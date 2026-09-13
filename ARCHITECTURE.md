@@ -59,7 +59,7 @@ tooling/repo         Repo automation: contributor setup, SDK regeneration, relea
 tooling/script       Build helper used across packages
 tooling/util         Shared TypeScript utilities (@synsci/util)
 tooling/patches      Dependency patches applied at install time
-evals                Launch evals, the cadence lab, and science-benchmark campaigns
+evals                Launch evals and the cadence dev lab for the research harness
 docs                 Engineering notes (docs/notes) and ADRs (docs/adr)
 .openscience         Repo-local agent config (commands, a skill, a theme) used by `bun dev "$PWD"`
 ```

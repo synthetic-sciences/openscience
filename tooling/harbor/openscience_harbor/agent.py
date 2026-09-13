@@ -96,13 +96,9 @@ class OpenScienceAgent(BaseInstalledAgent):
         binary: str | None = None,
         binary_sha256: str | None = None,
         cwd: str | None = None,
-        skills: str = "bundled",
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
-        if skills not in ("bundled", "none"):
-            raise ValueError("skills must be bundled or none")
-        self._skills = skills
         if self._version:
             self._version = self._version.removeprefix("v")
             if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", self._version):
@@ -211,7 +207,6 @@ class OpenScienceAgent(BaseInstalledAgent):
             "sha256": sha256,
             "source": "local_binary" if self._binary else "release",
             "installer_url": None if self._binary else url,
-            "skills": self._skills,
         }
         self._version = installed_version
         await self.exec_as_agent(
@@ -263,8 +258,6 @@ class OpenScienceAgent(BaseInstalledAgent):
         env.update(HEADLESS_ENV)
         env["OPENSCIENCE_DATA_DIR"] = self._data_dir
         env["OPENSCIENCE_CONFIG_DIR"] = self._config_dir
-        if self._skills == "none":
-            env["OPENSCIENCE_DISABLE_BUNDLED_SKILLS"] = "1"
         return env
 
     @with_prompt_template

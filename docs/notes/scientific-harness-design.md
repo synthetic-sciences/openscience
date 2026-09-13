@@ -48,8 +48,6 @@ The code paths are [the runtime](../../backend/cli/src/runtime),
 [the Python client](../../tooling/sdk/python), and
 [the native Harbor adapter](../../tooling/harbor). HTTP integrations and the
 versioned CLI event stream are two transports over the same session/tool runtime.
-Campaign configs for these five benches live in
-[`evals/science-harness`](../../evals/science-harness).
 
 ## What thin means
 
@@ -147,34 +145,39 @@ answers, or rubric contents were used to tune this refinement.
 
 | Requested benchmark    | Concrete lane                                                                                                        | Native contract                                                                                                                                                           | Remaining readiness work                                                                                                                                                                                                                                                                                      |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Terminal Bench Science | v0.1.0, 70 tasks; Harbor dataset `terminal-bench-science/terminal-bench-science@v0.1`                                | Harbor 0.22.0; task configs give 8-hour agent limits, task-specific CPU/RAM/storage and separate verifiers. Native binary reward.                                         | Run through `evals/science-harness` with a SHA-pinned Linux candidate. Preserve native image and task policies.                                                                                                                                                                                               |
-| Terminal-Bench 4 science | `terminal-bench/terminal-bench@4.0.0` science-domain slice; freeze IDs into `tb4-science-tasks.json`               | Harbor 0.22.0; native task limits and rewards. Distinct from Terminal-Bench-Science and from historical TB3 Science 15.                                                   | Freeze the science-domain task IDs from the 4.0.0 checkout before a scored run. Do not merge cohorts.                                                                                                                                                                                                         |
+| Terminal Bench Science | v0.1.0, 70 tasks; source `f81afac4f11048e77a15dfc8fb1dbfb897fea0ce`                                                  | Harbor 0.22.0; task configs give 8-hour agent limits, task-specific CPU/RAM/storage and separate verifiers. Native binary reward.                                         | Migrate the external launcher to the pinned product adapter/candidate; preserve native image and task policies; verify a selected task after fixture checks.                                                                                                                                                  |
+| FrontierBench-science  | Historical Terminal-Bench 3.0 Science 15, formerly Frontier-Bench; source `2b0442c3c583b710ca8da14c8e601b99f2f1f244` | Harbor 0.22.0; native task limits and rewards. v4 Science 14 is a different cohort with changed definitions.                                                              | Freeze v3 historical or v4 current comparison explicitly. Do not merge them. Migrate the same external launcher and retain executor differences in result labels.                                                                                                                                             |
+| DrugDiscoveryBench     | 82 tasks; source `d58c703841abbad0ba1cc439488e15fbbeae3bd2`                                                          | Harbor **0.13.1**, `/workspace/answer.md`, native outcome grading. Configs give 2 hours despite README's 45 minutes. Full and lightweight images are different protocols. | Reuse the existing native 0.13.1 OpenScience wrapper. Add SHA-pinned candidate installation, workspace/auto-approve probes, completion/accounting checks and real-version fixture tests; preserve input-copy steps, Biomni/Brave policy and verifier-only judge credentials.                                  |
 | BiomniBench            | Assumed **BiomniBench-DA public 50**, HF revision `e1c8ca5e11a620087bc48d97888eb69176a1f235`                         | Local manifest records Harbor 0.22.0, `/app/answer.txt`, `/app/trace.md`, rubric judging. Exact downloaded task envelopes were not verified because data is unstaged.     | Confirm intended split and authorized access; stage a selected sample, verify envelopes/collection, and separate judge credentials from agent-provider aliases. Public 50 is not the full/private 100.                                                                                                        |
-| BixBench 3             | v1.0.0, 20 tasks; source `d0e0bbb41222335b1b8878f533a58466a3a782dc`                                                  | **Inspect AI**, GCP, reference ReAct with persistent bash/Python and mediated web requests, 24-hour/5,000-message cap, host-side artifact grading.                        | Use `evals/science-harness/adapters/bixbench3.py` as the Inspect solver inside the native agent container; reuse VM/data/proxy/collection/grading. Label the whole-system variant.                                                                                                                           |
-| ResearchClawBench      | 40 expert tasks; `InternScience/ResearchClawBench`                                                                   | Host workspace, hidden target paper, rubric judge. Agent cmd in `evaluation/agents.json`.                                                                                 | Point their `agents.json` at `evals/science-harness/adapters/researchclaw.py`. Keep judge credentials off the agent environment.                                                                                                                                                                              |
+| BixBench 3             | v1.0.0, 20 tasks; source `d0e0bbb41222335b1b8878f533a58466a3a782dc`                                                  | **Inspect AI 0.3.220**, GCP, reference ReAct with persistent bash/Python and mediated web requests, 24-hour/5,000-message cap, host-side artifact grading.                | Add the missing external-agent Inspect solver inside the native agent container; reuse VM/data/proxy/collection/grading. Verify deadline/cancellation, mediated web access and message-cap treatment. Label the whole-system variant; exact reference-tool dispatch is optional for a matched-scaffold panel. |
 
-The three Harbor 0.22 lanes select `openscience_harbor.agent:OpenScienceAgent`
-through `evals/science-harness`. Do not duplicate the Research loop or silently
-upgrade a native runner.
+The benchmark control plane's `adapters/harbor/openscience_agent.py` already
+invokes OpenScience under Harbor 0.13.1; its launcher accepts a release version,
+not a local candidate path/SHA. Preserve that DDB wrapper and harden its candidate
+contract. The three Harbor 0.22 lanes can select the product adapter instead.
+These changes belong in the benchmark integration's reviewed checkout. The new
+product adapter is tested against 0.22.0 only and cannot be imported unchanged
+under 0.13.1. Do not duplicate the Research loop or silently upgrade a native runner.
 
-Bix launches the candidate in the existing agent container at `/workspace/work`,
-preserving native network and grading boundaries. That is a labeled whole-system
-comparison. Routing every tool through Inspect is additional work only for exact
-reference-tool comparisons; it is not required to reuse native tasks and graders.
-Do not launch the agent on the grading host.
+Bix currently has only a score-normalization helper, not an OpenScience runner.
+Its smallest integration launches the candidate in the existing agent container
+at `/workspace/work`, preserving native network and grading boundaries. This
+supports a labeled whole-system comparison. Routing every tool through Inspect
+is additional work only for exact reference-tool comparisons; it is not required
+to reuse native tasks and graders. Do not launch the agent on the grading host.
 
 For Bix, retain native continuous artifact scores and distinguish any paper-style
 threshold normalization. Inspect's nonempty-output collection check is not
-scientific correctness. ResearchClawBench's hidden-paper rubric is a different
-scale from Biomni's 0–100 judge. Do not average these unlike metrics into a
-synthetic “science score.” Keep exact scheduled task IDs, repeats and artifact
-inventories, not only matching counts.
+scientific correctness. For DrugDiscoveryBench, retain continuous outcome scores
+and label the publication's exact-100 pass threshold separately. Biomni's recorded
+judge scale is 0–100. Do not average these unlike metrics into a synthetic “science
+score.” Keep exact scheduled task IDs, repeats and artifact inventories, not only
+matching counts.
 
 Primary upstreams: [Terminal Bench Science run contract](https://www.terminal-bench-science.ai/run),
 [Terminal-Bench](https://www.tbench.ai/),
-[BiomniBench-DA](https://huggingface.co/datasets/phylobio/BiomniBench-DA),
-[BixBench3](https://github.com/EdisonScientific/BixBench3), and
-[ResearchClawBench](https://github.com/InternScience/ResearchClawBench).
+[DrugDiscoveryBench](https://github.com/scaleapi/DrugDiscoveryBench), and
+[BixBench3](https://github.com/EdisonScientific/BixBench3).
 Biomni details above are explicitly the local locked manifest's recorded contract,
 pending validation against authorized staged tasks.
 
@@ -183,12 +186,11 @@ pending validation against authorized staged tasks.
 1. **Freeze identities.** Record task-ID set, source/data/image digests, native
    runner, agent binary SHA, adapter revision, model snapshot, reasoning settings,
    tools, credentials by purpose, native limits, repeat inventory and retry rules.
-   Resolve TB4 science-subset IDs and Biomni split before presenting a comparison.
+   Resolve Frontier and Biomni naming before presenting a comparison.
 2. **Complete zero-model-cost compatibility.** Package/factory tests, a compiled
    fixture, working directory, tool execution, cancellation, output collection,
-   credential separation, event completion and native schema validation. Bix and
-   ResearchClawBench each need their own native-runner tests; the Harbor fixture
-   covers neither.
+   credential separation, event completion and native schema validation. DDB and
+   Bix each need their own native-version tests; the shared fixture covers neither.
 3. **Run a budgeted development panel.** Select tasks using public metadata before
    reading results. First compare frozen `fededb33` with the workspace fix; then
    title-call removal and Codex-only exact de-duplication. Keep each condition's
