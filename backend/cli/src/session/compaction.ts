@@ -90,6 +90,7 @@ export namespace SessionCompaction {
     model: Provider.Model,
     config: Config.Info,
     requestedContext?: number,
+    options?: { tiers?: boolean },
   ): { context: number; usable: number } {
     const positive = (value: number | undefined) =>
       value !== undefined && Number.isSafeInteger(value) && value > 0 ? value : undefined
@@ -99,7 +100,13 @@ export namespace SessionCompaction {
     // Custom/OpenAI-compatible model metadata is less strict than per-turn
     // context input. Invalid limits must not enlarge a budget or make it zero.
     const capacity = positive(model.limit.context) ?? positive(config.compaction?.fallbackContext) ?? FALLBACK_CONTEXT
-    const context = Math.min(capacity, requestedContext ?? defaultContext(model, capacity))
+    // The pricing boundary is a budget for compaction, not a limit the model
+    // has: a caller asking for the window itself (`tiers: false`) learns what
+    // a single request may hold.
+    const context = Math.min(
+      capacity,
+      requestedContext ?? (options?.tiers === false ? capacity : defaultContext(model, capacity)),
+    )
     const maximum = positive(SessionPrompt.OUTPUT_TOKEN_MAX) ?? 32_000
     const cap = Math.min(positive(model.limit.output) ?? maximum, maximum)
     const output = Math.min(cap, Math.floor(context / 2))

@@ -162,6 +162,11 @@ export namespace SessionPrompt {
     const config = await Config.get()
     const usable = SessionCompaction.usableContext(input.model, config, input.current.context).usable
     const hard = Math.max(1, Math.floor(usable * CONTEXT_PREFLIGHT_MARGIN))
+    // What one request may hold. It differs from `hard` only for a model
+    // priced in tiers, whose default budget stops at the first boundary: past
+    // it a request is dearer, not invalid, so only this line refuses one.
+    const window = SessionCompaction.usableContext(input.model, config, input.current.context, { tiers: false }).usable
+    const limit = Math.max(hard, Math.floor(window * CONTEXT_PREFLIGHT_MARGIN))
     const tools = await toolTokens(input.tools)
     const extra = input.extra ? Token.estimate(input.extra) : 0
     const composition = MessageV2.composition(input.messages, { system: input.system })
@@ -180,6 +185,7 @@ export namespace SessionPrompt {
       // preflight budget now, with no user-selected percentage below it.
       soft: hard,
       hard,
+      limit,
       composition,
     }
   }
@@ -1572,9 +1578,9 @@ export namespace SessionPrompt {
         }
         break
       }
-      if (preflight.total > preflight.hard && config.compaction?.auto === false) {
+      if (preflight.total > preflight.limit && config.compaction?.auto === false) {
         await failTooLarge(
-          `The assembled request is estimated at ${preflight.total.toLocaleString()} tokens, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}, and auto-compaction is disabled. Run /compact, shorten the request, or choose a model with a larger context window. No provider request was sent.`,
+          `The assembled request is estimated at ${preflight.total.toLocaleString()} tokens, above ${window.name}'s safe input budget of ${preflight.limit.toLocaleString()}, and auto-compaction is disabled. Run /compact, shorten the request, or choose a model with a larger context window. No provider request was sent.`,
         )
         break
       }
@@ -1593,11 +1599,13 @@ export namespace SessionPrompt {
         }
         if (await armedCompact()) continue
       }
-      if (preflight.total > preflight.hard) {
+      // Over the budget but within the window: the request goes out, dearer
+      // than the budget wanted; only a request the model cannot hold is refused.
+      if (preflight.total > preflight.limit) {
         const recoverable =
           config.compaction?.auto !== false && SessionLoopState.preflightRecovery({ attempts: preflightRecoveries })
         await failTooLarge(
-          `The assembled request is still estimated at ${preflight.total.toLocaleString()} tokens after context reduction, above ${window.name}'s safe input budget of ${preflight.hard.toLocaleString()}. Shorten the request or start a new session. No provider request was sent for this oversized attempt.`,
+          `The assembled request is still estimated at ${preflight.total.toLocaleString()} tokens after context reduction, above ${window.name}'s safe input budget of ${preflight.limit.toLocaleString()}. Shorten the request or start a new session. No provider request was sent for this oversized attempt.`,
           recoverable,
         )
         if (recoverable) {

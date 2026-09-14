@@ -279,6 +279,51 @@ describe("session.compaction.isOverflow", () => {
     })
   })
 
+  test("a model priced in tiers budgets its context at the first boundary unless the turn names the window", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const astra = createModel({
+          context: 1_050_000,
+          input: 922_000,
+          output: 128_000,
+          cost: {
+            input: 10,
+            output: 50,
+            cache: { read: 1, write: 12.5 },
+            tiers: [{ threshold: 272_000, input: 20, output: 75, cache: { read: 2, write: 25 } }],
+          },
+        })
+        // The default budget stops at the boundary; the window itself is still
+        // what one request may hold.
+        expect(SessionCompaction.usableContext(astra, {}).context).toBe(272_000)
+        expect(SessionCompaction.usableContext(astra, {}, undefined, { tiers: false }).context).toBe(1_050_000)
+        // Naming the full window, or any cap, is honoured as before.
+        expect(SessionCompaction.usableContext(astra, {}, 1_050_000).context).toBe(1_050_000)
+        expect(SessionCompaction.usableContext(astra, {}, 100_000).context).toBe(100_000)
+        // Compaction fires a little before the boundary, not at the window.
+        const tokens = { input: 250_000, output: 5_000, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(await SessionCompaction.isOverflow({ tokens, model: astra })).toBe(true)
+        expect(await SessionCompaction.isOverflow({ tokens, model: astra, context: 1_050_000 })).toBe(false)
+        // A tier that is not dearer is no boundary; a flat catalog keeps its window.
+        const flat = createModel({ context: 1_050_000, output: 128_000 })
+        expect(SessionCompaction.usableContext(flat, {}).context).toBe(1_050_000)
+        const same = createModel({
+          context: 1_050_000,
+          output: 128_000,
+          cost: {
+            input: 10,
+            output: 50,
+            cache: { read: 1, write: 12.5 },
+            tiers: [{ threshold: 272_000, input: 10, output: 50, cache: { read: 1, write: 12.5 } }],
+          },
+        })
+        expect(SessionCompaction.usableContext(same, {}).context).toBe(1_050_000)
+      },
+    })
+  })
+
   test("usable capacity stays positive and within known and selected limits", () => {
     for (const context of [1, 2, 8_000, 128_000, 1_000_000]) {
       for (const output of [0, 1, 4_096, 32_000, 128_000]) {
