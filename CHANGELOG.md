@@ -73,15 +73,14 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   that dispatched it instead of opening a headless second turn in the
   transcript, and the note on a result with failed tool calls is a count rather
   than a verdict.
-- The transcript reads the way a turn was written: the agent's prose stays in
-  place at full size, and the work between two paragraphs folds into one line
-  ("Read 4 files, edited 3 files · 4m 12s") that opens on request. The burst
-  still running stays open; a failed call or a pending question stays visible
-  under its line when folded; reasoning the provider kept private counts into
-  the burst's time instead of taking a row. The turn header opens or closes
-  every burst at once and, while the turn runs, names the call in flight with
-  its own clock ("Running pytest -q · 12s") from the first second, in one
-  element that never swaps.
+- The transcript keeps one hierarchy: the agent's prose in bright text, and
+  everything it did in grey rows beneath one header per turn (thoughts with
+  their text when the provider shares it, files read, searches, commands,
+  edits, delegations, questions). Rows and tool lines share one type size and
+  colour; skill loads fold with the rest. Reasoning that streamed while you
+  watched stays readable after it ends. The header is one plain line from the
+  first second to the last: it names the call in flight ("Running pytest -q")
+  while the turn works and "Worked for 4m 12s" when it is done.
 - Enter while a response is running adds the message to the current turn
   instead of stopping the response; the send button is Stop and Escape still
   stops. The runtime API accepts a prompt during a live run as a follow-up

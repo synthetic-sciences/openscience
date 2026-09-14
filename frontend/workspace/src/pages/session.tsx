@@ -866,9 +866,15 @@ export default function Page(): JSX.Element {
     return !!status && status.type !== "idle"
   })
 
-  // A live turn opens only the burst still running; finished bursts fold as
-  // work moves on, so no turn is expanded wholesale on the reader's behalf.
   const traceExpansion = createTraceExpansion()
+  createEffect(
+    on(
+      () => (working() ? lastUserMessage()?.id : undefined),
+      (id) => {
+        if (id) traceExpansion.open(id)
+      },
+    ),
+  )
 
   const chatScroll = createAutoScroll({
     working,
@@ -1405,7 +1411,7 @@ export default function Page(): JSX.Element {
                                   sessionID={params.id!}
                                   messageID={message.id}
                                   lastUserMessageID={lastUserMessage()?.id}
-                                  stepsExpanded={traceExpansion.preference(message.id)}
+                                  stepsExpanded={traceExpansion.expanded(message.id)}
                                   onStepsExpandedToggle={() => traceExpansion.toggle(message.id)}
                                   classes={{
                                     root: "min-w-0 w-full relative",

@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AssistantMessage, Part, ToolPart } from "@synsci/sdk/v2/client"
-import {
-  buildTraceRows,
-  buildTraceSegments,
-  burstLabel,
-  editedChanges,
-  editedLabel,
-  exploredLabel,
-  thoughtLabel,
-} from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel } from "./trace-rows"
 
 const message = {
   id: "msg_a",
@@ -170,68 +162,5 @@ describe("trace rows", () => {
     )
     const texts = rows.filter((row) => row.kind === "text") as Extract<(typeof rows)[number], { kind: "text" }>[]
     expect(texts.map((row) => row.narration)).toEqual([true, false])
-  })
-})
-
-describe("trace segments", () => {
-  const private_ = (id: string, start: number, end?: number) =>
-    ({ ...reasoning(id, start, end), text: "[REDACTED]" }) as Part
-
-  test("prose stays in place and the work between two paragraphs folds into one labelled burst", () => {
-    const rows = buildTraceRows(
-      entries([
-        text("x1", "Checking the stack first."),
-        private_("r1", 10_000, 70_000),
-        tool("t1", "read", { time: { start: 70_000, end: 71_000 } }, { filePath: "/p/study.json" }),
-        tool("t2", "bash", { metadata: { exit: 0 }, time: { start: 71_000, end: 90_000 } }),
-        tool("t3", "apply_patch", {
-          time: { start: 90_000, end: 95_000 },
-          metadata: { files: [{ filePath: "/p/train.py", type: "update", additions: 3, deletions: 1 }] },
-        }),
-        tool("t4", "bash", { status: "error", error: "exit 1", time: { start: 95_000, end: 96_000 } } as never),
-        text("x2", "The stack is verified."),
-        tool("t5", "task", { time: { start: 100_000, end: 100_500 } }, { description: "Build backend" }),
-        text("x3", "Both workers are dispatched."),
-      ]),
-    )
-    const segments = buildTraceSegments(rows)
-    expect(segments.map((segment) => segment.kind)).toEqual(["text", "burst", "text", "burst", "text"])
-    const first = segments[1] as Extract<(typeof segments)[number], { kind: "burst" }>
-    // The private thought adds no row but its minute is on the clock.
-    expect(first.rows.map((row) => row.kind)).toEqual(["explored", "edited", "tool"])
-    expect(first.calls).toBe(4)
-    expect(first.failed).toBe(1)
-    expect(first.start).toBe(10_000)
-    expect(first.end).toBe(96_000)
-    expect(burstLabel(first, 999_999)).toBe("Read 1 file, ran 2 commands, edited 1 file · 1 failed · 1m 26s")
-    const second = segments[3] as Extract<(typeof segments)[number], { kind: "burst" }>
-    expect(second.rows.map((row) => row.kind)).toEqual(["agent"])
-    expect(burstLabel(second, 999_999)).toBe("Delegated 1 task · 0s")
-  })
-
-  test("a readable thought keeps its row; a burst of thought alone reads like the row would", () => {
-    const rows = buildTraceRows(entries([reasoning("r1", 0, 63_000), text("x1", "Here is the plan.")]))
-    const segments = buildTraceSegments(rows)
-    const burst = segments[0] as Extract<(typeof segments)[number], { kind: "burst" }>
-    expect(burst.rows.map((row) => row.kind)).toEqual(["thought"])
-    expect(burstLabel(burst, 999_999)).toBe("Thought 1m 3s")
-    const quiet = buildTraceSegments(buildTraceRows(entries([private_("r2", 0, 5_000), text("x2", "Done.")])))
-    expect((quiet[0] as Extract<(typeof quiet)[number], { kind: "burst" }>).rows).toEqual([])
-    expect(burstLabel(quiet[0] as never, 999_999)).toBe("Thought 5s")
-  })
-
-  test("a burst stays open-ended while any call in it still runs, and a live thought keeps its row", () => {
-    const rows = buildTraceRows(
-      entries([
-        tool("t1", "read", { time: { start: 1_000, end: 2_000 } }),
-        tool("t2", "bash", { status: "running", time: { start: 2_000 } } as never),
-        private_("r1", 3_000),
-      ]),
-    )
-    const segments = buildTraceSegments(rows, (row) => row.kind === "thought")
-    const burst = segments[0] as Extract<(typeof segments)[number], { kind: "burst" }>
-    expect(burst.end).toBeUndefined()
-    expect(burst.rows.map((row) => row.kind)).toEqual(["explored", "tool", "thought"])
-    expect(burstLabel(burst, 62_000)).toBe("Read 1 file, ran 1 command · 1m 1s")
   })
 })

@@ -93,7 +93,6 @@ export function collapsibleTracePart(
       part.state.metadata?.stopReason === "search_output_unavailable")
   )
     return false
-  if (part.tool === "skill" && loadedSkillName(part.state)) return false
   const outcome = part.tool === "task" ? part.state.metadata?.outcome : undefined
   if (outcome === "error" || outcome === "timed_out" || outcome === "partial") return false
   if (part.state.metadata?.artifact) return false

@@ -56,17 +56,7 @@ import { responseText } from "./session-turn-response"
 import { isContinuationCarrier } from "./session-turn-carrier"
 import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
-import {
-  buildTraceRows,
-  buildTraceSegments,
-  burstLabel,
-  editedChanges,
-  editedLabel,
-  exploredLabel,
-  thoughtLabel,
-  type TraceRow,
-  type TraceSegment,
-} from "./trace-rows"
+import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
 import { liveActivity } from "./session-turn-live"
 import { Collapsible } from "./collapsible"
 import { MarkdownFileScope, useMarkdownFileResolvers } from "./markdown"
@@ -180,9 +170,14 @@ function TraceGroupRow(props: {
   children: JSX.Element
 }) {
   const [manual, setManual] = createSignal<boolean>()
-  // Finished calls remain a readable summary during long runs. Only live
-  // reasoning expands automatically; the reader's own choice always wins.
-  const open = () => manual() ?? !!props.live
+  // Reasoning that streamed while the reader watched stays readable after it
+  // ends; finishing must not fold text away under someone reading it. A
+  // thought loaded from history opens on request. The reader's own choice wins.
+  const [streamed, setStreamed] = createSignal(false)
+  createEffect(() => {
+    if (props.live) setStreamed(true)
+  })
+  const open = () => manual() ?? (!!props.live || streamed())
   // A burst of one call is that call's own row: nothing to fold, so it never
   // sits inside a collapsible that a finished turn would close over it.
   if (props.header === false) {
@@ -240,10 +235,8 @@ function TraceGroupRow(props: {
 
 function AssistantTrace(props: {
   messages: AssistantMessage[]
-  /** The reader's explicit choice for every burst; undefined lets each burst decide. */
-  expanded: boolean | undefined
+  expanded: boolean
   working: boolean
-  now: number
   pendingRequestCallID?: string
 }) {
   const data = useData()
@@ -261,141 +254,24 @@ function AssistantTrace(props: {
       ),
     ),
   )
-  const live = (entry: ResearchTraceEntry) =>
-    entry.part.type === "reasoning" && !entry.part.time?.end && !entry.message.time.completed
-  // The turn reads the way it was written: every paragraph the model said
-  // stays in place, and the work between two paragraphs folds into one line.
-  // The burst still running stays open; the reader's own choice always wins.
-  const segments = createMemo(() =>
-    buildTraceSegments(
-      buildTraceRows(entries()),
-      (row) => props.working && row.kind === "thought" && row.entries.some(live),
-    ),
-  )
-  const keyOf = (segment: TraceSegment) => (segment.kind === "text" ? segment.row.entry.part.id : segment.key)
-  const byKey = createMemo(() => new Map(segments().map((segment) => [keyOf(segment), segment])))
-  const keys = createMemo(() => segments().map(keyOf), [], { equals: same })
-  const lastKey = createMemo(() => keys().at(-1))
-  const surfaced = (row: TraceRow) =>
-    (row.kind === "tool" || row.kind === "agent") &&
-    !collapsibleTracePart(row.entry.part, props.pendingRequestCallID, pendingChildRequest)
-
-  return (
-    <For each={keys()}>
-      {(key) => {
-        const segment = () => byKey().get(key)
-        const kind = untrack(segment)?.kind
-        if (kind === "text") {
-          const value = () => segment() as Extract<TraceSegment, { kind: "text" }>
-          return (
-            <Show when={segment()}>
-              <div data-slot="trace-entry">
-                <Part part={value().row.entry.part} message={value().row.entry.message} hideCopy />
-              </div>
-            </Show>
-          )
-        }
-        const value = () => segment() as Extract<TraceSegment, { kind: "burst" }>
-        return (
-          <Show when={segment()}>
-            <TraceBurst
-              segment={value()}
-              live={props.working && (lastKey() === key || value().end === undefined)}
-              expanded={props.expanded}
-              working={props.working}
-              now={props.now}
-              surfaced={surfaced}
-              pendingRequestCallID={props.pendingRequestCallID}
-            />
-          </Show>
-        )
-      }}
-    </For>
-  )
-}
-
-/** One burst of work between two paragraphs: a line that names what happened
- * and how long it took, folding the rows underneath. Folded, only the rows
- * that still need the reader stay mounted (a failure, a pending request), on
- * the same keys as when open, so a question keeps its draft across folds. */
-function TraceBurst(props: {
-  segment: Extract<TraceSegment, { kind: "burst" }>
-  live: boolean
-  expanded: boolean | undefined
-  working: boolean
-  now: number
-  surfaced: (row: TraceRow) => boolean
-  pendingRequestCallID?: string
-}) {
-  const [manual, setManual] = createSignal<boolean>()
-  // The header's expand-all is a fresh instruction: it overrides any fold the
-  // reader opened or closed by hand before it.
-  createEffect(
-    on(
-      () => props.expanded,
-      () => setManual(undefined),
-      { defer: true },
-    ),
-  )
-  const open = () => manual() ?? props.expanded ?? props.live
-  const label = () => burstLabel(props.segment, props.now)
-  const shown = createMemo(() => (open() ? props.segment.rows : props.segment.rows.filter(props.surfaced)))
-  // An open burst of one row is that row: it already folds its own detail,
-  // and a second line naming the same thing would only repeat it. Folded, the
-  // line stands in for it like for any other burst.
-  const single = () => open() && props.segment.rows.length === 1
-  // Private thought alone has nothing to open: a label with the time it took.
-  const silent = () => props.segment.rows.length === 0
-  return (
-    <div
-      data-component="trace-burst"
-      data-live={props.live ? "true" : undefined}
-      data-open={open() ? "true" : undefined}
-      data-single={single() ? "true" : undefined}
-    >
-      <Show when={!single()}>
-        <Show
-          when={!silent()}
-          fallback={
-            <div data-component="trace-row" data-slot="trace-burst-head" data-static="true">
-              <Show when={props.live}>
-                <Spinner />
-              </Show>
-              <span data-slot="trace-row-label">{label()}</span>
-            </div>
-          }
-        >
-          <button
-            type="button"
-            data-slot="trace-burst-trigger"
-            aria-expanded={open()}
-            onClick={() => setManual(!open())}
-          >
-            <div data-component="trace-row" data-slot="trace-burst-head" data-open={open() ? "true" : undefined}>
-              <Show when={props.live}>
-                <Spinner />
-              </Show>
-              <span data-slot="trace-row-label">{label()}</span>
-              <Icon name="chevron-down" size="small" data-slot="trace-row-chevron" />
-            </div>
-          </button>
-        </Show>
-      </Show>
-      <div data-slot="trace-burst-body" hidden={!single() && shown().length === 0}>
-        <TraceRows rows={single() ? props.segment.rows : shown()} working={props.working} />
-      </div>
-    </div>
-  )
-}
-
-/** The rows of one burst, chronological: thoughts, exploration and edit
- * groups, delegations and single calls. A row keeps the key of its first
- * part, so a call that joins a group later never remounts what the reader
- * already opened. */
-function TraceRows(props: { rows: TraceRow[]; working: boolean }) {
+  // Collapsed, the turn shows what the reader asked for: the answer, plus
+  // anything that still needs them (a failure, a pending request). Expanded,
+  // the whole trace appears as rows, chronological, with narration in place.
+  const rows = createMemo(() => {
+    const all = buildTraceRows(entries())
+    if (props.expanded) return all
+    return all.filter((row) => {
+      if (row.kind === "text") return !row.narration
+      if (row.kind === "tool" || row.kind === "agent")
+        return !collapsibleTracePart(row.entry.part, props.pendingRequestCallID, pendingChildRequest)
+      return false
+    })
+  })
+  // A burst keeps the key of its first call, so a call that joins it later
+  // never remounts what the reader already opened.
   const keyOf = (row: TraceRow) => ("entries" in row ? `burst:${row.entries[0]!.part.id}` : row.entry.part.id)
-  const rowByKey = createMemo(() => new Map(props.rows.map((row) => [keyOf(row), row])))
-  const keys = createMemo(() => props.rows.map(keyOf), [], { equals: same })
+  const rowByKey = createMemo(() => new Map(rows().map((row) => [keyOf(row), row])))
+  const keys = createMemo(() => rows().map(keyOf), [], { equals: same })
   const live = (entry: ResearchTraceEntry) =>
     entry.part.type === "reasoning" && !entry.part.time?.end && !entry.message.time.completed
 
@@ -409,71 +285,71 @@ function TraceRows(props: { rows: TraceRow[]; working: boolean }) {
         const kind = untrack(row)?.kind
         return (
           <Show when={row()}>
-            {(current) => (
-              <div data-slot="trace-item" data-kind={kind}>
-                {(() => {
-                  if (kind === "thought") {
-                    const value = () => current() as Extract<TraceRow, { kind: "thought" }>
-                    const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
-                    const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
-                    const running = () => props.working && value().entries.some(live)
-                    return (
-                      <TraceGroupRow
-                        kind="thought"
-                        live={running()}
-                        working={props.working}
-                        header={value().readable ? undefined : "label"}
-                        label={thoughtLabel(value().seconds, running())}
-                      >
-                        <For each={ids()}>
-                          {(id) => (
-                            <Show when={byID().get(id)}>
-                              {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
-                            </Show>
-                          )}
-                        </For>
-                      </TraceGroupRow>
-                    )
-                  }
-                  if (kind === "explored" || kind === "edited") {
-                    const value = () => current() as Extract<TraceRow, { kind: "explored" | "edited" }>
-                    const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
-                    const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
-                    return (
-                      <TraceGroupRow
-                        kind={kind}
-                        working={props.working}
-                        header={value().entries.length > 1}
-                        changes={
-                          kind === "edited"
-                            ? editedChanges(value() as Extract<TraceRow, { kind: "edited" }>)
-                            : undefined
-                        }
-                        label={
-                          kind === "explored"
-                            ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
-                            : editedLabel(value() as Extract<TraceRow, { kind: "edited" }>)
-                        }
-                      >
-                        <For each={ids()}>
-                          {(id) => (
-                            <Show when={byID().get(id)}>
-                              {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
-                            </Show>
-                          )}
-                        </For>
-                      </TraceGroupRow>
-                    )
-                  }
-                  const value = () => current() as Extract<TraceRow, { kind: "text" | "tool" | "agent" }>
-                  return (
-                    <div data-slot="trace-entry">
-                      <Part part={value().entry.part} message={value().entry.message} hideCopy />
-                    </div>
-                  )
-                })()}
-              </div>
-            )}
+            {(current) => {
+              if (kind === "thought") {
+                const value = () => current() as Extract<TraceRow, { kind: "thought" }>
+                const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
+                const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
+                const running = () => props.working && value().entries.some(live)
+                return (
+                  <TraceGroupRow
+                    kind="thought"
+                    live={running()}
+                    working={props.working}
+                    header={value().readable ? undefined : "label"}
+                    label={thoughtLabel(value().seconds, running())}
+                  >
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byID().get(id)}>
+                          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+                        </Show>
+                      )}
+                    </For>
+                  </TraceGroupRow>
+                )
+              }
+              if (kind === "explored" || kind === "edited") {
+                const value = () => current() as Extract<TraceRow, { kind: "explored" | "edited" }>
+                const ids = createMemo(() => value().entries.map((entry) => entry.part.id), [], { equals: same })
+                const byID = createMemo(() => new Map(value().entries.map((entry) => [entry.part.id, entry])))
+                return (
+                  <TraceGroupRow
+                    kind={kind}
+                    working={props.working}
+                    header={value().entries.length > 1}
+                    changes={
+                      kind === "edited" ? editedChanges(value() as Extract<TraceRow, { kind: "edited" }>) : undefined
+                    }
+                    label={
+                      kind === "explored"
+                        ? exploredLabel(value() as Extract<TraceRow, { kind: "explored" }>)
+                        : editedLabel(value() as Extract<TraceRow, { kind: "edited" }>)
+                    }
+                  >
+                    <For each={ids()}>
+                      {(id) => (
+                        <Show when={byID().get(id)}>
+                          {(entry) => <Part part={entry().part} message={entry().message} hideCopy />}
+                        </Show>
+                      )}
+                    </For>
+                  </TraceGroupRow>
+                )
+              }
+              const value = () => current() as Extract<TraceRow, { kind: "text" | "tool" | "agent" }>
+              return (
+                <div
+                  data-slot="trace-entry"
+                  data-narration={(() => {
+                    const row = value()
+                    return row.kind === "text" && row.narration ? "true" : undefined
+                  })()}
+                >
+                  <Part part={value().entry.part} message={value().entry.message} hideCopy />
+                </div>
+              )
+            }}
           </Show>
         )
       }}
@@ -937,17 +813,19 @@ export function SessionTurn(
     duration: duration(),
   })
 
-  // The reader's explicit choice for the whole trace, if any. Without one,
-  // each burst decides for itself: the one still running is open, the rest
-  // fold as work moves on.
-  const preference = () => props.stepsExpanded ?? store.stepsExpanded
-  const expanded = () => preference() ?? false
+  const expanded = () => props.stepsExpanded ?? store.stepsExpanded ?? false
   const traceID = () => `session-turn-trace-${props.messageID}`
   const toggleSteps = () => {
     props.onUserInteracted?.()
     if (props.onStepsExpandedToggle) return props.onStepsExpandedToggle()
     setStore("stepsExpanded", !expanded())
   }
+
+  // Open a live turn once. Finishing a response must not collapse the text
+  // underneath someone reading it, and an explicit collapse must stay put.
+  createEffect(() => {
+    if (working() && store.stepsExpanded === undefined) setStore("stepsExpanded", true)
+  })
 
   createEffect(
     on(
@@ -1017,22 +895,20 @@ export function SessionTurn(
     if (!status) return
     return [i18n.t(status.key, status.params), status.hint ? i18n.t(status.hint) : ""].filter(Boolean).join(" ")
   })
-  // The line names the call in flight with its own clock ("Reading study.json
-  // · 12s"), the way the trace rows will name it once it lands, so the header
-  // never swaps vocabulary or elements between the first second and the last.
+  // The line names the call in flight ("Reading study.json"), the way the
+  // trace row will once the call lands; one clock, the turn's, sits beside it.
   const activity = createMemo(() => {
     const latest = assistantMessages().at(-1)
     if (!latest || latest.time.completed) return
     const own = liveActivity(data.store.part[latest.id] ?? emptyParts)
     if (!own || !own.label.startsWith("Delegating")) return own
-    // A worker in flight: read its live call from its own session when the
-    // store has it, so the lead's line follows the work being done.
+    // A worker in flight: follow its live call when the store has its session.
     const child = childSessionOf(data.store.part[latest.id] ?? emptyParts)
     const childParts = child
       ? (data.store.message[child] ?? emptyMessages).flatMap((message) => data.store.part[message.id] ?? emptyParts)
       : []
     const inner = child ? liveActivity(childParts) : undefined
-    return inner ? { label: `${own.label} · ${inner.label}`, since: inner.since } : own
+    return inner ? { label: `${own.label} · ${inner.label}` } : own
   })
   const queued = createMemo(() => {
     if (!working() || assistantMessages().length) return false
@@ -1044,10 +920,7 @@ export function SessionTurn(
     const live = phase()
     if (live) return i18n.t(live.key, live.params)
     if (queued()) return i18n.t("ui.sessionTurn.status.queued")
-    const current = activity()
-    if (!current) return rawStatus() ?? i18n.t("ui.sessionTurn.status.thinking")
-    const since = current.since === undefined ? undefined : elapsedLabel(Math.max(0, store.now - current.since))
-    return since && store.now - current.since! >= 2_000 ? `${current.label} · ${since}` : current.label
+    return activity()?.label ?? rawStatus() ?? i18n.t("ui.sessionTurn.status.thinking")
   })
 
   return (
@@ -1151,9 +1024,8 @@ export function SessionTurn(
                         <MarkdownFileScope paths={linkedFiles()}>
                           <AssistantTrace
                             messages={assistantMessages()}
-                            expanded={preference()}
+                            expanded={expanded()}
                             working={working()}
-                            now={store.now}
                             pendingRequestCallID={requestTool()?.callID}
                           />
                         </MarkdownFileScope>

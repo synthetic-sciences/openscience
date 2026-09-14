@@ -176,7 +176,9 @@ describe("literal research trace", () => {
     if (loaded.part.type === "tool") loaded.part.state.input = { name: "figures" }
     const calls = [searched, loaded]
     expect(visibleResearchTrace(calls)).toEqual(calls)
-    expect(collapsibleTracePart(loaded.part)).toBe(false)
+    // A finished load folds with the rest of the activity; only a load that
+    // failed, or one still running, needs the reader while the trace is folded.
+    expect(collapsibleTracePart(loaded.part)).toBe(true)
     expect(collapsibleTracePart(searched.part)).toBe(true)
     expect(collapsibleTracePart(entry("loading", "skill", "Loaded skill: figures", "running").part)).toBe(true)
     expect(collapsibleTracePart(entry("failed", "skill", "Permission denied", "error").part)).toBe(false)
