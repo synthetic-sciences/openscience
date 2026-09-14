@@ -43,6 +43,7 @@ import { SessionSummary } from "./summary"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@synsci/util/fn"
 import { SessionProcessor } from "./processor"
+import { interruptionReceipt } from "./tool-outcome"
 import { normalizeTaskAttemptInput, TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
@@ -651,8 +652,7 @@ export namespace SessionPrompt {
             input: part.state.input,
             raw: part.state.raw,
             metadata: { ...(part.state.status === "running" ? part.state.metadata : {}), interrupted: true },
-            error:
-              "Tool execution was interrupted before completion. Its side effects may have completed; inspect the current state before retrying.",
+            error: `Tool execution was interrupted before completion. ${interruptionReceipt(part.tool, part.state.status === "running")}`,
             time: { start, end: Math.max(start, now) },
           },
         } satisfies MessageV2.ToolPart)
@@ -1951,9 +1951,11 @@ export namespace SessionPrompt {
       },
     })
 
-    // Skill loads count for the whole task epoch, not only the span since the
-    // newest synthetic continuation, so a skill's tools stay on offer.
-    const activation = ToolVisibility.activation(SessionLoopState.epochMessages(input.messages))
+    // A loaded skill's text stays in the model's context until compaction
+    // summarizes it away, so its tools stay on offer for exactly as long: the
+    // whole visible history, not only the current request's epoch. A skill
+    // that still tells the model to call `study` must come with the tool.
+    const activation = ToolVisibility.activation(input.messages)
     // A session driving a study keeps the study, experiments and compute
     // tools on offer regardless of how the latest wake-up is worded.
     const study = await Experiments.studyForSession(input.session.id).catch(() => undefined)

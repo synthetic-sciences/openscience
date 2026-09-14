@@ -1,6 +1,6 @@
 ---
 name: delegation
-description: Delegates independent work to worker agents through the Task tool, choosing between the explore and execute profiles and the ML, biology, physics and chemistry specialists, writing a self-contained brief for a worker that cannot see the conversation, setting boundaries on files and compute, and reading the handoff back critically. Use before dispatching a worker or interpreting its result, and when deciding whether a task should be delegated at all. Never delegate the literature retrieval loop or a step of an experiment loop already underway.
+description: Delegates independent work to worker agents through the Task tool, choosing between the explore scout and the ml, biology, physics, chemistry and data specialists, writing a self-contained brief for a worker that cannot see the conversation, setting boundaries on files and compute, and reading the handoff back critically. Use before dispatching a worker or interpreting its result, and when deciding whether a task should be delegated at all. Never delegate the literature retrieval loop or a step of an experiment loop already underway.
 summary: "When and how to hand independent work to a worker or specialist; the brief and the handoff."
 category: core
 role: support
@@ -45,17 +45,20 @@ Never delegate:
 
 ## Choosing the worker
 
-| Need | `subagent_type` | `specialist` |
-| --- | --- | --- |
-| Read and report: codebase survey, artifact audit, options analysis | `explore` | optional |
-| Build or run: implement, execute, produce files or results | `execute` | optional |
-| Independent critical read of a draft or analysis | `explore` | `critique` (read-only; reports BLOCKING and observations) |
-| Domain-heavy phase: training or fine-tuning setup, omics pipeline, PDE solver, docking | `execute` or `explore` | `ml`, `biology`, `physics`, `chemistry` |
+| Need | `subagent_type` |
+| --- | --- |
+| Read and report: codebase survey, artifact audit, options analysis, literature scouting | `explore` (read-only) |
+| Independent critical read of a draft or analysis | `explore`, briefed with the peer-review skill and the angle to take |
+| Build or run: pipelines, data processing, scripts, files, results | `data` |
+| Domain-heavy phase: training or fine-tuning setup, omics pipeline, PDE solver, docking | `ml`, `biology`, `physics`, `chemistry` |
 
-A specialist worker keeps the Research contract and gains its domain contract, the full
-index of its skill library and its domain tools (the biology specialist can query UniProt,
-PDB, Ensembl, KEGG, PubMed directly). Use one when most of the phase sits in that domain;
-for mixed work a general worker that loads a skill is enough.
+`subagent_type` is an agent name; the Task tool's description lists the ones configured in
+this installation. There is no separate `specialist` parameter and no `execute` or
+`critique` profile. A specialist keeps the Research contract and gains its domain skill
+index and domain tools (the biology specialist can query UniProt, PDB, Ensembl, KEGG,
+PubMed directly). Use one when most of the phase sits in that domain; for mixed work the
+`data` worker, briefed to load a skill, is enough. Pass `background: true` for work you do
+not need before your next step; its result wakes you when it lands.
 
 ## The brief
 
@@ -63,9 +66,9 @@ The worker sees only the brief. Include, in this order:
 
 1. **Goal**: one sentence, what done looks like.
 2. **Context**: project, relevant paths, the metric or question, what has been tried.
-3. **Inputs**: exact files, run ids, URLs, data locations. Paths must exist and be readable
-   from the worker's workspace (the lead's scratch is read-only for it; it writes under
-   its own workspace and saves outputs as artifacts).
+3. **Inputs**: exact files, run ids, URLs, data locations. The worker works in your
+   working directory and its files land there; name the files it owns and the ones it must
+   not touch, and say which of the paths you name are inputs to read.
 4. **Constraints**: what not to touch, what not to change (the evaluation, the metric,
    frozen files), time or cost limits.
 5. **Compute authorization**: exactly which runs it may launch, on which target, with what
@@ -86,12 +89,12 @@ the task is worth a worker.
 - Treat the worker's inference as inference; its evidence as evidence. If the handoff does
   not separate them, ask for the separation or check yourself.
 - A partial result is normal; the handoff says what remains. Decide whether to continue
-  the same worker (`session_id`), start another, or finish here.
+  the same worker (`task_id` from its result), start another, or finish here.
 - Do not repeat the worker's diary to the user. Report the outcome and what changed.
 
 ## Concurrency and limits
 
 Several workers may run at once for genuinely parallel phases (a sweep across datasets, a
-survey split by subsystem). Workers cannot spawn workers. Publishing (pushing, releasing,
-uploading) stays with you. Each worker costs a full model context; three workers for a
+survey split by subsystem). Workers cannot spawn workers unless `subagent_depth` allows
+it. Publishing (pushing, releasing, uploading) stays with you. Each worker costs a full model context; three workers for a
 task one skill load would have solved is the common mistake.

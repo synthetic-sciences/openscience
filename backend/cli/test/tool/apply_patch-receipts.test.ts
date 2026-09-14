@@ -68,8 +68,21 @@ test("patch results bind actual formatter output while permissions retain the pr
         expect(receipt.afterHash).toBe(crypto.createHash("sha256").update(actual).digest("hex"))
         expect(receipt.formatted).toBe(true)
         expect(result.output).toContain(`Current SHA-256: ${receipt.afterHash}`)
+        // A short formatting diff still travels to the model in full.
         expect(result.output).toContain(`+  "value": ${index + 1}`)
+        expect(result.metadata.formatting?.[target]).toContain(`+  "value": ${index + 1}`)
       }
+      // A formatter that rewrites a large file sends the model the regions
+      // that changed, not the whole rewrite; the UI keeps the diff.
+      const lines = Array.from({ length: 400 }, (_, index) => `"k${index}":${index}`)
+      const big = await tool.execute(
+        { patchText: `*** Begin Patch\n*** Add File: big.receipt\n+{${lines.join(",")}}\n*** End Patch` },
+        ctx,
+      )
+      expect(big.output).toMatch(/Formatting changed lines 1(-\d+)?(, |;)/)
+      expect(big.output).toContain("re-read those regions before patching them again")
+      expect(big.output.length).toBeLessThan(1_200)
+      expect(big.metadata.formatting?.["big.receipt"].split("\n").length).toBeGreaterThan(400)
       await Instance.dispose()
     },
   })

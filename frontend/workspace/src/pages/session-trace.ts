@@ -39,6 +39,9 @@ export function createTraceExpansion(storage: Storage | undefined = browserStora
   }
   return {
     expanded: (id: string) => state[id] === true,
+    /** The reader's explicit choice, or nothing: a turn with no choice lets
+     * its live burst open on its own. */
+    preference: (id: string): boolean | undefined => state[id],
     toggle: (id: string) => set(id, state[id] !== true),
     open: (id: string) => {
       if (state[id] === undefined) set(id, true)

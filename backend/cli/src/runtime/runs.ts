@@ -172,7 +172,9 @@ export namespace RuntimeRuns {
     await Session.get(sessionID)
     const records = await Storage.list(prefix(sessionID))
     const runs = await Promise.all(records.map(async (item) => reconcile(Record.parse(await Storage.read(item)))))
-    return runs.sort((a, b) => a.acceptedAt - b.acceptedAt || a.runID.localeCompare(b.runID))
+    // A follow-up's receipt names the run it joined; the run lists once.
+    const unique = [...new Map(runs.map((run) => [run.runID, run])).values()]
+    return unique.sort((a, b) => a.acceptedAt - b.acceptedAt || a.runID.localeCompare(b.runID))
   }
 
   /** Admission and exact retry reconciliation are serialized across local
@@ -194,13 +196,55 @@ export namespace RuntimeRuns {
       if (prior.fingerprint !== fingerprint) throw new ConflictError()
       return { run: await reconcile(prior), replayed: true }
     }
-    try {
-      SessionPrompt.assertNotBusy(input.sessionID)
-    } catch (error) {
-      if (error instanceof Session.BusyError) throw new RuntimeEvents.ActiveRunError(input.sessionID)
-      throw error
+    const active = await RuntimeEvents.activeRun(input.sessionID)
+    const busy = (() => {
+      try {
+        SessionPrompt.assertNotBusy(input.sessionID)
+        return false
+      } catch (error) {
+        if (error instanceof Session.BusyError) return true
+        throw error
+      }
+    })()
+    if (active || busy) {
+      // A message sent while a run is live joins that run: the loop reads the
+      // newest user message on its next step and answers both, so the reply
+      // stays one run and Enter never has to mean Stop. Idempotent on the
+      // message id a retry reuses.
+      const current = active
+        ? await read(input.sessionID, active).catch((error) => {
+            if (Storage.NotFoundError.isInstance(error)) return
+            throw error
+          })
+        : undefined
+      if (!current || finished(current.run)) throw new RuntimeEvents.ActiveRunError(input.sessionID)
+      const existing = input.messageID
+        ? await MessageV2.get({ sessionID: input.sessionID, messageID: input.messageID }).catch((error) => {
+            if (Storage.NotFoundError.isInstance(error)) return
+            throw error
+          })
+        : undefined
+      if (!existing) {
+        const { requestID: _, message, effort: _effort, ...rest } = input
+        await SessionPrompt.prompt({
+          ...rest,
+          agent,
+          noReply: true,
+          parts: input.parts ?? [{ type: "text", text: message! }],
+        })
+      }
+      // The follow-up's own receipt points at the run it joined, so an exact
+      // retry after that run has ended replays the run instead of starting a
+      // fresh one for a message that is already in the transcript.
+      await Storage.write(key(input.sessionID, runID), {
+        run: current.run,
+        input,
+        fingerprint,
+        agent,
+        owner: current.owner,
+      } satisfies Record)
+      return { run: current.run, replayed: true }
     }
-    if (await RuntimeEvents.isActive(input.sessionID)) throw new RuntimeEvents.ActiveRunError(input.sessionID)
     if (input.messageID) {
       // A cancelled admission may never have persisted a user message. Its
       // receipt still reserves that message ID; a new request cannot rebind it.

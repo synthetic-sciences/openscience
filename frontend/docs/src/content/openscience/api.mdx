@@ -71,6 +71,8 @@ Use a runtime that supports this option; see [session workspaces](/openscience/s
 
 An identical `requestID` in the same session returns the original receipt, including after completion. A changed prompt or model with that ID returns HTTP 409. Omit the ID only when duplicate admission after an uncertain network result is acceptable. Advanced clients can supply a native `messageID`; ordinary integrations should let the server generate it and use their own external `requestID`.
 
+A prompt sent while the session has a live run joins that run: the message is added to the conversation, the agent reads it on its next step and answers it in the same run, and the response is the live run's receipt (its `runID`). A retry of that follow-up with the same `requestID` replays the run it joined, including after it ends. There is no separate queue to manage or flush.
+
 Use **exactly one** of `message` or `parts`. Parts support ordinary text, file attachments, agent mentions, conversation references, and explicit subtasks using the generated session input types. Internal synthetic text and system/agent overrides are excluded. Optional model, variant, tier, context, delegation, and delegation settings survive admission.
 
 Run states are `accepted`, `running`, `completed`, `failed`, `cancelled`, and `interrupted`. A completed run means the agent turn finished; it does not prove the science is correct or that a detached compute job has completed. Inspect saved Results, job delivery state, and native verification separately.

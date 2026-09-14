@@ -67,6 +67,17 @@ test("normalizes only unambiguous action aliases and valid JSON-object targets",
       const tool = await createComputeJobTool({ root, workspace: tmp.path }).init()
       const targets = await tool.execute({ operation: "targets" } as never, context(session.id, []))
       expect(targets.output).toContain('"kind": "local"')
+      // One preflight block says whether a job could run, download, and reach a
+      // model API, so readiness is not pieced together from settings prose.
+      const readiness = JSON.parse(targets.output).readiness
+      expect(readiness).toMatchObject({
+        remote_compute_configured: false,
+        outbound_network: "blocked",
+        downloads_permitted: false,
+        secret_refs_available: [],
+        ready_to_execute: "no remote target; local jobs only",
+      })
+      expect(readiness.credential_forwarding).toContain("not forwarded")
 
       const duplicate = await tool.execute(
         { action: "targets", operation: "targets" } as never,

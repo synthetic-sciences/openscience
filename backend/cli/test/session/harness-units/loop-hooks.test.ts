@@ -132,7 +132,7 @@ test("compute stays in <env>; time and spend ride at the tail so the system prom
         expect(head).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
         expect(head).toMatch(/Knowledge cutoff: /)
         expect(head).not.toContain("Time budget:")
-        expect(head).not.toContain("Spent so far:")
+        expect(head).not.toContain("Spent so far")
         // The provider caches the prefix; a second step whose system prompt
         // differs by one spend figure pays for the whole context again.
         expect(JSON.stringify(system(steps[1]))).toBe(head)
@@ -140,7 +140,7 @@ test("compute stays in <env>; time and spend ride at the tail so the system prom
           const last = tail(step)
           expect(last.role).toBe("user")
           expect(String(last.content)).toMatch(
-            /<system-reminder kind="status">[\s\S]*Time budget: 2h, elapsed \dm[\s\S]*Spent so far:[\s\S]*<\/system-reminder>/,
+            /<system-reminder kind="status">[\s\S]*Time budget: 2h, elapsed \dm[\s\S]*Spent so far on this session[\s\S]*<\/system-reminder>/,
           )
         }
         // The tail is request-only: nothing synthetic was persisted for it.

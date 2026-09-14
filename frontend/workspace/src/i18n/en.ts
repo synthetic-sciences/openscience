@@ -172,6 +172,7 @@ export const dict = {
 
   "prompt.placeholder.shell": "Enter shell command…",
   "prompt.placeholder.normal": "Describe the research task you want to work through…",
+  "prompt.placeholder.working": "Add to this turn while it works · Esc stops",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",

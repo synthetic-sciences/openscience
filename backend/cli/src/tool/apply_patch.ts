@@ -725,16 +725,27 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       return `M ${path.relative(Instance.worktree, target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
+    const formatting: Record<string, string> = {}
     for (const [index, file] of savedFiles.entries()) {
       if (!file.formatted) continue
       const formattingDiff = trimDiff(
         createTwoFilesPatch(file.filePath, file.filePath, fileChanges[index].newContent, file.after),
       )
+      formatting[file.relativePath] = formattingDiff
+      // The model needs to know which regions no longer read as it wrote them,
+      // not the formatter's whole rewrite: a 12 KB diff per edit was most of a
+      // long session's context. The full diff stays on the part for the UI.
+      const ranges = [...formattingDiff.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)].map((match) => {
+        const start = Number(match[1])
+        const count = match[2] === undefined ? 1 : Number(match[2])
+        return count > 1 ? `${start}-${start + count - 1}` : `${start}`
+      })
+      const shown = ranges.slice(0, 8).join(", ") + (ranges.length > 8 ? `, and ${ranges.length - 8} more` : "")
       output += `\n\nSaved contents changed after the edit (for example, by a formatter): ${file.relativePath}\nCurrent SHA-256: ${file.afterHash}\n`
       output +=
-        formattingDiff.length <= 12_000
+        formattingDiff.length <= 1_500
           ? formattingDiff
-          : "The formatting diff is too large to include here. Re-read the saved file before constructing another patch."
+          : `Formatting changed lines ${shown || "throughout"}; re-read those regions before patching them again.`
     }
     if (trash.length) {
       output += `\n\nRecoverable for 30 days: ${trash.map((record) => record.id).join(", ")}`
@@ -763,6 +774,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         files: savedFiles,
         diagnostics,
         trash,
+        ...(Object.keys(formatting).length ? { formatting } : {}),
       },
       output,
     }

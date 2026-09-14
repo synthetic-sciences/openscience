@@ -73,9 +73,10 @@ test("concurrent identical submissions share one durable admission and changed i
       await expect(
         RuntimeRuns.admit({ ...input, model: { providerID: "other", modelID: "other" } }),
       ).rejects.toBeInstanceOf(RuntimeRuns.ConflictError)
-      await expect(RuntimeRuns.admit({ ...input, requestID: "another" })).rejects.toBeInstanceOf(
-        RuntimeEvents.ActiveRunError,
-      )
+      // A different request while the run is live is a follow-up that joins it,
+      // not a conflict; here no model can store it, and that failure is the
+      // caller's to see rather than a false "busy".
+      await expect(RuntimeRuns.admit({ ...input, requestID: "another" })).rejects.toThrow(/model|provider/i)
       expect(await RuntimeRuns.list(session.id)).toHaveLength(1)
       await RuntimeRuns.cancel(session.id, results[0]!.run.runID)
     },
@@ -347,6 +348,109 @@ test("the public API runs rich input through a real local provider and exact ret
       await expect(
         runtime.prompt({ ...input, requestID: "new-request-same-message", messageID: run.messageID }),
       ).rejects.toMatchObject({ error: "request_conflict" })
+    },
+  })
+}, 30_000)
+
+test("a prompt sent while a run is live joins that run and is answered by it", async () => {
+  let calls = 0
+  using provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = (await request.json()) as { messages: unknown }
+      const text = JSON.stringify(body.messages)
+      const research = text.includes("Methods and deliverables")
+      const chunk = (delta: object, finish: string | null) =>
+        `data: ${JSON.stringify({ id: "chatcmpl-join", object: "chat.completion.chunk", created: 1, model: STRESS_PROVIDER_MODEL, choices: [{ index: 0, delta, finish_reason: finish }], ...(finish ? { usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } } : {}) })}\n\n`
+      // The first research step is slow to answer, so a follow-up can arrive
+      // while the run is live; the step after its tool call answers both.
+      if (research && calls++ === 0) {
+        await Bun.sleep(2_500)
+        return new Response(
+          chunk(
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_glob",
+                  type: "function",
+                  function: { name: "glob", arguments: JSON.stringify({ pattern: "*.md" }) },
+                },
+              ],
+            },
+            null,
+          ) +
+            chunk({}, "tool_calls") +
+            "data: [DONE]\n\n",
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      }
+      const both = text.includes("Second question")
+      return new Response(
+        chunk({ role: "assistant", content: both ? "Answered both." : "Answered the first only." }, null) +
+          chunk({}, "stop") +
+          "data: [DONE]\n\n",
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${provider.url.origin}/v1`) })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      await trustProject()
+      await Provider.invalidate()
+    },
+    fn: async () => {
+      const session = await Session.create({ title: "Follow-up fixture" })
+      using api = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => Server.App().fetch(request) })
+      const runtime = createOpenScienceRuntime({ baseUrl: api.url.origin, directory: tmp.path })
+      const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL }
+      const first = await runtime.prompt({
+        sessionID: session.id,
+        requestID: "first",
+        message: "First question.",
+        effort: "normal",
+        delegation: false,
+        model,
+      })
+      const deadline = Date.now() + 5000
+      while (calls === 0 && Date.now() < deadline) await Bun.sleep(10)
+      const second = await runtime.prompt({
+        sessionID: session.id,
+        requestID: "second",
+        message: "Second question.",
+        effort: "normal",
+        delegation: false,
+        model,
+      })
+      // Same run, not a 409: the message joined the live turn.
+      expect(second.runID).toBe(first.runID)
+      const done = await runtime.wait({
+        sessionID: session.id,
+        runID: first.runID,
+        intervalMs: 20,
+        signal: AbortSignal.timeout(15_000),
+      })
+      expect(done.state).toBe("completed")
+      const messages = await Session.messages({ sessionID: session.id })
+      const users = messages.filter((message) => message.info.role === "user")
+      expect(users).toHaveLength(2)
+      const answer = messages.findLast((message) => message.info.role === "assistant")
+      expect(answer?.parts.some((part) => part.type === "text" && part.text === "Answered both.")).toBe(true)
+      // The retry of the follow-up adds nothing.
+      const retry = await runtime.prompt({
+        sessionID: session.id,
+        requestID: "second",
+        message: "Second question.",
+        effort: "normal",
+        delegation: false,
+        model,
+      })
+      expect(retry.runID).toBe(first.runID)
+      expect((await Session.messages({ sessionID: session.id })).filter((m) => m.info.role === "user")).toHaveLength(2)
     },
   })
 }, 30_000)

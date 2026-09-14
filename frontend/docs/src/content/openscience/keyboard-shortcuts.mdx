@@ -21,11 +21,13 @@ Keyboard shortcuts can depend on the current page, focus, and active dialog. If 
 
 | Key | Action |
 | --- | --- |
-| Enter | Send the message when the composer is ready. |
+| Enter | Send the message. While a response is running, the message joins the current turn and is answered by it. |
 | Shift+Enter | Insert a new line. |
 | / | Search available skills and commands. |
 | @ | Open available context references in the composer. |
-| Escape | Dismiss the active dialog or picker. |
+| Escape | Dismiss the active dialog or picker; with none open, stop the running response. |
+
+The send button becomes **Stop** while a response runs; Enter never stops a response.
 
 Use filenames and explicit output paths in the message after adding context. Selecting an attachment or skill does not by itself define the research task.
 

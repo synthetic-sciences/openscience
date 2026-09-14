@@ -616,6 +616,26 @@ export function createComputeJobTool(base?: JobBroker.Options) {
             },
           },
           capabilities: resolved.capabilities,
+          // One preflight answer instead of facts scattered over settings:
+          // whether a job could run, download, and reach a model API.
+          readiness: (() => {
+            const configured = Boolean(resolved.modal && resolved.resolveCredentials)
+            const network = resolved.modal?.network === "unrestricted"
+            const secrets = (resolved.capabilities ?? []).find((target) => target.kind === "modal")?.secret_refs ?? []
+            return {
+              remote_compute_configured: configured,
+              outbound_network: network ? "enabled" : "blocked",
+              downloads_permitted: network,
+              secret_refs_available: secrets,
+              credential_forwarding:
+                "Only the listed secret_refs can be placed in a job. Provider API keys saved for chat (OpenRouter, OpenAI, Anthropic, Google) are not forwarded; a job that must call a model API needs a key the user provides for it.",
+              ready_to_execute: configured
+                ? network
+                  ? "yes"
+                  : "only jobs that need no downloads and no network"
+                : "no remote target; local jobs only",
+            }
+          })(),
         }
         return {
           title: "Compute targets",

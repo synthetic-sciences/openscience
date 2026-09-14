@@ -1,5 +1,6 @@
 import type { Hooks, Plugin } from "@synsci/plugin"
 import { Config } from "@/config/config"
+import { Session } from "@/session"
 import { HarnessState } from "./state"
 
 /**
@@ -10,9 +11,31 @@ import { HarnessState } from "./state"
  * adds a wrap-up reminder once, never a hard stop.
  */
 export namespace Cost {
+  /** What the figure covers, said once so the model does not read a lead's
+   * spend as the whole study's: this session's own model calls. */
   export function line(spend: HarnessState.Session["spend"]) {
     const dollars = spend.cost >= 0.01 ? `$${spend.cost.toFixed(2)}` : `$${spend.cost.toFixed(4)}`
-    return `Spent so far: ${dollars} (${spend.tokens.toLocaleString()} tokens)`
+    return `Spent so far on this session's model calls: ${dollars} (${spend.tokens.toLocaleString()} tokens); workers and compute jobs are counted separately.`
+  }
+
+  /** The in-memory count starts at zero whenever the process does; the
+   * transcript remembers every finished step. Sum it once per session so a
+   * restart mid-session never shows a 40-step conversation as free. */
+  export async function seed(sessionID: string) {
+    const spend = HarnessState.get(sessionID).spend
+    if (spend.seeded) return spend
+    spend.seeded = true
+    const messages = await Session.messages({ sessionID }).catch(() => [])
+    let cost = 0
+    let tokens = 0
+    for (const message of messages) {
+      if (message.info.role !== "assistant") continue
+      cost += message.info.cost ?? 0
+      tokens += message.info.tokens.input + message.info.tokens.output + message.info.tokens.reasoning
+    }
+    spend.cost = Math.max(spend.cost, cost)
+    spend.tokens = Math.max(spend.tokens, tokens)
+    return spend
   }
 }
 
@@ -29,6 +52,7 @@ export const CostUnit: Plugin = async () => {
     },
     async "env.lines"(input, output) {
       const state = HarnessState.get(input.sessionID)
+      await Cost.seed(input.sessionID)
       output.status.push(Cost.line(state.spend))
       const ceiling = HarnessState.costCeiling(await Config.get())
       if (ceiling === undefined || state.spend.cost < ceiling || state.spend.ceilingNoted) return

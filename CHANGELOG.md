@@ -73,6 +73,38 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   that dispatched it instead of opening a headless second turn in the
   transcript, and the note on a result with failed tool calls is a count rather
   than a verdict.
+- The transcript reads the way a turn was written: the agent's prose stays in
+  place at full size, and the work between two paragraphs folds into one line
+  ("Read 4 files, edited 3 files · 4m 12s") that opens on request. The burst
+  still running stays open; a failed call or a pending question stays visible
+  under its line when folded; reasoning the provider kept private counts into
+  the burst's time instead of taking a row. The turn header opens or closes
+  every burst at once and, while the turn runs, names the call in flight with
+  its own clock ("Running pytest -q · 12s") from the first second, in one
+  element that never swaps.
+- Enter while a response is running adds the message to the current turn
+  instead of stopping the response; the send button is Stop and Escape still
+  stops. The runtime API accepts a prompt during a live run as a follow-up
+  that joins that run (same `runID`), and an exact retry of the follow-up
+  replays it.
+- A skill's tools stay on offer for as long as its text is in the model's
+  context, across turns, instead of lapsing at the next request; the
+  autoresearch, delegation and peer-review skills describe the current Task
+  contract (`subagent_type`, `task_id`, `background`) rather than the retired
+  `specialist` parameter and `execute`/`critique` profiles.
+- The spend line survives a server restart: it is seeded from the transcript
+  once per session, and says what it covers (this session's model calls, not
+  workers or compute).
+- An interrupted `question` says that nothing was chosen or recorded and to ask
+  again; an interrupted read says nothing changed; only side-effecting tools
+  keep the "inspect the current state" warning.
+- `apply_patch` reports a formatter's rewrite as the changed line ranges rather
+  than the whole diff (the UI keeps the diff); `todowrite` confirms with counts
+  and the in-progress items instead of echoing the list.
+- `compute_job` `targets` includes a readiness block: whether remote compute is
+  configured, whether outbound network and downloads are permitted, which
+  secret references a job can carry, and that chat provider keys are not
+  forwarded into jobs.
 - `recall`: search this session's earlier messages, tool results and saved tool
   outputs by regular expression, including turns compaction summarized away.
 - The `execution-hygiene` core skill and eleven convention skills

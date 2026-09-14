@@ -1,6 +1,6 @@
 ---
 name: peer-review
-description: Reviews a manuscript, proposal, analysis or result the way a careful referee does, reading the whole artifact, checking the methods against the claims, the statistics against the design, the figures against the numbers, and reporting BLOCKING issues separately from observations, with a calibrated recommendation. Use for peer review, critical appraisal of a paper or claim, pre-submission review of the user's own draft, grant review, or evaluating research rigor. For fixing the text afterwards use paper-writing; for an independent second opinion delegate to the critique agent.
+description: Reviews a manuscript, proposal, analysis or result the way a careful referee does, reading the whole artifact, checking the methods against the claims, the statistics against the design, the figures against the numbers, and reporting BLOCKING issues separately from observations, with a calibrated recommendation. Use for peer review, critical appraisal of a paper or claim, pre-submission review of the user's own draft, grant review, or evaluating research rigor. For fixing the text afterwards use paper-writing; for an independent second opinion delegate a read to an explore worker.
 summary: "Referee a manuscript, proposal or result: BLOCKING vs observations, calibrated verdict."
 category: core
 role: workflow
@@ -70,11 +70,11 @@ uncertainty; numbers in text equal to numbers in tables; reporting checklist for
 If code is attached, run the smallest thing that tests a central number.
 
 **An independent second read.** When the artifact is long, the stakes are high, or your
-own draft is under review, delegate one read to the critique reviewer (Task tool,
-`subagent_type: "explore"`, `specialist: "critique"`) with the artifact paths and the
-specific angle: statistics, leakage, claims versus evidence. It is read-only and reports
-BLOCKING and OBSERVATION items. Merge its BLOCKING findings with yours; do not average
-them away.
+own draft is under review, delegate one read to an `explore` worker (Task tool,
+`subagent_type: "explore"`) with the artifact paths, this skill's name to load, and the
+specific angle: statistics, leakage, claims versus evidence. The worker is read-only; ask
+it to report BLOCKING and OBSERVATION items. Merge its BLOCKING findings with yours; do not
+average them away.
 
 ## Report
 

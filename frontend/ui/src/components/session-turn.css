@@ -538,18 +538,22 @@
     flex-direction: column;
     gap: 4px;
 
-    > [data-slot="trace-entry"]:not([data-narration]) [data-slot="text-part-body"] {
+    /* Prose stays at full size wherever it falls; a paragraph after a burst
+       gets a breath so it never reads as another row. */
+    > [data-slot="trace-entry"] [data-slot="text-part-body"] {
       margin-top: 16px;
     }
 
-    > [data-slot="trace-entry"]:first-child:not([data-narration]) [data-slot="text-part-body"] {
+    > [data-slot="trace-entry"]:first-child [data-slot="text-part-body"] {
       margin-top: 8px;
     }
 
-    > [data-slot="trace-entry"]:not([data-narration])
-      + [data-slot="trace-entry"]:not([data-narration])
-      [data-slot="text-part-body"] {
+    > [data-slot="trace-entry"] + [data-slot="trace-entry"] [data-slot="text-part-body"] {
       margin-top: 2px;
+    }
+
+    > [data-slot="trace-entry"] + [data-component="trace-burst"] {
+      margin-top: 8px;
     }
 
     > [data-slot="session-turn-stop"] {
@@ -768,15 +772,59 @@
     color: var(--text-base);
   }
 
-  /* Narration between tool bursts reads as part of the trace, quieter than
-     the final answer. */
-  [data-slot="trace-entry"][data-narration="true"] [data-slot="text-part-body"] {
-    margin: 8px 0;
-  }
+  /* One burst of work between two paragraphs: a line naming what happened
+     and how long it took; the rows hang off a hairline rail underneath. */
+  [data-component="trace-burst"] {
+    width: 100%;
 
-  [data-slot="trace-entry"][data-narration="true"] [data-component="markdown"],
-  [data-slot="trace-entry"][data-narration="true"] [data-component="markdown"] :is(p, li) {
-    color: var(--text-weak);
+    > [data-slot="trace-burst-trigger"] {
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      text-align: left;
+      border-radius: var(--radius-xs);
+      color: inherit;
+      font: inherit;
+    }
+
+    > [data-slot="trace-burst-trigger"]:hover [data-component="trace-row"],
+    > [data-slot="trace-burst-trigger"]:focus-visible [data-component="trace-row"] {
+      color: var(--text-strong);
+    }
+
+    [data-slot="trace-burst-head"] {
+      color: var(--text-weak);
+    }
+
+    [data-slot="trace-burst-head"][data-static="true"] {
+      cursor: default;
+    }
+
+    /* A burst of one row is rendered as that row, flush with the prose. */
+    &[data-single="true"] [data-slot="trace-burst-body"] {
+      margin: 0;
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    &[data-open="true"] [data-slot="trace-burst-head"],
+    &[data-live="true"] [data-slot="trace-burst-head"] {
+      color: var(--text-base);
+    }
+
+    [data-slot="trace-burst-body"] {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin: 0 0 4px 7px;
+      padding-left: 13px;
+      border-left: 1px solid var(--border-weak-base);
+    }
+
+    [data-slot="trace-burst-body"][hidden] {
+      display: none;
+    }
   }
 
   [data-slot="session-turn-live-status"] {

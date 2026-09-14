@@ -20,9 +20,19 @@ export const TodoWriteTool = Tool.define("todowrite", {
       sessionID: ctx.sessionID,
       todos: params.todos,
     })
+    // The list the model sent is already in its context as the call's input;
+    // echoing it back doubled every plan update. The confirmation carries the
+    // state that changes: the counts and what is in progress.
+    const done = params.todos.filter((x) => x.status === "completed").length
+    const pending = params.todos.filter((x) => x.status === "pending").length
+    const cancelled = params.todos.filter((x) => x.status === "cancelled").length
+    const active = params.todos.filter((x) => x.status === "in_progress").map((x) => x.content)
     return {
       title: `${params.todos.filter((x) => x.status !== "completed").length} todos`,
-      output: JSON.stringify(params.todos, null, 2),
+      output: [
+        `Updated: ${done}/${params.todos.length} done, ${pending} pending${cancelled ? `, ${cancelled} cancelled` : ""}.`,
+        ...(active.length ? [`In progress: ${active.join("; ")}`] : []),
+      ].join("\n"),
       metadata: {
         todos: params.todos,
       },

@@ -38,9 +38,11 @@ ledger, and wakes this session with a "Study update" whenever there is news.
    units times your confidence, and the configuration it needs; a configuration already in
    the study is rejected. The hypotheses skill is the tool for turning a vague direction
    into ideas worth queueing.
-4. If the review gate is on (the default), delegate a read-only critique of the training
-   and evaluation code to the critique reviewer (Task tool, `specialist: "critique"`) before
-   the baseline runs, and fix anything it marks blocking. A baseline built on a leaking
+4. If the review gate is on (the default), get a read-only critique of the training and
+   evaluation code before the baseline runs: load the peer-review skill and read it
+   yourself, or delegate one read to an `explore` worker (Task tool,
+   `subagent_type: "explore"`) with the file paths and the angle (leakage, metric
+   definition, split hygiene). Fix anything marked blocking. A baseline built on a leaking
    split or a misspelled metric wastes every run after it.
 
 ## Every run

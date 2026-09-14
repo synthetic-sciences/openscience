@@ -382,13 +382,20 @@ export namespace RuntimeEvents {
   }
 
   export async function isActive(sessionID: string) {
-    if (state().active.has(sessionID)) return true
+    return (await activeRun(sessionID)) !== undefined
+  }
+
+  /** The run that owns the session right now, if a live process still runs it. */
+  export async function activeRun(sessionID: string) {
     const journal = await read(sessionID)
-    return !!(
+    if (state().active.has(sessionID) && journal.activeRunID) return journal.activeRunID
+    if (
       journal.activeRunID &&
       journal.activeOwner &&
       (await ProcessIdentity.owns(journal.activeOwner.pid, journal.activeOwner.identity))
     )
+      return journal.activeRunID
+    return undefined
   }
 
   export async function begin(input: {

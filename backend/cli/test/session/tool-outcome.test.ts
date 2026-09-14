@@ -1,7 +1,12 @@
 import { expect, test } from "bun:test"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { CredentialRevocation } from "../../src/credentials/revocation"
-import { abortedToolPart, observableToolFailure, observableToolStatus } from "../../src/session/tool-outcome"
+import {
+  abortedToolPart,
+  interruptionReceipt,
+  observableToolFailure,
+  observableToolStatus,
+} from "../../src/session/tool-outcome"
 
 function completed(tool: string, metadata: Record<string, unknown>, title = `${tool} execution`): MessageV2.ToolPart {
   return {
@@ -163,4 +168,31 @@ test("a call cancelled by a credential revocation records the cause, not a fake 
   const truncated = abortedToolPart(pending, "Model output was truncated; no action was taken.", { explain: false })
   if (truncated.state.status !== "error") throw new Error("Expected the truncated call to be closed")
   expect(truncated.state.error).toBe("Model output was truncated; no action was taken.")
+})
+
+test("an interrupted question says what happened to the decision instead of warning about side effects", () => {
+  const question: MessageV2.ToolPart = {
+    id: "part_question",
+    sessionID: "ses_q",
+    messageID: "msg_q",
+    type: "tool",
+    tool: "question",
+    callID: "call_question",
+    state: { status: "running", input: { questions: [] }, metadata: {}, time: { start: 10 } },
+  }
+  const shown = abortedToolPart(question, "Tool execution aborted", { now: 40 })
+  if (shown.state.status !== "error") throw new Error("Expected the question to be closed")
+  expect(shown.state.error).toBe(
+    "Tool execution aborted. The question was shown but no answer arrived before the interruption: no option was chosen and nothing was recorded. Ask again if the decision is still open.",
+  )
+  expect(interruptionReceipt("question", false)).toBe("The question had not been shown; nothing was asked or recorded.")
+  // A read that was cut off changed nothing; a command may have.
+  expect(interruptionReceipt("read", true)).toBe("The read call only reads; nothing changed.")
+  expect(interruptionReceipt("bash", true)).toBe(
+    "Its side effects may have completed; inspect the current state before retrying.",
+  )
+  const read: MessageV2.ToolPart = { ...question, tool: "read", state: { ...question.state, input: { filePath: "a" } } }
+  const cut = abortedToolPart(read, "Tool execution aborted", { now: 40 })
+  if (cut.state.status !== "error") throw new Error("Expected the read to be closed")
+  expect(cut.state.error).toBe("Tool execution aborted. The read call only reads; nothing changed.")
 })

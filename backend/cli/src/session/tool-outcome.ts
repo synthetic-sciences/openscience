@@ -23,11 +23,45 @@ export function observableToolStatus(part: MessageV2.ToolPart): ObservableToolSt
   return "completed"
 }
 
+/** Tools that only observe: an interruption leaves nothing behind to check. */
+const OBSERVERS = new Set([
+  "read",
+  "glob",
+  "grep",
+  "list",
+  "codesearch",
+  "lsp",
+  "webfetch",
+  "websearch",
+  "research_search",
+  "literature",
+  "recall",
+  "science_search",
+  "science_fetch",
+  "science_list_dbs",
+  "skill",
+])
+
+/** What an interrupted call did or did not do, stated for the tool rather than
+ * in general. A budget question that was cut off must not read as "its side
+ * effects may have completed": nothing was chosen and nothing was recorded,
+ * and the model should simply ask again. */
+export function interruptionReceipt(tool: string, started: boolean) {
+  if (tool === "question") {
+    return started
+      ? "The question was shown but no answer arrived before the interruption: no option was chosen and nothing was recorded. Ask again if the decision is still open."
+      : "The question had not been shown; nothing was asked or recorded."
+  }
+  if (!started) return `The ${tool} call had not started; no action was taken.`
+  if (OBSERVERS.has(tool)) return `The ${tool} call only reads; nothing changed.`
+  return "Its side effects may have completed; inspect the current state before retrying."
+}
+
 /** Close a tool wrapper whose executor will never report. A call that never
  * left `pending` did nothing: its record must say so and carry the cause,
  * rather than read as a failed execution with empty arguments. `explain`
- * appends that clause for never-started calls when `reason` does not already
- * state it. */
+ * appends the receipt when `reason` does not already state it; a running call
+ * gets one only where the tool's nature makes it exact (a question, a read). */
 export function abortedToolPart(
   part: MessageV2.ToolPart,
   reason: string,
@@ -36,8 +70,9 @@ export function abortedToolPart(
   const now = options.now ?? Date.now()
   const running = part.state.status === "running" ? part.state : undefined
   const start = running ? running.time.start : now
+  const exact = part.tool === "question" || OBSERVERS.has(part.tool)
   const detail =
-    options.explain === false || running ? "" : `. The ${part.tool} call had not started; no action was taken.`
+    options.explain === false || (running && !exact) ? "" : `. ${interruptionReceipt(part.tool, !!running)}`
   return {
     ...part,
     state: {
