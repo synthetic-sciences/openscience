@@ -220,6 +220,9 @@ export function taskPhase(input: { status?: string; error?: string; metadata?: R
     if (metadata.outcome === "partial") return "partial"
     if (metadata.outcome === "timed_out") return "timed_out"
     if (metadata.outcome === "error") return "failed"
+    // A background dispatch settles at once; the worker's own outcome is
+    // written onto the part when it finishes. Until then it is still working.
+    if (metadata.background === true && metadata.outcome === undefined) return "running"
     return "completed"
   }
   if (input.status === "running" && child) return metadata.activeMs === undefined ? "queued" : "running"

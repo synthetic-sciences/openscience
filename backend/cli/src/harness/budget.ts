@@ -47,12 +47,20 @@ export namespace Budget {
     return rest ? `${hours}h ${rest}m` : `${hours}h`
   }
 
-  export function lines(state: HarnessState.Session, now: number, machine: { cpus: number; gib: number }) {
-    const out = [`Compute: ${machine.cpus} CPUs, ${machine.gib} GiB`]
-    if (!state.deadline || !state.startedAt) return out
+  /** The stable `<env>` line: what the machine offers. It never changes
+   * during a session, so it can live in the cached system prompt. */
+  export function lines(machine: { cpus: number; gib: number }) {
+    return [`Compute: ${machine.cpus} CPUs, ${machine.gib} GiB`]
+  }
+
+  /** The per-step facts: elapsed time against the budget and the one-shot
+   * reminders at 50% and 85%. Rendered at the tail of the context, never in
+   * the system prompt, because they change between steps. */
+  export function status(state: HarnessState.Session, now: number) {
+    if (!state.deadline || !state.startedAt) return []
     const total = state.deadline - state.startedAt
     const elapsed = Math.max(0, now - state.startedAt)
-    out.push(`Time budget: ${duration(total)}, elapsed ${duration(elapsed)}`)
+    const out = [`Time budget: ${duration(total)}, elapsed ${duration(elapsed)}`]
     const fraction = total > 0 ? elapsed / total : 1
     if (fraction >= 0.85 && !state.budgetReminders.has(85)) {
       state.budgetReminders.add(85)
@@ -84,7 +92,8 @@ export const BudgetUnit: Plugin = async () => {
     },
     async "env.lines"(input, output) {
       const state = HarnessState.get(input.sessionID)
-      output.lines.push(...Budget.lines(state, HarnessState.clock.now(), await Budget.compute()))
+      output.lines.push(...Budget.lines(await Budget.compute()))
+      output.status.push(...Budget.status(state, HarnessState.clock.now()))
     },
     async "loop.before_finish"(input, output) {
       const state = HarnessState.get(input.sessionID)

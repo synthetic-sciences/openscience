@@ -28,6 +28,17 @@ describe("Deliverables.detect", () => {
     expect(Deliverables.detect("Write results/out.csv (columns a,b); do not touch results/raw.csv.")).toEqual([
       "results/out.csv",
     ])
+    // Files the request tells the model to consult are inputs, not debts: a
+    // worker brief that opens with its reading list names no deliverable.
+    expect(
+      Deliverables.detect(
+        "Implement the control branch. Read CONTRACTS.md and study.json first. Own ONLY creative_rl/control.py and tests/test_control.py.",
+      ),
+    ).toEqual([])
+    expect(Deliverables.detect("Read config.yaml, then write results/summary.json and results/plot.png.")).toEqual([
+      "results/summary.json",
+      "results/plot.png",
+    ])
   })
 })
 
@@ -60,6 +71,34 @@ describe("Deliverables.check", () => {
 })
 
 describe("DeliverablesUnit", () => {
+  test("a worker's brief never becomes a checklist: the lead checks what it asked for itself", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const lead = await Session.create({ workspace: "project" })
+        const worker = await Session.create({ parentID: lead.id, workspace: "project" })
+        const unit = await DeliverablesUnit({} as PluginInput)
+        await unit["chat.message"]!(
+          { sessionID: worker.id, messageID: "msg_brief" },
+          {
+            message: { id: "msg_brief", sessionID: worker.id, role: "user" } as never,
+            parts: [
+              { type: "text", text: "Write results/alpha.csv with columns id,score and results/beta.md." } as never,
+            ],
+          },
+        )
+        expect(HarnessState.get(worker.id).deliverables).toEqual([])
+        const output = { message: undefined as string | undefined }
+        await unit["loop.before_finish"]!(
+          { sessionID: worker.id, messageID: "msg_a", turn: "msg_brief", injections: 0 },
+          output,
+        )
+        expect(output.message).toBeUndefined()
+      },
+    })
+  })
+
   test("a specification on the first message yields one failure message at finish, at most twice", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

@@ -231,10 +231,19 @@ export interface Hooks {
     output: { text: string },
   ) => Promise<void>
   /**
-   * Lines a plugin adds inside the `<env>` block of every provider request for
-   * this session (compute limits, time budget, spend). Keep each line short.
+   * Lines a plugin adds to every provider request for this session. `lines`
+   * go inside the `<env>` block of the system prompt and must be stable for
+   * the whole session (compute limits): the system prompt is the provider's
+   * cache prefix, and a line that changes between steps discards the cache
+   * for the entire context. Facts that change while the model works (time
+   * used, spend, study state, one-shot reminders) go in `status`, which is
+   * appended at the tail of the conversation for the current step only.
+   * Keep each line short.
    */
-  "env.lines"?: (input: { sessionID: string; model: Model }, output: { lines: string[] }) => Promise<void>
+  "env.lines"?: (
+    input: { sessionID: string; model: Model },
+    output: { lines: string[]; status: string[] },
+  ) => Promise<void>
   /**
    * The model returned a final answer with no tool calls. A plugin may set
    * `message` to inject it as a continuation and keep the loop running; the

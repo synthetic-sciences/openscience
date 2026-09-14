@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { availableParallelism } from "node:os"
+import path from "node:path"
 import { Config } from "../../src/config/config"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
+import { SystemPrompt } from "../../src/session/system"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { TaskAttempt } from "../../src/tool/task-attempt"
 import { childPermissionRules, renderTaskOutput, TaskTool } from "../../src/tool/task"
@@ -227,6 +229,33 @@ describe("Task tool contract", () => {
           permission: [...explore!.permission, { permission: "todowrite", pattern: "*", action: "allow" }],
         })
         expect(allowed.map((rule) => rule.permission).sort()).toEqual(["question", "task"])
+      },
+    })
+  })
+
+  test("a child of an isolated lead can read and write in the lead's scratch, and nowhere else across the boundary", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({ workspace: "isolated" })
+        const stranger = await Session.create({ workspace: "isolated" })
+        const child = await Session.create({ parentID: parent.id, workspace: "isolated" })
+        await SessionFilesystem.shareWorkingDirectory({ parentSessionID: parent.id, childSessionID: child.id })
+        const lead = await SessionFilesystem.toolDirectory(parent.id)
+        expect(await SessionFilesystem.toolDirectory(child.id)).toBe(lead)
+        // The lead's scratch is another session's private workspace; the
+        // parent grant is what lets the worker's deliverables land there.
+        const deliverable = path.join(lead, "results", "table.csv")
+        expect(await SessionFilesystem.allows({ sessionID: child.id, path: deliverable, access: "write" })).toBe(true)
+        expect(await SessionFilesystem.allows({ sessionID: child.id, path: deliverable, access: "read" })).toBe(true)
+        const elsewhere = path.join(await SessionFilesystem.toolDirectory(stranger.id), "notes.md")
+        await expect(
+          SessionFilesystem.allows({ sessionID: child.id, path: elsewhere, access: "read" }),
+        ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
+        // The worker is told whose directory it works in.
+        const env = await SystemPrompt.environment({ api: { id: "fixture" }, providerID: "fixture" }, child.id)
+        expect(env.join("\n")).toContain(`Working folder: ${lead} (the lead session's working directory`)
       },
     })
   })

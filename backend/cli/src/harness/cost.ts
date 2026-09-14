@@ -4,8 +4,10 @@ import { HarnessState } from "./state"
 
 /**
  * Spend beside the time budget: every finished step's cost and tokens are
- * accumulated per session and rendered in <env>. An optional soft ceiling
- * (harness.cost.max_usd) adds a wrap-up reminder once, never a hard stop.
+ * accumulated per session and rendered as a per-step status line at the tail
+ * of the context (a spend figure changes every step, so it must stay out of
+ * the cached system prompt). An optional soft ceiling (harness.cost.max_usd)
+ * adds a wrap-up reminder once, never a hard stop.
  */
 export namespace Cost {
   export function line(spend: HarnessState.Session["spend"]) {
@@ -27,11 +29,11 @@ export const CostUnit: Plugin = async () => {
     },
     async "env.lines"(input, output) {
       const state = HarnessState.get(input.sessionID)
-      output.lines.push(Cost.line(state.spend))
+      output.status.push(Cost.line(state.spend))
       const ceiling = HarnessState.costCeiling(await Config.get())
       if (ceiling === undefined || state.spend.cost < ceiling || state.spend.ceilingNoted) return
       state.spend.ceilingNoted = true
-      output.lines.push(
+      output.status.push(
         `Spend reminder: the soft ceiling of $${ceiling.toFixed(2)} is reached. Wrap up: finish the deliverables in hand and report what remains.`,
       )
     },

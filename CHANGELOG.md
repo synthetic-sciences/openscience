@@ -55,7 +55,24 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   memory and time budget in the environment, reminders at 50% and 85%), `cost`
   (spend so far and an optional soft ceiling), `headless-policy`,
   `durable-jobs`, `workers`. Plugins get two new hook points, `loop.before_finish`
-  and `loop.guard`, plus `env.lines`.
+  and `loop.guard`, plus `env.lines`. Only facts that hold for the whole session
+  (compute) go into the system prompt; time used, spend, one-shot reminders and
+  study state ride in a per-step status block at the tail of the request, so
+  the provider's prompt cache survives every step (a spend figure in the system
+  prompt was discarding the cached prefix on each step of a turn).
+- The environment names the model's knowledge cutoff from the model catalog and
+  the gap to today, and tells the model to look up the current generation before
+  pinning a model, library version, baseline or protocol.
+- A delegated worker can read and write in the lead's working directory even
+  when that directory is the lead's private session scratch; its environment
+  says whose directory it works in. The deliverables check no longer runs in a
+  worker (a brief is the lead's instruction, not the user's specification) and
+  no longer counts files a request says to read as outputs.
+- A background worker's Task card stays live until the worker finishes and then
+  shows the worker's real outcome and duration; its completion joins the turn
+  that dispatched it instead of opening a headless second turn in the
+  transcript, and the note on a result with failed tool calls is a count rather
+  than a verdict.
 - `recall`: search this session's earlier messages, tool results and saved tool
   outputs by regular expression, including turns compaction summarized away.
 - The `execution-hygiene` core skill and eleven convention skills

@@ -19,7 +19,7 @@ test("compute limits come from the cgroup when present", async () => {
   expect(host.gib).toBeGreaterThan(0)
 })
 
-test("env lines show compute and time budget, with one reminder each at 50% and 85%", async () => {
+test("compute is a stable env line; elapsed time and the 50%/85% reminders are per-step status", async () => {
   await using tmp = await tmpdir()
   await Bun.write(path.join(tmp.path, "cpu.max"), "400000 100000")
   await Bun.write(path.join(tmp.path, "memory.max"), String(16 * 1024 ** 3))
@@ -31,21 +31,26 @@ test("env lines show compute and time budget, with one reminder each at 50% and 
     { sessionID: "ses_b", messageID: "msg_1" },
     { message: { time: { created: now }, deadline: now + 60 * 60_000 } as never, parts: [] },
   )
-  const lines = async () => {
-    const output = { lines: [] as string[] }
+  const render = async () => {
+    const output = { lines: [] as string[], status: [] as string[] }
     await unit["env.lines"]!({ sessionID: "ses_b", model: {} as never }, output)
-    return output.lines
+    return output
   }
-  expect(await lines()).toEqual(["Compute: 4 CPUs, 16 GiB", "Time budget: 1h, elapsed 0m"])
+  const first = await render()
+  // The system prompt is the provider's cache prefix: only what never changes
+  // during the session may go there.
+  expect(first.lines).toEqual(["Compute: 4 CPUs, 16 GiB"])
+  expect(first.status).toEqual(["Time budget: 1h, elapsed 0m"])
   now += 31 * 60_000
-  const half = await lines()
-  expect(half[1]).toBe("Time budget: 1h, elapsed 31m")
-  expect(half[2]).toContain("half the budget")
-  expect((await lines()).some((line) => line.includes("half the budget"))).toBe(false)
+  const half = await render()
+  expect(half.lines).toEqual(["Compute: 4 CPUs, 16 GiB"])
+  expect(half.status[0]).toBe("Time budget: 1h, elapsed 31m")
+  expect(half.status[1]).toContain("half the budget")
+  expect((await render()).status.some((line) => line.includes("half the budget"))).toBe(false)
   now += 22 * 60_000
-  const late = await lines()
-  expect(late[2]).toContain("85% of the budget")
-  expect(await lines()).toHaveLength(2)
+  const late = await render()
+  expect(late.status[1]).toContain("85% of the budget")
+  expect((await render()).status).toHaveLength(1)
 })
 
 test("a finished turn with failing deliverables and time left is asked to continue, once", async () => {

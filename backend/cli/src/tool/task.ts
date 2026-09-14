@@ -604,7 +604,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                       : taskOutcome.stopReason === "empty_handoff"
                         ? "The subagent ended without a textual handoff; treat this result as incomplete."
                         : failedToolCalls > 0
-                          ? `Completed with ${failedToolCalls} failed tool ${failedToolCalls === 1 ? "attempt" : "attempts"}; review its limitations.`
+                          ? `${failedToolCalls} of ${summary.length} tool calls failed along the way; the report below is the worker's own account.`
                           : undefined
           const body = [
             text || `(no text; ${summary.length} tool calls in this turn)`,
@@ -668,12 +668,26 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           child: session.id,
         })
       }
+      // The dispatching call settled long ago with `background: true`; once the
+      // worker finishes, the recorded call takes the worker's real outcome and
+      // duration so the transcript shows the work, not the dispatch. The output
+      // the model already read stays as it was: it is part of the cached prefix.
+      const settle = async (result: TaskAttempt.Result) => {
+        const parts = await MessageV2.parts(ctx.messageID)
+        const part = parts.find((item) => item.type === "tool" && item.callID === ctx.callID)
+        if (!part || part.type !== "tool" || part.state.status !== "completed") return
+        await Session.updatePart({
+          ...part,
+          state: { ...part.state, metadata: { ...result.metadata, background: true, jobId: session.id } },
+        })
+      }
       if (!background.has(session.id)) {
         // Detached from the dispatching turn's admission context: the child
         // and the wake-up run after that turn has finished.
         const pending = SessionPrompt.detached(() => run(new AbortController().signal, false))
           .then(async (result) => {
             background.delete(session.id)
+            await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
             await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
               log.error("background task completion could not wake the parent", { error }),
             )
@@ -692,6 +706,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 text: message,
               }),
             })
+            await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
             await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
               log.error("background task failure could not wake the parent", { error }),
             )

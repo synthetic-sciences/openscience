@@ -24315,7 +24315,8 @@
                           "permission",
                           "api",
                           "tool",
-                          "handoff"
+                          "handoff",
+                          "parent"
                         ]
                       },
                       "time": {
@@ -29191,7 +29192,8 @@
                               "permission",
                               "api",
                               "tool",
-                              "handoff"
+                              "handoff",
+                              "parent"
                             ]
                           },
                           "time": {
@@ -29440,7 +29442,8 @@
                         "permission",
                         "api",
                         "tool",
-                        "handoff"
+                        "handoff",
+                        "parent"
                       ]
                     },
                     "time": {
@@ -29624,7 +29627,8 @@
                               "permission",
                               "api",
                               "tool",
-                              "handoff"
+                              "handoff",
+                              "parent"
                             ]
                           },
                           "time": {
@@ -29917,7 +29921,8 @@
                         "permission",
                         "api",
                         "tool",
-                        "handoff"
+                        "handoff",
+                        "parent"
                       ]
                     },
                     "time": {
@@ -55130,7 +55135,8 @@
                       "permission",
                       "api",
                       "tool",
-                      "handoff"
+                      "handoff",
+                      "parent"
                     ]
                   },
                   "time": {
@@ -60366,6 +60372,9 @@
                 "release_date": {
                   "type": "string"
                 },
+                "knowledge": {
+                  "type": "string"
+                },
                 "attachment": {
                   "type": "boolean"
                 },
@@ -61905,6 +61914,9 @@
             }
           },
           "release_date": {
+            "type": "string"
+          },
+          "knowledge": {
             "type": "string"
           },
           "reasoningOptions": {

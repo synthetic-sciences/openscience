@@ -107,8 +107,8 @@ test("switching the deliverables unit off removes the continuation", async () =>
   }
 })
 
-test("the budget and cost units put compute, time and spend lines in <env>", async () => {
-  const fixture = server()
+test("compute stays in <env>; time and spend ride at the tail so the system prompt is cache-stable across steps", async () => {
+  const fixture = toolThenText()
   try {
     await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
     await Instance.provide({
@@ -123,16 +123,86 @@ test("the budget and cost units put compute, time and spend lines in <env>", asy
           deadline: Date.now() + 2 * 60 * 60_000,
           parts: [{ type: "text", text: "Say hello." }],
         })
-        const system = text(main(fixture.requests)[0])
-        expect(system).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
-        expect(system).toMatch(/Time budget: 2h, elapsed \dm/)
-        expect(system).toContain("Spent so far:")
+        const steps = main(fixture.requests)
+        expect(steps).toHaveLength(2)
+        const system = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          request.messages.filter((message) => message.role === "system")
+        const tail = (request: { messages: Array<{ role: string; content: unknown }> }) => request.messages.at(-1)!
+        const head = JSON.stringify(system(steps[0]))
+        expect(head).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
+        expect(head).toMatch(/Knowledge cutoff: /)
+        expect(head).not.toContain("Time budget:")
+        expect(head).not.toContain("Spent so far:")
+        // The provider caches the prefix; a second step whose system prompt
+        // differs by one spend figure pays for the whole context again.
+        expect(JSON.stringify(system(steps[1]))).toBe(head)
+        for (const step of steps) {
+          const last = tail(step)
+          expect(last.role).toBe("user")
+          expect(String(last.content)).toMatch(
+            /<system-reminder kind="status">[\s\S]*Time budget: 2h, elapsed \dm[\s\S]*Spent so far:[\s\S]*<\/system-reminder>/,
+          )
+        }
+        // The tail is request-only: nothing synthetic was persisted for it.
+        const messages = await Session.messages({ sessionID: session.id })
+        expect(messages.filter((message) => message.info.role === "user")).toHaveLength(1)
       },
     })
   } finally {
     fixture.instance.stop(true)
   }
 })
+
+/** A model that reads a file on its first step and answers on the second, so
+ * two provider requests of one turn can be compared. */
+function toolThenText() {
+  const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = []
+  let calls = 0
+  const chunk = (delta: object, finish: string | null) =>
+    `data: ${JSON.stringify({
+      id: "chatcmpl-tail",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: STRESS_PROVIDER_MODEL,
+      choices: [{ index: 0, delta, finish_reason: finish }],
+      ...(finish ? { usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } } : {}),
+    })}\n\n`
+  const instance = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = await request.json()
+      requests.push(body)
+      const research = text(body).includes("Methods and deliverables")
+      if (research && calls++ === 0) {
+        return new Response(
+          chunk(
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_glob",
+                  type: "function",
+                  function: { name: "glob", arguments: JSON.stringify({ pattern: "*.md" }) },
+                },
+              ],
+            },
+            null,
+          ) +
+            chunk({}, "tool_calls") +
+            "data: [DONE]\n\n",
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      }
+      return new Response(
+        chunk({ role: "assistant", content: "All done." }, null) + chunk({}, "stop") + "data: [DONE]\n\n",
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  return { instance, requests }
+}
 
 /** A model that keeps reading a missing file under a new name until told to
  * stop, then answers with text. Same cause, different arguments: the input

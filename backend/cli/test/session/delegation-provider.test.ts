@@ -61,6 +61,10 @@ function text(value: unknown): string {
   return Object.values(value).map(text).join("\n")
 }
 
+/** The per-step status block is the one reminder that rides in the user
+ * channel, at the tail of the request; every other reminder stays in system. */
+const STATUS = /<system-reminder kind="status">[\s\S]*?<\/system-reminder>/g
+
 function role(body: { messages?: unknown }, name: string) {
   if (!Array.isArray(body.messages)) return ""
   return body.messages
@@ -68,7 +72,7 @@ function role(body: { messages?: unknown }, name: string) {
       (message): message is Record<string, unknown> =>
         !!message && typeof message === "object" && "role" in message && message.role === name,
     )
-    .map((message) => text(message.content))
+    .map((message) => text(message.content).replace(STATUS, ""))
     .join("\n")
 }
 

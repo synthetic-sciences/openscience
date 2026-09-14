@@ -22,8 +22,25 @@ export namespace Deliverables {
   const PLACEHOLDER = /\b(?:TODO|TBD|FIXME|placeholder|dummy|lorem ipsum|xxx+|fill me|to be filled|<insert)\b/i
   const NEGATED =
     /\b(?:skip|don'?t|do not|not|later|except|ignore|without|omit|leave|instead of|rather than|no need)\b/i
+  // A file the request tells the model to consult is an input, not something
+  // it owes: "Read CONTRACTS.md and study.json first" names no deliverable.
+  // The nearest verb before a path decides; "read config.yaml, then write
+  // results/out.csv" keeps only the output.
+  const INPUT = /\b(?:read|inspect|consult|open|load|follow|see|check|review|use|given|based on|according to)\b/gi
+  const PRODUCES = /\b(?:write|save|store|export|output|produce|create|emit|dump|generate|deliver)\b/gi
   const NAN = /(?:^|[,\t;\s])(?:nan|NaN|NAN|inf|-inf|Inf|-Inf|Infinity|-Infinity|#N\/A)(?=$|[,\t;\s])/
   const MAX_BYTES = 64 * 1024 * 1024
+
+  /** Paths whose nearest preceding verb says the model reads them. */
+  function consulted(sentence: string) {
+    const verbs = [
+      ...[...sentence.matchAll(INPUT)].map((match) => ({ index: match.index, input: true })),
+      ...[...sentence.matchAll(PRODUCES)].map((match) => ({ index: match.index, input: false })),
+    ].sort((left, right) => left.index - right.index)
+    return [...sentence.matchAll(PATH)]
+      .filter((match) => verbs.filter((verb) => verb.index < match.index).at(-1)?.input === true)
+      .map((match) => match[1])
+  }
 
   /** File paths a request names as outputs, in order of appearance, when it
    * reads like an output specification at all. */
@@ -31,11 +48,12 @@ export namespace Deliverables {
     // A path named in a sentence that waives it ("skip X for now") is the
     // user's decision, not a missing deliverable.
     const sentences = text.split(/(?<=[.!?;])\s+|\n+/)
-    const waived = new Set(
-      sentences
+    const waived = new Set([
+      ...sentences
         .filter((sentence) => NEGATED.test(sentence))
         .flatMap((sentence) => [...sentence.matchAll(PATH)].map((match) => match[1])),
-    )
+      ...sentences.flatMap(consulted),
+    ])
     const paths = [...new Set([...text.matchAll(PATH)].map((match) => match[1]))].filter(
       (candidate) => !/^(?:https?|www\.)/i.test(candidate) && !candidate.endsWith(".py") && !waived.has(candidate),
     )
@@ -165,6 +183,11 @@ export const DeliverablesUnit: Plugin = async () => {
     async "chat.message"(input, output) {
       const state = HarnessState.get(input.sessionID)
       if (state.deliverables.length) return
+      // A worker's brief is written by the lead and names the files it may
+      // touch or must read; the lead holds the checklist for the user's
+      // request and checks the deliverables it asked for itself.
+      const session = await Session.get(input.sessionID).catch(() => undefined)
+      if (session?.parentID) return
       // Only the first real request defines the deliverables; later turns may
       // steer the work but the checklist stays anchored to what was asked.
       const earlier = (await Session.messages({ sessionID: input.sessionID }).catch(() => [])).filter(

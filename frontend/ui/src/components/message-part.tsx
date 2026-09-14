@@ -1345,7 +1345,10 @@ ToolRegistry.register({
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const handoff = createMemo(() => parseTaskHandoff(props.output ?? props.error))
-    const live = () => props.status === "running" || props.status === "pending"
+    const live = () =>
+      props.status === "running" ||
+      props.status === "pending" ||
+      (props.status === "completed" && props.metadata.background === true && props.metadata.outcome === undefined)
     const now = useClock(() => live() && !!props.time?.start)
     const duration = () => {
       if (live() && props.time?.start) return elapsedLabel(now() - props.time.start)

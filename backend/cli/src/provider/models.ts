@@ -53,6 +53,8 @@ export namespace ModelsDev {
     name: z.string(),
     family: z.string().optional(),
     release_date: z.string(),
+    /** Training-data cutoff as the catalog reports it (YYYY-MM or YYYY-MM-DD). */
+    knowledge: z.string().optional(),
     attachment: z.boolean(),
     reasoning: z.boolean(),
     reasoning_options: z.array(ReasoningOption).optional(),

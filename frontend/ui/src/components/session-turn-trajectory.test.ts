@@ -1909,6 +1909,73 @@ describe("trace control", () => {
     expect(button.textContent).toMatch(/^Worked for \d/)
   })
 
+  test("a background worker's completion keeps the turn open: its replies join the same trace and total time", async () => {
+    // The turn dispatched a worker, said something, then the worker's result
+    // arrived as a runtime-written user message and drew two more steps.
+    const first: AssistantMessage = { ...assistant(4_000), id: "msg_0002" }
+    const wake: UserMessage = {
+      id: "msg_0003",
+      sessionID,
+      role: "user",
+      time: { created: 5_000 },
+      agent: "research",
+      model: { providerID: "test", modelID: "test" },
+      internal: { type: "prompt", epoch: "msg_0001" },
+    }
+    const second: AssistantMessage = {
+      ...assistant(9_000),
+      id: "msg_0004",
+      parentID: wake.id,
+      time: { created: 5_100, completed: 9_000 },
+    }
+    const envelope: TextPart = {
+      id: "prt_wake",
+      sessionID,
+      messageID: wake.id,
+      type: "text",
+      synthetic: true,
+      text: '<task id="ses_child" state="completed">\n<task_result>\nDone: 31 tests pass.\n</task_result>\n</task>',
+    }
+    const interim: TextPart = {
+      id: "prt_interim",
+      sessionID,
+      messageID: first.id,
+      type: "text",
+      text: "Dispatched the control-ledger worker; the stack is verified.",
+      time: { start: 3_000, end: 3_500 },
+    }
+    const final: TextPart = {
+      id: "prt_final",
+      sessionID,
+      messageID: second.id,
+      type: "text",
+      text: "The worker's ledger is in; one methodological issue surfaced.",
+      time: { start: 8_000, end: 8_900 },
+    }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, first, wake, second] },
+      part: {
+        [user.id]: [],
+        [first.id]: [read("prt_merge_read_a", "study.json", 2_000), interim],
+        [wake.id]: [envelope],
+        [second.id]: [{ ...read("prt_merge_read_b", "control.py", 6_000), messageID: second.id }, final],
+      },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id }), store)
+    // One turn, one clock: it spans the worker's wake-up and the steps after it.
+    const button = toggle(host)
+    expect(button.textContent).toBe("Worked for 8s")
+    await ready(() => host.textContent!.includes("The worker's ledger is in"))
+    // Collapsed, the earlier prose is narration; the newest text is the answer.
+    expect(host.textContent).not.toContain("Dispatched the control-ledger worker")
+    // The envelope the runtime wrote is never shown as if the user had typed it.
+    expect(host.textContent).not.toContain("<task id=")
+    button.click()
+    await ready(() => host.querySelectorAll('[data-component="tool-part-wrapper"]').length === 2)
+    await ready(() => host.textContent!.includes("Dispatched the control-ledger worker"))
+  })
+
   test("before any step exists there is nothing to disclose, only the request status", async () => {
     const message = assistant()
     const host = mount(

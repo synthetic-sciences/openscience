@@ -1472,8 +1472,14 @@ export namespace SessionPrompt {
 
       await Plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
 
+      // Stable facts join the system prompt; anything that changes between
+      // steps (time used, spend, study state) rides at the tail of the
+      // conversation instead, so the provider's prefix cache survives the step.
       const envLines: string[] = []
-      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines })
+      const status: string[] = []
+      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines, status })
+      const study = await studyReminder(sessionID)
+      if (study) status.push(study)
       const slash = SystemPrompt.slashInvocation(route.text)
       const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
       const system = [
@@ -1643,6 +1649,7 @@ export namespace SessionPrompt {
           ...MessageV2.toModelMessages(sessionMessages, model, {
             keepRecentImages: SessionCompaction.recentImages(config),
           }),
+          ...(status.length ? [{ role: "user" as const, content: statusReminder(status) }] : []),
           ...(isLastStep
             ? [
                 {
@@ -2836,6 +2843,14 @@ export namespace SessionPrompt {
     ].join("\n")
   }
 
+  /** The per-step status the harness units report (time used, spend, study
+   * state). It is the last message of the request and is never persisted:
+   * a fact that changes every step must not sit in the cached prefix. The
+   * `kind` names it as the one reminder that travels in the user channel. */
+  export function statusReminder(lines: string[]) {
+    return ['<system-reminder kind="status">', ...lines, "</system-reminder>"].join("\n")
+  }
+
   export function systemReminder(value: string) {
     return value.replace(/<\/?system-reminder>/gu, "").trim()
   }
@@ -2871,8 +2886,7 @@ export namespace SessionPrompt {
     // any header. Plan keeps its own instructions below.
     const posture =
       input.agent.name === "plan" ? PROMPT_PLAN : researchEffortReminder(effort, delegationSettings, delegationEnabled)
-    const study = await studyReminder(input.session.id)
-    const system = [...legacy, systemReminder(posture), ...(study ? [study] : [])]
+    const system = [...legacy, systemReminder(posture)]
 
     // Original logic when experimental plan mode is disabled
     if (!Flag.OPENSCIENCE_EXPERIMENTAL_PLAN_MODE) {

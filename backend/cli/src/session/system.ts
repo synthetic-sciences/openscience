@@ -266,8 +266,28 @@ export namespace SystemPrompt {
     ].join("\n")
   }
 
+  /** The one line that stops a model treating its training-time frontier as
+   * the present: the catalog's cutoff, the gap to today, and where the gap
+   * bites (choosing a model, version, baseline or protocol). It is fixed for
+   * the day, so it sits in the cached system prompt beside the date. */
+  export function cutoff(knowledge: string | undefined, now = new Date()) {
+    const parsed = knowledge ? new Date(/^\d{4}-\d{2}$/.test(knowledge) ? `${knowledge}-15` : knowledge) : undefined
+    const known = parsed && !Number.isNaN(parsed.getTime()) ? parsed : undefined
+    const months = known ? Math.max(0, Math.round((now.getTime() - known.getTime()) / (30.44 * 86_400_000))) : undefined
+    const gap =
+      months === undefined
+        ? ""
+        : months < 1
+          ? ", within the last month"
+          : `, about ${months} month${months === 1 ? "" : "s"} before today`
+    const head = known
+      ? `Knowledge cutoff: ${knowledge} (per the model catalog)${gap}.`
+      : "Knowledge cutoff: not listed for this model; assume it is months before today."
+    return `${head} Models, libraries, methods and results released since are not in your training: look up the current generation before pinning a model, version, baseline or protocol, and read "latest" in a dated source as of its date.`
+  }
+
   export async function environment(
-    model: { api: { id: string }; providerID: string },
+    model: { api: { id: string }; providerID: string; knowledge?: string },
     sessionID: string,
     /** Lines the harness units add inside <env>: compute, time budget, spend. */
     extra: string[] = [],
@@ -280,6 +300,11 @@ export namespace SystemPrompt {
     // A connected read/write folder that is the working directory: relative
     // paths land in the user's own folder, and scratch stays for side outputs.
     const folder = filesystem.toolDirectory !== workspace ? filesystem.toolDirectory : undefined
+    // A delegated worker inherits the lead's directory rather than a folder
+    // the user connected; say so, since its files are the lead's deliverables.
+    const shared = filesystem.grants.some(
+      (grant) => grant.source === "parent" && !grant.time.revoked && grant.path === folder,
+    )
     const projectAccess = context[1]
     const sources = filesystem.grants.filter(
       (grant) =>
@@ -303,7 +328,9 @@ export namespace SystemPrompt {
         `  Project files: ${Instance.directory} (durable and shared across this project)`,
         ...(folder
           ? [
-              `  Working folder: ${folder} (connected read and write folder; relative paths resolve here, and files stay when the session ends)`,
+              shared
+                ? `  Working folder: ${folder} (the lead session's working directory, shared with this worker; relative paths resolve here and files written here are the lead's deliverables)`
+                : `  Working folder: ${folder} (connected read and write folder; relative paths resolve here, and files stay when the session ends)`,
               `  Session scratch: ${workspace} (temporary and isolated to this conversation; for caches and side outputs)`,
             ]
           : isolated
@@ -321,6 +348,7 @@ export namespace SystemPrompt {
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
         `  Today's date: ${new Date().toDateString()}`,
+        `  ${cutoff(model.knowledge)}`,
         ...extra.map((line) => `  ${line}`),
         `</env>`,
         `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. ${isolated ? "Session scratch belongs only to this conversation." : "This session uses the project directory as its default tool working directory; its files are shared and remain when the session is deleted."} Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,

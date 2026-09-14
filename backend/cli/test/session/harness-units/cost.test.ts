@@ -22,16 +22,18 @@ const step = (sessionID: string, cost: number, tokens: number) => ({
   },
 })
 
-test("spend accumulates from finished steps and renders beside the time budget", async () => {
+test("spend accumulates from finished steps and renders as per-step status, never in <env>", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
       const unit = await CostUnit({} as PluginInput)
       const lines = async () => {
-        const output = { lines: [] as string[] }
+        const output = { lines: [] as string[], status: [] as string[] }
         await unit["env.lines"]!({ sessionID: "ses_cost", model: {} as never }, output)
-        return output.lines
+        // A figure that changes every step would discard the cached prefix.
+        expect(output.lines).toEqual([])
+        return output.status
       }
       expect(await lines()).toEqual(["Spent so far: $0.0000 (0 tokens)"])
       await unit.event!({ event: step("ses_cost", 0.4, 12_000) as never })
@@ -49,12 +51,12 @@ test("the soft ceiling adds a wrap-up reminder once and never stops the loop", a
     fn: async () => {
       const unit = await CostUnit({} as PluginInput)
       await unit.event!({ event: step("ses_cap", 1.5, 100) as never })
-      const first = { lines: [] as string[] }
+      const first = { lines: [] as string[], status: [] as string[] }
       await unit["env.lines"]!({ sessionID: "ses_cap", model: {} as never }, first)
-      expect(first.lines[1]).toContain("soft ceiling of $1.00")
-      const second = { lines: [] as string[] }
+      expect(first.status[1]).toContain("soft ceiling of $1.00")
+      const second = { lines: [] as string[], status: [] as string[] }
       await unit["env.lines"]!({ sessionID: "ses_cap", model: {} as never }, second)
-      expect(second.lines).toHaveLength(1)
+      expect(second.status).toHaveLength(1)
     },
   })
 })

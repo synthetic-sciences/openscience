@@ -1,6 +1,6 @@
 export type FilesystemAccess = "read" | "write"
 export type FilesystemScope = "once" | "session" | "project" | "installation"
-type FilesystemSource = "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+type FilesystemSource = "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
 
 export interface FilesystemGrant {
   id: string
@@ -115,7 +115,8 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
         grant.source !== "permission" &&
         grant.source !== "api" &&
         grant.source !== "tool" &&
-        grant.source !== "handoff") ||
+        grant.source !== "handoff" &&
+        grant.source !== "parent") ||
       typeof time?.created !== "number" ||
       (time.consumed !== undefined && typeof time.consumed !== "number") ||
       (time.revoked !== undefined && typeof time.revoked !== "number")

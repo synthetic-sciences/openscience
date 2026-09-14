@@ -35,7 +35,10 @@ export namespace SessionFilesystem {
   // `skill` the read access a loaded skill's directory receives. Both are
   // runtime dependencies, not folders the user connected, and the UI lists
   // them apart from `permission` and `api` grants.
-  export const Source = z.enum(["workspace", "project", "skill", "permission", "api", "tool", "handoff"])
+  /** `parent`: the lead session's working directory, shared with a delegated
+   * child so its files land where the lead works. It is the one grant allowed
+   * to cross the per-session workspace boundary in both directions. */
+  export const Source = z.enum(["workspace", "project", "skill", "permission", "api", "tool", "handoff", "parent"])
   export type Source = z.infer<typeof Source>
 
   export const Grant = z.object({
@@ -296,14 +299,13 @@ export namespace SessionFilesystem {
     if (!boundary) return
     if (!Filesystem.contains(boundary.root, target) || Filesystem.contains(boundary.workspace, target)) return
     if (
-      access === "read" &&
       record.grants.some(
         (grant) =>
-          grant.source === "handoff" &&
           grant.scope === "session" &&
           !grant.time.consumed &&
           !grant.time.revoked &&
-          Filesystem.contains(grant.path, target),
+          Filesystem.contains(grant.path, target) &&
+          (grant.source === "parent" ? permits(grant, access) : grant.source === "handoff" && access === "read"),
       )
     )
       return
@@ -635,15 +637,15 @@ export namespace SessionFilesystem {
       path: target,
       access: "write",
       scope: "session",
-      source: "api",
+      source: "parent",
       time: { created: Date.now() },
     }
     const result = await Storage.update<State>(key(input.childSessionID), (draft) => {
-      // Only an api-sourced grant can be the working root; a project-root
-      // grant on the same path does not qualify, so add ours beside it.
+      // A project-root grant on the same path cannot be the working root and
+      // cannot cross into the lead's private scratch, so add ours beside it.
       const duplicate = draft.grants.find(
         (item) =>
-          item.source === "api" &&
+          item.source === "parent" &&
           item.path === target &&
           item.access === "write" &&
           item.scope === "session" &&
@@ -1057,7 +1059,10 @@ export namespace SessionFilesystem {
             !grant.time.consumed &&
             !grant.time.revoked &&
             grant.scope !== "once" &&
-            (grant.source === "permission" || grant.source === "api" || grant.source === "project"),
+            (grant.source === "permission" ||
+              grant.source === "api" ||
+              grant.source === "project" ||
+              grant.source === "parent"),
         )
         .map((grant) => grant.path),
     ])
@@ -1092,7 +1097,7 @@ export namespace SessionFilesystem {
     return record.grants
       .filter(
         (grant) =>
-          (grant.source === "api" || grant.source === "permission") &&
+          (grant.source === "api" || grant.source === "permission" || grant.source === "parent") &&
           grant.scope !== "once" &&
           permits(grant, "write"),
       )

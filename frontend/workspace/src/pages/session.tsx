@@ -15,6 +15,7 @@ import {
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createMediaQuery } from "@solid-primitives/media"
 import { SessionTurn } from "@synsci/ui/session-turn"
+import { isContinuationCarrier } from "@synsci/ui/session-turn-carrier"
 import { createAutoScroll } from "@synsci/ui/hooks"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
@@ -506,9 +507,14 @@ export default function Page(): JSX.Element {
   }
 
   const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  // Runtime continuations (a background worker's completion, a harness nudge)
+  // are user messages nobody typed; they extend the turn before them rather
+  // than opening one, so they never get a turn card of their own.
+  const opensTurn = (message: (typeof sync.data.message)[string][number]) =>
+    message.role === "user" && !isContinuationCarrier(message, sync.data.part[message.id])
   const lastUserMessage = createMemo(() => {
     const ms = messages()
-    for (let i = ms.length - 1; i >= 0; i--) if (ms[i].role === "user") return ms[i]
+    for (let i = ms.length - 1; i >= 0; i--) if (opensTurn(ms[i])) return ms[i]
   })
   // A SessionTurn renders nothing for an assistant message — it only renders
   // when handed a user message, gathering that turn's assistant replies itself.
@@ -560,7 +566,7 @@ export default function Page(): JSX.Element {
   })
   const turnMessages = createMemo(() => {
     const revertID = revertInfo()?.messageID
-    return messages().filter((m) => m.role === "user" && (!revertID || m.id < revertID))
+    return messages().filter((m) => opensTurn(m) && (!revertID || m.id < revertID))
   })
   const sessionStatus = createMemo(() =>
     params.id ? (sync.data.session_status?.[params.id] as { type?: string } | undefined)?.type : undefined,
@@ -614,7 +620,7 @@ export default function Page(): JSX.Element {
   const revertedCount = createMemo(() => {
     const revertID = revertInfo()?.messageID
     if (!revertID) return 0
-    return messages().filter((m) => m.role === "user" && m.id >= revertID).length
+    return messages().filter((m) => opensTurn(m) && m.id >= revertID).length
   })
   const revertedPreview = createMemo<UndoPreview>(() => ({
     turns: revertInfo()?.turns ?? revertedCount(),

@@ -1880,6 +1880,8 @@ export namespace Provider {
       options: z.record(z.string(), z.any()),
       headers: z.record(z.string(), z.string()),
       release_date: z.string(),
+      /** Training-data cutoff from the catalog, when it lists one. */
+      knowledge: z.string().optional(),
       reasoningOptions: z.array(z.record(z.string(), z.any())).optional(),
       contextOptions: z.array(z.number().positive()).optional(),
       variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
@@ -2160,6 +2162,7 @@ export namespace Provider {
         interleaved: model.interleaved ?? false,
       },
       release_date: isMetaMuse11 ? "2026-07-09" : model.release_date,
+      knowledge: model.knowledge,
       variants: {},
     }
 
@@ -2422,6 +2425,7 @@ export namespace Provider {
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
           family: model.family ?? existingModel?.family ?? "",
           release_date: model.release_date ?? existingModel?.release_date ?? "",
+          knowledge: model.knowledge ?? existingModel?.knowledge,
           reasoningOptions: existingModel?.reasoningOptions,
           contextOptions: existingModel?.contextOptions,
           variants: {},

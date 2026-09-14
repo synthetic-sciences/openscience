@@ -144,7 +144,7 @@ export type EventSessionFilesystemChanged = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
       time: {
         created: number
         consumed?: number
@@ -1888,6 +1888,7 @@ export type ProviderConfig = {
       name?: string
       family?: string
       release_date?: string
+      knowledge?: string
       attachment?: boolean
       reasoning?: boolean
       reasoning_options?: Array<
@@ -2478,6 +2479,7 @@ export type Model = {
     [key: string]: string
   }
   release_date: string
+  knowledge?: string
   reasoningOptions?: Array<{
     [key: string]: unknown
   }>
@@ -10038,7 +10040,7 @@ export type ProjectWorkingRootsResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
     time: {
       created: number
       consumed?: number
@@ -11614,7 +11616,7 @@ export type SessionFilesystemListResponses = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
       time: {
         created: number
         consumed?: number
@@ -11685,7 +11687,7 @@ export type SessionFilesystemGrantResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
     time: {
       created: number
       consumed?: number
@@ -11738,7 +11740,7 @@ export type SessionFilesystemWorkingRootResponses = {
       path: string
       access: "read" | "write"
       scope: "once" | "session" | "project" | "installation"
-      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
       time: {
         created: number
         consumed?: number
@@ -11807,7 +11809,7 @@ export type SessionFilesystemRevokeResponses = {
     path: string
     access: "read" | "write"
     scope: "once" | "session" | "project" | "installation"
-    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
     time: {
       created: number
       consumed?: number

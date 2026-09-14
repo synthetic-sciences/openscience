@@ -53,6 +53,7 @@ import { createStore } from "solid-js/store"
 import { createAutoScroll } from "../hooks"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { responseText } from "./session-turn-response"
+import { isContinuationCarrier } from "./session-turn-carrier"
 import { headerProgress, progressStatus } from "./session-turn-progress"
 import { collapsibleTracePart, elapsedLabel, visibleResearchTrace, type ResearchTraceEntry } from "./research-trace"
 import { buildTraceRows, editedChanges, editedLabel, exploredLabel, thoughtLabel, type TraceRow } from "./trace-rows"
@@ -449,7 +450,7 @@ export function SessionTurn(
     const messages = allMessages() ?? emptyMessages
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i]
-      if (msg?.role === "user") return msg.id
+      if (msg?.role === "user" && !isContinuationCarrier(msg, data.store.part[msg.id])) return msg.id
     }
     return undefined
   })
@@ -484,12 +485,19 @@ export function SessionTurn(
       const index = messageIndex()
       if (index < 0) return emptyAssistant
 
+      // A continuation the runtime wrote (a worker's completion, a harness
+      // nudge) keeps the turn open: the replies it draws are this turn's work.
+      const owned = new Set([msg.id])
       const result: AssistantMessage[] = []
       for (let i = index + 1; i < messages.length; i++) {
         const item = messages[i]
         if (!item) continue
-        if (item.role === "user") break
-        if (item.role === "assistant" && item.parentID === msg.id) result.push(item as AssistantMessage)
+        if (item.role === "user") {
+          if (!isContinuationCarrier(item, data.store.part[item.id])) break
+          owned.add(item.id)
+          continue
+        }
+        if (item.role === "assistant" && owned.has(item.parentID)) result.push(item as AssistantMessage)
       }
       return result
     },
