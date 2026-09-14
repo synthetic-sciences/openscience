@@ -34,7 +34,7 @@ export namespace HarnessState {
     budgetReminders: Set<50 | 85>
     /** `seeded`: the stored transcript has been summed once, so a process
      * that restarted mid-session does not start the count again at zero. */
-    spend: { cost: number; tokens: number; ceilingNoted: boolean; seeded?: boolean }
+    spend: { cost: number; tokens: number; workers: number; ceilingNoted: boolean; seeded?: boolean }
   }
 
   const sessions = new Map<string, Session>()
@@ -53,7 +53,7 @@ export namespace HarnessState {
       budgetNudged: false,
       guardTrips: 0,
       budgetReminders: new Set(),
-      spend: { cost: 0, tokens: 0, ceilingNoted: false },
+      spend: { cost: 0, tokens: 0, workers: 0, ceilingNoted: false },
     }
     sessions.set(sessionID, created)
     return created

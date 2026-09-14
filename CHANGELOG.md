@@ -82,6 +82,26 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   reads. The journal used to be rewritten whole on every event before any
   subscriber saw it, which on a long session froze the workspace for minutes
   after a wave of worker events and then delivered them all at once.
+- Old tool results are pruned only when the provider's prompt cache has gone
+  cold (ten minutes without a request) or when capacity requires it, no longer
+  at the end of every turn. A prune rewrites earlier context, and the provider
+  re-reads everything after the rewrite at full price, so a wake-up inside the
+  cache window (a worker finishing, a study update) now keeps its prefix.
+- Up to twenty recent images travel in full with each request (was one); past
+  the cap the older half are released together, so a session with many figures
+  rewrites its prefix once per ten figures rather than once per figure. The
+  cap of one dated from when a figure's base64 was billed as prompt text.
+- A model that prices long prompts in tiers budgets its context at the first
+  pricing boundary by default (272K for GPT-6 Astra, where every input rate
+  doubles), so the conversation compacts a little before the cliff; the model
+  settings' **Full** option opts a model into its whole window, and the choice
+  is stored per model. A session that ran on in the higher tier paid twice the
+  rate on every step.
+- The spend line the model reads counts its workers separately from its own
+  calls (`Spent so far: $1.00 on this session's model calls … and $2.50 on its
+workers`), the soft ceiling applies to the sum, and a study's cost budget
+  counts the lead's workers. A delegating lead spends most of a study's money
+  in its workers, and the earlier figure left them out.
 - A study whose wake-up the provider refused (an empty account, a rejected key)
   pauses with the refusal as its reason instead of knocking on the session
   every tick; resume it once the cause is fixed.

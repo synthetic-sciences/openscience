@@ -644,6 +644,22 @@ export namespace MessageV2 {
 
   export const TOOL_MEDIA_PROMPT = "Images from the tool results above:"
 
+  /** Which images, in order of appearance, still travel in full under a cap.
+   * A plain "newest N" window would retire one older image for every new one,
+   * and each retirement rewrites an earlier message, which ends the provider's
+   * cached prefix there. Instead the window fills to the cap and then releases
+   * its older half at once, so a session with many figures pays for that
+   * rewrite once per half-window rather than once per figure. */
+  export function retainedImages(order: readonly string[], cap: number): Set<string> {
+    if (cap <= 0) return new Set()
+    const kept: string[] = []
+    for (const id of order) {
+      kept.push(id)
+      if (kept.length > cap) kept.splice(0, kept.length - Math.max(1, Math.ceil(cap / 2)))
+    }
+    return new Set(kept)
+  }
+
   /** Whether this model's SDK can carry media inside a tool result. Chat
    * Completions-style transports (OpenRouter, openai-compatible, the Copilot
    * fork) accept only a string there and JSON-stringify anything else, so a
@@ -699,9 +715,8 @@ export namespace MessageV2 {
         if (part.type === "tool" && part.state.status === "completed" && !part.state.time.compacted)
           for (const attachment of part.state.attachments ?? []) add(attachment.mime, attachment.url)
       }
-    const retained = new Set(
-      options?.keepRecentImages === undefined ? order : order.slice(-Math.max(0, options.keepRecentImages)),
-    )
+    const retained =
+      options?.keepRecentImages === undefined ? new Set(order) : retainedImages(order, options.keepRecentImages)
     const emitted = new Set<string>()
     // Returns a placeholder string when this image occurrence should be dropped, else undefined.
     const dropImage = (mime: string, url: string, filename?: string): string | undefined => {

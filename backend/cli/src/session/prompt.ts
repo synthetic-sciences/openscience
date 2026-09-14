@@ -773,6 +773,20 @@ export namespace SessionPrompt {
       return output.message
     }
     const workspace = await SessionFilesystem.workspace(sessionID)
+    // Pruning rewrites old tool results, and the provider's cached prefix ends
+    // where the first rewrite begins: the next request re-reads everything after
+    // it at full price. That is free only when the cache has gone cold anyway,
+    // so a turn that follows a long pause (a person typing, a run waiting)
+    // prunes here, while a wake inside the cache window keeps its prefix and
+    // leaves pruning to the capacity checks in the loop, which prune when they
+    // must.
+    const lastCompleted = durable.reduce<number | undefined>((latest, message) => {
+      if (message.info.role !== "assistant" || !message.info.time.completed) return latest
+      return Math.max(latest ?? 0, message.info.time.completed)
+    }, undefined)
+    if (!lastCompleted || Date.now() - lastCompleted > SessionCompaction.CACHE_WINDOW_MS) {
+      await SessionCompaction.prune({ sessionID })
+    }
     const readMessages = async () => {
       let messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
       // Atomic message writes can briefly overlap a directory scan on busy or
@@ -1712,7 +1726,6 @@ export namespace SessionPrompt {
       if (result === "compact") await armedCompact()
       continue
     }
-    await SessionCompaction.prune({ sessionID })
     const item = await (async () => {
       for (const delay of [0, 5, 20]) {
         if (delay) await Bun.sleep(delay)

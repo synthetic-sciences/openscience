@@ -1,4 +1,5 @@
 import { Experiments } from "."
+import { Cost } from "@/harness/cost"
 import { JobBroker } from "@/compute/job-broker"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session"
@@ -144,14 +145,18 @@ export namespace StudyDriver {
     return JobBroker.logPath(jobID, await computeOptions(sessionID))
   }
 
+  /** The study's model spend: the lead's own steps and every worker it
+   * delegated to, since a delegating lead spends most of a study's money in
+   * its workers. */
   async function sessionCost(sessionID: string) {
     const custom = deps().cost
     if (custom) return custom(sessionID)
     const messages = await Session.messages({ sessionID, limit: 2000 })
-    return messages.reduce((total, message) => {
+    const own = messages.reduce((total, message) => {
       const cost = message.info.role === "assistant" ? message.info.cost : 0
       return total + (typeof cost === "number" && Number.isFinite(cost) ? cost : 0)
     }, 0)
+    return own + (await Cost.workers(sessionID))
   }
 
   function idle(sessionID: string) {

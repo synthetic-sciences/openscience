@@ -144,6 +144,31 @@ describe("session.message-v2.toModelMessage — media budgeting", () => {
     expect((s.match(/older image omitted/g) ?? []).length).toBe(2) // the two older ones stripped
   })
 
+  test("the image window releases its older half at once, so a new figure does not rewrite an earlier message", () => {
+    const names = ["a", "b", "c", "d", "e", "f"]
+    const input = (count: number): MessageV2.WithParts[] => [
+      {
+        info: userInfo("m-imgs"),
+        parts: names.slice(0, count).map((name, index) => imagePart(`i${index}`, `${name}.png`)) as MessageV2.Part[],
+      },
+    ]
+    const kept = (count: number) =>
+      names
+        .slice(0, count)
+        .filter((name) =>
+          JSON.stringify(MessageV2.toModelMessages(input(count), model, { keepRecentImages: 4 })).includes(
+            `"filename":"${name}.png"`,
+          ),
+        )
+    // Four images fit. The fifth spills the window, which keeps its newest half.
+    expect(kept(4)).toEqual(["a", "b", "c", "d"])
+    expect(kept(5)).toEqual(["d", "e"])
+    // The sixth joins without touching what the fifth settled: a, b, c stay
+    // placeholders and d stays in full, so the request prefix is unchanged.
+    expect(kept(6)).toEqual(["d", "e", "f"])
+    expect(MessageV2.retainedImages(["1", "2", "3"], 0).size).toBe(0)
+  })
+
   test("stripMedia replaces every image with a placeholder (compaction summary path)", () => {
     const out = MessageV2.toModelMessages(imagesInput(), model, { stripMedia: true })
     const s = JSON.stringify(out)

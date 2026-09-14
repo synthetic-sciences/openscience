@@ -1329,9 +1329,9 @@ describe("session.compaction.selectTail", () => {
 
 describe("compaction.recentImages", () => {
   test("is a config knob whose default keeps one inline image", () => {
-    expect(SessionCompaction.KEEP_RECENT_IMAGES).toBe(1)
-    expect(SessionCompaction.recentImages({})).toBe(1)
-    expect(SessionCompaction.recentImages({ compaction: {} })).toBe(1)
+    expect(SessionCompaction.KEEP_RECENT_IMAGES).toBe(20)
+    expect(SessionCompaction.recentImages({})).toBe(20)
+    expect(SessionCompaction.recentImages({ compaction: {} })).toBe(20)
     expect(SessionCompaction.recentImages({ compaction: { recentImages: 4 } })).toBe(4)
     expect(SessionCompaction.recentImages({ compaction: { recentImages: 0 } })).toBe(0)
     expect(Config.Info.parse({ compaction: { recentImages: 3 } }).compaction?.recentImages).toBe(3)

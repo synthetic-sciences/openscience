@@ -140,7 +140,7 @@ test("compute stays in <env>; time and spend ride at the tail so the system prom
           const last = tail(step)
           expect(last.role).toBe("user")
           expect(String(last.content)).toMatch(
-            /<system-reminder kind="status">[\s\S]*Time budget: 2h, elapsed \dm[\s\S]*Spent so far on this session[\s\S]*<\/system-reminder>/,
+            /<system-reminder kind="status">[\s\S]*Time budget: 2h, elapsed \dm[\s\S]*Spent so far: \$[\s\S]*on this session[\s\S]*<\/system-reminder>/,
           )
         }
         // The tail is request-only: nothing synthetic was persisted for it.

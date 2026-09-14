@@ -46,7 +46,10 @@ export namespace SessionCompaction {
   // How many of the most-recent images to keep in full in the model request. Older
   // images are replaced with a text placeholder (they stay on disk, re-readable) so a
   // session that reads many figures can't bloat the window with re-shipped base64.
-  export const KEEP_RECENT_IMAGES = 1
+  /** Images travel as images on every route now, at a few thousand tokens
+   * each, so the window can hold a working set of figures; the previous cap of
+   * one dated from when a figure's base64 was billed as prompt text. */
+  export const KEEP_RECENT_IMAGES = 20
 
   /** `compaction.recentImages` widens that window for figure-heavy sessions on
    * models with room for it; the default is unchanged. */
@@ -64,6 +67,25 @@ export namespace SessionCompaction {
   // OpenCode's automatic budget: leave a response reserve, or a 20k buffer below
   // an explicit input cap. Unknown/small local model windows retain their fallback
   // and half-window clamp so missing metadata cannot cause compaction every turn.
+  /** The context a turn budgets when the request names none. A catalog that
+   * prices the window in tiers puts a cliff at the first boundary (Astra
+   * doubles every input rate past 272K), and once a session crosses it, every
+   * later step pays the higher rate on its whole prompt. Compacting a little
+   * before the boundary keeps the session on the cheap side; a turn that
+   * names the full window opts out. */
+  export function defaultContext(model: Provider.Model, capacity: number): number {
+    const base = model.cost
+    const tiered = (base?.tiers ?? [])
+      .filter(
+        (tier) =>
+          tier.threshold < capacity && (tier.input > (base?.input ?? 0) || tier.cache.read > (base?.cache?.read ?? 0)),
+      )
+      .map((tier) => tier.threshold)
+    const legacy = base?.experimentalOver200K && capacity > 200_000 ? [200_000] : []
+    const boundary = [...tiered, ...legacy].sort((a, b) => a - b)[0]
+    return boundary ?? capacity
+  }
+
   export function usableContext(
     model: Provider.Model,
     config: Config.Info,
@@ -77,7 +99,7 @@ export namespace SessionCompaction {
     // Custom/OpenAI-compatible model metadata is less strict than per-turn
     // context input. Invalid limits must not enlarge a budget or make it zero.
     const capacity = positive(model.limit.context) ?? positive(config.compaction?.fallbackContext) ?? FALLBACK_CONTEXT
-    const context = Math.min(capacity, requestedContext ?? capacity)
+    const context = Math.min(capacity, requestedContext ?? defaultContext(model, capacity))
     const maximum = positive(SessionPrompt.OUTPUT_TOKEN_MAX) ?? 32_000
     const cap = Math.min(positive(model.limit.output) ?? maximum, maximum)
     const output = Math.min(cap, Math.floor(context / 2))
@@ -564,6 +586,11 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
+  /** How long a provider keeps a cached prefix warm without traffic: OpenAI
+   * quotes five to ten minutes, Anthropic five. Past this, a request pays
+   * for its prefix again whether or not the transcript changed, so a routine
+   * prune costs nothing extra; inside it, the same prune costs a full read. */
+  export const CACHE_WINDOW_MS = 10 * 60_000
 
   // Skill loads, Results and the deliverables checklist are never pruned:
   // each is small and the model steers by them.

@@ -9,7 +9,7 @@ import { foldedRouteMode, routableModelKey } from "@/context/model-catalog"
 import { modelTierOptions, normalizedTier, promptTier, resolvedTier } from "@/context/model-tier"
 import { resolveModelAccessRoute, type ModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
 import { modelVariantDefault, modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
-import { modelContextOptions } from "@/context/model-context"
+import { modelContextOptions, modelDefaultContext } from "@/context/model-context"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -343,19 +343,23 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const m = current()
             if (!m) return 0
             const value = models.context.get({ providerID: m.provider.id, modelID: m.id })
-            return value && this.list().includes(value) ? value : m.limit.context
+            return value && this.list().includes(value) ? value : modelDefaultContext(m)
           },
           set(value: number | undefined) {
             const m = current()
             if (!m) return
-            const selected = value && this.list().includes(value) && value < m.limit.context ? value : undefined
+            // The full window is stored too: a person who chose it past a
+            // pricing boundary must not fall back to the boundary default.
+            const selected = value && this.list().includes(value) ? value : undefined
             models.context.set({ providerID: m.provider.id, modelID: m.id }, selected)
           },
           prompt() {
             const m = current()
             if (!m) return undefined
-            const value = this.current()
-            return value < m.limit.context ? value : undefined
+            const value = models.context.get({ providerID: m.provider.id, modelID: m.id })
+            // No choice: the server applies the same boundary default.
+            if (!value || !this.list().includes(value)) return undefined
+            return value
           },
         },
       }

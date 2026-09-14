@@ -1457,7 +1457,7 @@ export namespace Config {
             .nonnegative()
             .optional()
             .describe(
-              "How many of the most recent images are sent in full with each model request; older images become text placeholders that can be read again (default: 1)",
+              "How many recent images travel in full with each model request; once the cap is exceeded the older half are released together and become text placeholders that can be read again (default: 20)",
             ),
         })
         .optional(),
