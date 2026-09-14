@@ -56,12 +56,24 @@ test("separate processes admit one receipt and a real process exit interrupts it
 }, 30_000)
 
 test("concurrent identical submissions share one durable admission and changed inputs conflict", async () => {
-  await using tmp = await tmpdir({ git: true })
+  // A provider is configured so a follow-up's message can be stored; no
+  // request reaches it, since nothing here executes a run.
+  await using tmp = await tmpdir({ git: true, config: stressProviderConfig("http://127.0.0.1:9/v1") })
   await Instance.provide({
     directory: tmp.path,
+    init: async () => {
+      await trustProject()
+      await Provider.invalidate()
+    },
     fn: async () => {
       const session = await Session.create({})
-      const input = { sessionID: session.id, requestID: "retry-safe", message: "Inspect", effort: "normal" as const }
+      const input = {
+        sessionID: session.id,
+        requestID: "retry-safe",
+        message: "Inspect",
+        effort: "normal" as const,
+        model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+      }
       const results = await Promise.all(Array.from({ length: 8 }, () => RuntimeRuns.admit(input)))
       expect(new Set(results.map((result) => result.run.runID)).size).toBe(1)
       expect(results.filter((result) => !result.replayed)).toHaveLength(1)
@@ -74,9 +86,11 @@ test("concurrent identical submissions share one durable admission and changed i
         RuntimeRuns.admit({ ...input, model: { providerID: "other", modelID: "other" } }),
       ).rejects.toBeInstanceOf(RuntimeRuns.ConflictError)
       // A different request while the run is live is a follow-up that joins it,
-      // not a conflict; here no model can store it, and that failure is the
-      // caller's to see rather than a false "busy".
-      await expect(RuntimeRuns.admit({ ...input, requestID: "another" })).rejects.toThrow(/model|provider/i)
+      // not a conflict: its message lands in the session and the receipt is
+      // the live run's.
+      const joined = await RuntimeRuns.admit({ ...input, requestID: "another", message: "And this" })
+      expect(joined).toMatchObject({ replayed: true, run: { runID: results[0]!.run.runID } })
+      expect(await Session.messages({ sessionID: session.id })).toHaveLength(1)
       expect(await RuntimeRuns.list(session.id)).toHaveLength(1)
       await RuntimeRuns.cancel(session.id, results[0]!.run.runID)
     },
