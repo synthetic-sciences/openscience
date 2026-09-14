@@ -870,12 +870,22 @@ describe("taskPhase", () => {
       "timed_out",
     )
     expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", outcome: "error" } })).toBe("failed")
-    // A background dispatch returns at once; the worker keeps running until
+    // A background dispatch returns at once; the worker runs on while its
+    // child session is busy, and reads as completed once it has gone quiet or
     // its outcome is recorded on the part.
-    expect(taskPhase({ status: "completed", metadata: { sessionId: "ses_child", background: true } })).toBe("running")
     expect(
-      taskPhase({ status: "completed", metadata: { sessionId: "ses_child", background: true, outcome: "completed" } }),
+      taskPhase({ status: "completed", metadata: { sessionId: "ses_child", background: true }, childBusy: true }),
+    ).toBe("running")
+    expect(
+      taskPhase({ status: "completed", metadata: { sessionId: "ses_child", background: true }, childBusy: false }),
     ).toBe("completed")
+    expect(
+      taskPhase({
+        status: "completed",
+        metadata: { sessionId: "ses_child", background: true, outcome: "partial" },
+        childBusy: true,
+      }),
+    ).toBe("partial")
   })
 
   test("maps phases onto the card's outcome vocabulary", () => {

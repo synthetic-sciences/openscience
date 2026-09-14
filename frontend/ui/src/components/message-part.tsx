@@ -1345,20 +1345,41 @@ ToolRegistry.register({
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const handoff = createMemo(() => parseTaskHandoff(props.output ?? props.error))
-    const live = () =>
-      props.status === "running" ||
-      props.status === "pending" ||
-      (props.status === "completed" && props.metadata.background === true && props.metadata.outcome === undefined)
+    const child = () => {
+      const id = childSessionId()
+      return id ? data.store.session.find((session) => session.id === id) : undefined
+    }
+    const childBusy = () => {
+      const id = childSessionId()
+      const status = id ? data.store.session_status[id] : undefined
+      return !!status && status.type !== "idle"
+    }
+    // A background dispatch settles at once while its worker keeps going; the
+    // card follows the worker until the worker's outcome is on the part.
+    const background = () =>
+      props.status === "completed" && props.metadata.background === true && props.metadata.outcome === undefined
+    const live = () => props.status === "running" || props.status === "pending" || (background() && childBusy())
     const now = useClock(() => live() && !!props.time?.start)
     const duration = () => {
       if (live() && props.time?.start) return elapsedLabel(now() - props.time.start)
-      const measured = props.time?.end === undefined ? undefined : props.time.end - props.time.start
-      return formatTaskDuration((props.metadata.durationMs as number | undefined) ?? measured)
+      const recorded = props.metadata.durationMs as number | undefined
+      // A worker whose outcome was never written back: the child's last
+      // activity is the best end time; the dispatch call's own time is not.
+      const finished = background() ? child()?.time?.updated : undefined
+      const measured =
+        finished !== undefined && props.time?.start
+          ? finished - props.time.start
+          : props.time?.end === undefined
+            ? undefined
+            : props.time.end - props.time.start
+      return formatTaskDuration(recorded ?? measured)
     }
     // Phases come from the part state and the Task metadata the backend
     // recorded, never from the pending placeholder alone: a delegation that
     // fails before a child exists must not look like a worker in trouble.
-    const phase = createMemo(() => taskPhase({ status: props.status, error: props.error, metadata: props.metadata }))
+    const phase = createMemo(() =>
+      taskPhase({ status: props.status, error: props.error, metadata: props.metadata, childBusy: childBusy() }),
+    )
     const outcome = () => taskOutcome(phase())
     const outcomeLabel = () => {
       switch (phase()) {

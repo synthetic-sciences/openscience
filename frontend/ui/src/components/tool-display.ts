@@ -209,7 +209,14 @@ export type TaskPhase =
  * child holds its capacity slot and provider work begins; before that the
  * worker is queued.
  */
-export function taskPhase(input: { status?: string; error?: string; metadata?: Record<string, unknown> }): TaskPhase {
+export function taskPhase(input: {
+  status?: string
+  error?: string
+  metadata?: Record<string, unknown>
+  /** Whether the bound child session is still working, for a background
+   * dispatch whose own outcome has not been written onto the part. */
+  childBusy?: boolean
+}): TaskPhase {
   const metadata = input.metadata ?? {}
   const child = typeof metadata.sessionId === "string" && metadata.sessionId !== ""
   if (input.status === "error") {
@@ -221,8 +228,10 @@ export function taskPhase(input: { status?: string; error?: string; metadata?: R
     if (metadata.outcome === "timed_out") return "timed_out"
     if (metadata.outcome === "error") return "failed"
     // A background dispatch settles at once; the worker's own outcome is
-    // written onto the part when it finishes. Until then it is still working.
-    if (metadata.background === true && metadata.outcome === undefined) return "running"
+    // written onto the part when it finishes. While the child is still busy
+    // the worker is running; a child that has gone quiet without writing an
+    // outcome (a record from before outcomes were kept) reads as completed.
+    if (metadata.background === true && metadata.outcome === undefined) return input.childBusy ? "running" : "completed"
     return "completed"
   }
   if (input.status === "running" && child) return metadata.activeMs === undefined ? "queued" : "running"
