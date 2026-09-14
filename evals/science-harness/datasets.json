@@ -1,0 +1,70 @@
+{
+  "version": 2,
+  "agent": "openscience_harbor.agent:OpenScienceAgent",
+  "harbor": "0.22.0",
+  "skills_default": "bundled",
+  "attempts_default": 3,
+  "benches": {
+    "terminal-bench-science": {
+      "runner": "harbor",
+      "dataset": "terminal-bench-science/terminal-bench-science@v0.1",
+      "metric": "native_binary_reward",
+      "leaderboard": "https://hub.harborframework.com/datasets/terminal-bench-science/terminal-bench-science/10?leaderboard=v0-1-eval&tab=leaderboard",
+      "leaderboard_protocol": "3 trials per task, 70 tasks, cost and tokens reported per run",
+      "notes": "70 Harbor tasks, no GPUs, 8h agent timeout each. Native images, limits, and verifiers stay in Harbor."
+    },
+    "terminal-bench-4-science": {
+      "runner": "harbor",
+      "dataset": "terminal-bench/terminal-bench@4.0.0",
+      "task_filter": "metadata.category == \"Science\"",
+      "tasks_file": "tb4-science-tasks.json",
+      "metric": "native_binary_reward",
+      "leaderboard": "https://hub.harborframework.com/datasets/terminal-bench/terminal-bench/4",
+      "leaderboard_protocol": "Public leaderboard jobs expose per-task rewards via `harbor hub job tasks <job-id>`; filter to the frozen 14 IDs instead of re-running other harnesses.",
+      "notes": "Science-category slice of Terminal-Bench 4.0 (14 of 66), not Terminal-Bench-Science and not the historical TB3 Science 15."
+    },
+    "biomni-bench-50": {
+      "runner": "harbor",
+      "huggingface": {
+        "dataset": "phylobio/BiomniBench-DA",
+        "revision": "e1c8ca5e11a620087bc48d97888eb69176a1f235"
+      },
+      "metric": "rubric_0_100",
+      "judge_env": ["GEMINI_API_KEY"],
+      "leaderboard": "https://github.com/omicverse/BiomniBench-AI4S",
+      "leaderboard_protocol": "Paper (bioRxiv 10.64898/2026.05.12.724604) scores all 100 tasks with Gemini 3.1 Pro judge, 3 reruns; BiomniBench-AI4S compares 7 agents on the public 50 with deepseek-v4-pro and a DeepSeek+Gemini dual judge.",
+      "notes": "Public 50 Harbor tasks, 1h budget, 2 CPUs. Judge credentials go to the verifier only (--ve), never the agent environment."
+    },
+    "drugdiscoverybench": {
+      "runner": "harbor",
+      "github": "scaleapi/DrugDiscoveryBench",
+      "huggingface": "ScaleAI/DrugDiscoveryBench",
+      "image": "ghcr.io/scaleapi/drugdiscoverybench:1.0.0-lightweight",
+      "upstream_harbor": "0.13.1",
+      "metric": "rubric_0_100",
+      "judge_env": ["JUDGE_BASE_URL", "JUDGE_API_KEY", "JUDGE_MODEL"],
+      "agent_env": ["BRAVE_SEARCH_API_KEY"],
+      "leaderboard": "https://labs.scale.com/leaderboard/drugdiscoverybench",
+      "leaderboard_protocol": "3 runs per setting, mean not best-of-n; each closed model appears in its native harness and in mini-SWE-agent.",
+      "notes": "82 Harbor tasks; rubrics are filled from the gated HF dataset by scripts/populate_rubrics.py. Upstream pins Harbor 0.13.1; we run the same task.toml files under 0.22.0 and record that in the identity."
+    },
+    "bixbench3": {
+      "runner": "inspect",
+      "github": "EdisonScientific/BixBench3",
+      "huggingface": "EdisonScientific/BixBench3",
+      "release": "v1.0.0",
+      "metric": "continuous_artifact_score",
+      "leaderboard": "https://advances.edisonscientific.com/benchmarks/bixbench3/",
+      "leaderboard_protocol": "13 models in the Inspect ReAct reference solver, 20 tasks, 24h/5000-message cap; mean artifact score 0-1.",
+      "notes": "Inspect AI + GCP. OpenScience replaces the reference ReAct solver inside the native agent container; grading stays host-side. The sandbox is egress-isolated behind a Squid allowlist, so the model provider API host must be added to the case network_policy.base_allow_domains."
+    },
+    "researchclawbench": {
+      "runner": "researchclaw",
+      "github": "InternScience/ResearchClawBench",
+      "metric": "rubric_hidden_paper",
+      "leaderboard": "https://internscience.github.io/ResearchClawBench-Home/",
+      "leaderboard_protocol": "RADS 0-100 per task (50 = matches paper); best score per (task, agent), Pass@1 mean over 40 tasks.",
+      "notes": "Host workspace + hidden-paper rubric judge. Plug in adapters/researchclaw.py through evaluation/agents.json. Label must stay 'OpenScience (Synthetic Sciences)': their board already has an unrelated 'Open Science'."
+    }
+  }
+}

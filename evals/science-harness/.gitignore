@@ -1,0 +1,6 @@
+jobs/
+datasets/
+workspaces/
+binaries/
+status.json
+*.log

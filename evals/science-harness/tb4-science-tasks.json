@@ -1,0 +1,20 @@
+{
+  "dataset": "terminal-bench/terminal-bench@4.0.0",
+  "filter": "category:Science",
+  "tasks": [
+    "atrx-vep-crispr",
+    "biped-contact-dynamics",
+    "coq-block-bound",
+    "foodstuff-beta-activity",
+    "glycan-ms2-elucidation",
+    "gsea-proteomics",
+    "hof-topology-interpenetration",
+    "ks-solver-cpp",
+    "lake-temp-glm",
+    "protein-autointerp-disulfide",
+    "roy-polymorph-cn",
+    "sound-change-cascade",
+    "takens-embedding-lean",
+    "wdm-design"
+  ]
+}

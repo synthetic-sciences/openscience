@@ -1,0 +1,7 @@
+{
+  "openscience": {
+    "label": "OpenScience",
+    "icon": "S",
+    "cmd": "python3 evals/science-harness/adapters/researchclaw.py -p <PROMPT> -w <WORKSPACE>"
+  }
+}
