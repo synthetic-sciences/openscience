@@ -45,6 +45,9 @@ export namespace LLM {
     messages: ModelMessage[]
     small?: boolean
     tools: Record<string, Tool>
+    /** Offer the tools (they are part of the cached prefix) but forbid calling
+     * them, for a request that must answer in text. */
+    toolChoice?: "none"
     retries?: number
     trace?: { messageID: string; attempt: number }
     route?: string
@@ -315,6 +318,7 @@ export namespace LLM {
       providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools,
       tools,
+      ...(input.toolChoice ? { toolChoice: input.toolChoice } : {}),
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {

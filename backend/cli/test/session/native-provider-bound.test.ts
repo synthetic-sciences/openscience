@@ -268,10 +268,14 @@ describe("native provider system and continuation boundaries", () => {
         })
         await local.quiet()
 
+        // One conversation request per scenario. The summary rides the
+        // conversation's own system blocks, custom system included, so it
+        // carries the marker of the turn it summarizes and is counted apart.
         for (const scenario of ["disabled", "explicit", "context-first", "context-second", "context-after"]) {
           expect(
             local.requests.filter(
-              (request) => request.adapter === adapter && request.scenario === `${scenario}-${adapter}`,
+              (request) =>
+                request.adapter === adapter && request.scenario === `${scenario}-${adapter}` && !request.summary,
             ),
           ).toHaveLength(1)
         }

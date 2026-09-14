@@ -30,7 +30,9 @@ If the model offers a smaller context-window choice, that choice is retained thr
 
 When a model prices long prompts in tiers (GPT-6 Astra doubles every input rate past 272K tokens), the default budget is the first pricing boundary, so the conversation compacts a little before it crosses into the higher tier and each later step pays the lower rate on its whole prompt. Choose **Full** in the model's context options to allow the whole window instead; the choice is kept per model.
 
-Old tool results are pruned only when the provider's prompt cache has gone cold (after roughly ten minutes without a request) or when capacity requires it. Pruning rewrites earlier context, which the provider then re-reads at full price, so a wake-up inside the cache window keeps its prefix intact. Up to twenty recent images travel in full with each request; past that, the older half are released together and become placeholders that can be read again (`compaction.recentImages`).
+Old tool results are pruned only when the provider's prompt cache has gone cold (thirty minutes without a request) or when capacity requires it. Pruning rewrites earlier context, which the provider then re-reads at full price, so a wake-up inside the cache window keeps its prefix intact. Up to twenty recent images travel in full with each request; past that, the older half are released together and become placeholders that can be read again (`compaction.recentImages`).
+
+A summary request is built from the conversation's own header, system blocks and tools (offered, not callable), so the provider serves the material it summarizes from the cache the conversation already wrote; a configured `agent.compaction.model` that differs from the conversation's model takes a standalone request instead. Reasoning is replayed for the work since your last message; earlier turns' reasoning is left out of requests, as the visible transcript carries the decisions.
 
 Old `compaction.threshold` and warning-level preferences are ignored. If you explicitly set `compaction.auto` to `false` in configuration, use `/compact` before the conversation becomes too large.
 
@@ -59,13 +61,13 @@ exist, summarize the current state, and continue with the next step.
 
 ## Choose the right recovery action
 
-| Need | Action |
-| --- | --- |
-| More space in the same discussion | Compact with a clear focus. |
-| A local recovery point | Save a checkpoint and review its scope. |
-| A human-readable continuation note | Write a handoff file. |
-| A copy of conversation history | Use [session export](/openscience/sessions). |
-| A durable deliverable | Save a [Result](/openscience/results) and its supporting files. |
-| Return to an earlier supported turn | Use Undo and review affected changes. |
+| Need                                | Action                                                          |
+| ----------------------------------- | --------------------------------------------------------------- |
+| More space in the same discussion   | Compact with a clear focus.                                     |
+| A local recovery point              | Save a checkpoint and review its scope.                         |
+| A human-readable continuation note  | Write a handoff file.                                           |
+| A copy of conversation history      | Use [session export](/openscience/sessions).                    |
+| A durable deliverable               | Save a [Result](/openscience/results) and its supporting files. |
+| Return to an earlier supported turn | Use Undo and review affected changes.                           |
 
 Commands surfaced as skills need those skills enabled. Check [Slash commands](/openscience/slash-commands) if an action is not offered in the picker.

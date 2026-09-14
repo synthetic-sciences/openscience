@@ -628,6 +628,26 @@ export namespace MessageV2 {
     return "continue"
   }
 
+  /** The replay copy of an OpenRouter reasoning record. The stream delivers a
+   * model's reasoning summary as one `reasoning.summary` item per token, each
+   * wrapped in a hundred bytes of JSON, and every tool call in the step carries
+   * the whole list: one step's summary came back as 450 items and 50 KB. The
+   * upstream needs the signed or encrypted items to continue reasoning; the
+   * summaries are display data, so they stay in the transcript and leave the
+   * request. */
+  export function replayableOpenRouterReplay(metadata: Record<string, unknown> | undefined) {
+    const openrouter = metadata?.openrouter
+    if (!openrouter || typeof openrouter !== "object") return metadata
+    const details = (openrouter as { reasoning_details?: unknown }).reasoning_details
+    if (!Array.isArray(details)) return metadata
+    const kept = details.filter(
+      (detail) =>
+        !(detail && typeof detail === "object" && (detail as { type?: unknown }).type === "reasoning.summary"),
+    )
+    if (kept.length === details.length) return metadata
+    return { ...metadata, openrouter: { ...(openrouter as Record<string, unknown>), reasoning_details: kept } }
+  }
+
   function replayableOpenRouterMetadata(metadata: Record<string, unknown> | undefined) {
     const openrouter = metadata?.openrouter
     if (!openrouter || typeof openrouter !== "object") return false
@@ -770,8 +790,24 @@ export namespace MessageV2 {
       return { type: "json", value: output as never }
     }
 
-    for (const msg of input) {
+    // Reasoning is replayed for the work in progress, everything since the
+    // person's last request, and dropped for the turns before it. Anthropic
+    // strips earlier turns' thinking server-side; OpenAI renders earlier turns'
+    // encrypted reasoning into context on GPT-5.6+ and bills it as input on
+    // every step, and this session carried 139 items of it. The transcript
+    // keeps the decisions. The boundary is the person's message, not any
+    // user-role message: a worker's result or a study update lands mid-work,
+    // and stripping there would rewrite the prefix the cache holds for
+    // nothing, while a person's request usually follows a pause that has
+    // cooled the cache anyway.
+    const lastUser = input.findLastIndex(
+      (msg) =>
+        msg.info.role === "user" &&
+        msg.parts.some((part) => (part.type === "text" && !part.synthetic) || part.type === "file"),
+    )
+    for (const [index, msg] of input.entries()) {
       if (msg.parts.length === 0) continue
+      const earlierTurn = index < lastUser
 
       if (msg.info.role === "user") {
         const userMessage: UIMessage = {
@@ -852,16 +888,16 @@ export namespace MessageV2 {
         // Forwarding all of those duplicates makes the next backend reject the
         // first unsigned thinking block. Preserve one canonical, signed copy.
         const openrouter =
-          model.providerID === "openrouter" && !differentModel
+          model.providerID === "openrouter" && !differentModel && !earlierTurn
             ? iife(() => {
                 const tool = msg.parts.findLast(
                   (part) => part.type === "tool" && replayableOpenRouterMetadata(part.metadata),
                 )
-                if (tool?.type === "tool") return tool.metadata
+                if (tool?.type === "tool") return replayableOpenRouterReplay(tool.metadata)
                 const reasoning = msg.parts.findLast(
                   (part) => part.type === "reasoning" && replayableOpenRouterMetadata(part.metadata),
                 )
-                if (reasoning?.type === "reasoning") return reasoning.metadata
+                if (reasoning?.type === "reasoning") return replayableOpenRouterReplay(reasoning.metadata)
                 return undefined
               })
             : undefined
@@ -979,7 +1015,7 @@ export namespace MessageV2 {
                     }),
               })
           }
-          if (part.type === "reasoning") {
+          if (part.type === "reasoning" && !earlierTurn) {
             assistantMessage.parts.push({
               type: "reasoning",
               text: part.text,

@@ -734,9 +734,21 @@ export namespace Session {
         0) as number
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
-      const adjustedInputTokens = excludesCachedTokens
+      const uncachedInputTokens = excludesCachedTokens
         ? (input.usage.inputTokens ?? 0)
         : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
+      // OpenAI writes every uncached token of a GPT-5.6+ prompt to its cache
+      // at 1.25x the input rate and reports only the reads, so on the native
+      // route the uncached remainder is a cache write, not plain input; the
+      // catalog's write rate already carries the premium. Routes that report a
+      // cost (OpenRouter, the gateway) are settled from that figure instead.
+      const implicitWrite =
+        input.model.providerID === "openai" &&
+        cacheWriteInputTokens === 0 &&
+        (input.model.cost?.cache?.write ?? 0) > (input.model.cost?.input ?? 0) &&
+        /^gpt-(?:5\.[6-9]|[6-9])/.test(input.model.api.id.toLowerCase())
+      const adjustedInputTokens = implicitWrite ? 0 : uncachedInputTokens
+      const adjustedCacheWriteTokens = implicitWrite ? uncachedInputTokens : cacheWriteInputTokens
       const safe = (value: number) => {
         // Clamp non-finite AND negative values: for providers not in the
         // excludes-cached set, `inputTokens - cacheRead - cacheWrite` can go
@@ -751,7 +763,7 @@ export namespace Session {
         output: safe(input.usage.outputTokens ?? 0),
         reasoning: safe(input.usage?.reasoningTokens ?? 0),
         cache: {
-          write: safe(cacheWriteInputTokens),
+          write: safe(adjustedCacheWriteTokens),
           read: safe(cacheReadInputTokens),
         },
       }

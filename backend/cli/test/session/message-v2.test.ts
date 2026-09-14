@@ -992,6 +992,94 @@ describe("session.message-v2.toModelMessage", () => {
     expect(JSON.stringify(result)).not.toContain('"format":"anthropic-claude-v1","index":0}}')
   })
 
+  test("replays the encrypted reasoning of the turn in progress and nothing of earlier turns, without per-token summaries", () => {
+    const openrouter = {
+      ...model,
+      id: "openai/gpt-6-astra",
+      providerID: "openrouter",
+      api: { ...model.api, id: "openai/gpt-6-astra", npm: "@openrouter/ai-sdk-provider" },
+    }
+    const encrypted = (id: string) => ({
+      type: "reasoning.encrypted",
+      id,
+      data: `encrypted-${id}`,
+      format: "openai-responses-v1",
+      index: 0,
+    })
+    const summaries = ["**Planning", " the", " read**"].map((summary) => ({
+      type: "reasoning.summary",
+      summary,
+      format: "openai-responses-v1",
+      index: 0,
+    }))
+    const step = (assistantID: string, parentID: string, rs: string) => ({
+      info: assistantInfo(assistantID, parentID, undefined, { providerID: "openrouter", modelID: openrouter.id }),
+      parts: [
+        {
+          ...basePart(assistantID, `${assistantID}-reasoning`),
+          type: "reasoning",
+          text: "[REDACTED]Planning the read",
+          metadata: { openrouter: { reasoning_details: [...summaries, encrypted(rs)] } },
+          time: { start: 0, end: 1 },
+        },
+        {
+          ...basePart(assistantID, `${assistantID}-tool`),
+          type: "tool",
+          callID: `${assistantID}-call`,
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: "a.md" },
+            output: "a",
+            title: "a.md",
+            metadata: {},
+            time: { start: 1, end: 2 },
+          },
+          metadata: { openrouter: { reasoning_details: [...summaries, encrypted(rs)] } },
+        },
+      ] as MessageV2.Part[],
+    })
+    const input: MessageV2.WithParts[] = [
+      {
+        info: userInfo("u1"),
+        parts: [{ ...basePart("u1", "u1-text"), type: "text", text: "First request" }] as MessageV2.Part[],
+      },
+      step("a1", "u1", "rs_old"),
+      {
+        info: userInfo("u2"),
+        parts: [{ ...basePart("u2", "u2-text"), type: "text", text: "Second request" }] as MessageV2.Part[],
+      },
+      step("a2", "u2", "rs_now"),
+      // A worker's result lands mid-work as a synthetic user message; it is not a turn.
+      {
+        info: userInfo("u3"),
+        parts: [
+          {
+            ...basePart("u3", "u3-text"),
+            type: "text",
+            text: '<task id="ses_w" state="completed">done</task>',
+            synthetic: true,
+          },
+        ] as MessageV2.Part[],
+      },
+      step("a3", "u3", "rs_after_worker"),
+    ]
+    const serialized = JSON.stringify(MessageV2.toModelMessages(input, openrouter))
+    // The work since the person's last request keeps its encrypted items; the earlier turn's reasoning is gone.
+    expect(serialized).toContain("encrypted-rs_now")
+    expect(serialized).toContain("encrypted-rs_after_worker")
+    expect(serialized).not.toContain("encrypted-rs_old")
+    expect((serialized.match(/"type":"reasoning"/g) ?? []).length).toBe(2)
+    // Per-token summary fragments never travel; the transcript still has them.
+    expect(serialized).not.toContain("reasoning.summary")
+    expect(MessageV2.replayableOpenRouterReplay({ openrouter: { reasoning_details: summaries } })).toEqual({
+      openrouter: { reasoning_details: [] },
+    })
+    // Untouched when there is nothing to trim, so a signed Anthropic block stays byte-identical.
+    const signed = { openrouter: { reasoning_details: [{ type: "reasoning.text", text: "t", signature: "s" }] } }
+    expect(MessageV2.replayableOpenRouterReplay(signed)).toBe(signed)
+  })
+
   test("does not replay an unsigned OpenRouter Anthropic reasoning detail", () => {
     const assistantID = "m-openrouter-unsigned"
     const openrouter = {

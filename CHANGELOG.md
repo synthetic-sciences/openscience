@@ -83,7 +83,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   subscriber saw it, which on a long session froze the workspace for minutes
   after a wave of worker events and then delivered them all at once.
 - Old tool results are pruned only when the provider's prompt cache has gone
-  cold (ten minutes without a request) or when capacity requires it, no longer
+  cold (thirty minutes without a request) or when capacity requires it, no longer
   at the end of every turn. A prune rewrites earlier context, and the provider
   re-reads everything after the rewrite at full price, so a wake-up inside the
   cache window (a worker finishing, a study update) now keeps its prefix.
@@ -102,6 +102,20 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 workers`), the soft ceiling applies to the sum, and a study's cost budget
   counts the lead's workers. A delegating lead spends most of a study's money
   in its workers, and the earlier figure left them out.
+- A summary request rides the conversation's own prefix: the same header,
+  system blocks and tools (offered, not callable), the same rendering, then
+  the handoff instruction as the one new message, so the provider serves the
+  head from the cache the conversation wrote. A 240K-token compaction on
+  Astra read at the full rate ($2.4) under the compaction agent's own header;
+  it now reads at the cache rate. A configured `agent.compaction.model` that
+  differs from the conversation's model keeps the standalone request.
+- Reasoning is replayed only for the work since the person's last message, and
+  OpenRouter's per-token `reasoning.summary` fragments never travel. One step's
+  summary came back as 450 items and 50 KB, every tool call in the step
+  carried the whole list, and GPT-5.6+ renders earlier turns' encrypted
+  reasoning into context and bills it on every step: this session's requests
+  were 57% replayed reasoning. A worker's result or a study update is not a
+  turn boundary, so it does not disturb the cached prefix mid-work.
 - A study whose wake-up the provider refused (an empty account, a rejected key)
   pauses with the refusal as its reason instead of knocking on the session
   every tick; resume it once the cause is fixed.

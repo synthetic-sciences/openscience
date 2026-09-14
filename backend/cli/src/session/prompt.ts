@@ -1659,6 +1659,13 @@ export namespace SessionPrompt {
         },
       })
 
+      // A later summary of this conversation can ride this request's prefix.
+      SessionCompaction.remember(sessionID, {
+        system,
+        tools,
+        agent,
+        model: { providerID: model.providerID, id: model.id },
+      })
       const result = await processor.process({
         user: lastUser,
         agent,

@@ -52,6 +52,43 @@ describe("Session.getUsage cost/token accounting", () => {
     })
   }
 
+  test("the native OpenAI route bills a GPT-5.6+ prompt's uncached remainder as the implicit cache write", () => {
+    const astra = (): any => ({
+      providerID: "openai",
+      api: { id: "gpt-6-astra" },
+      cost: { input: 10, output: 50, cache: { read: 1, write: 12.5 } },
+    })
+    const result = Session.getUsage({
+      model: astra(),
+      usage: { inputTokens: 100_000, outputTokens: 1_000, reasoningTokens: 500, cachedInputTokens: 60_000 } as any,
+      metadata: { openai: {} } as any,
+    })
+    // 60K read from the cache, the other 40K written to it at the write rate.
+    expect(result.tokens).toEqual({
+      input: 0,
+      output: 1_000,
+      reasoning: 500,
+      cache: { read: 60_000, write: 40_000 },
+    })
+    expect(result.cost).toBeCloseTo((60_000 * 1 + 40_000 * 12.5 + 1_000 * 50) / 1_000_000, 8)
+    // Earlier families carry no write premium and keep plain input accounting.
+    const sol55 = Session.getUsage({
+      model: { ...astra(), api: { id: "gpt-5.5" }, cost: { input: 10, output: 50, cache: { read: 1, write: 0 } } },
+      usage: { inputTokens: 100_000, outputTokens: 1_000, cachedInputTokens: 60_000 } as any,
+      metadata: { openai: {} } as any,
+    })
+    expect(sol55.tokens.input).toBe(40_000)
+    expect(sol55.tokens.cache.write).toBe(0)
+    // The same model through OpenRouter reports its cost; the split stays plain.
+    const routed = Session.getUsage({
+      model: { ...astra(), providerID: "openrouter", api: { id: "openai/gpt-6-astra" } },
+      usage: { inputTokens: 100_000, outputTokens: 1_000, cachedInputTokens: 60_000 } as any,
+      metadata: { openrouter: { usage: { cost: 1.23 } } } as any,
+    })
+    expect(routed.tokens.input).toBe(40_000)
+    expect(routed.cost).toBeCloseTo(1.23, 8)
+  })
+
   test("over-200k tier trips on a mostly-cache-write prompt (cache.write counts toward the threshold)", () => {
     // 15k fresh input + 190k cache-creation = 205k > 200k → over-200k pricing.
     const r = Session.getUsage({
