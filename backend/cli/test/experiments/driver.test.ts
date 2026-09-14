@@ -5,6 +5,8 @@ import { Experiments } from "../../src/experiments"
 import { StudyDriver } from "../../src/experiments/driver"
 import { TrackingSDK } from "../../src/experiments/sdk"
 import { Instance } from "../../src/project/instance"
+import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
 import type { JobBroker } from "../../src/compute/job-broker"
 import { tmpdir } from "../fixture/fixture"
 
@@ -367,6 +369,67 @@ describe("study driver", () => {
         expect(prompts).toHaveLength(1)
         expect(prompts[0]).toContain('Run "one"')
         expect((await Experiments.getStudy(study.id))?.turns).toBe(1)
+      },
+    })
+  })
+
+  test("a wake the provider refused pauses the study with the reason instead of knocking again", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        const prompts: string[] = []
+        StudyDriver.configure({
+          now: () => Date.now(),
+          idle: () => true,
+          prompt: async ({ text }) => {
+            prompts.push(text)
+            // The turn the wake started ended in the provider's refusal.
+            await Session.updateMessage({
+              id: `msg_refused_${prompts.length}`,
+              sessionID: session.id,
+              role: "assistant",
+              parentID: "msg_user",
+              mode: "research",
+              agent: "research",
+              path: { cwd: tmp.path, root: tmp.path },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              modelID: "m",
+              providerID: "p",
+              time: { created: Date.now(), completed: Date.now() },
+              error: new MessageV2.APIError({
+                message: "The connected provider account needs $26.86 for this step; $0.00 is available.",
+                statusCode: 402,
+                isRetryable: false,
+              }).toObject(),
+            })
+          },
+          job: async () => undefined,
+          cancel: async () => undefined,
+          logPath: async (jobID) => path.join(tmp.path, `${jobID}.log`),
+        })
+        const study = await Experiments.createStudy({
+          sessionID: session.id,
+          name: "refused",
+          purpose: "test",
+          metric: "val_loss",
+          direction: "minimize",
+          root: path.join(tmp.path, "study"),
+          budget: { maxRuns: 5 },
+        })
+        await Experiments.proposeIdeas(study.id, [{ title: "one", description: "d", why: "w", ev: 0.1 }])
+        await StudyDriver.tick(study.id)
+        expect(prompts).toHaveLength(1)
+        const paused = await Experiments.getStudy(study.id)
+        expect(paused?.status).toBe("paused")
+        const event = (await Experiments.listEvents(study.id)).find((item) => item.kind === "paused")
+        expect(event?.message).toContain("needs $26.86")
+        expect(event?.message).toContain("resume the study")
+        // Paused: the next tick does not knock again.
+        await StudyDriver.tick(study.id)
+        expect(prompts).toHaveLength(1)
       },
     })
   })

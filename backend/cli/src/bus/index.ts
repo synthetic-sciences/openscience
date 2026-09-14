@@ -50,9 +50,10 @@ export namespace Bus {
     log.debug("publishing", {
       type: def.type,
     })
-    // Public runtime streams are journaled before delivery, so a reconnect
-    // cursor never observes a live event that was not durably replayable.
-    await RuntimeEvents.capture(payload)
+    // Public runtime streams journal every event in publish order, behind the
+    // delivery rather than ahead of it: a journal rewrite must never hold the
+    // bus, and replay waits for the pending captures before it reads.
+    void RuntimeEvents.enqueue(payload)
     const pending = []
     for (const key of [def.type, "*"]) {
       const match = state().subscriptions.get(key)

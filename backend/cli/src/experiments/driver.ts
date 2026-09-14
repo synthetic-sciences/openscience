@@ -415,6 +415,29 @@ export namespace StudyDriver {
     // Any wake-up restarts the idle window: the agent needs time to act on it.
     current.lastNudgeAt = now
     await Experiments.updateStudy(study.id, { turns: study.turns + 1 })
+    // A wake that the provider refused (an empty account, a rejected key)
+    // would be refused again next tick; every retry is another failed turn in
+    // the transcript. Pause instead and say why, so the study resumes once
+    // the cause is fixed rather than knocking on a closed door every minute.
+    const failure = await refusedTurn(study.sessionID)
+    if (!failure) return
+    current.pending.length = 0
+    await Experiments.updateStudy(study.id, { status: "paused" })
+    await Experiments.addEvent(
+      study.id,
+      "paused",
+      `the session's turn failed (${failure}); fix the cause, then resume the study`,
+    )
+  }
+
+  /** The provider's refusal, if the session's newest turn ended in one. */
+  async function refusedTurn(sessionID: string) {
+    const messages = await Session.messages({ sessionID, limit: 6 }).catch(() => [])
+    const last = messages.findLast((message) => message.info.role === "assistant")
+    if (!last || last.info.role !== "assistant" || !last.info.error) return
+    const data = (last.info.error as { data?: { message?: unknown } }).data
+    const message = typeof data?.message === "string" ? data.message : last.info.error.name
+    return message.replace(/\s+/g, " ").slice(0, 200)
   }
 
   /** Called by the study tool when a run starts, so the follower begins

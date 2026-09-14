@@ -209,17 +209,18 @@ describe("public runtime event journal", () => {
               properties: { sessionID: session.id, value: 1 },
             }),
           ).resolves.toBeUndefined()
+          // Capture places the event in its stream; the durable write and the
+          // subscriber delivery run on that stream's queue, which replay drains.
+          expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
+            runID: "run_subscriber_isolation",
+            type: Tick.type,
+            properties: { sessionID: session.id, value: 1 },
+          })
+          expect(received).toMatchObject([{ runID: "run_subscriber_isolation", type: Tick.type }])
         } finally {
           unsubscribeFailing()
           unsubscribeHealthy()
         }
-
-        expect(received).toMatchObject([{ runID: "run_subscriber_isolation", type: Tick.type }])
-        expect((await RuntimeEvents.replay(session.id)).events.at(-1)).toMatchObject({
-          runID: "run_subscriber_isolation",
-          type: Tick.type,
-          properties: { sessionID: session.id, value: 1 },
-        })
         await RuntimeEvents.finish({
           sessionID: session.id,
           runID: "run_subscriber_isolation",

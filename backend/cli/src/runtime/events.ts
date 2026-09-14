@@ -86,17 +86,19 @@ export namespace RuntimeEvents {
   type ProgressInput = {
     sessionID: string
     runID: string
-    type: "message.part.updated"
-    properties: Record<string, unknown> & {
-      part: Record<string, unknown>
-      delta: string
-    }
+    type: string
+    properties: Record<string, unknown>
   }
+
+  /** How a captured event joins the pending batch: a text delta appends to the
+   * delta already waiting for the same part, a progress heartbeat replaces the
+   * one waiting for the same request, anything else is its own entry. */
+  type Merge = "delta" | "replace" | "none"
 
   type ProgressEntry = {
     key: string
+    merge: Merge
     input: ProgressInput
-    waiters: Array<{ resolve: () => void; reject: (error: unknown) => void }>
   }
 
   type Progress = {
@@ -107,9 +109,10 @@ export namespace RuntimeEvents {
     timer?: ReturnType<typeof setTimeout>
   }
 
-  /** Keep durable public progress responsive without rewriting the full replay
-   * journal for every provider token. The regular UI bus still receives each
-   * original delta after its durable batch commits. */
+  /** Keep the durable replay journal responsive without rewriting it for every
+   * provider token or tool state change: everything a run emits inside this
+   * window lands in one write. The UI bus receives each original event as it
+   * happens; the journal catches up in order behind it. */
   export const PROGRESS_INTERVAL_MS = 50
 
   const state = Instance.state(() => ({
@@ -308,54 +311,44 @@ export namespace RuntimeEvents {
     stream.timer = undefined
     const entries = stream.pending.splice(0)
     if (!entries.length) return stream.tail
-    return queue(stream, async () => {
-      try {
-        await appendProgress({ sessionID, runID: stream.runID, entries })
-        for (const entry of entries) {
-          for (const waiter of entry.waiters) waiter.resolve()
-        }
-      } catch (error) {
-        for (const entry of entries) {
-          for (const waiter of entry.waiters) waiter.reject(error)
-        }
-        throw error
-      }
-    })
+    return queue(stream, () => appendProgress({ sessionID, runID: stream.runID, entries }))
   }
 
-  function scheduleProgress(input: ProgressInput) {
+  /** Place a captured event in its stream: the first event of a run is written
+   * at once so the run is visible immediately; the rest wait for the batch
+   * window. The write happens on the stream's own queue, so scheduling never
+   * waits for the journal. */
+  function scheduleProgress(input: ProgressInput, merge: Merge, key: string) {
     const stream = progress(input.sessionID, input.runID)
     if (stream.first) {
       stream.first = false
-      return queue(stream, async () => {
-        await append({ ...input, requireActive: true })
-      })
+      void queue(stream, () => append({ ...input, requireActive: true })).catch((error) =>
+        log.error("failed to journal the first runtime event", { sessionID: input.sessionID, error }),
+      )
+      return
     }
-    return new Promise<void>((resolve, reject) => {
-      const part = input.properties.part
-      const key = [part.messageID, part.id, part.type].join(":")
-      const prior = stream.pending.at(-1)
-      if (prior?.key === key) {
-        prior.input = {
-          ...input,
-          properties: {
-            ...input.properties,
-            delta: prior.input.properties.delta + input.properties.delta,
-          },
-        }
-        prior.waiters.push({ resolve, reject })
-      } else {
-        stream.pending.push({ key, input, waiters: [{ resolve, reject }] })
+    const prior = stream.pending.at(-1)
+    if (merge === "delta" && prior?.key === key && prior.merge === "delta") {
+      prior.input = {
+        ...input,
+        properties: {
+          ...input.properties,
+          delta: String(prior.input.properties.delta) + String(input.properties.delta),
+        },
       }
-      if (stream.timer) return
-      stream.timer = setTimeout(() => {
-        stream.timer = undefined
-        void flushProgress(input.sessionID).catch((error) =>
-          log.error("failed to flush runtime progress", { sessionID: input.sessionID, runID: input.runID, error }),
-        )
-      }, PROGRESS_INTERVAL_MS)
-      ;(stream.timer as { unref?: () => void }).unref?.()
-    })
+    } else if (merge === "replace" && prior?.key === key && prior.merge === "replace") {
+      prior.input = input
+    } else {
+      stream.pending.push({ key, merge, input })
+    }
+    if (stream.timer) return
+    stream.timer = setTimeout(() => {
+      stream.timer = undefined
+      void flushProgress(input.sessionID).catch((error) =>
+        log.error("failed to flush runtime progress", { sessionID: input.sessionID, runID: input.runID, error }),
+      )
+    }, PROGRESS_INTERVAL_MS)
+    ;(stream.timer as { unref?: () => void }).unref?.()
   }
 
   function progressInput(input: {
@@ -647,6 +640,7 @@ export namespace RuntimeEvents {
     expectedOwner?: Journal["activeOwner"]
     onTerminal?: () => void
   }) {
+    await settled()
     await flushProgress(input.sessionID)
     let event: Event | undefined
     let idempotent = false
@@ -741,15 +735,41 @@ export namespace RuntimeEvents {
       properties: properties as Record<string, unknown>,
     }
     const streaming = progressInput(input)
-    if (streaming) return scheduleProgress(streaming)
-    const stream = progress(run.sessionID, run.runID)
-    await flushProgress(run.sessionID)
-    await queue(stream, async () => {
-      await append({ ...input, requireActive: true })
+    if (streaming) {
+      const part = streaming.properties.part as Record<string, unknown>
+      return scheduleProgress(streaming, "delta", [part.messageID, part.id, part.type].join(":"))
+    }
+    if (input.type === "session.request.progress") {
+      const messageID = (properties as Record<string, unknown>).messageID
+      return scheduleProgress(input, "replace", `progress:${String(messageID)}`)
+    }
+    return scheduleProgress(input, "none", `${input.type}:${Date.now()}:${Math.random()}`)
+  }
+
+  let journaling: Promise<void> = Promise.resolve()
+
+  /** Journal a bus event without holding up its delivery. Captures are placed
+   * one after another in publish order, so the replay journal keeps the bus's
+   * sequence, and a rewrite of a large journal never stalls the stream every
+   * consumer is watching. `capture` resolves once the event sits in its
+   * stream's batch; the write itself runs on that stream's queue. */
+  export function enqueue(payload: { type: string; properties: unknown }) {
+    const next = journaling.then(() => capture(payload))
+    journaling = next.catch((error) => {
+      log.error("runtime event capture failed", { type: payload.type, error })
     })
+    return journaling
+  }
+
+  /** Every capture enqueued so far has been placed in its stream; a flush of
+   * that stream then makes it replayable. */
+  export function settled() {
+    return journaling
   }
 
   export async function replay(sessionID: string, afterSequence?: number) {
+    // A cursor taken after a live event must find that event replayable.
+    await settled()
     await flushProgress(sessionID)
     const journal = await read(sessionID)
     const oldestSequence = journal.events[0]?.sequence ?? journal.nextSequence

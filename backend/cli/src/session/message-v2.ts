@@ -642,6 +642,35 @@ export namespace MessageV2 {
     })
   }
 
+  export const TOOL_MEDIA_PROMPT = "Images from the tool results above:"
+
+  /** Whether this model's SDK can carry media inside a tool result. Chat
+   * Completions-style transports (OpenRouter, openai-compatible, the Copilot
+   * fork) accept only a string there and JSON-stringify anything else, so a
+   * figure's base64 would be billed as prompt text: a 500 KB PNG became
+   * 170K input tokens on every step until it was pruned. Those transports get
+   * the image as a user message instead, which every image-capable model
+   * reads at image prices. */
+  export function mediaInToolResult(model: Provider.Model, mime: string): boolean {
+    const npm = model.api.npm
+    if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") return true
+    if (npm === "@ai-sdk/openai" || npm === "@ai-sdk/azure") return true
+    if (npm === "@ai-sdk/amazon-bedrock" || npm === "@ai-sdk/xai") return mime.startsWith("image/")
+    if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex") {
+      const id = model.api.id.toLowerCase()
+      return id.includes("gemini-3") && !id.includes("gemini-2")
+    }
+    return false
+  }
+
+  /** Whether the model can take this media as input at all, by the same
+   * coarse fallback the request transform applies to user attachments. */
+  function viewable(model: Provider.Model, mime: string): boolean {
+    if (mime.startsWith("image/")) return model.capabilities.input.image || model.capabilities.attachment
+    if (mime === "application/pdf") return model.capabilities.input.pdf || model.capabilities.attachment
+    return false
+  }
+
   export function toModelMessages(
     input: WithParts[],
     model: Provider.Model,
@@ -801,6 +830,7 @@ export namespace MessageV2 {
           role: "assistant",
           parts: [],
         }
+        const media: Array<{ mime: string; url: string; filename?: string }> = []
         // OpenRouter can route consecutive turns through different Anthropic
         // backends. Its stream puts an incomplete reasoning detail on the
         // reasoning part, then the complete signed detail on every tool call.
@@ -843,11 +873,24 @@ export namespace MessageV2 {
               const isDuplicate = superseded.has(part.id)
               const rawAttachments = part.state.time.compacted || isDuplicate ? [] : (part.state.attachments ?? [])
               let droppedNote = ""
-              const attachments = rawAttachments.filter((a) => {
+              const shown = rawAttachments.filter((a) => {
                 const dropped = dropImage(a.mime, a.url, a.filename)
                 if (dropped) droppedNote += `\n${dropped}`
                 return !dropped
               })
+              // Media the provider's tool-result channel cannot carry travels
+              // in a user message right after this one; the result keeps a
+              // pointer so the model connects the two.
+              const carried = shown.filter((a) => mediaInToolResult(model, a.mime))
+              const relocated = shown.filter((a) => !mediaInToolResult(model, a.mime) && viewable(model, a.mime))
+              const blind = shown.length - carried.length - relocated.length
+              if (relocated.length) {
+                media.push(...relocated)
+                droppedNote += `\n[${relocated.length === 1 ? "1 image" : `${relocated.length} images`} from this result ${relocated.length === 1 ? "follows" : "follow"} in the next message]`
+              }
+              if (blind > 0) {
+                droppedNote += `\n[${blind === 1 ? "1 attachment" : `${blind} attachments`} omitted: this model cannot view ${blind === 1 ? "it" : "them"}; work from the data or the file itself]`
+              }
               const baseText = isDuplicate
                 ? DUPLICATE_OUTPUT
                 : part.state.time.compacted
@@ -855,10 +898,10 @@ export namespace MessageV2 {
                   : part.state.output
               const outputText = baseText + droppedNote
               const output =
-                attachments.length > 0
+                carried.length > 0
                   ? {
                       text: outputText,
-                      attachments,
+                      attachments: carried,
                     }
                   : outputText
 
@@ -940,6 +983,21 @@ export namespace MessageV2 {
         }
         if (assistantMessage.parts.length > 0) {
           result.push(assistantMessage)
+          if (media.length > 0) {
+            result.push({
+              id: `${msg.info.id}-media`,
+              role: "user",
+              parts: [
+                { type: "text", text: TOOL_MEDIA_PROMPT },
+                ...media.map((attachment) => ({
+                  type: "file" as const,
+                  url: attachment.url,
+                  mediaType: attachment.mime,
+                  filename: attachment.filename,
+                })),
+              ],
+            })
+          }
         }
       }
     }

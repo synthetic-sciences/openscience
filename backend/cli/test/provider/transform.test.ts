@@ -84,6 +84,26 @@ describe("ProviderTransform.options - setCacheKey", () => {
     expect(result.promptCacheKey).toBe(sessionID)
   })
 
+  test("an OpenRouter request carries the session as its sticky-routing and cache key", () => {
+    const openrouter = (id: string) => ({
+      ...mockModel,
+      id,
+      providerID: "openrouter",
+      api: { id, url: "https://openrouter.ai/api/v1", npm: "@openrouter/ai-sdk-provider" },
+    })
+    const astra = ProviderTransform.options({ model: openrouter("openai/gpt-6-astra"), sessionID, providerOptions: {} })
+    expect(astra.session_id).toBe(sessionID)
+    expect(astra.prompt_cache_key).toBe(sessionID)
+    // Only OpenAI reads prompt_cache_key; every upstream benefits from the sticky session.
+    const claude = ProviderTransform.options({
+      model: openrouter("anthropic/claude-opus-5"),
+      sessionID,
+      providerOptions: {},
+    })
+    expect(claude.session_id).toBe(sessionID)
+    expect(claude.prompt_cache_key).toBeUndefined()
+  })
+
   test("should set store=false for openai provider", () => {
     const openaiModel = {
       ...mockModel,

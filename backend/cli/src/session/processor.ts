@@ -43,6 +43,9 @@ export namespace SessionProcessor {
   // attempts under the capped backoff in retry.ts surface a dead provider in
   // about two minutes instead of most of an hour.
   const MAX_RETRY_ATTEMPTS = 5
+  /** How long execute() waits for the consumer to record a call's streamed
+   * placeholder before it registers the call itself. */
+  const ARRIVAL_GRACE_MS = 1_000
   const log = Log.create({ service: "session.processor" })
 
   /** Provider reasoning can contain a private-payload placeholder, including
@@ -437,6 +440,24 @@ export namespace SessionProcessor {
     const names = new Map<string, string>()
     const applying = new Set<string>()
     const settled = new Set<string>()
+    // Resolved when the consumer records a call's streamed placeholder. The
+    // provider SDK schedules execute() the moment it parses a call, often
+    // before the consumer has reached that call's tool-input-start event; the
+    // placeholder's id is what orders the part among the step's thoughts, so
+    // a fresh id minted here would sort a fast call ahead of the reasoning
+    // that produced it, and the next request would replay them out of order.
+    const arrivals = new Map<string, { promise: Promise<void>; resolve: () => void }>()
+    function arrival(callID: string) {
+      const existing = arrivals.get(callID)
+      if (existing) return existing
+      let resolve = () => {}
+      const promise = new Promise<void>((done) => {
+        resolve = done
+      })
+      const created = { promise, resolve }
+      arrivals.set(callID, created)
+      return created
+    }
 
     async function apply(callID: string) {
       const outcome = outcomes.get(callID)
@@ -526,6 +547,7 @@ export namespace SessionProcessor {
         return settled.has(callID)
       },
       pending(part: MessageV2.ToolPart, write?: () => Promise<unknown>) {
+        arrival(part.callID).resolve()
         // The provider SDK invokes execute() on its own schedule, so the call
         // may already be registered as running (or settled) by the time the
         // consumer reaches its tool-input-start event. A second registration
@@ -623,10 +645,14 @@ export namespace SessionProcessor {
           return existing.promise as Promise<T>
         }
         const startedAt = Date.now()
-        const previous = toolcalls[callID]
         const canonical = names.get(callID)
-        const register = (() => {
-          if (!canonical || !input.identity || previous?.state.status === "running") return Promise.resolve()
+        const register = (async () => {
+          if (!canonical || !input.identity) return
+          if (!toolcalls[callID]) {
+            await Promise.race([arrival(callID).promise, Bun.sleep(ARRIVAL_GRACE_MS)])
+          }
+          const previous = toolcalls[callID]
+          if (previous?.state.status === "running") return
           // Reuse the streamed placeholder's identity and wait for its write so
           // the running receipt cannot be overtaken by the pending one.
           const placeholder = pendingWrites.get(callID) ?? Promise.resolve()
@@ -645,7 +671,8 @@ export namespace SessionProcessor {
             },
           }
           toolcalls[callID] = part
-          return placeholder.then(() => input.updatePart(part)).then(() => undefined)
+          await placeholder
+          await input.updatePart(part)
         })()
         const execution = Promise.resolve()
           .then(() => register)

@@ -60,6 +60,31 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   study state ride in a per-step status block at the tail of the request, so
   the provider's prompt cache survives every step (a spend figure in the system
   prompt was discarding the cached prefix on each step of a turn).
+- Every OpenRouter request carries the session as its `session_id` (OpenRouter's
+  sticky-routing key) and, for OpenAI models, as `prompt_cache_key`, so one
+  session's steps reach the same upstream endpoint and the same cache. Left to
+  the default routing hash, which every OpenScience session shares, a session
+  saw its 200K-token prompt re-read at full price on nearly every step.
+- A figure a tool returns (a `read` of a PNG, a rendered plot) now reaches
+  transports whose tool results are strings only (OpenRouter, openai-compatible,
+  the Copilot fork) as an image in a user message right after the result, with a
+  pointer in the result. Those SDKs stringify anything else, so the base64 was
+  billed as prompt text: one 500 KB PNG cost 170K input tokens on every step
+  until it was pruned. Models that cannot view images get a one-line note.
+- A tool call the provider SDK executes before the session has recorded its
+  streamed placeholder now waits for that placeholder instead of minting its
+  own part; a fast call no longer sorts ahead of the thought that produced it,
+  which on the OpenRouter route had replayed the reasoning as a stray assistant
+  message after the tool result.
+- The public runtime event journal is written behind the bus instead of ahead
+  of it: captures are placed in publish order and batched into one write per
+  50 ms window, and a replay cursor waits for the pending captures before it
+  reads. The journal used to be rewritten whole on every event before any
+  subscriber saw it, which on a long session froze the workspace for minutes
+  after a wave of worker events and then delivered them all at once.
+- A study whose wake-up the provider refused (an empty account, a rejected key)
+  pauses with the refusal as its reason instead of knocking on the session
+  every tick; resume it once the cause is fixed.
 - The environment names the model's knowledge cutoff from the model catalog and
   the gap to today, and tells the model to look up the current generation before
   pinning a model, library version, baseline or protocol.

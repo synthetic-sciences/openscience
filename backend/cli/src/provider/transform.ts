@@ -963,6 +963,15 @@ export namespace ProviderTransform {
       result["usage"] = {
         include: true,
       }
+      // OpenRouter picks the upstream endpoint per request. Left to itself it
+      // keys that choice on a hash of the opening messages, which every
+      // OpenScience session shares, so a busy prefix scatters one session's
+      // steps across endpoints and each step re-reads a 200K-token prompt at
+      // full price. `session_id` is OpenRouter's explicit sticky-routing key;
+      // `prompt_cache_key` travels on to OpenAI, whose cache routing uses it
+      // the same way. One key per session, for as long as the session lives.
+      result["session_id"] = input.sessionID
+      if (input.model.api.id.startsWith("openai/")) result["prompt_cache_key"] = input.sessionID
       // OpenRouter streams reasoning through its unified `reasoning` /
       // `reasoning_details` fields, but ONLY when reasoning is explicitly
       // requested — without a `reasoning` object the upstream reasons silently
