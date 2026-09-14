@@ -88,6 +88,7 @@ import {
 } from "./prompt-capabilities"
 import { canRestoreFailedSubmission } from "./prompt-submission"
 import { getNodeLength, isPillNode, setCursorPosition } from "./prompt-editor-cursor"
+import { applyHighlight, clearHighlight, slashTokenRanges } from "./prompt-highlight"
 import { submitComposerPrompt, type ComposerPromptInput } from "./prompt-runtime"
 import { requestFailure, requestStatus } from "@/utils/request-error"
 import {
@@ -1045,6 +1046,23 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       : slashCommands()
     return slashMatches(items, query, SLASH_QUERY_LIMIT)
   }
+
+  // A selected skill or command stays plain text in the prompt but reads as a
+  // token: every known `/trigger` in any composer on the page is painted
+  // through one document-level highlight, recomputed after each prompt change.
+  const SLASH_HIGHLIGHT = "composer-slash"
+  const paintSlashTokens = () => {
+    const triggers = new Set(slashCommands().map((item) => item.trigger))
+    const editors = document.querySelectorAll<HTMLElement>('[data-component="prompt-input"]')
+    const ranges = Array.from(editors).flatMap((editor) => slashTokenRanges(editor, triggers))
+    applyHighlight(SLASH_HIGHLIGHT, ranges)
+  }
+  createEffect(
+    on([() => prompt.current(), slashCommands], () => {
+      requestAnimationFrame(paintSlashTokens)
+    }),
+  )
+  onCleanup(() => clearHighlight(SLASH_HIGHLIGHT))
 
   const setIntent = (intent: SlashMode | null) => {
     setStore("intent", intent)

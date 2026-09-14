@@ -1241,3 +1241,9 @@ form.workspace-composer .workspace-composer__send[data-composer-action="stop"] [
     transition: none;
   }
 }
+
+/* A known /skill or /command in the composer, coloured like the other prompt
+   tokens (files, agents, conversations) without leaving plain text. */
+::highlight(composer-slash) {
+  color: var(--syntax-primitive);
+}
