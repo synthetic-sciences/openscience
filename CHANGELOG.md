@@ -8,6 +8,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Changed
+
+- NOTICE credits the K-Dense [Scientific Agent Skills](https://github.com/K-Dense-AI/scientific-agent-skills)
+  library as the source of the bundled scientific skills that landed in #609.
+
 ### Fixed
 
 Failures traced through one EDA-and-LaTeX-report session that showed eleven
