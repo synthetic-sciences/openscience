@@ -18,6 +18,11 @@ Copyright 2026 Shoko-official contributors.
 Licensed under the Apache License, Version 2.0.
 Pinned source revision: a55a1709d36534d42462b51f61f9859bf4ab23b6.
 --------------------------------------------------------------------------------
+Scientific Agent Skills (bundled scientific skills under backend/cli/skills/)
+https://github.com/K-Dense-AI/scientific-agent-skills
+Copyright (c) 2025 K-Dense Inc.
+Licensed under the MIT License. See https://github.com/K-Dense-AI/scientific-agent-skills/blob/main/LICENSE.md.
+--------------------------------------------------------------------------------
 Iconoir icons (bundled in frontend/ui/src/components/iconoir-registry.ts)
 https://github.com/iconoir-icons/iconoir
 
