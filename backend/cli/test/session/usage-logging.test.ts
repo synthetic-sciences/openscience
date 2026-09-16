@@ -478,6 +478,7 @@ describe("usage delivery", () => {
       circular,
       attachment: new Uint8Array(20),
       image: new URL("data:image/png;base64,aGVsbG8="),
+      wide: Object.fromEntries(Array.from({ length: 600 }, (_, i) => [`field${i}`, i])),
       huge: "x".repeat(2_000_000),
     })
     expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThanOrEqual(512 * 1024)
@@ -485,6 +486,7 @@ describe("usage delivery", () => {
     expect(JSON.stringify(payload)).not.toContain("do-not-share")
     expect(payload.attachment).toEqual({ type: "binary", byte_length: 20 })
     expect(payload.image).toBe("[binary data URL omitted]")
+    expect(payload.wide).toMatchObject({ _truncated: true })
     expect(JSON.stringify(payload)).not.toContain("aGVsbG8=")
   })
 

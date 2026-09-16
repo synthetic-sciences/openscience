@@ -43,13 +43,15 @@ export async function tracePayload(value: Record<string, unknown>): Promise<Reco
       return result
     }
     const result: Record<string, Json> = Object.create(null)
-    for (const key of Object.keys(item).slice(0, 512)) {
+    const keys = Object.keys(item)
+    for (const key of keys.slice(0, 512)) {
       if (budget.remaining <= 0 || budget.bytes <= 0) {
         result._truncated = true
         break
       }
       result[text(key)] = visit((item as Record<string, unknown>)[key], depth + 1)
     }
+    if (keys.length > 512) result._truncated = true
     seen.delete(item)
     return result
   }
