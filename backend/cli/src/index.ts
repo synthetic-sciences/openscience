@@ -46,6 +46,7 @@ import { purgeRetiredAtlasAgentInstall } from "./skill/retired-install"
 import { SELF_RESTART_ARG, SelfRestart } from "./process/self-restart"
 import { DARWIN_UPDATE_SWAP_ARG, DarwinUpdateSwap } from "./process/darwin-update-swap"
 import { GracefulShutdown } from "./process/graceful-shutdown"
+import { UsageLogging } from "./session/usage-logging"
 
 if (process.argv[2] === DARWIN_UPDATE_SWAP_ARG) {
   try {
@@ -158,6 +159,7 @@ const cli = yargs(hideBin(process.argv))
       // process env so skills/tools/connectors actually use them. Dynamic import
       // keeps the credential route module out of every command's static graph.
       if (!capabilityCanary) {
+        UsageLogging.start()
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
         void import("./openscience").then((m) => m.OpenScience.startCredentialSync())
       }
@@ -276,6 +278,7 @@ async function run() {
     // run using `docker run --init`.
     // Explicitly exit to avoid any hanging subprocesses.
     await GracefulShutdown.run({ timeoutMs: 8_000 }).catch(() => undefined)
+    await UsageLogging.drain().catch(() => undefined)
     await disposeDataRootOperation().catch(() => undefined)
     await Log.flush().catch(() => undefined)
     process.exit()

@@ -21964,6 +21964,142 @@
         ]
       }
     },
+    "/settings/usage-logging": {
+      "get": {
+        "operationId": "settings.usageLogging.get",
+        "summary": "Get device session-trace sharing preference and delivery status",
+        "responses": {
+          "200": {
+            "description": "Session trace sharing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "queued": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "quarantined": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "delivered": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastDelivery": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "signedIn",
+                    "queued",
+                    "quarantined",
+                    "delivered"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usageLogging.get({\n  ...\n})"
+          }
+        ]
+      },
+      "put": {
+        "operationId": "settings.usageLogging.update",
+        "summary": "Update device session-trace sharing; disabling discards queued records",
+        "responses": {
+          "200": {
+            "description": "Session trace sharing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "signedIn": {
+                      "type": "boolean"
+                    },
+                    "queued": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "quarantined": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "delivered": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "lastDelivery": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "signedIn",
+                    "queued",
+                    "quarantined",
+                    "delivered"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usageLogging.update({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/local/start": {
       "post": {
         "operationId": "postSettingsLocalStart",

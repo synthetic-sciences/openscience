@@ -3,7 +3,7 @@ import Header from "@/components/Header"
 import { useMeta } from "@/components/Meta"
 import { DASHBOARD, GITHUB, REPORT_VULNERABILITY, SECURITY, docs } from "@/data/links"
 
-const UPDATED = "7 September 2026"
+const UPDATED = "16 September 2026"
 const CONTACT = "privacy@syntheticsciences.ai"
 
 /* One continuous document, set like opencode.ai's legal pages: a single prose
@@ -29,12 +29,14 @@ export default function Privacy() {
             </p>
 
             <p>
-              OpenScience is a local application. Your projects, sessions, credentials, and results stay on your
-              machine, and prompts leave it only for the model provider and the scientific services you choose to call.
-              If you sign in to Synthetic Sciences, we receive what an account and a Wallet require, we log the routing
-              and cost of managed requests so we can bill you, and we log session traces to improve the agent. Trace
-              sharing is on by default. You can turn it off from your account at any time, and everything we hold about
-              you can be deleted. This page describes each of those flows in the order data moves.
+              OpenScience is a local application. Your projects, sessions, credentials, and results are stored on your
+              machine. Prompts are sent to the model provider and scientific services you choose to call, and signed-in
+              session traces are shared with Synthetic Sciences as described below. If you sign in to Synthetic
+              Sciences, we receive what an account and a Wallet require, we log the routing and cost of managed requests
+              so we can bill you, and we log session traces to improve the agent. Trace sharing is on by default,
+              including sessions using your own provider connections. Saved opt-outs are preserved. You can turn it off
+              in General settings or from your account at any time, and everything we hold about you can be deleted.
+              This page describes each of those flows in the order data moves.
             </p>
 
             <h2 id="scope">What this page covers</h2>
@@ -48,7 +50,7 @@ export default function Privacy() {
 
             <h2 id="local">What stays on your machine</h2>
             <p>
-              Everything durable is local. The agent runs as a server bound to your loopback address with a Host and
+              Your working copy is local. The agent runs as a server bound to your loopback address with a Host and
               Origin allowlist, and there is no remote mode. The data root defaults to <code>~/.openscience</code> and
               can be moved. It holds your sessions, messages, and tool outputs as files; your artifacts, figures, and
               the provenance graph that links each result to the code and sources that produced it; your provider keys,
@@ -66,8 +68,9 @@ export default function Privacy() {
 
             <h2 id="leaves">What leaves your machine</h2>
             <p>
-              Requests go directly from your machine to the service you invoked. None of them pass through Synthetic
-              Sciences unless you chose a managed route.
+              Model and tool requests go directly from your machine to the service you invoked unless you chose a
+              managed route. Separately, while trace sharing is enabled, the client sends a redacted record of session
+              activity to Synthetic Sciences.
             </p>
             <ul>
               <li>
@@ -91,8 +94,9 @@ export default function Privacy() {
               </li>
             </ul>
             <p>
-              Your own provider keys, a ChatGPT Plus or Pro sign-in, local models, Python and R, SSH compute, and your
-              own Modal account never touch Synthetic Sciences.
+              Your own provider keys and provider sign-in credentials are not uploaded to Synthetic Sciences. Activity
+              using those connections, local models, Python and R, SSH, or your own Modal account may appear in a shared
+              session trace, including prompts and tool inputs and outputs.
             </p>
 
             <h2 id="account">What Synthetic Sciences collects</h2>
@@ -127,6 +131,13 @@ export default function Privacy() {
               where the agent goes wrong and how we build the benchmarks on the home page. Trace sharing is on by
               default while you are signed in, and you can turn it off at any time.
             </p>
+            <p>
+              Usage records retain the token counts and costs reported by the provider, with reasoning and cached tokens
+              kept as separate reported details rather than added again to the total. A missing amount is marked
+              unavailable; the client does not substitute a generated count or a catalog-price estimate. These records
+              are diagnostic evidence, not an independent verification of a provider invoice. Managed billing continues
+              to use the gateway's settlement records.
+            </p>
             <p>While sharing is on, five rules apply.</p>
             <ul>
               <li>
@@ -134,8 +145,9 @@ export default function Privacy() {
                 idempotent id, so a retry can never duplicate an event.
               </li>
               <li>
-                Before anything is stored, the ingest path recursively redacts credential-shaped keys and known secret
-                formats: provider keys, cloud tokens, and personal access tokens.
+                The client redacts known credentials and secret-shaped fields before writing its upload queue, and the
+                ingest path applies its own redaction before storage. Redaction does not remove all personal or research
+                information from a trace.
               </li>
               <li>
                 Raw trace events are kept for 30 days and then purged. A content-free usage projection of route, model,
@@ -146,16 +158,24 @@ export default function Privacy() {
                 access is audited.
               </li>
               <li>
-                Each stored event carries the hash of its canonical payload and a receipt id, so you can check what we
-                received against what your client sent.
+                Each stored event carries the hash of its canonical payload and a receipt id. The client checks the
+                delivery id and acknowledged event ids before removing a queued record; an unverified response leaves
+                the record queued for retry.
               </li>
             </ul>
+            <p>
+              Upload queues and individual records have size limits. Oversized content is marked as truncated; binary
+              attachments are represented by metadata, and logging does not open additional files to upload them.
+              Delivery failures and rejected records are shown in General settings. An interrupted process may leave an
+              incomplete trace.
+            </p>
 
             <h2 id="controls">Turning sharing off</h2>
             <p>
-              Trace sharing is a versioned preference on your account. The current disclosure version is named in the
-              preference itself, so if we ever change what a trace contains, your earlier choice does not carry over
-              silently and you are asked again.
+              Trace sharing has a device switch and versioned account preferences. In General settings, turn off Share
+              session traces to stop this device's uploads and discard its queued and rejected records. This does not
+              delete your local conversations or records already received by the service. The client requires a
+              supported account disclosure version before uploading and preserves saved opt-outs.
             </p>
             <p>
               Three switches control it. <strong>Analytics</strong> covers content-free usage: routes, models, token
@@ -170,8 +190,9 @@ export default function Privacy() {
               <a href={DASHBOARD} target="_blank" rel="noreferrer">
                 Synthetic Sciences account
               </a>
-              . Turning sharing off is enforced across every device signed in to the account, and the client will not
-              upload again until you turn it back on.
+              . Account opt-outs are enforced at ingestion and checked before each upload. Turning off user-owned routes
+              excludes those traces while allowing managed routes under your remaining preferences. Signing out stops
+              uploads from the device.
             </p>
 
             <h2 id="deletion">Deletion and retention</h2>

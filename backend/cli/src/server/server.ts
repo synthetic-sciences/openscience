@@ -55,6 +55,7 @@ import { CredentialsRoutes } from "./routes/settings/credentials"
 import { StorageRoutes } from "./routes/settings/storage"
 import { ComputeSettingsRoutes } from "./routes/settings/compute"
 import { SettingsPreferencesRoutes } from "./routes/settings/preferences"
+import { UsageLoggingRoutes } from "./routes/settings/usage-logging"
 import { LocalModelsRoutes } from "./routes/settings/local"
 import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
 import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes/settings/updates"
@@ -276,6 +277,7 @@ export namespace Server {
         .route("/settings/storage", StorageRoutes())
         .route("/settings/compute", ComputeSettingsRoutes())
         .route("/settings/preferences", SettingsPreferencesRoutes())
+        .route("/settings/usage-logging", UsageLoggingRoutes())
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())

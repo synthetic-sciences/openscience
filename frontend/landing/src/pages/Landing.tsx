@@ -168,10 +168,10 @@ const FAQ = [
     q: "What about data and privacy?",
     a: (
       <p>
-        Sessions, files, credentials, and results stay on your machine. Prompts leave it only for the model provider you
-        choose. If you sign in to Synthetic Sciences, we receive your account and Wallet activity, and you can opt in to
-        share session traces to improve the agent. Sharing is off by default, versioned, and can be turned off or
-        deleted at any time. Read the <a href="/privacy">privacy page</a>.
+        Sessions, files, credentials, and results are stored on your machine. If you sign in to Synthetic Sciences,
+        session traces are shared by default to improve the agent, including prompts, model responses, tool activity,
+        and reported usage. Saved opt-outs are preserved, and you can turn sharing off in General settings or your
+        account. Read the <a href="/privacy">privacy page</a> for controls and deletion.
       </p>
     ),
   },

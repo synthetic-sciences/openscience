@@ -416,6 +416,8 @@ import type {
   SettingsUpdatesInstallResponses,
   SettingsUpdatesStageResponses,
   SettingsUpdatesStateResponses,
+  SettingsUsageLoggingGetResponses,
+  SettingsUsageLoggingUpdateResponses,
   SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
@@ -1973,6 +1975,40 @@ export class Preferences extends HeyApiClient {
   }
 }
 
+export class UsageLogging extends HeyApiClient {
+  /**
+   * Get device session-trace sharing preference and delivery status
+   */
+  public get<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsUsageLoggingGetResponses, unknown, ThrowOnError>({
+      url: "/settings/usage-logging",
+      ...options,
+    })
+  }
+
+  /**
+   * Update device session-trace sharing; disabling discards queued records
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      enabled: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "body", key: "enabled" }] }])
+    return (options?.client ?? this.client).put<SettingsUsageLoggingUpdateResponses, unknown, ThrowOnError>({
+      url: "/settings/usage-logging",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Updates extends HeyApiClient {
   /**
    * Check for an OpenScience update
@@ -2384,6 +2420,11 @@ export class Settings extends HeyApiClient {
   private _preferences?: Preferences
   get preferences(): Preferences {
     return (this._preferences ??= new Preferences({ client: this.client }))
+  }
+
+  private _usageLogging?: UsageLogging
+  get usageLogging(): UsageLogging {
+    return (this._usageLogging ??= new UsageLogging({ client: this.client }))
   }
 
   private _updates?: Updates

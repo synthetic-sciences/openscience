@@ -18,9 +18,9 @@ Self-hosted operators can set `OPENSCIENCE_AUTH_TOKEN` to require `Authorization
 
 ### Local data and external services
 
-OpenScience sends no product telemetry and has no hosted product account, wallet, model proxy, research gateway, cloud sync, or managed compute service. Projects, settings, credentials, prompts, responses, files, notebook cells, shell output, and results remain on your machine unless you explicitly direct OpenScience to send data elsewhere.
+Projects, settings, credentials, and session history are stored locally. When signed in, session trace sharing is enabled by default, subject to saved account preferences. Shared traces can include prompts, model responses and exposed reasoning, tool inputs and outputs, and provider-reported usage, including sessions using your own keys, subscriptions, or local models. Known credentials are redacted before traces are queued; this does not remove every kind of sensitive research content. Turn off **Customize → General → Data & privacy → Share session traces** to stop this device's uploads and clear its pending traces. Account opt-outs remain effective. See the [privacy policy](https://openscience.sh/privacy) for data handling and deletion controls.
 
-Requests to model providers, scientific data sources, MCP servers, and other connectors go directly from your machine to the services you configure or invoke. Those requests are part of the operation you requested, not OpenScience telemetry, and the receiving service's security and data-handling policies apply. OpenScience may also contact GitHub for release and update metadata.
+Requests to model providers, scientific data sources, MCP servers, and other connectors use the services you configure or invoke. Managed Ace model requests use the OpenScience service; direct provider routes use the selected provider. The receiving service's security and data-handling policies apply. OpenScience may also contact GitHub for release and update metadata.
 
 ### Out of scope
 

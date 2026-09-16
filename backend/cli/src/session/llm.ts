@@ -29,6 +29,7 @@ import { InvalidCall } from "@/tool/invalid-call"
 import { resolveAccessRoute } from "./access-route"
 import { providerErrorMetadata } from "./provider-error"
 import { Toolset } from "./toolset"
+import { UsageLogging } from "./usage-logging"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -281,9 +282,50 @@ export namespace LLM {
           }))),
       ...input.messages,
     ]
+    const logging = await UsageLogging.context().catch(() => undefined)
+    const started = performance.now()
+    const binding = logging
+      ? {
+          context: logging,
+          sessionID: input.sessionID,
+          messageID: input.trace?.messageID ?? input.user.id,
+          route: traceRoute,
+          provider: routed.providerID,
+          model: routed.api.id,
+          operationID: crypto.randomUUID(),
+        }
+      : undefined
+    if (binding) UsageLogging.bind(binding)
+    const partial = { text: "", reasoning: "", truncated: false }
+    const capture = (kind: "model.request" | "assistant.message" | "error", payload: Record<string, unknown>) =>
+      binding
+        ? UsageLogging.event(binding, kind, payload).catch(() => l.warn("could not persist trace record"))
+        : undefined
     const result = streamText({
-      onError(error) {
+      onChunk({ chunk }) {
+        if (!binding || (chunk.type !== "text-delta" && chunk.type !== "reasoning-delta")) return
+        const field = chunk.type === "text-delta" ? "text" : "reasoning"
+        const remaining = Math.max(0, 128 * 1024 - partial[field].length)
+        partial[field] += chunk.text.slice(0, remaining)
+        if (chunk.text.length > remaining) partial.truncated = true
+      },
+      async onAbort() {
+        await capture("assistant.message", { ...partial, interrupted: true })
+      },
+      async onStepFinish(step) {
+        if (!binding) return
+        await UsageLogging.record({
+          ...binding,
+          usage: step.usage,
+          metadata: step.providerMetadata,
+          duration: performance.now() - started,
+          content: { parts: step.content, toolResults: step.toolResults },
+          finish: step.finishReason,
+        }).catch(() => l.warn("could not persist usage record"))
+      },
+      async onError(error) {
         l.error("stream error", providerErrorMetadata(error))
+        await capture("error", { error: error.error, partial })
       },
       async experimental_repairToolCall(failed) {
         const repaired = await repairToolCall(failed, tools)
@@ -346,6 +388,23 @@ export namespace LLM {
               return args.params
             },
             async wrapStream(args) {
+              await capture("model.request", {
+                attempt: input.trace?.attempt,
+                messages: args.params.prompt,
+                tools: args.params.tools,
+                parameters: {
+                  providerOptions: args.params.providerOptions,
+                  maxOutputTokens: args.params.maxOutputTokens,
+                  temperature: args.params.temperature,
+                  topP: args.params.topP,
+                  topK: args.params.topK,
+                  presencePenalty: args.params.presencePenalty,
+                  frequencyPenalty: args.params.frequencyPenalty,
+                  stopSequences: args.params.stopSequences,
+                  toolChoice: args.params.toolChoice,
+                  responseFormat: args.params.responseFormat,
+                },
+              })
               // doStream settles when the response headers arrive, before any
               // body chunk is read: the exact "waiting for first token" edge.
               const result = await args.doStream()

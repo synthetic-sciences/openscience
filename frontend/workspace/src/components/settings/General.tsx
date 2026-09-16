@@ -11,6 +11,7 @@ import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll, Section } from "./_shared"
 import { settingsApi } from "./api"
 import { LoginApproval } from "./LoginApproval"
+import { UsageLogging } from "./UsageLogging"
 import { walletBalanceLabel } from "./credit-balance"
 import { ProviderLogo } from "./ProviderLogo"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "./account-deadline"
@@ -360,6 +361,7 @@ export default function General() {
             </div>
           </Section>
 
+          <UsageLogging />
           <AppearanceSections />
         </PanelBody>
       </div>

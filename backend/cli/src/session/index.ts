@@ -27,6 +27,7 @@ import { Project } from "@/project/project"
 import { NamedError } from "@synsci/util/error"
 import { SessionFilesystem } from "./filesystem"
 import { SessionTraceStore } from "./trace-store"
+import { UsageLogging } from "./usage-logging"
 import { SessionResearch } from "./research"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { FileLease } from "@/util/file-lease"
@@ -693,7 +694,10 @@ export namespace Session {
     // Only a streaming delta rides the 250ms timer plus the idle flush; whole/synthetic
     // parts (no delta) and the final text/reasoning-end part flush immediately.
     const streaming = delta !== undefined && (part.type === "text" || part.type === "reasoning")
-    if (!streaming) await partWriter.flushNow(key)
+    if (!streaming) {
+      await partWriter.flushNow(key)
+      await UsageLogging.part(part).catch(() => log.warn("could not persist trace part"))
+    }
     return part
   })
 

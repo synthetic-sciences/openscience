@@ -79,6 +79,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- Restored authenticated session trace delivery after the uploader was removed.
+  Trace sharing is on by default for signed-in accounts, including user-owned
+  routes, while preserving saved opt-outs. General settings now expose a device
+  switch and delivery status. Records contain redacted prompts, responses, tool
+  activity, and provider-reported usage; missing amounts remain unavailable.
+  Retries retain event IDs and require matching server acknowledgements.
+
 - **The context pill is measured against the window in use.** A tiered model
   such as GPT-5.6 is budgeted at its first pricing boundary (272K) unless the
   full window is chosen, and compaction fires against that cap, but the header

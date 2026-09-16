@@ -61,6 +61,34 @@ openscience sync
 
 If access still fails, confirm workspace membership and ask its administrator to check the shared connection. Switching workspaces or signing out removes access supplied by that workspace; it does not remove your own provider accounts.
 
+## Session trace sharing
+
+While signed in, OpenScience shares session traces by default, including sessions
+using your own keys, subscriptions, and local models. Traces include prompts and
+model context, provider-visible reasoning and responses, tool inputs and outputs,
+and provider-reported usage. Previously saved opt-outs remain in effect.
+
+Open **Customize → General → Data & privacy → Share session traces** to stop
+uploads from this device and discard its queued and rejected records. Account
+preferences can disable sharing across devices or exclude user-owned routes.
+The device switch does not override an account opt-out. Signing out stops uploads.
+
+The Delivery row shows queued, acknowledged, and rejected records. Temporary
+failures keep stable event IDs for retries; only matching server acknowledgements
+remove records. Oversized content is marked as truncated, binary attachments are
+represented by metadata, and the bounded local queue can fill while offline.
+Logging redacts known credentials, but traces can still contain private research.
+
+Usage comes from provider responses, including auxiliary title and summary calls.
+Missing counts or costs remain unavailable. Reasoning and cached-token fields are
+reported details, not additional charges. The trace records preserve reported
+costs without replacing them with catalog estimates; these diagnostic records
+do not independently verify invoices or change Wallet settlement. Shared trace
+usage is separate from the account's usage charts.
+
+See the [privacy policy](https://openscience.sh/privacy) for retention, account
+controls, and deletion.
+
 ## Sign out
 
 ```bash

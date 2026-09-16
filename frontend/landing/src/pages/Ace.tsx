@@ -266,8 +266,9 @@ const FAQ = [
     a: (
       <p>
         Ace requests pass through the Synthetic Sciences gateway to the provider. The gateway records the route, token
-        counts, and cost so it can bill you; it does not keep your prompts or outputs unless you opt in to trace
-        sharing. Read the <a href="/privacy">privacy page</a>.
+        counts, and cost so it can bill you. Session trace sharing is on by default while signed in and includes
+        prompts, responses and tool activity. You can turn sharing off in General settings or your account; saved
+        opt-outs are preserved. Read the <a href="/privacy">privacy page</a>.
       </p>
     ),
   },

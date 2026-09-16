@@ -9237,6 +9237,57 @@ export type SettingsPreferencesUpdateResponses = {
 export type SettingsPreferencesUpdateResponse =
   SettingsPreferencesUpdateResponses[keyof SettingsPreferencesUpdateResponses]
 
+export type SettingsUsageLoggingGetData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/usage-logging"
+}
+
+export type SettingsUsageLoggingGetResponses = {
+  /**
+   * Session trace sharing
+   */
+  200: {
+    enabled: boolean
+    signedIn: boolean
+    queued: number
+    quarantined: number
+    delivered: number
+    lastDelivery?: string
+    error?: string
+  }
+}
+
+export type SettingsUsageLoggingGetResponse = SettingsUsageLoggingGetResponses[keyof SettingsUsageLoggingGetResponses]
+
+export type SettingsUsageLoggingUpdateData = {
+  body?: {
+    enabled: boolean
+  }
+  path?: never
+  query?: never
+  url: "/settings/usage-logging"
+}
+
+export type SettingsUsageLoggingUpdateResponses = {
+  /**
+   * Session trace sharing
+   */
+  200: {
+    enabled: boolean
+    signedIn: boolean
+    queued: number
+    quarantined: number
+    delivered: number
+    lastDelivery?: string
+    error?: string
+  }
+}
+
+export type SettingsUsageLoggingUpdateResponse =
+  SettingsUsageLoggingUpdateResponses[keyof SettingsUsageLoggingUpdateResponses]
+
 export type PostSettingsLocalStartData = {
   body?: {
     id: string
