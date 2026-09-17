@@ -66,14 +66,14 @@ test("compute is a stable env line; the 50%/85% reminders fire once each and car
   expect((await render()).status).toEqual([])
 })
 
-test("an initial 85% reminder consumes the obsolete half-time threshold", () => {
+test("an initial 85% reminder records only the emitted threshold", () => {
   const state = HarnessState.get("ses_late")
   state.startedAt = 1_000
   state.deadline = 11_000
 
   expect(Budget.status(state, 9_500)[0]).toContain("(85%)")
   expect(Budget.status(state, 9_501)).toEqual([])
-  expect(state.budgetReminders).toEqual(new Set([50, 85]))
+  expect(state.budgetReminders).toEqual(new Set([85]))
 })
 
 test("timed external prompts reset their matching start while untimed and synthetic follow-ups preserve it", async () => {
