@@ -78,7 +78,7 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   )
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
-  expect(parsed.jobs["prepare-npm"]["timeout-minutes"]).toBe(90)
+  expect(parsed.jobs["prepare-npm"]["timeout-minutes"]).toBe(120)
 })
 
 test("the release gate expects every rehearsal gate job by exact name", async () => {

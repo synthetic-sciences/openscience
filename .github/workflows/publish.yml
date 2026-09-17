@@ -387,8 +387,9 @@ jobs:
     name: Pack and stage npm release
     needs: [version, sign-macos-cli]
     runs-on: ubuntu-latest
-    # Staging may need two registry-visibility passes of about 40 minutes.
-    timeout-minutes: 90
+    # Staging can require two ~40-minute registry-visibility passes; packaging,
+    # command startup, and runner overhead fit within this bounded 120-minute job.
+    timeout-minutes: 120
     permissions:
       id-token: write
       contents: read
