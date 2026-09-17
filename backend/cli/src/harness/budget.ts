@@ -1,6 +1,8 @@
 import os from "node:os"
 import path from "path"
 import type { Hooks, Plugin } from "@synsci/plugin"
+import { SessionLoopState } from "@/session/loop-state"
+import type { MessageV2 } from "@/session/message-v2"
 import { HarnessState } from "./state"
 
 /**
@@ -68,6 +70,7 @@ export namespace Budget {
     const fraction = total > 0 ? elapsed / total : 1
     const used = `${duration(elapsed)} of the ${duration(total)} time budget is used`
     if (fraction >= 0.85 && !state.budgetReminders.has(85)) {
+      state.budgetReminders.add(50)
       state.budgetReminders.add(85)
       return [`Time reminder: ${used} (85%). Finish the deliverables you can and write real partial results.`]
     }
@@ -89,10 +92,13 @@ export const BudgetUnit: Plugin = async () => {
   const hooks: Hooks = {
     async "chat.message"(input, output) {
       const state = HarnessState.get(input.sessionID)
-      const message = output.message as { deadline?: number; internal?: unknown; time?: { created: number } }
-      if (message.internal && (message.internal as { type?: string }).type !== "prompt") return
-      state.startedAt ??= message.time?.created ?? HarnessState.clock.now()
-      if (message.deadline) state.deadline = message.deadline
+      const message = output.message as MessageV2.User
+      if (!message.deadline || !SessionLoopState.external({ info: message, parts: output.parts } as MessageV2.WithParts))
+        return
+      state.startedAt = message.time.created
+      state.deadline = message.deadline
+      state.budgetReminders.clear()
+      state.budgetNudged = false
     },
     async "env.lines"(input, output) {
       const state = HarnessState.get(input.sessionID)

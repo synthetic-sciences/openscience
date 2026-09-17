@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import fs from "node:fs/promises"
 import path from "path"
 import type { PluginInput } from "@synsci/plugin"
 import { Deliverables, DeliverablesUnit } from "../../../src/harness/deliverables"
@@ -6,6 +7,8 @@ import { HarnessState } from "../../../src/harness/state"
 import { Instance } from "../../../src/project/instance"
 import { Session } from "../../../src/session"
 import { SessionFilesystem } from "../../../src/session/filesystem"
+import { SessionLoopState } from "../../../src/session/loop-state"
+import { Identifier } from "../../../src/id/id"
 import { tmpdir } from "../../fixture/fixture"
 
 afterEach(() => HarnessState.reset())
@@ -48,6 +51,19 @@ describe("Deliverables.detect", () => {
       ),
     ).toEqual(["results/summary.csv"])
   })
+
+  test("preserves absolute Windows, UNC and POSIX paths without treating URLs as files", () => {
+    expect(
+      Deliverables.detect(
+        'Write the table to "C:\\Research Outputs\\fit.csv", save the report as \\\\server\\shared results\\reports\\fit.md, ' +
+          "and export the plot to /tmp/results/fit.png. See https://example.org/reference.csv.",
+      ),
+    ).toEqual([
+      "C:\\Research Outputs\\fit.csv",
+      "\\\\server\\shared results\\reports\\fit.md",
+      "/tmp/results/fit.png",
+    ])
+  })
 })
 
 describe("Deliverables.check", () => {
@@ -76,9 +92,78 @@ describe("Deliverables.check", () => {
     expect(results["good.csv"]).toEqual([])
     expect(results["good.json"]).toEqual([])
   })
+
+  test("rejects traversal and symlink escapes before reading them", async () => {
+    await using outside = await tmpdir({
+      init: async (directory) => {
+        await Bun.write(path.join(directory, "secret.csv"), "id,value\nexternal,1\n")
+      },
+    })
+    await using tmp = await tmpdir()
+    await fs.symlink(outside.path, path.join(tmp.path, "escape"), process.platform === "win32" ? "junction" : "dir")
+
+    const traversal = path.relative(tmp.path, path.join(outside.path, "secret.csv"))
+    expect((await Deliverables.check(tmp.path, traversal)).problems).toEqual(["is outside allowed output roots"])
+    expect((await Deliverables.check(tmp.path, path.join("escape", "secret.csv"))).problems).toEqual([
+      "is outside allowed output roots",
+    ])
+    expect((await Deliverables.check(tmp.path, path.join(outside.path, "secret.csv"))).problems).toEqual([
+      "is outside allowed output roots",
+    ])
+
+    const valid = path.join(tmp.path, "results", "valid.csv")
+    await Bun.write(valid, "id,value\ninside,1\n")
+    expect((await Deliverables.check(tmp.path, path.join("results", "valid.csv"))).problems).toEqual([])
+    expect((await Deliverables.check(tmp.path, valid)).problems).toEqual([])
+  })
 })
 
 describe("DeliverablesUnit", () => {
+  test("restart state does not re-anchor deliverables after a prior real prompt", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({ workspace: "project" })
+        const id = Identifier.ascending("message")
+        await Session.updateMessage({
+          id,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "research",
+          model: { providerID: "test", modelID: "test" },
+          effort: "normal",
+          context: 128_000,
+          internal: SessionLoopState.prompt(id),
+        })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          messageID: id,
+          sessionID: session.id,
+          type: "text",
+          text: "Write results/original.csv with columns id,score.",
+        })
+
+        HarnessState.clear(session.id)
+        const unit = await DeliverablesUnit({} as PluginInput)
+        await unit["chat.message"]!(
+          { sessionID: session.id, messageID: "msg_external" },
+          {
+            message: {
+              id: "msg_external",
+              sessionID: session.id,
+              role: "user",
+              internal: SessionLoopState.prompt("msg_external"),
+            } as never,
+            parts: [{ type: "text", text: "Write results/second.csv with columns id,score." } as never],
+          },
+        )
+        expect(HarnessState.get(session.id).deliverables).toEqual([])
+      },
+    })
+  })
+
   test("a worker's brief never becomes a checklist: the lead checks what it asked for itself", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

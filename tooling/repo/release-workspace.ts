@@ -1,7 +1,8 @@
 import { $ } from "bun"
 import path from "path"
+import { fileURLToPath } from "node:url"
 
-export const releaseRoot = new URL("../..", import.meta.url).pathname
+export const releaseRoot = fileURLToPath(new URL("../..", import.meta.url))
 
 export function resolveReleasePath(value: string) {
   return path.isAbsolute(value) ? value : path.resolve(releaseRoot, value)

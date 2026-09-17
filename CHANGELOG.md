@@ -312,6 +312,26 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Windows paths and asynchronous pickers are reliable.** The folder picker
+  understands drive letters, UNC roots, backslashes, breadcrumbs and relative
+  paths on Windows. Server health checks and `@` mention results no longer let
+  an older request overwrite or select from the latest query.
+
+- **Downloads and docs choose the right assets.** Macs whose architecture
+  cannot be detected now offer explicit Apple Silicon and Intel downloads
+  instead of defaulting to Apple Silicon, and documentation fonts and icons
+  load when the site is hosted under `/docs`.
+
+- **Harness continuations preserve the original request.** Time budgets now
+  start from real requests carrying a deadline, while synthetic continuations
+  no longer redefine deliverables. Mistral parallel tool calls also retain
+  distinct, valid IDs.
+
+- **Release tooling works on Windows and fails fast on npm errors.** Package
+  builds resolve Windows file URLs correctly, and genuine npm permission or
+  dist-tag failures are reported immediately instead of entering retry or
+  visibility waits.
+
 - **NVIDIA BioNeMo: the DiffDock route and the repo's front door.** The hosted
   DiffDock endpoint moved to `/v1/biology/mit/diffdock`; the old
   `/v1/molecular-docking/diffdock/generate` path answers 404 (NVIDIA's own

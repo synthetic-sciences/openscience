@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "bun run --cwd ../docs build && vite build",
     "preview": "vite preview",
+    "test": "bun test ./src",
     "sync:docs": "bun run build"
   },
   "dependencies": {

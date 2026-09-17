@@ -1,4 +1,4 @@
-import { createSignal, createMemo, createResource, createEffect, type JSX, For, Show } from "solid-js"
+import { createSignal, createMemo, createResource, createEffect, onCleanup, type JSX, For, Show } from "solid-js"
 import { Dialog } from "@synsci/ui/dialog"
 import { Button } from "@synsci/ui/button"
 import { Icon, type IconProps } from "@synsci/ui/icon"
@@ -6,6 +6,17 @@ import { useDialog } from "@synsci/ui/context/dialog"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { validateDirectoryPath } from "@/atlas/openDirectory"
+import {
+  basenameLocalPath,
+  displayLocalPath,
+  isLocalPathRoot,
+  joinLocalPath,
+  localPathBreadcrumbs,
+  localPathRoot,
+  normalizeLocalPath,
+  parentLocalPath,
+  resolveTypedLocalPath,
+} from "@/utils/local-path"
 import "./FolderPicker.css"
 
 interface FolderEntry {
@@ -23,12 +34,27 @@ interface PickerProps {
 
 const RECENT_KEY = "thesis-folder-picker-recents-v1"
 
+export function createRequestGeneration() {
+  let current = 0
+  onCleanup(() => void ++current)
+  return {
+    next: () => ++current,
+    invalidate: () => void ++current,
+    isCurrent: (generation: number) => generation === current,
+  }
+}
+
 function readRecents(): string[] {
   try {
     const raw = localStorage.getItem(RECENT_KEY)
     if (!raw) return []
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? arr.filter((x) => typeof x === "string").slice(0, 8) : []
+    const arr: unknown = JSON.parse(raw)
+    return Array.isArray(arr)
+      ? arr
+          .filter((path: unknown): path is string => typeof path === "string")
+          .map(normalizeLocalPath)
+          .slice(0, 8)
+      : []
   } catch {
     return []
   }
@@ -57,37 +83,43 @@ export function FolderPicker(props: PickerProps): JSX.Element {
   const sync = useGlobalSync()
   const dialog = useDialog()
 
-  const home = () => sync.data.path.home || "/"
+  const home = () => normalizeLocalPath(sync.data.path.home || "/")
   const [cwd, setCwd] = createSignal(home())
   const [filter, setFilter] = createSignal("")
   const [pathInput, setPathInput] = createSignal("")
   const [error, setError] = createSignal<string>()
+  const listings = createRequestGeneration()
+  const navigation = createRequestGeneration()
+  let latestEntries: FolderEntry[] = []
 
   const [entries, { refetch }] = createResource(
     () => cwd(),
     async (dir): Promise<FolderEntry[]> => {
+      const generation = listings.next()
       setError(undefined)
       try {
-        const res: any = await sdk.client.file.list({ directory: dir, path: "." } as any)
-        const data = res?.data ?? res
-        const list = Array.isArray(data) ? data : []
-        return list
+        const res = await sdk.client.file.list({ directory: dir, path: "." })
+        if (!listings.isCurrent(generation)) return latestEntries
+        const list = res.data ?? []
+        latestEntries = list
           .filter(
-            (n: any) =>
-              (n?.type === "directory" || (props.kind === "file" && n?.type === "file")) &&
+            (n) =>
+              (n.type === "directory" || (props.kind === "file" && n.type === "file")) &&
               !n.name.startsWith(".") &&
               !n.ignored,
           )
-          .map((n: any) => ({
-            name: n.name as string,
-            absolute: n.absolute as string,
-            type: n.type as "file" | "directory",
+          .map((n) => ({
+            name: n.name,
+            absolute: normalizeLocalPath(n.absolute),
+            type: n.type,
           }))
           .sort((a, b) => {
             if (a.type !== b.type) return a.type === "directory" ? -1 : 1
             return a.name.localeCompare(b.name)
           })
+        return latestEntries
       } catch (err) {
+        if (!listings.isCurrent(generation)) return latestEntries
         // Surface the failure instead of masking it as an empty folder — an
         // empty list and a failed listing are very different states.
         setError(err instanceof Error ? err.message : String(err))
@@ -106,39 +138,24 @@ export function FolderPicker(props: PickerProps): JSX.Element {
     return list.filter((e) => e.name.toLowerCase().includes(q))
   })
 
-  const crumbs = createMemo(() => {
-    const path = cwd()
-    const h = home()
-    const segs: Array<{ label: string; path: string }> = []
-    if (h && (path === h || path.startsWith(h + "/"))) {
-      segs.push({ label: "~", path: h })
-      const tail = path === h ? "" : path.slice(h.length + 1)
-      if (tail) {
-        const parts = tail.split("/")
-        let acc = h
-        for (const p of parts) {
-          acc = acc + "/" + p
-          segs.push({ label: p, path: acc })
-        }
-      }
-    } else {
-      segs.push({ label: "/", path: "/" })
-      const parts = path.replace(/^\/+/, "").split("/").filter(Boolean)
-      let acc = ""
-      for (const p of parts) {
-        acc = acc + "/" + p
-        segs.push({ label: p, path: acc })
-      }
-    }
-    return segs
-  })
+  const crumbs = createMemo(() => localPathBreadcrumbs(cwd(), home()))
+
+  const navigate = (path: string) => {
+    navigation.invalidate()
+    listings.invalidate()
+    setCwd(normalizeLocalPath(path))
+    setFilter("")
+  }
+
+  const refresh = () => {
+    listings.invalidate()
+    void refetch()
+  }
 
   const goUp = () => {
     const cur = cwd()
-    if (cur === "/" || cur === "") return
-    const i = cur.lastIndexOf("/")
-    setCwd(i <= 0 ? "/" : cur.slice(0, i))
-    setFilter("")
+    if (isLocalPathRoot(cur)) return
+    navigate(parentLocalPath(cur))
   }
 
   const drillInto = (e: FolderEntry) => {
@@ -146,41 +163,36 @@ export function FolderPicker(props: PickerProps): JSX.Element {
       pick(e.absolute)
       return
     }
-    setCwd(e.absolute)
-    setFilter("")
+    navigate(e.absolute)
   }
 
-  const goTo = (path: string) => {
-    setCwd(path)
-    setFilter("")
-  }
+  const goTo = (path: string) => navigate(path)
 
   /** Resolve `~` / relative segments and jump there. */
-  const normalizeTyped = (raw: string) => {
-    const trimmed = raw.trim().replace(/\/+$/, "")
-    if (!trimmed) return ""
-    if (trimmed === "~") return home()
-    if (trimmed.startsWith("~/")) return home() + trimmed.slice(1)
-    if (!trimmed.startsWith("/")) return (cwd() === "/" ? "" : cwd()) + "/" + trimmed
-    return trimmed
-  }
+  const normalizeTyped = (raw: string) => resolveTypedLocalPath(raw, cwd(), home())
 
   /** Resolve `~` / relative segments, verify it exists, and jump there. */
   const goToTyped = async (raw: string) => {
     const abs = normalizeTyped(raw)
     if (!abs) return
+    const generation = navigation.next()
     const valid = await validateDirectoryPath(sdk.url, abs)
-    if (!valid) return
-    setCwd(valid)
-    setFilter("")
+    if (!valid || !navigation.isCurrent(generation)) return
+    navigate(valid)
     setPathInput("")
   }
 
   const pick = (path: string) => {
-    const recent = props.kind === "file" ? path.slice(0, path.lastIndexOf("/")) || "/" : path
+    const recent = props.kind === "file" ? parentLocalPath(path) : normalizeLocalPath(path)
     pushRecent(recent)
     props.onSelect(props.multiple ? [path] : path)
     dialog.close()
+  }
+
+  const pickCurrent = async () => {
+    const generation = navigation.next()
+    const valid = await validateDirectoryPath(sdk.url, cwd())
+    if (valid && navigation.isCurrent(generation)) pick(valid)
   }
 
   const cancel = () => {
@@ -192,11 +204,11 @@ export function FolderPicker(props: PickerProps): JSX.Element {
     const h = home()
     const links: Array<{ label: string; path: string; icon: IconProps["name"] }> = [
       { label: "Home", path: h, icon: "home" },
-      { label: "Desktop", path: h + "/Desktop", icon: "layout-grid" },
-      { label: "Documents", path: h + "/Documents", icon: "file" },
-      { label: "Downloads", path: h + "/Downloads", icon: "download" },
-      { label: "Applications", path: "/Applications", icon: "folder-tree" },
+      { label: "Desktop", path: joinLocalPath(h, "Desktop"), icon: "layout-grid" },
+      { label: "Documents", path: joinLocalPath(h, "Documents"), icon: "file" },
+      { label: "Downloads", path: joinLocalPath(h, "Downloads"), icon: "download" },
     ]
+    if (/^\/Users\/[^/]+$/i.test(h)) links.push({ label: "Applications", path: "/Applications", icon: "folder-tree" })
     return links
   })
 
@@ -233,8 +245,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 <For each={recents()}>
                   {(path) => (
                     <SidebarRow
-                      label={path.split("/").filter(Boolean).pop() ?? "/"}
-                      sublabel={path.replace(home() + "/", "~/").replace(home(), "~")}
+                      label={basenameLocalPath(path)}
+                      sublabel={displayLocalPath(path, home())}
                       icon="folder"
                       active={cwd() === path}
                       onClick={() => goTo(path)}
@@ -256,7 +268,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                 onClick={goUp}
                 aria-label="Parent folder"
                 title="Parent folder"
-                disabled={cwd() === "/" || cwd() === ""}
+                disabled={isLocalPathRoot(cwd())}
               >
                 <Icon name="arrow-up" size="small" />
               </button>
@@ -297,7 +309,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
             <button
               type="button"
               class="folder-picker__icon-button folder-picker__refresh"
-              onClick={() => void refetch()}
+              onClick={refresh}
               aria-label="Refresh folder"
               title="Refresh folder"
             >
@@ -335,9 +347,14 @@ export function FolderPicker(props: PickerProps): JSX.Element {
               <span class="folder-picker__field-label">Path</span>
               <input
                 value={pathInput()}
-                onInput={(e) => setPathInput(e.currentTarget.value)}
+                onInput={(e) => {
+                  navigation.invalidate()
+                  setPathInput(e.currentTarget.value)
+                }}
                 aria-label="Go to path"
-                placeholder="/Users/you/research or ~/research"
+                placeholder={
+                  localPathRoot(home()) === "/" ? "/Users/you/research or ~/research" : "C:\\Users\\you\\research"
+                }
                 spellcheck={false}
                 autocomplete="off"
               />
@@ -374,7 +391,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                         <Icon name="alert-circle" size="normal" />
                         <strong>Couldn’t read this folder</strong>
                         <p>{error()}</p>
-                        <button type="button" class="folder-picker__retry" onClick={() => void refetch()}>
+                        <button type="button" class="folder-picker__retry" onClick={refresh}>
                           Retry
                         </button>
                       </div>
@@ -384,10 +401,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                       <Show when={(entries() ?? []).length === 0} fallback={<span>Nothing matches the filter.</span>}>
                         <Show
                           when={
-                            /\/Desktop$|\/Documents$|\/Downloads$/.test(cwd()) ||
-                            cwd().endsWith("/Desktop") ||
-                            cwd().endsWith("/Documents") ||
-                            cwd().endsWith("/Downloads")
+                            /^\/Users\/[^/]+$/i.test(home()) &&
+                            ["Desktop", "Documents", "Downloads"].includes(basenameLocalPath(cwd()))
                           }
                           fallback={
                             <span>
@@ -398,7 +413,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                           }
                         >
                           <strong>
-                            macOS is blocking the listing of <code>{cwd().split("/").pop()}</code>
+                            macOS is blocking the listing of <code>{basenameLocalPath(cwd())}</code>
                           </strong>
                           <p>
                             To list this folder, the <code>openscience</code> binary needs Full Disk Access. For now,
@@ -428,7 +443,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
           <footer class="folder-picker__footer">
             <span class="folder-picker__current-path" title={cwd()}>
               <Icon name="folder" size="small" />
-              {cwd().replace(home(), "~")}
+              {displayLocalPath(cwd(), home())}
             </span>
             <div class="folder-picker__footer-actions">
               <Button type="button" size="normal" variant="ghost" onClick={cancel}>
@@ -439,10 +454,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                   type="button"
                   size="normal"
                   variant="primary"
-                  onClick={async () => {
-                    const valid = await validateDirectoryPath(sdk.url, cwd())
-                    if (valid) pick(valid)
-                  }}
+                  onClick={pickCurrent}
                   title="Choose the current folder"
                 >
                   Use this folder

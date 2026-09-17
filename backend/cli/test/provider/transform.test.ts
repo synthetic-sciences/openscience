@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { APICallError } from "ai"
+import { APICallError, type ModelMessage } from "ai"
 import { ProviderTransform } from "../../src/provider/transform"
 import { managedOpenRouterBaseURL } from "../../src/openscience/synced-env-policy"
+import type { Provider } from "../../src/provider/provider"
 
 const OUTPUT_TOKEN_MAX = 32000
 
@@ -543,6 +544,107 @@ describe("ProviderTransform.message - DeepSeek reasoning content", () => {
 
     expect(result[0].content).toEqual(msgs[0].content)
     expect(result[0].providerOptions?.openaiCompatible).toBeUndefined()
+  })
+})
+
+describe("ProviderTransform.message - Mistral tool call IDs", () => {
+  const model = {
+    id: "mistral/mistral-large",
+    providerID: "mistral",
+    api: { id: "mistral-large-latest", url: "https://api.mistral.ai", npm: "@ai-sdk/mistral" },
+    name: "Mistral Large",
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 128_000, output: 8_192 },
+    status: "active",
+    options: {},
+    headers: {},
+    release_date: "2024-01-01",
+  } satisfies Provider.Model
+
+  const toolIDs = (message: ModelMessage) => {
+    if (!Array.isArray(message.content)) return []
+    return message.content.flatMap((part) =>
+      (part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part ? [part.toolCallId] : [],
+    )
+  }
+
+  test("parallel calls remain distinct and each result keeps its call's mapped ID", () => {
+    const first = "shared-prefix-call-alpha"
+    const second = "shared-prefix-call-beta"
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool-call", toolCallId: first, toolName: "read", input: {} },
+          { type: "tool-call", toolCallId: second, toolName: "read", input: {} },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          { type: "tool-result", toolCallId: second, toolName: "read", output: { type: "text", value: "b" } },
+          { type: "tool-result", toolCallId: first, toolName: "read", output: { type: "text", value: "a" } },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(messages, model, {})
+
+    const calls = toolIDs(result[0]!)
+    const results = toolIDs(result[1]!)
+    expect(calls[0]).not.toBe(calls[1])
+    expect(results).toEqual([calls[1], calls[0]])
+    expect(calls.every((id) => /^[a-zA-Z0-9]{9}$/.test(id))).toBe(true)
+  })
+
+  test("malformed source IDs still become exactly nine alphanumeric characters", () => {
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: "!@#$%^&*()", toolName: "read", input: {} }],
+      },
+    ]
+    const result = ProviderTransform.message(messages, model, {})
+    expect(toolIDs(result[0]!)[0]).toMatch(/^[a-zA-Z0-9]{9}$/)
+  })
+
+  test("maps IDs for an aliased model routed through the Mistral SDK", () => {
+    const alias = {
+      ...model,
+      id: "custom/research-model",
+      providerID: "private-gateway",
+      api: { ...model.api, id: "research-model-v1" },
+    } satisfies Provider.Model
+    const source = "call_with_more_than_nine_characters"
+    const messages: ModelMessage[] = [
+      {
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId: source, toolName: "read", input: {} }],
+      },
+    ]
+
+    const result = ProviderTransform.message(messages, alias, {})
+    expect(toolIDs(result[0]!)[0]).toMatch(/^[a-zA-Z0-9]{9}$/)
+    expect(toolIDs(result[0]!)[0]).not.toBe(source)
+  })
+
+  test("deterministically retries a digest collision", () => {
+    const ids = ProviderTransform.mistralToolIDs(
+      ["first", "second", "first"],
+      (value) => (value.includes("\0") ? "bbbbbbbbb" : "aaaaaaaaa"),
+    )
+    expect([...ids.entries()]).toEqual([
+      ["first", "aaaaaaaaa"],
+      ["second", "bbbbbbbbb"],
+    ])
   })
 })
 

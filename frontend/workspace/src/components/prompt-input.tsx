@@ -857,13 +857,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const AT_RECENT = 5
 
   const {
-    grouped: atGrouped,
+    groups: atGroups,
     filter: atFilter,
     flat: atFlat,
     active: atActive,
     setActive: setAtActive,
     onInput: atOnInput,
     onKeyDown: atOnKeyDown,
+    select: selectAt,
   } = useFilteredList<AtOption>({
     items: async (query) => {
       const agents = agentList()
@@ -932,6 +933,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     setActive: setConversationActive,
     onInput: conversationOnInput,
     onKeyDown: conversationOnKeyDown,
+    select: selectConversation,
   } = useFilteredList<ConversationOption>({
     items: async () => conversationOptions(),
     key: (option) => option?.sourceSessionID,
@@ -1196,13 +1198,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const {
-    grouped: slashGrouped,
+    groups: slashGroups,
     flat: slashFlat,
     active: slashActive,
     setActive: setSlashActive,
     onInput: slashOnInput,
     onKeyDown: slashOnKeyDown,
     refetch: slashRefetch,
+    select: selectSlash,
   } = useFilteredList<SlashCommand>({
     items: slashItems,
     key: (x) => x?.id,
@@ -1220,7 +1223,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const slashVisible = createMemo(() => {
     let remaining = slashRendered()
     const result: Array<{ category: string; items: SlashCommand[] }> = []
-    for (const group of slashGrouped.latest ?? []) {
+    for (const group of slashGroups()) {
       if (remaining <= 0) break
       const items = group.items.slice(0, remaining)
       result.push({ category: group.category, items })
@@ -1239,7 +1242,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   createEffect(
     on(
-      () => slashGrouped.latest,
+      slashGroups,
       () => setSlashRendered(SLASH_SLICE),
       { defer: true },
     ),
@@ -1335,7 +1338,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (category === "file") return atFilter().trim() ? "" : "Files & folders"
       return ""
     }
-    return (atGrouped.latest ?? []).map((group) => ({
+    return atGroups().map((group) => ({
       category: group.category,
       label: label(group.category),
       items: group.items,
@@ -1393,7 +1396,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (items.length === 0) return
       const active = atActive()
       const item = items.find((entry) => atKey(entry) === active) ?? items[0]
-      handleAtSelect(item)
+      selectAt(item)
       return
     }
 
@@ -1402,7 +1405,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (items.length === 0) return
       const active = conversationActive()
       const item = items.find((entry) => entry.sourceSessionID === active) ?? items[0]
-      handleConversationSelect(item)
+      selectConversation(item)
       return
     }
 
@@ -1411,7 +1414,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (items.length === 0) return
       const active = slashActive()
       const item = items.find((entry) => entry.id === active) ?? items[0]
-      handleSlashSelect(item)
+      selectSlash(item)
     }
   }
 
@@ -2682,7 +2685,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                   "workspace-composer__at-row": true,
                                   "is-active": atActive() === atKey(item),
                                 }}
-                                onClick={() => handleAtSelect(item)}
+                                onClick={() => selectAt(item)}
                                 onMouseEnter={() => setAtActive(atKey(item))}
                               >
                                 <Show
@@ -2769,7 +2772,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         "workspace-composer__suggestion workspace-composer__conversation-row": true,
                         "bg-surface-raised-base-hover": conversationActive() === item.sourceSessionID,
                       }}
-                      onClick={() => handleConversationSelect(item)}
+                      onClick={() => selectConversation(item)}
                       onMouseEnter={() => setConversationActive(item.sourceSessionID)}
                     >
                       <span class="workspace-composer__conversation-mark" aria-hidden="true">
@@ -2812,7 +2815,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               "workspace-composer__slash-row": true,
                               "is-active": slashActive() === cmd.id,
                             }}
-                            onClick={() => handleSlashSelect(cmd)}
+                            onClick={() => selectSlash(cmd)}
                             onMouseEnter={() => setSlashActive(cmd.id)}
                           >
                             <span class="workspace-composer__slash-icon" aria-hidden="true">

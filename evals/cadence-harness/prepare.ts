@@ -87,14 +87,19 @@ export function buildPromptCorpus(rtf: string, report: string): CampaignPrompt[]
 }
 
 async function rtfText(file: string) {
-  const process = Bun.spawn(["textutil", "-convert", "txt", "-stdout", file], {
+  if (process.platform !== "darwin") {
+    throw new Error(
+      `RTF prompt preparation requires macOS textutil; ${process.platform} is unsupported. Run this preparation command on macOS, where textutil is included.`,
+    )
+  }
+  const child = Bun.spawn(["textutil", "-convert", "txt", "-stdout", file], {
     stdout: "pipe",
     stderr: "pipe",
   })
   const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(process.stdout).text(),
-    new Response(process.stderr).text(),
-    process.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
   ])
   if (exitCode !== 0) throw new Error(`textutil failed (${exitCode}): ${stderr.trim()}`)
   return stdout

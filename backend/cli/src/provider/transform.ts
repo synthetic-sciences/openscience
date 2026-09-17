@@ -1,4 +1,5 @@
 import type { APICallError, ModelMessage } from "ai"
+import { createHash } from "node:crypto"
 import { mergeDeep, unique } from "remeda"
 import type { JSONSchema } from "zod/v4/core"
 import type { Provider } from "./provider"
@@ -27,6 +28,26 @@ function signedThinking(options: unknown): boolean {
 }
 
 export namespace ProviderTransform {
+  export function mistralToolIDs(
+    ids: Iterable<string>,
+    digest = (value: string) => createHash("sha256").update(value).digest("hex"),
+  ) {
+    const result = new Map<string, string>()
+    const used = new Set<string>()
+    for (const id of ids) {
+      if (result.has(id)) continue
+      for (let nonce = 0; ; nonce++) {
+        const value = nonce ? `${id}\0${nonce}` : id
+        const candidate = digest(value).replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")
+        if (used.has(candidate)) continue
+        result.set(id, candidate)
+        used.add(candidate)
+        break
+      }
+    }
+    return result
+  }
+
   // Maps npm package to the key the AI SDK expects for providerOptions
   function sdkKey(npm: string): string | undefined {
     switch (npm) {
@@ -111,8 +132,23 @@ export namespace ProviderTransform {
         return msg
       })
     }
-    if (model.providerID === "mistral" || model.api.id.toLowerCase().includes("mistral")) {
+    if (
+      model.api.npm === "@ai-sdk/mistral" ||
+      model.providerID === "mistral" ||
+      model.api.id.toLowerCase().includes("mistral")
+    ) {
       const result: ModelMessage[] = []
+      const ids = ProviderTransform.mistralToolIDs(
+        msgs.flatMap((msg) =>
+          Array.isArray(msg.content)
+            ? msg.content.flatMap((part) =>
+                (part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part
+                  ? [part.toolCallId]
+                  : [],
+              )
+            : [],
+        ),
+      )
       for (let i = 0; i < msgs.length; i++) {
         const msg = msgs[i]
         const nextMsg = msgs[i + 1]
@@ -120,15 +156,9 @@ export namespace ProviderTransform {
         if ((msg.role === "assistant" || msg.role === "tool") && Array.isArray(msg.content)) {
           msg.content = msg.content.map((part) => {
             if ((part.type === "tool-call" || part.type === "tool-result") && "toolCallId" in part) {
-              // Mistral requires alphanumeric tool call IDs with exactly 9 characters
-              const normalizedId = part.toolCallId
-                .replace(/[^a-zA-Z0-9]/g, "") // Remove non-alphanumeric characters
-                .substring(0, 9) // Take first 9 characters
-                .padEnd(9, "0") // Pad with zeros if less than 9 characters
-
               return {
                 ...part,
-                toolCallId: normalizedId,
+                toolCallId: ids.get(part.toolCallId)!,
               }
             }
             return part

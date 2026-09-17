@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 import { Script } from "@synsci/script"
 import { $ } from "bun"
+import { fileURLToPath } from "node:url"
 import { createCompiledPackageManifest, packPackage, publishPackage } from "../../repo/npm-release"
 
-const dir = new URL("..", import.meta.url).pathname
+const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 await $`bun tsc`

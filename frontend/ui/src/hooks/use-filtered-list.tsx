@@ -17,19 +17,17 @@ export interface FilteredListProps<T> {
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
-  const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
+  const [store, setStore] = createStore({ filter: "", resolved: "" })
 
   type Group = { category: string; items: [T, ...T[]] }
   const empty: Group[] = []
 
   const [grouped, { refetch }] = createResource(
-    () => ({
-      filter: store.filter,
-      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
-    }),
-    async ({ filter, items }) => {
+    () => store.filter,
+    async (filter) => {
       const query = filter ?? ""
       const needle = query.toLowerCase()
+      const items = typeof props.items === "function" ? props.items(query) : props.items
       const all = (await Promise.resolve(items)) || []
       const result = pipe(
         all,
@@ -50,9 +48,11 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     { initialValue: empty },
   )
 
+  const groups = createMemo(() => (store.resolved === store.filter ? grouped.latest || empty : empty))
+
   const flat = createMemo(() => {
     return pipe(
-      grouped.latest || [],
+      groups(),
       flatMap((x) => x.items),
     )
   })
@@ -82,12 +82,18 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     list.setActive(props.key(all[0]))
   }
 
+  const select = (item: T, index?: number) => {
+    const selectedIndex = flat().findIndex((x) => props.key(x) === props.key(item))
+    if (selectedIndex < 0) return
+    props.onSelect?.(flat()[selectedIndex], index ?? selectedIndex)
+  }
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" && !event.isComposing) {
       event.preventDefault()
       const selectedIndex = flat().findIndex((x) => props.key(x) === list.active())
       const selected = flat()[selectedIndex]
-      if (selected) props.onSelect?.(selected, selectedIndex)
+      if (selected) select(selected, selectedIndex)
     } else if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (event.key === "n" || event.key === "p") {
         event.preventDefault()
@@ -106,6 +112,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   createEffect(
     on(grouped, () => {
+      setStore("resolved", store.filter)
       reset()
     }),
   )
@@ -116,6 +123,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   return {
     grouped,
+    groups,
     filter: () => store.filter,
     flat,
     reset,
@@ -123,6 +131,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
     clear: () => setStore("filter", ""),
     onKeyDown,
     onInput,
+    select,
     active: list.active,
     setActive: list.setActive,
   }

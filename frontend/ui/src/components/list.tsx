@@ -79,7 +79,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     container.scrollTop = Math.max(0, Math.min(target, max))
   }
 
-  const { filter, grouped, flat, active, setActive, onKeyDown, onInput } = useFilteredList<T>(props)
+  const { filter, grouped, groups, flat, active, setActive, onKeyDown, onInput, select } = useFilteredList<T>(props)
 
   const searchProps = () => (typeof props.search === "object" ? props.search : {})
   const searchAction = () => searchProps().action
@@ -150,7 +150,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   })
 
   const handleSelect = (item: T | undefined, index: number) => {
-    props.onSelect?.(item, index)
+    if (item) select(item, index)
   }
 
   const handleKey = (e: KeyboardEvent) => {
@@ -276,9 +276,9 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
             </div>
           }
         >
-          <For each={grouped.latest}>
+          <For each={groups()}>
             {(group, groupIndex) => {
-              const isLastGroup = () => groupIndex() === grouped.latest.length - 1
+              const isLastGroup = () => groupIndex() === groups().length - 1
               return (
                 <div data-slot="list-group">
                   <Show when={group.category}>
@@ -333,7 +333,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
               )
             }}
           </For>
-          <Show when={grouped.latest.length === 0 && showAdd()}>
+          <Show when={groups().length === 0 && showAdd()}>
             <div data-slot="list-group">
               <div data-slot="list-items">{renderAdd()}</div>
             </div>

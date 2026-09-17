@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import os from "os"
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises"
+import { fileURLToPath, pathToFileURL } from "node:url"
 import {
   NpmArtifactConflict,
   NpmPermissionError,
@@ -34,6 +35,7 @@ import { releaseRoot } from "../../../../tooling/repo/release-workspace"
 type FakeState = {
   diff?: string
   failTagReadAfterAdd?: string
+  failTagWrites?: boolean
   identity: string
   optionalDependencies?: Record<string, Record<string, string>>
   owners: string[]
@@ -47,6 +49,7 @@ type FakeState = {
   publishSpecs?: string[]
   publishVisibilityReads?: number
   tagAdds?: string[]
+  tagVisibilityReads?: number
   tags: Record<string, Record<string, string>>
 }
 
@@ -115,6 +118,12 @@ async function readState(file: string) {
   return (await Bun.file(file).json()) as FakeState
 }
 
+test("file URLs decode native module paths without URL pathname artifacts", () => {
+  const native = path.resolve(import.meta.dir, "module path with spaces")
+  expect(fileURLToPath(pathToFileURL(native))).toBe(native)
+  expect(path.resolve(releaseRoot)).toBe(path.resolve(import.meta.dir, "../../../.."))
+})
+
 // A single local registry observes how many dist-tag writes and reads
 // overlap. The shared-file fixture serializes its own mutations behind a lock
 // but cannot see overlap, so concurrency assertions use this server instead.
@@ -122,14 +131,29 @@ async function tagRegistry(file: string) {
   const state = await readState(file)
   const failure = state.failTagReadAfterAdd
   const failed = new Set<string>()
-  const activity = { current: 0, maximum: 0, rollbackWhileActive: false, reads: { current: 0, maximum: 0 } }
+  const pending = new Map<string, { remaining: number; tag: string; version: string }>()
+  const activity = {
+    current: 0,
+    maximum: 0,
+    rollbackWhileActive: false,
+    reads: { calls: 0, current: 0, maximum: 0 },
+  }
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const args = (await request.json()) as string[]
       if (args[0] === "view" && args[2] === "dist-tags") {
+        activity.reads.calls++
         if (failed.delete(args[1])) return Response.json({ exitCode: 1, stderr: "transient dist-tag read failure" })
+        const delayed = pending.get(args[1])
+        if (delayed?.remaining === 0) {
+          state.tags[args[1]] ??= {}
+          state.tags[args[1]][delayed.tag] = delayed.version
+          pending.delete(args[1])
+        } else if (delayed) {
+          delayed.remaining--
+        }
         activity.reads.current++
         activity.reads.maximum = Math.max(activity.reads.maximum, activity.reads.current)
         // Hold the read long enough for sibling processes to overlap it.
@@ -138,6 +162,9 @@ async function tagRegistry(file: string) {
         return Response.json({ exitCode: 0, stdout: JSON.stringify(state.tags[args[1]] ?? {}) })
       }
       if (args[0] === "dist-tag" && args[1] === "add") {
+        if (state.failTagWrites) {
+          return Response.json({ exitCode: 1, stderr: "npm error code E500\npermanent dist-tag failure" })
+        }
         const split = args[2].lastIndexOf("@")
         const name = args[2].slice(0, split)
         const version = args[2].slice(split + 1)
@@ -150,8 +177,12 @@ async function tagRegistry(file: string) {
           activity.current--
           if (name === failure) failed.add(name)
         } else if (activity.current) activity.rollbackWhileActive = true
-        state.tags[name] ??= {}
-        state.tags[name][args[3]] = version
+        if (state.tagVisibilityReads) {
+          pending.set(name, { remaining: state.tagVisibilityReads, tag: args[3], version })
+        } else {
+          state.tags[name] ??= {}
+          state.tags[name][args[3]] = version
+        }
         state.tagAdds ??= []
         state.tagAdds.push(`${name}@${version}:${args[3]}`)
         return Response.json({ exitCode: 0 })
@@ -688,6 +719,36 @@ test("candidate staging submits absent packages in bounded parallel batches", as
     expect(state.packages[`${artifact.name}@${version}`].integrity).toBe(artifact.integrity)
     expect(state.tags[artifact.name][releaseCandidateTag(version)]).toBe(version)
   }
+})
+
+test("dist-tag command failure is reported immediately without visibility polling", async () => {
+  const artifact = await fixturePackage()
+  const tag = releaseStagingTag(artifact.version)
+  const file = await stateFile({ failTagWrites: true })
+  await using registry = await tagRegistry(file)
+
+  await expect(ensureReleaseStagingTags([artifact], tag, registry.options)).rejects.toThrow(
+    `Could not set ${artifact.name}'s ${tag} dist-tag to ${artifact.version}: npm error code E500`,
+  )
+  expect(registry.activity.reads.calls).toBe(2)
+  expect(registry.state.tags[artifact.name]).toBeUndefined()
+})
+
+test("dist-tag visibility may lag a successful command and repeated staging is idempotent", async () => {
+  const artifact = await fixturePackage()
+  const tag = releaseStagingTag(artifact.version)
+  const file = await stateFile({ tagVisibilityReads: 1 })
+  await using registry = await tagRegistry(file)
+  const delayed = {
+    ...registry.options,
+    env: { ...registry.options.env, OPENSCIENCE_NPM_VISIBILITY_ATTEMPTS: "3" },
+  }
+
+  await ensureReleaseStagingTags([artifact], tag, delayed)
+  await ensureReleaseStagingTags([artifact], tag, delayed)
+
+  expect(registry.state.tags[artifact.name][tag]).toBe(artifact.version)
+  expect(registry.state.tagAdds).toEqual([`${artifact.name}@${artifact.version}:${tag}`])
 })
 
 test("staging tags read and write in bounded batches and reject a conflict before writing", async () => {

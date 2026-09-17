@@ -4,6 +4,7 @@ import type { Hooks, Plugin } from "@synsci/plugin"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Instance } from "@/project/instance"
 import { Session } from "@/session"
+import { Filesystem } from "@/util/filesystem"
 import { HarnessState } from "./state"
 
 /**
@@ -16,7 +17,10 @@ import { HarnessState } from "./state"
 export namespace Deliverables {
   const EXTENSIONS =
     "csv|tsv|json|jsonl|md|txt|png|jpg|jpeg|svg|pdf|parquet|npy|npz|yaml|yml|toml|py|ipynb|xlsx|html|tex|bib|fasta|pdb|cif|sdf|h5|hdf5|nc|tif|tiff|zip|tar|gz"
-  const PATH = new RegExp(`(?<![\\w@/.-])((?:[\\w.-]+/)*[\\w.-]+\\.(?:${EXTENSIONS}))(?![\\w/])`, "gi")
+  const PATH = new RegExp(
+    `(?<![\\w@/\\\\.-])((?:(?:[a-z]:[\\\\/]|\\\\\\\\[\\w.-]+[\\\\/][\\w$ .-]+[\\\\/]|/)(?:[\\w .-]+[\\\\/])*[\\w .-]+\\.(?:${EXTENSIONS})|(?:[\\w.-]+[\\\\/])*[\\w.-]+\\.(?:${EXTENSIONS})))(?![\\w/\\\\])`,
+    "gi",
+  )
   const INTENT =
     /\b(?:write|save|store|export|output|produce|create|emit|dump)\b[^.\n]{0,80}\b(?:to|as|in|at|into|named|called)\b/i
   const SHAPE = /\b(?:columns?|schema|keys?|fields?|header|format|rounded|decimal|units?|sorted by|one row per)\b/i
@@ -160,13 +164,32 @@ export namespace Deliverables {
     const results = await Promise.all(roots.map((root) => check(root, name)))
     const passed = results.find((result) => result.problems.length === 0)
     if (passed) return passed
-    const present = results.find((result) => !result.problems.includes("does not exist"))
-    return present ?? results[0] ?? { path: name, problems: ["does not exist"] }
+    const present = results.find(
+      (result) =>
+        !result.problems.includes("does not exist") && !result.problems.includes("is outside allowed output roots"),
+    )
+    const missing = results.find((result) => result.problems.includes("does not exist"))
+    return present ?? missing ?? results[0] ?? { path: name, problems: ["does not exist"] }
   }
 
   /** Mechanical checks for one named output; an empty list means it passed. */
   export async function check(root: string, name: string): Promise<Check> {
-    const file = path.isAbsolute(name) ? name : path.join(root, name)
+    const absolute = path.isAbsolute(name)
+    if (!absolute && (path.win32.isAbsolute(name) || path.posix.isAbsolute(name))) {
+      return { path: name, problems: ["is outside allowed output roots"] }
+    }
+    const allowed = await Filesystem.canonical(root)
+    const target = absolute ? name : path.resolve(root, name)
+    if (
+      !allowed ||
+      (!Filesystem.contains(path.resolve(root), target) && !Filesystem.contains(allowed, target))
+    ) {
+      return { path: name, problems: ["is outside allowed output roots"] }
+    }
+    const file = await Filesystem.canonical(target)
+    if (!file || !Filesystem.contains(allowed, file)) {
+      return { path: name, problems: ["is outside allowed output roots"] }
+    }
     const stat = await fs.stat(file).catch(() => undefined)
     if (!stat) return { path: name, problems: ["does not exist"] }
     if (!stat.isFile()) return { path: name, problems: ["is not a regular file"] }

@@ -190,6 +190,16 @@ export function DialogSelectServer() {
       status: undefined as boolean | undefined,
     },
   })
+  let healthGeneration = 0
+  let addPreviewGeneration = 0
+  let editPreviewGeneration = 0
+  let disposed = false
+  onCleanup(() => {
+    disposed = true
+    healthGeneration++
+    addPreviewGeneration++
+    editPreviewGeneration++
+  })
   const [defaultUrl, defaultUrlActions] = createResource(
     async () => {
       try {
@@ -218,16 +228,22 @@ export function DialogSelectServer() {
     return host.includes(".") || host.includes(":")
   }
 
-  const previewStatus = async (value: string, setStatus: (value: boolean | undefined) => void) => {
+  const previewStatus = async (
+    value: string,
+    current: () => boolean,
+    setStatus: (value: boolean | undefined) => void,
+  ) => {
     setStatus(undefined)
     if (!looksComplete(value)) return
     const normalized = normalizeServerUrl(value)
     if (!normalized) return
     const result = await checkHealth(normalized, platform)
+    if (disposed || !current()) return
     setStatus(result.healthy)
   }
 
   const resetAdd = () => {
+    addPreviewGeneration++
     setStore("addServer", {
       url: "",
       error: "",
@@ -237,6 +253,7 @@ export function DialogSelectServer() {
   }
 
   const resetEdit = () => {
+    editPreviewGeneration++
     setStore("editServer", {
       id: undefined,
       value: "",
@@ -285,12 +302,22 @@ export function DialogSelectServer() {
   })
 
   async function refreshHealth() {
+    const generation = ++healthGeneration
+    const urls = items()
     const results: Record<string, ServerStatus> = {}
     await Promise.all(
-      items().map(async (url) => {
+      urls.map(async (url) => {
         results[url] = await checkHealth(url, platform)
       }),
     )
+    const current = items()
+    if (
+      disposed ||
+      generation !== healthGeneration ||
+      current.length !== urls.length ||
+      current.some((url, index) => url !== urls[index])
+    )
+      return
     setStore("status", reconcile(results))
   }
 
@@ -315,8 +342,13 @@ export function DialogSelectServer() {
 
   const handleAddChange = (value: string) => {
     if (store.addServer.adding) return
+    const generation = ++addPreviewGeneration
     setStore("addServer", { url: value, error: "" })
-    void previewStatus(value, (next) => setStore("addServer", { status: next }))
+    void previewStatus(
+      value,
+      () => generation === addPreviewGeneration && store.addServer.url === value && !store.addServer.adding,
+      (next) => setStore("addServer", { status: next }),
+    )
   }
 
   const scrollListToBottom = () => {
@@ -329,12 +361,18 @@ export function DialogSelectServer() {
 
   const handleEditChange = (value: string) => {
     if (store.editServer.busy) return
+    const generation = ++editPreviewGeneration
     setStore("editServer", { value, error: "" })
-    void previewStatus(value, (next) => setStore("editServer", { status: next }))
+    void previewStatus(
+      value,
+      () => generation === editPreviewGeneration && store.editServer.value === value && !store.editServer.busy,
+      (next) => setStore("editServer", { status: next }),
+    )
   }
 
   async function handleAdd(value: string) {
     if (store.addServer.adding) return
+    addPreviewGeneration++
     const normalized = normalizeServerUrl(value)
     if (!normalized) {
       resetAdd()
@@ -344,6 +382,7 @@ export function DialogSelectServer() {
     setStore("addServer", { adding: true, error: "" })
 
     const result = await checkHealth(normalized, platform)
+    if (disposed) return
     setStore("addServer", { adding: false })
 
     if (!result.healthy) {
@@ -357,6 +396,7 @@ export function DialogSelectServer() {
 
   async function handleEdit(original: string, value: string) {
     if (store.editServer.busy) return
+    editPreviewGeneration++
     const normalized = normalizeServerUrl(value)
     if (!normalized) {
       resetEdit()
@@ -371,6 +411,7 @@ export function DialogSelectServer() {
     setStore("editServer", { busy: true, error: "" })
 
     const result = await checkHealth(normalized, platform)
+    if (disposed) return
     setStore("editServer", { busy: false })
 
     if (!result.healthy) {
@@ -562,6 +603,7 @@ export function DialogSelectServer() {
                         <DropdownMenu.Item
                           onSelect={() => {
                             resetAdd()
+                            editPreviewGeneration++
                             setStore("editServer", {
                               id: i,
                               value: i,

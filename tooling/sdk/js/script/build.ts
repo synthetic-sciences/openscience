@@ -1,12 +1,14 @@
 #!/usr/bin/env bun
 
-const dir = new URL("..", import.meta.url).pathname
-process.chdir(dir)
-
 import { $ } from "bun"
 import path from "path"
+import { rm } from "node:fs/promises"
+import { fileURLToPath } from "node:url"
 
 import { createClient } from "@hey-api/openapi-ts"
+
+const dir = fileURLToPath(new URL("..", import.meta.url))
+process.chdir(dir)
 
 await $`bun dev generate > ${dir}/openapi.json`.cwd(path.resolve(dir, "../../../backend/cli"))
 
@@ -52,6 +54,6 @@ await Bun.write(sseRuntime, settledCancel)
 
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
-await $`rm -rf dist`
+await rm(path.join(dir, "dist"), { recursive: true, force: true })
 await $`bun tsc -p tsconfig.build.json`
-await $`rm openapi.json`
+await rm(path.join(dir, "openapi.json"))

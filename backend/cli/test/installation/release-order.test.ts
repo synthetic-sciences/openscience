@@ -50,6 +50,7 @@ test("exhaustive and native suites stay off the pull request path", async () => 
 
 test("production requires an exact artifact-source deep release rehearsal", async () => {
   const workflow = await read(".github/workflows/publish.yml")
+  const parsed = Bun.YAML.parse(workflow) as { jobs: Record<string, { "timeout-minutes"?: number }> }
   const script = await read("tooling/repo/version.ts")
   const source = workflow.indexOf("Resolve release rehearsal source")
   const rehearsal = workflow.indexOf("Verify exact artifact-source release rehearsal")
@@ -77,6 +78,7 @@ test("production requires an exact artifact-source deep release rehearsal", asyn
   )
   expect(workflow).not.toContain("npm-test-gate")
   expect(workflow).not.toContain("verify-native-cli")
+  expect(parsed.jobs["prepare-npm"]["timeout-minutes"]).toBe(90)
 })
 
 test("the release gate expects every rehearsal gate job by exact name", async () => {
