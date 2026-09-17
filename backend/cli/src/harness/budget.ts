@@ -73,7 +73,12 @@ export namespace Budget {
       state.budgetReminders.add(85)
       return [`Time reminder: ${used} (85%). Finish the deliverables you can and write real partial results.`]
     }
-    if (fraction >= 0.5 && fraction < 0.85 && !state.budgetReminders.has(50)) {
+    if (
+      fraction >= 0.5 &&
+      fraction < 0.85 &&
+      !state.budgetReminders.has(50) &&
+      !state.budgetReminders.has(85)
+    ) {
       state.budgetReminders.add(50)
       return [`Time reminder: ${used} (half). Prioritize the remaining deliverables.`]
     }

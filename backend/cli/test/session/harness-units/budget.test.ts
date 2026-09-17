@@ -72,7 +72,7 @@ test("an initial 85% reminder records only the emitted threshold", () => {
   state.deadline = 11_000
 
   expect(Budget.status(state, 9_500)[0]).toContain("(85%)")
-  expect(Budget.status(state, 9_501)).toEqual([])
+  expect(Budget.status(state, 7_000)).toEqual([])
   expect(state.budgetReminders).toEqual(new Set([85]))
 })
 
