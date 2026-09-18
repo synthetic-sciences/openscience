@@ -19,7 +19,7 @@ const Entry = z.object({
   id: z.string(),
   available: z.boolean().optional(),
   upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
-  hosting_provider: z.enum(["azure", "openrouter"]).optional(),
+  hosting_provider: z.enum(["azure", "gemini", "openrouter"]).optional(),
   context_length: Tokens,
   max_output_tokens: Tokens.optional(),
   context_options: z.array(Tokens).max(8).optional(),
@@ -117,7 +117,7 @@ export namespace ManagedPricing {
       const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
       const body: Record<string, string> | undefined =
         model.upstream_provider === "openrouter" &&
-        model.hosting_provider !== "azure" &&
+        (!model.hosting_provider || model.hosting_provider === "openrouter") &&
         /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id) &&
         transport &&
         "service_tier" in transport

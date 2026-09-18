@@ -62110,6 +62110,7 @@
                 "type": "string",
                 "enum": [
                   "azure",
+                  "gemini",
                   "openrouter"
                 ]
               },

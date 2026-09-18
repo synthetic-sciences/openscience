@@ -6,6 +6,7 @@ const cost = { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } }
 describe("route-aware model pricing", () => {
   test("identifies Azure hosting behind the compatible managed transport", () => {
     expect(pricingUpstream({ upstream_provider: "openrouter", hosting_provider: "azure" })).toBe("Azure OpenAI")
+    expect(pricingUpstream({ upstream_provider: "openrouter", hosting_provider: "gemini" })).toBe("Google Gemini")
     expect(pricingUpstream({ upstream_provider: "openrouter" })).toBe("OpenRouter")
   })
   test("Ace never presents an OpenRouter catalog rate as a direct provider rate", () => {

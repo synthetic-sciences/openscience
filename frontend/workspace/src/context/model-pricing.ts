@@ -7,7 +7,7 @@ type Rates = {
 
 type ModelPricing = {
   upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
-  hosting_provider?: "azure" | "openrouter"
+  hosting_provider?: "azure" | "gemini" | "openrouter"
   /** The only markup on an Ace turn, stated by the account's catalog; the public 5.5% otherwise. */
   funding_fee_bps?: number
   audited_at?: string
@@ -208,7 +208,7 @@ export function rateBasis(rates: RouteRates) {
 export function pricingUpstream(pricing: ModelPricing | undefined): string | undefined {
   const names: Record<string, string> = {
     anthropic: "Anthropic",
-    gemini: "Google",
+    gemini: "Google Gemini",
     xai: "xAI",
     meta: "Meta",
     openrouter: "OpenRouter",
