@@ -91,6 +91,30 @@ test("long-context prices retain inclusive provider thresholds", () => {
   expect(parsed[entry.id]?.cost.tiers?.[0]?.threshold).toBe(200_000)
 })
 
+test("Azure hosting preserves the managed route and cannot inherit OpenRouter Fast", () => {
+  const parsed = ManagedPricing.parse({
+    models: [
+      {
+        ...entry,
+        id: "openai/gpt-5.6-sol",
+        upstream_provider: "openrouter",
+        hosting_provider: "azure",
+        pricing: { tiers: [{ input: 4.22, output: 21.1, cache_read: 0.422 }] },
+        fast_mode: true,
+        fast_mode_details: {
+          available: true,
+          transport: { service_tier: "priority" },
+          pricing: { verified: true, tiers: [{ input: 8, output: 40 }] },
+        },
+      },
+    ],
+  })["openai/gpt-5.6-sol"]!
+  expect(parsed.pricing.hosting_provider).toBe("azure")
+  expect(parsed.pricing.upstream_provider).toBe("openrouter")
+  expect(parsed.cost.input).toBe(4.22)
+  expect(parsed.modes).toEqual({})
+})
+
 test("managed controls cannot import native-provider Fast transports into OpenRouter", () => {
   const parsed = ManagedPricing.parse({
     models: [

@@ -19,6 +19,7 @@ const Entry = z.object({
   id: z.string(),
   available: z.boolean().optional(),
   upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+  hosting_provider: z.enum(["azure", "openrouter"]).optional(),
   context_length: Tokens,
   max_output_tokens: Tokens.optional(),
   context_options: z.array(Tokens).max(8).optional(),
@@ -66,6 +67,7 @@ export namespace ManagedPricing {
     }
     pricing: {
       upstream_provider: z.infer<typeof Entry>["upstream_provider"]
+      hosting_provider?: z.infer<typeof Entry>["hosting_provider"]
       funding_fee_bps: number
       audited_at?: string
       source_url?: string
@@ -115,6 +117,7 @@ export namespace ManagedPricing {
       const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
       const body: Record<string, string> | undefined =
         model.upstream_provider === "openrouter" &&
+        model.hosting_provider !== "azure" &&
         /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id) &&
         transport &&
         "service_tier" in transport
@@ -155,6 +158,7 @@ export namespace ManagedPricing {
         },
         pricing: {
           upstream_provider: model.upstream_provider,
+          ...(model.hosting_provider ? { hosting_provider: model.hosting_provider } : {}),
           funding_fee_bps: model.pricing.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS,
           audited_at: model.pricing.audited_at,
           ...(model.pricing.source_url?.startsWith("https://") ? { source_url: model.pricing.source_url } : {}),

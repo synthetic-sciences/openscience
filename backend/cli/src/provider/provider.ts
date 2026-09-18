@@ -1871,6 +1871,7 @@ export namespace Provider {
       pricing: z
         .object({
           upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+          hosting_provider: z.enum(["azure", "openrouter"]).optional(),
           funding_fee_bps: z.number().optional(),
           audited_at: z.string().optional(),
           source_url: z.string().optional(),

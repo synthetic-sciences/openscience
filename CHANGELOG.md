@@ -10,6 +10,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Azure hosting for Ace OpenAI models.** GPT-6 Astra and GPT-5.6 Sol, Terra, and Luna use Azure Global Standard through the managed gateway, with Azure token rates and the existing funding fee. Rates identify Azure; Fast is unavailable on this route. Direct API-key and ChatGPT connections remain available.
 - **Simplified download page.** Removed the "Build with OpenScience" integrations section from openscience.sh/download.
 - **Model access, rebuilt.** The Ace page's Model access card is five rows
   with one control each: Ace (state and Manage), Wallet (available amount and

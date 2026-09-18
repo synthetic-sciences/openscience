@@ -62106,6 +62106,13 @@
                   "openrouter"
                 ]
               },
+              "hosting_provider": {
+                "type": "string",
+                "enum": [
+                  "azure",
+                  "openrouter"
+                ]
+              },
               "funding_fee_bps": {
                 "type": "number"
               },
