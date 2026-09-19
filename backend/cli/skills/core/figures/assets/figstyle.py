@@ -52,8 +52,6 @@ CYCLE = [PALETTE[k] for k in ("blue", "orange", "green", "red", "purple", "cyan"
 BASELINE = "#7F7F7F"
 MUTED = "#CFCFCF"
 
-SEQUENTIAL = "viridis"
-DIVERGING = "RdBu_r"
 
 # Two-sided 95% t critical values by degrees of freedom. Seed counts are small
 # enough that the normal approximation understates the interval.
@@ -154,31 +152,8 @@ def figure(width: float = COLUMN, ratio: float = 0.68, **kwargs):
     return fig, ax
 
 
-def figure_grid(nrows: int = 1, ncols: int = 2, width: float = TEXT, ratio: float = 0.4, **kwargs):
-    """A panel grid at a final printed size, sharing one constrained layout."""
-    fig, axes = plt.subplots(
-        nrows, ncols, figsize=(width, width * ratio), layout="constrained", **kwargs
-    )
-    return fig, axes
 
 
-def panel_labels(axes, labels=None, weight: str = "bold", pad: float = 2.0):
-    """Label panels (a), (b), ... above each axes' top-left corner.
-
-    Panel letters are how prose names a part of a figure ("as Fig. 2b shows").
-    Without them a multi-panel figure can only be referred to by position,
-    which breaks the moment a panel moves.
-    """
-    flat = np.ravel(np.asarray(axes, dtype=object)).tolist()
-    labels = labels or [f"({chr(ord('a') + i)})" for i in range(len(flat))]
-    for ax, text in zip(flat, labels):
-        ax.annotate(
-            text,
-            xy=(0, 1), xycoords="axes fraction",
-            xytext=(0, pad), textcoords="offset points",
-            ha="left", va="bottom", fontweight=weight,
-            fontsize=mpl.rcParams["axes.labelsize"],
-        )
 
 
 def _looks_numeric(label: str) -> bool:
@@ -423,31 +398,6 @@ def _t95(df: int) -> float:
     return _T95[max(covered)] if covered else _T95[1]
 
 
-def diff_ci(treatment, baseline):
-    """Mean difference (treatment - baseline) and its 95% Welch interval.
-
-    An ablation claims a difference, so the figure has to show the interval of
-    the difference. Two overlapping per-variant intervals do not mean the
-    difference is indistinguishable from zero.
-    """
-    treatment = np.asarray(treatment, dtype=float)
-    baseline = np.asarray(baseline, dtype=float)
-    delta = treatment.mean() - baseline.mean()
-    n_t, n_b = treatment.size, baseline.size
-    if n_t < 2 or n_b < 2:
-        warnings.warn(
-            "one seed per arm: the difference has no interval — say so in the caption",
-            stacklevel=2,
-        )
-        return delta, delta, delta
-    var_t = treatment.var(ddof=1) / n_t
-    var_b = baseline.var(ddof=1) / n_b
-    sem = math.sqrt(var_t + var_b)
-    if sem == 0:
-        return delta, delta, delta  # every seed identical: the interval is a point
-    df = (var_t + var_b) ** 2 / (var_t**2 / (n_t - 1) + var_b**2 / (n_b - 1))
-    half = _t95(int(df)) * sem
-    return delta, delta - half, delta + half
 
 
 def band(ax, x, runs, label=None, color=None, **kwargs):
@@ -458,104 +408,7 @@ def band(ax, x, runs, label=None, color=None, **kwargs):
     return line
 
 
-def label_ends(ax, lines, labels, pad: float = 3.0, min_gap: float = 7.0, **kwargs):
-    """Label each line at its right end, in the line's own color.
-
-    Direct labels beat a legend up to ~5 series: the reader never has to match
-    a color to a key. Labels whose lines converge are nudged apart by `min_gap`
-    points so they stay readable, and the right x-limit is extended by exactly
-    the width the labels need.
-    """
-    ax.figure.canvas.draw()  # constrained layout settles the transform at draw
-    renderer = ax.figure.canvas.get_renderer()
-    pad_px = pad * ax.figure.dpi / 72
-
-    labels = list(labels)
-    if not labels:
-        return
-    size = kwargs.pop("fontsize", mpl.rcParams["legend.fontsize"])
-    widths, heights = [], []
-    for text in labels:
-        probe = ax.text(0, 0, text, fontsize=size)
-        extent = probe.get_window_extent(renderer)
-        widths.append(extent.width)
-        heights.append(extent.height)
-        probe.remove()
-    # Separate by the labels' own height, not a fixed point value: the right
-    # gap depends on the font, and a constant tuned for one is wrong for another.
-    gap_px = max(min_gap * ax.figure.dpi / 72, max(heights) * 1.15)
-    # Setting xlim changes the data-to-pixel scale, so the room cannot be
-    # measured in the old scale: solve for the limit at which the original span
-    # occupies (axes width - label width) pixels.
-    x_lo, x_hi = ax.get_xlim()
-    need = max(widths) + 2 * pad_px
-    axes_px = ax.bbox.width
-    if need < axes_px:
-        scale = ax.xaxis.get_transform()
-        s_lo, s_hi = scale.transform([x_lo, x_hi])
-        room = scale.inverted().transform(
-            [s_lo + (s_hi - s_lo) * axes_px / (axes_px - need)]
-        )[0]
-        ax.set_xlim(x_lo, room)
-
-    ends = []
-    for line, text in zip(lines, labels):
-        xy = (line.get_xdata()[-1], line.get_ydata()[-1])
-        ends.append([ax.transData.transform(xy)[1], xy, line, text])
-    ends.sort(key=lambda end: end[0])
-    for i in range(1, len(ends)):
-        ends[i][0] = max(ends[i][0], ends[i - 1][0] + gap_px)
-    for y_px, xy, line, text in ends:
-        offset = (y_px - ax.transData.transform(xy)[1]) * 72 / ax.figure.dpi
-        ax.annotate(
-            text,
-            xy=xy,
-            xytext=(pad, offset),
-            textcoords="offset points",
-            color=line.get_color(),
-            va="center",
-            fontsize=size,
-            clip_on=False,
-            **kwargs,
-        )
 
 
-def si_ticks(ax, which: str = "x") -> None:
-    """Format ticks as 1.2k / 340M / 7B instead of 1.2e3 / 3.4e8.
-
-    Call it after the limits are final. On a log axis spanning less than a
-    decade the minor ticks carry the labels, so they get the same format —
-    otherwise matplotlib prints them as `1.85 x 10^0`.
-    """
-
-    def fmt(value, _pos):
-        for scale, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "k")):
-            if abs(value) >= scale:
-                trimmed = f"{value / scale:.1f}".rstrip("0").rstrip(".")
-                return f"{trimmed}{suffix}"
-        return f"{value:g}"
-
-    axis = ax.xaxis if which == "x" else ax.yaxis
-    axis.set_major_formatter(mpl.ticker.FuncFormatter(fmt))
-    scale = ax.get_xscale() if which == "x" else ax.get_yscale()
-    lo, hi = sorted(ax.get_xlim() if which == "x" else ax.get_ylim())
-    if scale == "log" and lo > 0 and hi / lo < 10:
-        axis.set_minor_formatter(mpl.ticker.FuncFormatter(fmt))
 
 
-def annotate_matrix(ax, values, fmt: str = "{:.2f}", image=None, threshold: float = 0.6) -> None:
-    """Write each cell's value on a heatmap, in whichever of black or white
-    stays legible against that cell."""
-    values = np.asarray(values, dtype=float)
-    image = ax.images[-1] if image is None else image
-    norm, cmap = image.norm, image.cmap
-    for (row, col), value in np.ndenumerate(values):
-        if not np.isfinite(value):
-            continue
-        rgba = cmap(norm(value))
-        luminance = 0.299 * rgba[0] + 0.587 * rgba[1] + 0.114 * rgba[2]
-        ax.text(
-            col, row, fmt.format(value),
-            ha="center", va="center", fontsize=6,
-            color="black" if luminance > threshold else "white",
-        )
