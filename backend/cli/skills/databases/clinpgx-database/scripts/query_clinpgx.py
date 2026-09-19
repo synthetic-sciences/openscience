@@ -78,35 +78,6 @@ def safe_api_call(url: str, params: Optional[Dict] = None, max_retries: int = 3)
     return None
 
 
-def cached_query(cache_file: str, query_func, *args, **kwargs) -> Any:
-    """
-    Cache API results to avoid repeated queries.
-
-    Args:
-        cache_file: Path to cache file
-        query_func: Function to call if cache miss
-        *args, **kwargs: Arguments to pass to query_func
-
-    Returns:
-        Cached or freshly queried data
-    """
-    cache_path = Path(cache_file)
-
-    if cache_path.exists():
-        print(f"Loading from cache: {cache_file}")
-        with open(cache_path) as f:
-            return json.load(f)
-
-    print(f"Cache miss. Querying API...")
-    result = query_func(*args, **kwargs)
-
-    if result is not None:
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(cache_path, 'w') as f:
-            json.dump(result, f, indent=2)
-        print(f"Cached to: {cache_file}")
-
-    return result
 
 
 # Core Query Functions
@@ -225,22 +196,6 @@ def get_alleles(gene: str) -> Optional[List[Dict]]:
     return safe_api_call(url, params)
 
 
-def get_allele_info(allele_name: str) -> Optional[Dict]:
-    """
-    Get detailed information about a specific allele.
-
-    Args:
-        allele_name: Allele name (e.g., "CYP2D6*4")
-
-    Returns:
-        Allele information dictionary
-
-    Example:
-        >>> allele = get_allele_info("CYP2D6*4")
-        >>> print(allele['function'], allele['frequencies'])
-    """
-    url = f"{BASE_URL}allele/{allele_name}"
-    return safe_api_call(url)
 
 
 def get_clinical_annotations(
@@ -278,95 +233,10 @@ def get_clinical_annotations(
     return safe_api_call(url, params)
 
 
-def get_drug_labels(drug: str, source: Optional[str] = None) -> Optional[List[Dict]]:
-    """
-    Retrieve pharmacogenomic drug label information.
-
-    Args:
-        drug: Drug name
-        source: Regulatory source (e.g., "FDA", "EMA")
-
-    Returns:
-        List of drug labels with PGx information
-
-    Example:
-        >>> # Get all labels for warfarin
-        >>> labels = get_drug_labels("warfarin")
-        >>>
-        >>> # Get only FDA labels
-        >>> fda_labels = get_drug_labels("warfarin", source="FDA")
-    """
-    url = f"{BASE_URL}drugLabel"
-    params = {"drug": drug}
-    if source:
-        params["source"] = source
-
-    return safe_api_call(url, params)
 
 
-def search_variants(rsid: Optional[str] = None, chromosome: Optional[str] = None,
-                   position: Optional[str] = None) -> Optional[List[Dict]]:
-    """
-    Search for genetic variants by rsID or genomic position.
-
-    Args:
-        rsid: dbSNP rsID (e.g., "rs4244285")
-        chromosome: Chromosome number
-        position: Genomic position
-
-    Returns:
-        List of matching variants
-
-    Example:
-        >>> # Search by rsID
-        >>> variant = search_variants(rsid="rs4244285")
-        >>>
-        >>> # Search by position
-        >>> variants = search_variants(chromosome="10", position="94781859")
-    """
-    url = f"{BASE_URL}variant"
-
-    if rsid:
-        url = f"{BASE_URL}variant/{rsid}"
-        return safe_api_call(url)
-
-    params = {}
-    if chromosome:
-        params["chromosome"] = chromosome
-    if position:
-        params["position"] = position
-
-    return safe_api_call(url, params)
 
 
-def get_pathway_info(pathway_id: Optional[str] = None, drug: Optional[str] = None) -> Optional[Any]:
-    """
-    Retrieve pharmacokinetic/pharmacodynamic pathway information.
-
-    Args:
-        pathway_id: ClinPGx pathway ID (optional)
-        drug: Drug name (optional)
-
-    Returns:
-        Pathway information or list of pathways
-
-    Example:
-        >>> # Get specific pathway
-        >>> pathway = get_pathway_info(pathway_id="PA146123006")
-        >>>
-        >>> # Get all pathways for a drug
-        >>> pathways = get_pathway_info(drug="warfarin")
-    """
-    if pathway_id:
-        url = f"{BASE_URL}pathway/{pathway_id}"
-        return safe_api_call(url)
-
-    url = f"{BASE_URL}pathway"
-    params = {}
-    if drug:
-        params["drug"] = drug
-
-    return safe_api_call(url, params)
 
 
 # Utility Functions
@@ -402,57 +272,8 @@ def export_to_dataframe(data: List[Dict], output_file: Optional[str] = None):
     return df
 
 
-def batch_gene_query(gene_list: List[str], delay: float = 0.5) -> Dict[str, Dict]:
-    """
-    Query multiple genes in batch with rate limiting.
-
-    Args:
-        gene_list: List of gene symbols
-        delay: Delay between requests (default 0.5s)
-
-    Returns:
-        Dictionary mapping gene symbols to gene data
-
-    Example:
-        >>> genes = ["CYP2D6", "CYP2C19", "CYP2C9", "TPMT"]
-        >>> results = batch_gene_query(genes)
-        >>> for gene, data in results.items():
-        >>>     print(f"{gene}: {data['name']}")
-    """
-    results = {}
-
-    print(f"Querying {len(gene_list)} genes with {delay}s delay between requests...")
-
-    for gene in gene_list:
-        print(f"Fetching: {gene}")
-        data = get_gene_info(gene)
-        if data:
-            results[gene] = data
-        time.sleep(delay)
-
-    print(f"Completed: {len(results)}/{len(gene_list)} successful")
-    return results
 
 
-def find_actionable_gene_drug_pairs(cpic_level: str = "A") -> Optional[List[Dict]]:
-    """
-    Find all clinically actionable gene-drug pairs with CPIC guidelines.
-
-    Args:
-        cpic_level: CPIC recommendation level (A, B, C, D)
-
-    Returns:
-        List of actionable gene-drug pairs
-
-    Example:
-        >>> # Get all Level A recommendations
-        >>> actionable = find_actionable_gene_drug_pairs(cpic_level="A")
-        >>> for pair in actionable:
-        >>>     print(f"{pair['gene']} - {pair['drug']}")
-    """
-    url = f"{BASE_URL}geneDrugPair"
-    params = {"cpicLevel": cpic_level}
-    return safe_api_call(url, params)
 
 
 # Example Usage
