@@ -266,63 +266,6 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
     return results
 
 
-def compare_prior_posterior(idata, prior_idata, var_names=None, output_path=None):
-    """
-    Compare prior and posterior distributions.
-
-    Parameters
-    ----------
-    idata : arviz.InferenceData
-        InferenceData with posterior samples
-    prior_idata : arviz.InferenceData
-        InferenceData with prior samples
-    var_names : list, optional
-        Variables to compare
-    output_path : str, optional
-        If provided, save plot to this path
-
-    Returns
-    -------
-    None
-    """
-    fig, axes = plt.subplots(
-        len(var_names) if var_names else 3,
-        1,
-        figsize=(10, 8)
-    )
-
-    if not isinstance(axes, np.ndarray):
-        axes = [axes]
-
-    for idx, var in enumerate(var_names if var_names else list(idata.posterior.data_vars)[:3]):
-        # Plot prior
-        az.plot_dist(
-            prior_idata.prior[var].values.flatten(),
-            label='Prior',
-            ax=axes[idx],
-            color='blue',
-            alpha=0.3
-        )
-
-        # Plot posterior
-        az.plot_dist(
-            idata.posterior[var].values.flatten(),
-            label='Posterior',
-            ax=axes[idx],
-            color='green',
-            alpha=0.3
-        )
-
-        axes[idx].set_title(f'{var}: Prior vs Posterior')
-        axes[idx].legend()
-
-    plt.tight_layout()
-
-    if output_path:
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"Prior-posterior comparison saved to {output_path}")
-    else:
-        plt.show()
 
 
 # Example usage
