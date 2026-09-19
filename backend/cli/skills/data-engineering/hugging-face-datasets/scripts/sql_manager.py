@@ -94,11 +94,6 @@ class HFDatasetSQL:
         else:
             return f"hf://datasets/{dataset_id}@{revision}/default/{split}/*.parquet"
 
-    def _build_hf_path_flexible(
-        self,
-        dataset_id: str,
-        split: Optional[str] = None,
-        config: Optional[str] = None,
     ) -> str:
         """
         Build flexible hf:// path with wildcards for discovery.
