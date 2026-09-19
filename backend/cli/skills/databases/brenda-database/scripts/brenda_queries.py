@@ -143,24 +143,6 @@ def parse_reaction_entry(entry: str) -> Dict[str, Any]:
     return parsed
 
 
-def extract_organism_data(entry: str) -> Dict[str, Any]:
-    """Extract organism-specific information from BRENDA entry."""
-    parsed = parse_km_entry(entry) if 'kmValue' in entry else parse_reaction_entry(entry)
-
-    if 'organism' in parsed:
-        return {
-            'organism': parsed['organism'],
-            'ec_number': parsed.get('ecNumber', ''),
-            'substrate': parsed.get('substrate', ''),
-            'km_value': parsed.get('kmValue', ''),
-            'km_numeric': parsed.get('km_value_numeric', None),
-            'ph': parsed.get('ph', None),
-            'temperature': parsed.get('temperature', None),
-            'commentary': parsed.get('commentary', ''),
-            'literature': parsed.get('literature', '')
-        }
-
-    return {}
 
 
 def search_enzymes_by_substrate(substrate: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -468,60 +450,8 @@ def get_substrate_specificity(ec_number: str) -> List[Dict[str, Any]]:
     return specificity
 
 
-def compare_substrate_affinity(ec_number: str) -> List[Dict[str, Any]]:
-    """Compare substrate affinity for an enzyme."""
-    return get_substrate_specificity(ec_number)
 
 
-def get_inhibitors(ec_number: str) -> List[Dict[str, Any]]:
-    """Get inhibitor information for an enzyme (from commentary)."""
-    validate_dependencies()
-
-    inhibitors = []
-
-    try:
-        km_data = get_km_values(ec_number)
-        time.sleep(0.5)  # Rate limiting
-
-        for entry in km_data:
-            parsed = parse_km_entry(entry)
-            commentary = parsed.get('commentary', '').lower()
-
-            # Look for inhibitor keywords
-            inhibitor_keywords = ['inhibited', 'inhibition', 'blocked', 'prevented', 'reduced']
-            if any(keyword in commentary for keyword in inhibitor_keywords):
-                # Try to extract inhibitor names (this is approximate)
-                # Common inhibitors
-                common_inhibitors = [
-                    'iodoacetate', 'n-ethylmaleimide', 'p-chloromercuribenzoate',
-                    'heavy metals', 'mercury', 'copper', 'zinc',
-                    'cyanide', 'azide', 'carbon monoxide',
-                    'edta', 'egta'
-                ]
-
-                for inhibitor in common_inhibitors:
-                    if inhibitor in commentary:
-                        inhibitors.append({
-                            'name': inhibitor,
-                            'type': 'irreversible' if 'iodoacetate' in inhibitor or 'maleimide' in inhibitor else 'reversible',
-                            'organism': parsed.get('organism', ''),
-                            'ec_number': ec_number,
-                            'commentary': parsed.get('commentary', '')
-                        })
-
-    except Exception as e:
-        print(f"Error getting inhibitors for {ec_number}: {e}")
-
-    # Remove duplicates
-    unique_inhibitors = []
-    seen = set()
-    for inhibitor in inhibitors:
-        key = (inhibitor['name'], inhibitor['organism'])
-        if key not in seen:
-            seen.add(key)
-            unique_inhibitors.append(inhibitor)
-
-    return unique_inhibitors
 
 
 def get_activators(ec_number: str) -> List[Dict[str, Any]]:
@@ -728,56 +658,6 @@ def get_modeling_parameters(ec_number: str, substrate: str = None) -> Dict[str, 
         return {'ec_number': ec_number, 'error': str(e)}
 
 
-def export_kinetic_data(ec_number: str, format: str = 'csv', filename: str = None) -> str:
-    """Export kinetic data to file."""
-    validate_dependencies()
-
-    if not filename:
-        filename = f"brenda_kinetic_data_{ec_number.replace('.', '_')}.{format}"
-
-    try:
-        # Get all kinetic data
-        km_data = get_km_values(ec_number)
-        time.sleep(0.5)  # Rate limiting
-
-        if not km_data:
-            print(f"No kinetic data found for EC {ec_number}")
-            return filename
-
-        # Parse all entries
-        parsed_data = []
-        for entry in km_data:
-            parsed = parse_km_entry(entry)
-            if parsed:
-                parsed_data.append(parsed)
-
-        # Export based on format
-        if format.lower() == 'csv':
-            if parsed_data:
-                df = pd.DataFrame(parsed_data)
-                df.to_csv(filename, index=False)
-            else:
-                with open(filename, 'w', newline='') as f:
-                    f.write('No data found')
-
-        elif format.lower() == 'json':
-            with open(filename, 'w') as f:
-                json.dump(parsed_data, f, indent=2, default=str)
-
-        elif format.lower() == 'excel':
-            if parsed_data and PANDAS_AVAILABLE:
-                df = pd.DataFrame(parsed_data)
-                df.to_excel(filename, index=False)
-            else:
-                print("pandas required for Excel export")
-                return filename
-
-        print(f"Exported {len(parsed_data)} entries to {filename}")
-        return filename
-
-    except Exception as e:
-        print(f"Error exporting data: {e}")
-        return filename
 
 
 def search_by_pattern(pattern: str, limit: int = 50) -> List[Dict[str, Any]]:
