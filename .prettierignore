@@ -22,8 +22,6 @@ frontend/workspace/e2e/test-results/
 frontend/docs/test-results/
 frontend/docs/playwright-report/
 
-# built docs, embedded so openscience.sh/docs serves them (regenerate with: bun run --cwd frontend/landing sync:docs)
-frontend/landing/public/docs/
 tooling/harbor/.venv/
 
 # downloaded benchmark datasets and run output of the science-harness campaigns

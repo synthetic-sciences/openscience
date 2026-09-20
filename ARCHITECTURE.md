@@ -83,13 +83,15 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 
 ### Prompt architecture
 
-An explicit agent header replaces the generic fallback. Default Research uses the
-short `researchagent-test.txt` header plus response defaults; session assembly adds
-environment, project instructions and applicable mode/skill context. Provider
-transforms then adapt request options, tools, reasoning and message serialization.
-The generic fallback currently ignores model identity, and Research bypasses it.
-Codex OAuth places the Research header once in the API instructions field. See
-[CLAUDE.md](CLAUDE.md) for the actual routing and
+An agent's own header wins. An agent without one (`research`, `plan`) receives the
+header for its model family (`anthropic.txt`, `gpt.txt`, `gpt-astra.txt`, `codex.txt`,
+`gemini.txt`, otherwise `default.txt`). Each family file carries one `{{SCIENCE}}` slot
+that the runtime fills from `agent/prompt/science.txt`, so the science text is identical
+across families, and `session/prompt/response.txt` is appended to every header. Session
+assembly then adds environment, project instructions and applicable mode/skill context,
+and provider transforms adapt request options, tools, reasoning and message
+serialization. Codex OAuth places a primary agent's header once in the API instructions
+field. See [CLAUDE.md](CLAUDE.md) for the routing in detail and
 [the OpenCode comparison](docs/notes/opencode-harness-comparison.md) for the upstream
 prompt-selection and provider-transport analysis.
 
