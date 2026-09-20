@@ -145,10 +145,6 @@ def _get_next_rid(rels_path: Path) -> int:
     return max_rid + 1
 
 
-
-
-
-
 _COMMENT_RELS = [
     ("http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments", "comments.xml"),
     ("http://schemas.microsoft.com/office/2011/relationships/commentsExtended", "commentsExtended.xml"),
