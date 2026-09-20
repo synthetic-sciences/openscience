@@ -1,4 +1,4 @@
-import { equalFilePath, fileSourceName, type FilesystemGrant } from "@/atlas/file-sources"
+import { equalFilePath, fileSourceName, type FilesystemGrant, type FilesystemScope } from "@/atlas/file-sources"
 
 /**
  * The picker is an information architecture, not a list of storage backends.
@@ -16,6 +16,10 @@ export interface PaneSource {
   sub?: string
   root: string
   kind: "artifacts" | "trash" | "project" | "session" | "connected" | "modal"
+  /** How far the grant behind a connected folder reaches, as the grant defines
+   * it. Ending one reaches exactly that far, so the confirmation has to say
+   * whether this session, this project, or every project loses the folder. */
+  scope?: FilesystemScope
   readonly?: boolean
   /** Authority this conversation was handed by the session that delegated to
    * it, rather than a folder connected here. It is browsable like any other
@@ -76,6 +80,7 @@ export function buildSources(input: {
       sub: grant.path,
       root: grant.path,
       kind: "connected",
+      scope: grant.scope,
       readonly: grant.access === "read",
       inherited: grant.source === "parent",
     })

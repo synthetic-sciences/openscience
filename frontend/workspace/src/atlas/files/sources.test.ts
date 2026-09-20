@@ -56,6 +56,26 @@ describe("pane sources", () => {
     expect(list.find((s) => s.id === "g_own")?.inherited).toBe(false)
   })
 
+  // Revoking reaches exactly as far as the grant does, so the row has to carry
+  // how far that is — an installation-wide folder looked like a project one.
+  test("carries the grant's own scope on the folder it lists", () => {
+    const list = buildSources({
+      projectRoot: "/p",
+      projectName: "p",
+      grants: [
+        grant("g_session", "/data/one", "write"),
+        grant("g_project", "/data/two", "write", { scope: "project" }),
+        grant("g_wide", "/data/three", "write", { scope: "installation" }),
+      ],
+    })
+
+    expect(list.find((s) => s.id === "g_session")?.scope).toBe("session")
+    expect(list.find((s) => s.id === "g_project")?.scope).toBe("project")
+    expect(list.find((s) => s.id === "g_wide")?.scope).toBe("installation")
+    // Nothing else in the pane is a grant, so nothing else claims a reach.
+    expect(list.find((s) => s.kind === "project")?.scope).toBeUndefined()
+  })
+
   test("marks a read grant read-only so the badge has something true to show", () => {
     const list = buildSources({
       projectRoot: "/p",

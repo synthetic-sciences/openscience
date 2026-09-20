@@ -5,6 +5,7 @@ import type { JSX } from "solid-js"
 import { createTestServer as createServer } from "../../test/vite"
 import solid from "vite-plugin-solid"
 import type { PaneFile } from "./FilesPane"
+import type { PaneSource } from "./files/sources"
 
 const server = await createServer({
   root: fileURLToPath(new URL("../..", import.meta.url)),
@@ -299,6 +300,92 @@ describe("files pane", () => {
     expect(listed).toEqual(["/home/keertan/codes/RINR"])
     expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
     expect(host.querySelector("[data-files-loading]")).toBeNull()
+  })
+
+  // #667: the right pane can be left on Files, so the pane mounts on the first
+  // paint of a session — before the sync store has placed that session in this
+  // project. Holding the listing on the proven session id missed that window
+  // entirely: the pane listed the project root, swapped to the loader when the
+  // store landed, then to the working folder (rows, loader, rows).
+  test("holds the first listing on a session the sync store has not placed yet", async () => {
+    const listed: Array<Record<string, string>> = []
+    let arrive: (() => void) | undefined
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        // The route names the session; nothing has proved it is this project's.
+        belongs: () => false,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`) {
+            await new Promise<void>((resolve) => (arrive = resolve))
+            return listing(snapshot([grant("fsg_rinr", "/home/keertan/codes/RINR", "write")]))
+          }
+          if (path === "/file") listed.push(query ?? {})
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(listed).toEqual([])
+    expect(host.querySelector("[data-files-loading]")).not.toBeNull()
+    expect(host.querySelector("[data-folder-empty]")).toBeNull()
+
+    arrive!()
+    await settle()
+
+    // The snapshot the server answered for this project is the proof the store
+    // had not given yet, so the pane opens on the working folder and lists it
+    // under the session's own capability rather than waiting for a second
+    // answer to the same question.
+    expect(listed).toEqual([{ path: "/home/keertan/codes/RINR", sessionID: SESSION }])
+    expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector("[data-files-loading]")).toBeNull()
+  })
+
+  // The hold must never outlive the answer. A session that is not this
+  // project's is refused, and a refusal is an answer: the pane lists the
+  // project root, which needs no session, instead of holding a loader on a
+  // proof that is not coming.
+  test("lists the project root when the route names a session this project does not own", async () => {
+    const listed: Array<Record<string, string>> = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        belongs: () => false,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`) return new Response("session not found", { status: 404 })
+          if (path === "/file") listed.push(query ?? {})
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-files-loading]")).toBeNull()
+    expect(listed).toEqual([{ path: DIRECTORY }])
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+  })
+
+  // The landing route reaches the pane with a project and no session at all.
+  // There is no snapshot to wait for there, so there is nothing to hold.
+  test("holds nothing on a route with no session", async () => {
+    const listed: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === "/file") listed.push(String(query?.path))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector("[data-files-loading]")).toBeNull()
+    expect(listed).toEqual([DIRECTORY])
   })
 
   // The composer can pin any connected folder as the working one, and the pane
@@ -1614,6 +1701,56 @@ describe("files pane", () => {
 
     expect(host.querySelector('[data-workspace-id="fsg_1"]')).toBeNull()
     expect(globalThis.localStorage?.getItem("openscience:files-source")).toBeNull()
+  })
+
+  // #667: Customize → Permissions already says "Every project / This project /
+  // This session" for these grants. The pane's confirmation named only the
+  // path, so ending a folder approved for the whole installation read like a
+  // decision about this project alone.
+  const confirmationFor = async (scope: "session" | "project" | "installation", access: "read" | "write" = "write") => {
+    let picked: PaneSource | undefined
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(snapshot([grant("fsg_1", "/home/keertan/data/pdebench", access, 1, { scope })]))
+          return listing([])
+        },
+        onRevokeSource: (source) => void (picked = source),
+      }),
+    )
+    await settle()
+    revoke(host, "fsg_1")
+    return subject.revokeConfirmation(picked!)
+  }
+
+  test("says an installation-wide revoke takes the folder from every project", async () => {
+    const confirmation = await confirmationFor("installation")
+
+    expect(confirmation.title).toBe("Revoke access to pdebench?")
+    expect(confirmation.message).toBe(
+      "OpenScience will no longer read or write files in /home/keertan/data/pdebench. " +
+        "Every project loses access to this folder, not only this one. " +
+        "Affected kernels are stopped so the folder cannot stay mounted. " +
+        "Nothing inside it is moved, changed, or deleted.",
+    )
+  })
+
+  test("says a project revoke is this project's", async () => {
+    const confirmation = await confirmationFor("project", "read")
+
+    expect(confirmation.message).toContain("no longer read files in /home/keertan/data/pdebench.")
+    expect(confirmation.message).toContain("This project loses access to this folder.")
+    expect(confirmation.message).not.toContain("Every project")
+  })
+
+  test("says a session revoke is this session's", async () => {
+    const confirmation = await confirmationFor("session")
+
+    expect(confirmation.message).toContain("This session loses access to this folder.")
+    expect(confirmation.message).not.toContain("This project loses")
   })
 
   test("says so with a notification when a revoke fails, and keeps the folder listed", async () => {

@@ -269,6 +269,33 @@ export async function revokeGrant(input: {
   )
 }
 
+/** How far a revoke reaches, in the words Customize → Permissions uses for the
+ * same grant ("Every project", "This project", "This session"). A grant
+ * approved installation-wide is not this project's alone to end, and a
+ * confirmation that names only the folder does not say so. A source with no
+ * grant behind it claims nothing rather than guessing the narrowest reach. */
+function revokeReach(scope?: FilesystemScope) {
+  if (scope === "installation") return "Every project loses access to this folder, not only this one."
+  if (scope === "project") return "This project loses access to this folder."
+  if (scope) return "This session loses access to this folder."
+  return ""
+}
+
+/** The confirmation for ending a grant. Exported because the wording is the
+ * disclosure: what is revoked, how far that reaches, and what is left alone. */
+export function revokeConfirmation(source: PaneSource) {
+  return {
+    title: `Revoke access to ${source.name}?`,
+    message: [
+      `OpenScience will no longer ${source.readonly ? "read" : "read or write"} files in ${source.sub}.`,
+      revokeReach(source.scope),
+      "Affected kernels are stopped so the folder cannot stay mounted. Nothing inside it is moved, changed, or deleted.",
+    ]
+      .filter(Boolean)
+      .join(" "),
+  }
+}
+
 /** Rename lives in a dialog because a 150px card is not a text field. */
 function RenameArtifact(props: {
   artifact: StoredArtifact
@@ -313,6 +340,10 @@ export function FilesPane(
   props: {
     request?: Transport
     session?: string
+    /** Standalone seam for the cold path: whether the sync store has placed
+     * `session` in this project yet. Production reads the store itself, and a
+     * standalone mount that says nothing is placed already. */
+    belongs?: () => boolean
     directory?: string
     /** Human project label for standalone embeds/tests. Production uses Project.name. */
     projectName?: string
@@ -361,18 +392,61 @@ export function FilesPane(
     return folder || "Project files"
   }
   const routeSessionID = () => props.session ?? (params.id && params.id !== "new" ? params.id : undefined)
-  const sessionID = () => {
-    const candidate = routeSessionID()
-    // A URL can retain the previous project's session during navigation. A
-    // project listing needs no session capability, so omit it until the active
-    // project's sync store proves ownership instead of asking the backend to
-    // reject a stale cross-project id.
-    return filesSessionForProject({
-      candidate,
-      explicit: standalone || Boolean(props.session),
-      belongsToProject: Boolean(candidate && sync?.session.get(candidate)),
-    })
+  /**
+   * The session the route names, before anything has proved it is this
+   * project's. The grant snapshot is addressed to it: `GET
+   * /session/:id/filesystem` asserts the session's own directory, and
+   * `parseFilesystemSnapshot` checks the answer against this project's id and
+   * root, so asking is how the question gets answered — and the answer always
+   * comes, which is what keeps the hold below from outlasting it.
+   */
+  const routeIdentity = (): FilesystemIdentity | undefined => {
+    const session = routeSessionID()
+    if (!session || !projectRoot()) return
+    return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
+  const routeScope = createMemo(() =>
+    JSON.stringify([sdk?.url ?? "", sdk?.projectID ?? "", projectRoot(), routeSessionID() ?? ""]),
+  )
+  const [snapshot, { refetch: refetchSnapshot }] = createResource(
+    () => routeIdentity() && { scope: routeScope(), identity: routeIdentity()! },
+    async (current) => ({
+      scope: current.scope,
+      value: await readAccess(transport, current.identity).catch(() => undefined),
+    }),
+  )
+  const accessSnapshot = () => (snapshot.latest?.scope === routeScope() ? snapshot.latest.value : undefined)
+  /**
+   * The grant snapshot is what says where the pane opens: until it answers,
+   * "Project files" is a guess, and listing it flashes an empty managed
+   * directory a frame before the working folder replaces it. The wait is held
+   * on the session the route names rather than on a proven one, because the
+   * pane mounts on the first paint of a session and the proof arrives later —
+   * holding on the proof put the project root on screen first and the loader
+   * second. A failed read still answers (with no grants), a session that is
+   * not this project's is refused, and where no snapshot is ever fetched
+   * nothing is held at all.
+   */
+  const resolving = () => Boolean(routeIdentity()) && snapshot.latest?.scope !== routeScope()
+  // A URL can retain the previous project's session during navigation. A
+  // project listing needs no session capability, so the pane omits it until
+  // the session is known to be this project's rather than asking the backend
+  // to reject a stale cross-project id. Two things know: the active project's
+  // sync store, which places the session in it, and a grant snapshot the
+  // server answered for this project — the earlier of the two on the first
+  // paint of a session.
+  const placed = () => {
+    const candidate = routeSessionID()
+    if (!candidate) return false
+    if (props.belongs) return props.belongs()
+    return Boolean(sync?.session.get(candidate))
+  }
+  const sessionID = () =>
+    filesSessionForProject({
+      candidate: routeSessionID(),
+      explicit: !props.belongs && (standalone || Boolean(props.session)),
+      belongsToProject: placed() || Boolean(accessSnapshot()),
+    })
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
     if (!session || !projectRoot()) return
@@ -416,22 +490,6 @@ export function FilesPane(
   )
   const deletedData = () => (deleted.latest?.scope === scope() ? deleted.latest : undefined)
 
-  const [snapshot, { refetch: refetchSnapshot }] = createResource(
-    () => identity() && { scope: scope(), identity: identity()! },
-    async (current) => ({
-      scope: current.scope,
-      value: await readAccess(transport, current.identity).catch(() => undefined),
-    }),
-  )
-  const accessSnapshot = () => (snapshot.latest?.scope === scope() ? snapshot.latest.value : undefined)
-  /**
-   * The grant snapshot is what says where the pane opens: until it answers,
-   * "Project files" is a guess, and listing it flashes an empty managed
-   * directory a frame before the working folder replaces it. A failed read
-   * still answers (with no grants), so this holds for the request, not for a
-   * result — and it holds nothing at all where no snapshot is ever fetched.
-   */
-  const resolving = () => Boolean(identity()) && snapshot.latest?.scope !== scope()
   const filesystemChanged = sdk?.event.on("session.filesystem.changed", (event) => {
     if (event.properties.sessionID !== sessionID()) return
     void refetchSnapshot()
@@ -1156,9 +1214,10 @@ export function FilesPane(
     }
     if (props.onRevokeSource) return props.onRevokeSource(source, submit)
     if (!dialog) return
+    const confirmation = revokeConfirmation(source)
     void confirmDialog(dialog, {
-      title: `Revoke access to ${source.name}?`,
-      message: `OpenScience will no longer ${source.readonly ? "read" : "read or write"} files in ${source.sub}, and affected kernels are stopped so the folder cannot stay mounted. Nothing inside it is moved, changed, or deleted.`,
+      title: confirmation.title,
+      message: confirmation.message,
       confirmLabel: "Revoke folder access",
       danger: true,
     }).then((confirmed) => (confirmed ? submit() : undefined))
