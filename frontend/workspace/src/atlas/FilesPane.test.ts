@@ -23,11 +23,14 @@ const server = await createServer({
 const solidjs = (await server.ssrLoadModule("solid-js")) as typeof import("solid-js")
 const web = (await server.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
 const subject = (await server.ssrLoadModule("/src/atlas/FilesPane.tsx")) as typeof import("./FilesPane")
+const notifications = (await server.ssrLoadModule("/src/atlas/Toast.tsx")) as typeof import("./Toast")
+const uiToast = (await server.ssrLoadModule("@synsci/ui/toast")) as typeof import("@synsci/ui/toast")
 const cleanups: Array<() => void> = []
 
 afterAll(() => server.close())
 afterEach(() => {
   cleanups.splice(0).forEach((fn) => fn())
+  uiToast.toaster.clear()
   document.body.replaceChildren()
   // The pane remembers its last source; without this, whichever test ran first
   // would decide what every later one opens on.
@@ -43,6 +46,11 @@ const mount = (view: () => JSX.Element) => {
   cleanups.push(web.render(view, host))
   return host
 }
+
+/** The app's one notification region, so a toast the pane raises has somewhere
+ * to land. It portals to the document, not into the pane. */
+const mountNotifications = () => mount(() => web.createComponent(notifications.ToastContainer, {}))
+const visibleToasts = () => [...document.querySelectorAll('[data-component="toast"]')]
 
 // GET /file returns a bare array body (backend/cli/src/server/routes/file.ts:158-182),
 // never a {data} wrapper — that shape belongs only to the generated client's
@@ -144,7 +152,98 @@ describe("files pane", () => {
     })
   })
 
-  test("opens on shared project files when nothing has been picked yet", async () => {
+  // #646: "Project files" is the managed ~/.openscience/projects/<id>
+  // directory. It greeted every new pane with "This folder is empty" while the
+  // folder the conversation was working in sat behind the More menu.
+  test("opens on the folder this conversation works in rather than the empty project root", async () => {
+    const listed: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(snapshot([grant("fsg_rinr", "/home/keertan/codes/RINR", "write")]))
+          if (path === "/file") listed.push(String(query?.path))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("false")
+    expect(listed).toContain("/home/keertan/codes/RINR")
+  })
+
+  test("keeps an explicit pick over the working folder it would otherwise open on", async () => {
+    startOn("project")
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(snapshot([grant("fsg_rinr", "/home/keertan/codes/RINR", "write")]))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+  })
+
+  test("gives connected folders their own tabs instead of hiding them behind More", async () => {
+    const paths = ["/data/one", "/data/two", "/data/three", "/data/four"]
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(snapshot(paths.map((folder, index) => grant(`fsg_${index}`, folder, "read"))))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    const tabs = [...host.querySelectorAll('[data-workspace-source="connected"]')]
+    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["one", "two", "three"])
+    // The fourth is not lost: the overflow menu still lists every location.
+    expect(host.querySelector('[data-workspace-id="fsg_3"]')).toBeNull()
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    expect(host.querySelector('[data-source-item="fsg_3"]')).not.toBeNull()
+  })
+
+  test("browses a connected folder from its tab", async () => {
+    const listed: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(snapshot([grant("fsg_1", "/data/spatial", "read")]))
+          if (path === "/file") {
+            listed.push(String(query?.path))
+            return listing([{ name: "cells.csv", type: "file", size: 12 }])
+          }
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    host.querySelector<HTMLButtonElement>('[data-workspace-id="fsg_1"]')?.click()
+    await settle()
+
+    expect(listed).toContain("/data/spatial")
+    expect(host.querySelector('[data-file-row="cells.csv"]')).not.toBeNull()
+  })
+
+  test("opens on shared project files when nothing is picked and no folder is connected", async () => {
     const host = mount(() =>
       subject.FilesPane({
         request: async (path) => {
@@ -1252,30 +1351,113 @@ describe("files pane", () => {
     expect(changed).toBeGreaterThan(0)
   })
 
-  test("keeps grant revocation out of the working-files source menu", async () => {
+  // #647: the grant existed, the route existed, and nothing in the workspace
+  // called it — a folder could be connected but never disconnected.
+  const connected = (
+    grants: Array<{ id: string; path: string; access: "read" | "write" }>,
+    over: { revoke?: () => Response } = {},
+  ) => {
     const calls: Array<{ path: string; method?: string }> = []
+    const live = new Set(grants.map((entry) => entry.id))
+    const request = async (path: string, init?: RequestInit, query?: Record<string, string>) => {
+      calls.push({ path, method: init?.method })
+      if (init?.method === "DELETE" && path.startsWith(`/session/${SESSION}/filesystem/`)) {
+        if (over.revoke) return over.revoke()
+        live.delete(path.split("/").at(-1)!)
+        return listing({ id: path.split("/").at(-1) })
+      }
+      if (path === `/session/${SESSION}/filesystem`)
+        return listing(
+          snapshot(
+            grants.filter((entry) => live.has(entry.id)).map((entry) => grant(entry.id, entry.path, entry.access)),
+          ),
+        )
+      if (path === "/file") return listing([{ name: `${query?.path ?? ""}/file.py`, type: "file", size: 1 }])
+      return listing([])
+    }
+    return { calls, request }
+  }
+
+  const revoke = (host: HTMLElement, id: string) => {
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    host.querySelector<HTMLButtonElement>(`[data-source-revoke="${id}"]`)?.click()
+  }
+
+  test("revokes a connected folder through the session route and moves the pane off it", async () => {
+    const { calls, request } = connected([{ id: "fsg_1", path: "/home/keertan/data/pdebench", access: "write" }])
+    let confirm: (() => Promise<unknown>) | undefined
     const host = mount(() =>
       subject.FilesPane({
         session: SESSION,
         directory: DIRECTORY,
-        request: async (path, init) => {
-          calls.push({ path, method: init?.method })
-          if (path === `/session/${SESSION}/filesystem`)
-            return new Response(JSON.stringify(snapshot([grant("fsg_1", "/home/keertan/data/pdebench", "write")])), {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            })
-          return listing([])
-        },
+        request,
+        onRevokeSource: (_source, submit) => void (confirm = submit),
+      }),
+    )
+    await settle()
+    expect(host.querySelector('[data-workspace-id="fsg_1"]')?.getAttribute("aria-selected")).toBe("true")
+
+    revoke(host, "fsg_1")
+    // The confirmation is what calls the route: the click alone must not.
+    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+
+    await confirm!()
+    await settle()
+
+    expect(calls).toContainEqual({ path: `/session/${SESSION}/filesystem/fsg_1`, method: "DELETE" })
+    expect(host.querySelector('[data-workspace-id="fsg_1"]')).toBeNull()
+    expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("true")
+  })
+
+  test("forgets a revoked folder so the pane does not reopen on it", async () => {
+    startOn("fsg_1")
+    const { request } = connected([{ id: "fsg_1", path: "/home/keertan/data/pdebench", access: "read" }])
+    let confirm: (() => Promise<unknown>) | undefined
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request,
+        onRevokeSource: (_source, submit) => void (confirm = submit),
       }),
     )
     await settle()
 
-    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
-    expect(host.querySelector('[data-source-item="fsg_1"]')?.textContent).toContain("pdebench")
+    revoke(host, "fsg_1")
+    await confirm!()
+    await settle()
 
-    expect(host.querySelector('[data-source-revoke="fsg_1"]')).toBeNull()
-    expect(calls.some((call) => call.method === "DELETE")).toBe(false)
+    expect(host.querySelector('[data-workspace-id="fsg_1"]')).toBeNull()
+    expect(globalThis.localStorage?.getItem("openscience:files-source")).toBeNull()
+  })
+
+  test("says so with a notification when a revoke fails, and keeps the folder listed", async () => {
+    const { request } = connected([{ id: "fsg_1", path: "/home/keertan/data/pdebench", access: "write" }], {
+      revoke: () => new Response("grant belongs to another session", { status: 400 }),
+    })
+    let confirm: (() => Promise<unknown>) | undefined
+    mountNotifications()
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request,
+        onRevokeSource: (_source, submit) => void (confirm = submit),
+      }),
+    )
+    await settle()
+
+    revoke(host, "fsg_1")
+    await confirm!()
+    await settle()
+
+    expect(
+      visibleToasts()
+        .map((node) => node.textContent)
+        .join(" "),
+    ).toContain("Access to pdebench could not be revoked")
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    expect(host.querySelector('[data-source-item="fsg_1"]')).not.toBeNull()
   })
 
   test("connects a folder from the source menu with an explicit write choice", async () => {

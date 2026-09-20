@@ -35,6 +35,25 @@ const mount = (view: () => JSX.Element) => {
   return host
 }
 
+/**
+ * happy-dom lays nothing out, so the geometry the menu measures is supplied
+ * here: a selector per box, and the window width the pane sits in.
+ */
+const layout = (boxes: Array<{ match: string; left: number; right: number }>, viewport: number) => {
+  const rect = Object.getOwnPropertyDescriptor(Element.prototype, "getBoundingClientRect")!
+  const width = Object.getOwnPropertyDescriptor(globalThis, "innerWidth")
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    const box = boxes.find((candidate) => this.matches(candidate.match)) ?? { left: 0, right: 0 }
+    const size = { ...box, width: box.right - box.left, height: 0, top: 0, bottom: 0, x: box.left, y: 0 }
+    return { ...size, toJSON: () => size } as DOMRect
+  }
+  Object.defineProperty(globalThis, "innerWidth", { configurable: true, value: viewport })
+  cleanups.push(() => {
+    Object.defineProperty(Element.prototype, "getBoundingClientRect", rect)
+    if (width) Object.defineProperty(globalThis, "innerWidth", width)
+  })
+}
+
 const SOURCES = [
   {
     id: "artifacts",
@@ -255,6 +274,64 @@ describe("source menu", () => {
     await Promise.resolve()
     expect(host.querySelector("[data-source-menu]")).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  // #646: the trigger sits at the right end of the toolbar, so a menu hung
+  // from its left edge ran 93px past the window at 1440x900 and truncated
+  // every path and badge.
+  test("hangs the menu from the trigger's right edge when the left edge would put it outside the pane", async () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    host.className = "files-pane"
+    layout(
+      [
+        { match: ".files-pane", left: 900, right: 1440 },
+        { match: ".files-source__button", left: 1180, right: 1268 },
+        { match: ".files-menu", left: 1180, right: 1480 },
+      ],
+      1440,
+    )
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await Promise.resolve()
+
+    expect(host.querySelector("[data-source-menu]")?.getAttribute("data-align")).toBe("end")
+  })
+
+  test("keeps the menu on the trigger's left edge when it already fits", async () => {
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    host.className = "files-pane"
+    layout(
+      [
+        { match: ".files-pane", left: 0, right: 1440 },
+        { match: ".files-source__button", left: 240, right: 328 },
+        { match: ".files-menu", left: 240, right: 540 },
+      ],
+      1440,
+    )
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await Promise.resolve()
+
+    expect(host.querySelector("[data-source-menu]")?.getAttribute("data-align")).toBe("start")
+  })
+
+  // The pane is a column of a much wider window: fitting inside the viewport
+  // is not the same as fitting inside the pane, and the second is what the
+  // reader sees.
+  test("measures the pane, not the window", () => {
+    const menu = { width: 300, trigger: { left: 1000, right: 1088 } }
+
+    expect(subject.menuAlignment({ ...menu, bounds: { left: 0, right: 1440 } })).toBe("start")
+    expect(subject.menuAlignment({ ...menu, bounds: { left: 760, right: 1100 } })).toBe("end")
+  })
+
+  test("keeps the alignment that leaves less of the menu outside a container narrower than it", () => {
+    expect(
+      subject.menuAlignment({ width: 300, trigger: { left: 20, right: 108 }, bounds: { left: 0, right: 260 } }),
+    ).toBe("start")
+    expect(
+      subject.menuAlignment({ width: 300, trigger: { left: 160, right: 248 }, bounds: { left: 0, right: 260 } }),
+    ).toBe("end")
   })
 
   // The kinds were text glyphs (a square for anything with a root), so a

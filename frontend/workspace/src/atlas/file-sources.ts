@@ -167,6 +167,18 @@ export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
   )
 }
 
+/**
+ * The connected folder this conversation works in — the one the composer's
+ * "Working in …" chip names. The server pins the newest writable connected
+ * grant when nothing was chosen explicitly, so the pane resolves it the same
+ * way instead of inventing a second answer from the same grants.
+ */
+export function workingFilesystemRoot(snapshot?: FilesystemSnapshot) {
+  return connectedFilesystemGrants(snapshot)
+    .filter((grant) => grant.access === "write" && grant.scope !== "once")
+    .toSorted((left, right) => right.time.created - left.time.created)[0]?.path
+}
+
 export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {
   return activeFilesystemGrants(snapshot).find(
     (grant) => grant.source === "workspace" && grant.scope === "session" && grant.access === "write",

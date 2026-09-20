@@ -5,6 +5,7 @@ import {
   findFilesystemGrant,
   parseFilesystemSnapshot,
   sessionFilesystemRoot,
+  workingFilesystemRoot,
   type FilesystemSnapshot,
 } from "./file-sources"
 
@@ -206,6 +207,37 @@ describe("filesystem source isolation", () => {
   test("uses the durable session workspace grant as the Session files root", () => {
     expect(sessionFilesystemRoot(snapshot)).toBe("/work/alpha")
     expect(sessionFilesystemRoot()).toBeUndefined()
+  })
+
+  // What the composer's "Working in …" chip names: the newest writable
+  // connected folder. The read-only grant is not somewhere work can land, and
+  // the workspace scratch grant is not a folder anyone connected.
+  test("names the newest writable connected folder as the conversation's working folder", () => {
+    const newer = {
+      ...snapshot,
+      grants: [
+        ...snapshot.grants,
+        {
+          id: "fsg_newest",
+          path: "/data/rinr",
+          access: "write",
+          scope: "project",
+          source: "permission",
+          time: { created: 9 },
+        },
+      ],
+    } satisfies FilesystemSnapshot
+
+    expect(workingFilesystemRoot(snapshot)).toBe("/data/publish")
+    expect(workingFilesystemRoot(newer)).toBe("/data/rinr")
+    expect(workingFilesystemRoot()).toBeUndefined()
+  })
+
+  test("leaves a read-only grant out of the working folder", () => {
+    const readOnly = { ...snapshot, grants: [snapshot.grants[0], snapshot.grants[1]] } satisfies FilesystemSnapshot
+
+    expect(connectedFilesystemGrants(readOnly).map((grant) => grant.id)).toEqual(["fsg_read"])
+    expect(workingFilesystemRoot(readOnly)).toBeUndefined()
   })
 
   test("treats the filesystem root as containing its descendants", () => {

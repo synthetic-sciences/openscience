@@ -83,6 +83,14 @@
   background-clip: padding-box;
   box-shadow: var(--atlas-shadow-md);
 }
+/* The trigger sits at the right end of the toolbar, so a menu hung from its
+   left edge runs past the pane and takes every path and badge with it. When it
+   would, it hangs from the trigger's right edge instead; SourceMenu measures
+   the pane, not the window, because the pane is a column of a wider one. */
+.files-menu[data-align="end"] {
+  left: auto;
+  right: 0;
+}
 .files-menu__group {
   padding: 10px 10px 5px;
   font-size: var(--font-size-x-small);
@@ -560,20 +568,31 @@
   max-width: 100%;
 }
 
+/* Connected folders are tabs here, so the strip grows with the project. It
+   yields to the search field and scrolls rather than pushing either the
+   overflow trigger or the search box out of the toolbar. */
 .files-workspace-switcher {
   display: inline-flex;
   min-width: 0;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
   gap: 2px;
   padding: 2px;
   border-radius: var(--atlas-radius-sm);
   background: var(--color-bg-subtle);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.files-workspace-switcher::-webkit-scrollbar {
+  display: none;
 }
 
 .files-workspace-switcher__tab {
   display: inline-flex;
+  flex: none;
   min-width: 0;
+  max-width: 140px;
   min-height: 30px;
   align-items: center;
   justify-content: center;
@@ -1676,12 +1695,10 @@
     flex-wrap: wrap;
   }
 
-  /* The "More" trigger is ~88px wide; leave it room on the same row and let
-     the location tabs scroll instead of wrapping the trigger underneath. */
+  /* The "More" trigger is ~88px wide; leave it room on the same row so the
+     scrolling tab strip does not wrap the trigger underneath. */
   .files-workspace-switcher {
     max-width: calc(100% - 96px);
-    overflow-x: auto;
-    scrollbar-width: none;
   }
 
   .files-browser__toolbar .files-source {
@@ -1691,10 +1708,6 @@
   /* Inactive locations keep their icon and tooltip; only the active one
      spends the width on a label, so nothing is clipped mid-word. */
   .files-workspace-switcher__tab:not(.is-active) > span:last-child {
-    display: none;
-  }
-
-  .files-workspace-switcher::-webkit-scrollbar {
     display: none;
   }
 

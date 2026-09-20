@@ -26,6 +26,27 @@ const glyph = (kind: PaneSource["kind"]) => {
   return IconFolder
 }
 
+/**
+ * Which edge of the trigger the menu hangs from. It opens rightwards by
+ * default, which is what a menu at the left of a toolbar wants; the source
+ * trigger sits at the right end of one, inside a pane that is a column of a
+ * much wider window, so "still inside the window" is not the test. When the
+ * menu would cross the pane's right edge it hangs from the trigger's right
+ * edge instead, and every path and badge stays readable.
+ */
+export function menuAlignment(input: {
+  trigger: { left: number; right: number }
+  bounds: { left: number; right: number }
+  width: number
+}): "start" | "end" {
+  const past = input.trigger.left + input.width - input.bounds.right
+  if (past <= 0) return "start"
+  // Neither edge fits when the pane is narrower than the menu. Keep whichever
+  // leaves less of it outside rather than always flipping into the opposite
+  // overflow.
+  return input.bounds.left - (input.trigger.right - input.width) < past ? "end" : "start"
+}
+
 export function SourceMenu(props: {
   sources: PaneSource[]
   active: PaneSource
@@ -42,7 +63,25 @@ export function SourceMenu(props: {
   onOpen?: () => void
 }): JSX.Element {
   const [open, setOpen] = createSignal(false)
+  const [align, setAlign] = createSignal<"start" | "end">("start")
   const refs: { trigger?: HTMLButtonElement; menu?: HTMLDivElement } = {}
+  // Measured rather than declared: the pane is resizable and the menu's own
+  // width is capped against the container, so only the live geometry knows
+  // whether the default alignment fits.
+  const measure = () => {
+    const trigger = refs.trigger?.getBoundingClientRect()
+    const menu = refs.menu?.getBoundingClientRect()
+    if (!trigger || !menu) return
+    const pane = refs.trigger?.closest(".files-pane")?.getBoundingClientRect()
+    const viewport = globalThis.innerWidth || pane?.right || trigger.right
+    setAlign(
+      menuAlignment({
+        trigger,
+        width: menu.width,
+        bounds: { left: Math.max(pane?.left ?? 0, 0), right: Math.min(pane?.right ?? viewport, viewport) },
+      }),
+    )
+  }
   const items = () => Array.from(refs.menu?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])
   const focusItem = (item: HTMLElement | undefined) => {
     if (!item) return
@@ -81,7 +120,10 @@ export function SourceMenu(props: {
     }
     props.onOpen?.()
     setOpen(true)
-    queueMicrotask(() => focusItem(items()[0]))
+    queueMicrotask(() => {
+      measure()
+      focusItem(items()[0])
+    })
   }
   const pick = (source: PaneSource) => {
     close(true)
@@ -138,6 +180,7 @@ export function SourceMenu(props: {
             }}
             class="files-menu"
             data-source-menu
+            data-align={align()}
             role="menu"
             onKeyDown={(event) => {
               if (event.key === "Escape" || event.key === "Tab") {

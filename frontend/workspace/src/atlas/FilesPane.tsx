@@ -23,7 +23,7 @@ import { SourceMenu } from "@/atlas/files/SourceMenu"
 import { ArtifactGrid } from "@/atlas/files/ArtifactGrid"
 import { FileTable, type FileRow } from "@/atlas/files/FileTable"
 import { TrashList, type TrashedFile } from "@/atlas/files/TrashList"
-import { buildSources, type PaneSource } from "@/atlas/files/sources"
+import { buildSources, defaultSource, primarySources, type PaneSource } from "@/atlas/files/sources"
 import { readSource, writeSource } from "@/atlas/files/last-source"
 import { RemoteFileView, type RemoteFile } from "@/atlas/files/RemoteFileView"
 import { remotePreview } from "@/atlas/files/remote-preview"
@@ -37,16 +37,19 @@ import {
   IconChevronRight,
   IconClock,
   IconFolder,
+  IconLink,
   IconRefresh,
   IconSearch,
   IconX,
 } from "@/atlas/shared/Icon"
+import { toast } from "@/atlas/Toast"
 import {
   connectedFilesystemGrants,
   containsFilePath,
   normalizeFilePath,
   parseFilesystemSnapshot,
   sessionFilesystemRoot,
+  workingFilesystemRoot,
   type FilesystemAccess,
   type FilesystemIdentity,
   type FilesystemScope,
@@ -191,7 +194,7 @@ export function fileListQuery(kind: PaneSource["kind"], target: string, session?
 // helpers, but they are private, unexported, and typed against ProjectRequest
 // (which carries a .url this pane's injected transport does not). They are
 // reimplemented here against the same endpoints and the same
-// parseFilesystemSnapshot guard rather than imported. Folding the pair into
+// parseFilesystemSnapshot guard rather than imported. Folding the trio into
 // file-sources.ts is the obvious follow-up.
 async function readAccess(transport: Transport, identity: FilesystemIdentity): Promise<FilesystemSnapshot> {
   const value = await transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem`).then(json)
@@ -223,6 +226,15 @@ async function grantAccess(transport: Transport, identity: FilesystemIdentity, i
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  }).then(json)
+}
+
+/** The server revokes the grant across its whole scope and stops the kernels
+ * that mounted it, so this is the end of that folder's authority, not just of
+ * this pane's view of it. */
+async function revokeAccess(transport: Transport, identity: FilesystemIdentity, grantID: string) {
+  return transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem/${encodeURIComponent(grantID)}`, {
+    method: "DELETE",
   }).then(json)
 }
 
@@ -284,6 +296,7 @@ export function FilesPane(
     onRenameFile?: (file: FileRow, submit: (name: string) => Promise<unknown>) => void
     onTrashFile?: (file: FileRow, submit: () => Promise<unknown>) => void
     onPurgeFile?: (file: TrashedFile, submit: () => Promise<unknown>) => void
+    onRevokeSource?: (source: PaneSource, submit: () => Promise<unknown>) => void
   } = {},
 ): JSX.Element {
   // The `request` prop is a standalone test seam (see FilesPane.test.ts) that
@@ -441,31 +454,20 @@ export function FilesPane(
     writeSource(id)
   }
 
-  // Project files are the durable working default. A remembered pick only wins
-  // while it still names a source that exists — a revoked grant falls back
-  // rather than leaving the pane on an empty location.
-  const current = createMemo(
-    () =>
-      sources().find((item) => item.id === picked()) ??
-      sources().find((item) => item.kind === "project") ??
-      sources().find((item) => item.kind === "artifacts") ??
-      sources()[0]!,
-  )
-  const primarySources = createMemo(() =>
-    (["project", "session", "artifacts"] as const).flatMap((kind) => {
-      const source = sources().find((item) => item.kind === kind)
-      return source ? [source] : []
-    }),
-  )
-  // Project, session scratch, and Results already have permanent tabs. More is
-  // the overflow for connected folders, remote storage, and recovery only;
-  // repeating the primary destinations in both controls gives one location two
-  // competing owners and makes the workspace model look more complicated than
-  // it is.
+  // A remembered pick only wins while it still names a source that exists — a
+  // revoked grant falls back rather than leaving the pane on a location it can
+  // no longer read.
+  const workingRoot = () => workingFilesystemRoot(accessSnapshot())
+  const current = createMemo(() => defaultSource(sources(), { remembered: picked(), workingRoot: workingRoot() }))
+  const primary = createMemo(() => primarySources(sources(), workingRoot()))
+  // Project files, connected folders, session scratch and Results have tabs.
+  // More is the overflow: everything a tab does not show, plus the connected
+  // rows themselves, which are the only place a grant's path, its access and
+  // its Revoke control can be read together.
   const overflowSources = createMemo(() =>
     sources().filter((source) => !["project", "session", "artifacts"].includes(source.kind)),
   )
-  const primaryActive = () => primarySources().some((source) => source.id === current().id)
+  const primaryActive = () => primary().some((source) => source.id === current().id)
   const place = createMemo(() => JSON.stringify([scope(), current().id, current().kind, current().root]))
   const [navigation, setNavigation] = createStore({ place: "", parts: [] as string[] })
   const path = () => (navigation.place === place() ? navigation.parts : [])
@@ -1078,6 +1080,39 @@ export function FilesPane(
     )
   }
 
+  // Ending a grant is the one destructive action in the picker and it reaches
+  // past this pane: the server drops the authority across its whole scope and
+  // stops the kernels that mounted it. So it confirms by name, and the
+  // remembered pick goes with it — reopening on a folder the app can no longer
+  // read is how the same grant looks like a broken pane a week later.
+  const revokeSource = (source: PaneSource) => {
+    if (source.kind !== "connected") return
+    // Captured with the click, not read inside submit: a dialog can outlive
+    // the session that raised it, and a grant belongs to one session.
+    const owner = identity()
+    const submit = async () => {
+      if (!owner) return
+      const revoked = await revokeAccess(transport, owner, source.id).then(
+        () => true,
+        (value) => {
+          toast.error(`Access to ${source.name} could not be revoked`, concise(value))
+          return false
+        },
+      )
+      if (!revoked || !mounted) return
+      if (picked() === source.id) choose(undefined)
+      return refetchSnapshot()
+    }
+    if (props.onRevokeSource) return props.onRevokeSource(source, submit)
+    if (!dialog) return
+    void confirmDialog(dialog, {
+      title: `Revoke access to ${source.name}?`,
+      message: `OpenScience will no longer ${source.readonly ? "read" : "read or write"} files in ${source.sub}, and affected kernels are stopped so the folder cannot stay mounted. Nothing inside it is moved, changed, or deleted.`,
+      confirmLabel: "Revoke folder access",
+      danger: true,
+    }).then((confirmed) => (confirmed ? submit() : undefined))
+  }
+
   const restoreArtifact = (artifact: StoredArtifact) => {
     if (!artifactTrash().includes(artifact)) return
     void mutate(
@@ -1138,7 +1173,7 @@ export function FilesPane(
       <header class="files-browser__header">
         <div class="files-browser__toolbar">
           <div class="files-workspace-switcher" role="tablist" aria-label="Project file locations">
-            <For each={primarySources()}>
+            <For each={primary()}>
               {(source) => (
                 <button
                   type="button"
@@ -1146,9 +1181,10 @@ export function FilesPane(
                   class="files-workspace-switcher__tab"
                   classList={{ "is-active": source.id === current().id }}
                   data-workspace-source={source.kind}
+                  data-workspace-id={source.id}
                   aria-selected={source.id === current().id}
-                  aria-label={`${source.name}. ${source.detail ?? ""}`.trim()}
-                  title={source.detail}
+                  aria-label={[source.name, source.detail ?? source.sub].filter(Boolean).join(". ")}
+                  title={source.detail ?? source.sub}
                   onClick={() => pickSource(source)}
                 >
                   <span aria-hidden="true">
@@ -1156,6 +1192,8 @@ export function FilesPane(
                       <IconFolder size={14} strokeWidth={1.5} />
                     ) : source.kind === "session" ? (
                       <IconClock size={14} strokeWidth={1.5} />
+                    ) : source.kind === "connected" ? (
+                      <IconLink size={14} strokeWidth={1.5} />
                     ) : (
                       <IconArchive size={14} strokeWidth={1.5} />
                     )}
@@ -1177,6 +1215,7 @@ export function FilesPane(
               if (identity()) void refetchSnapshot()
             }}
             onPick={pickSource}
+            onRevoke={revokeSource}
             onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
           />
 

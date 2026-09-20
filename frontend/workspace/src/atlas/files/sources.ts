@@ -107,6 +107,52 @@ export function buildSources(input: {
   return list
 }
 
+const connectedAt = (list: PaneSource[], root?: string) => {
+  if (!root) return
+  const target = normalizeFilePath(root)
+  return list.find((source) => source.kind === "connected" && normalizeFilePath(source.root) === target)
+}
+
+/**
+ * Where the pane opens. An explicit pick wins for as long as it still names a
+ * source that exists; with none, the conversation's working folder beats the
+ * project root, which is a managed directory (`~/.openscience/projects/<id>`)
+ * that stays empty unless something deliberately writes there.
+ */
+export function defaultSource(list: PaneSource[], input: { remembered?: string; workingRoot?: string }): PaneSource {
+  return (
+    list.find((source) => source.id === input.remembered) ??
+    connectedAt(list, input.workingRoot) ??
+    list.find((source) => source.kind === "project") ??
+    list.find((source) => source.kind === "artifacts") ??
+    list[0]!
+  )
+}
+
+/** Beyond three, the promoted folders cost the toolbar more room than the
+ * overflow menu they replaced; the rest stay one click away in it. */
+const CONNECTED_TABS = 3
+
+/**
+ * The locations that earn a permanent tab. Connected folders are where the
+ * work actually happens, so they sit beside the project root rather than
+ * behind an overflow menu, and the working folder leads them so the pane's
+ * default location is always visible. They remain listed in the menu as well:
+ * a tab navigates, and the menu row is where a grant shows its path, its
+ * access and the way out of it.
+ */
+export function primarySources(list: PaneSource[], workingRoot?: string): PaneSource[] {
+  const working = connectedAt(list, workingRoot)
+  const connected = list.filter((source) => source.kind === "connected" && source !== working)
+  const ofKind = (kind: PaneSource["kind"]) => list.filter((source) => source.kind === kind)
+  return [
+    ...ofKind("project"),
+    ...(working ? [working, ...connected] : connected).slice(0, CONNECTED_TABS),
+    ...ofKind("session"),
+    ...ofKind("artifacts"),
+  ]
+}
+
 export function groupSources(list: PaneSource[]) {
   return ORDER.flatMap((group) => {
     const items = list.filter((source) => source.group === group)
