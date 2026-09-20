@@ -24,6 +24,7 @@ import {
   stageCurrent,
   trustedTransaction,
 } from "../../../../frontend/desktop/src/updater.mjs"
+import { startupUpdateState } from "../../../../frontend/desktop/src/update-state.mjs"
 import { DarwinUpdateSwap } from "../../src/process/darwin-update-swap"
 
 const roots: string[] = []
@@ -697,10 +698,13 @@ process.exit(70)
     })
     expect(await child.exited).toBe(0)
     expect(await versionOf(current)).toBe("9.8.7")
-    expect(await Bun.file(path.join(root, "cache", "last-result.json")).json()).toMatchObject({
-      status: "succeeded",
-      version: "9.8.7",
-    })
+    const receipt = await Bun.file(path.join(root, "cache", "last-result.json")).json()
+    expect(receipt).toMatchObject({ status: "succeeded", version: "9.8.7" })
+    // The installer writes this only after the updated app has reported itself
+    // healthy from a running window, so the notice was already said there. The
+    // receipt is born acknowledged and no later plain launch replays it.
+    expect(Number.isFinite(Date.parse(receipt.acknowledged_at))).toBe(true)
+    expect(startupUpdateState(receipt, "9.8.7")).toBeUndefined()
     expect((await Bun.$`codesign --verify --deep --strict ${current}`.quiet()).exitCode).toBe(0)
     expect(await Bun.file(launchMarker).json()).toEqual({ electronRunAsNode: "unset" })
     expect((await Bun.$`xattr -p com.apple.quarantine ${current}`.quiet().nothrow()).exitCode).not.toBe(0)

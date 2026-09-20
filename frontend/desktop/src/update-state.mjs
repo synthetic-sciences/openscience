@@ -6,10 +6,12 @@ export function startupUpdateState(value, currentVersion, pendingVersion) {
   if (!/^\d+\.\d+\.\d+$/.test(value.version ?? "")) return
   if (typeof value.completed_at !== "string" || !Number.isFinite(Date.parse(value.completed_at))) return
   if (value.status === "succeeded" && value.version !== currentVersion) return
-  // "Updated to X" belongs to the first healthy launch after the update. The
-  // stored result outlives that launch, so once it has been served it carries
-  // an acknowledgement and no later launch replays it.
-  if (value.status === "succeeded" && value.acknowledged_at) return
+  // "Updated to X" belongs to the launch that proved the update healthy: that
+  // launch publishes the result from memory and the installer stamps the
+  // receipt it leaves behind, so no later launch replays it. `health` is the
+  // same evidence from an installer written before that stamp existed — it is
+  // recorded only once a live launch has reported itself healthy.
+  if (value.status === "succeeded" && (value.acknowledged_at || value.health)) return
   return {
     phase: value.status,
     version: value.version,

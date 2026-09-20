@@ -68,6 +68,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   result is now acknowledged on disk, so the notice appears on the first healthy
   launch after an update and never again — dismissing it holds too. A failed
   update still reports itself until the next attempt.
+- **"Updated to OpenScience X" is said once.** The notice belongs to the launch
+  that proves an update healthy, which publishes it from memory; the installer
+  then left a result file behind that a later launch read and said again, and
+  Settings → General repeated it for as long as the file lasted. The installer
+  now records that the notice was already shown when it writes that result, and
+  the launch that does serve one — after a recovered update, which is shown for
+  the first time — acknowledges it on disk. So it appears once and never again,
+  and dismissing it holds. A failed update still reports itself until the next
+  attempt.
 - **A newer release is offered on launch, and installs in one press.** The
   startup notice now says "OpenScience X is available" whenever a newer stable
   release exists, even while the previous update's result is still on screen,

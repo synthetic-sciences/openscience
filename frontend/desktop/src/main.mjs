@@ -604,8 +604,10 @@ async function updates() {
   const acknowledged = acknowledgedStartupResult(stored, state.updateResult)
   // Serving "Updated to X" is what spends it. Recording that on disk, rather
   // than only removing the file, means a result written again by update
-  // recovery cannot replay the notice on a later launch either.
-  if (acknowledged) await writeResultFile(resultFile, acknowledged)
+  // recovery cannot replay the notice on a later launch either. This is a
+  // safety net for a notice already shown, never a reason to refuse the
+  // launch, so a cache that will not take the write is ignored.
+  if (acknowledged) await writeResultFile(resultFile, acknowledged).catch(() => undefined)
   else if (stored) await rm(resultFile, { force: true })
   const recovered = updateHealthRequest()
     ? undefined

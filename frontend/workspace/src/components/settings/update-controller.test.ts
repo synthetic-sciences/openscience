@@ -210,6 +210,35 @@ describe("desktop update controller", () => {
     expect(calls).toEqual(["stage", "state", "state", "apply"])
   })
 
+  test("one press restarts once when the staging request itself answers with a verified bundle", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const candidate = platform({ states: [], calls })
+    // The desktop answers a stage for a bundle it has already verified with the
+    // current view, which is `ready` rather than `downloading`.
+    candidate.stageUpdate = async () => {
+      calls.push("stage")
+      return { phase: "ready", version: "2.0.54" }
+    }
+    const controller = createUpdateController(candidate, {
+      schedule: (run) => {
+        queued.push(run)
+        return queued.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    let restarts = 0
+
+    await controller.downloadAndRestart(async () => {
+      restarts++
+      await controller.apply()
+    })
+
+    expect(restarts).toBe(1)
+    expect(controller.state.phase).toBe("restarting")
+    expect(controller.state.error).toBeUndefined()
+    expect(calls).toEqual(["stage", "apply"])
+  })
+
   test("restarts straight away when the update is already verified", async () => {
     const calls: string[] = []
     const controller = createUpdateController(platform({ states: [{ phase: "ready", version: "2.0.54" }], calls }))

@@ -47,6 +47,17 @@ test("shows a succeeded result once and ignores it on every later launch", () =>
   expect(acknowledgedStartupResult(acknowledged, served)).toBeUndefined()
 })
 
+test("never replays a success the installer already saw a live launch report", () => {
+  // The installer only writes `health` once the updated app reported itself
+  // healthy from a running window, which is the launch that showed the notice.
+  // Both the stamp and that older evidence must suppress the replay.
+  expect(startupUpdateState({ ...previous, acknowledged_at: "2026-09-06T10:00:01Z" }, "2.0.75")).toBeUndefined()
+  expect(startupUpdateState({ ...previous, health: { process_identity: { pid: 42 } } }, "2.0.75")).toBeUndefined()
+  // A result recovered from an interrupted transaction was never shown live,
+  // so it keeps its one showing.
+  expect(startupUpdateState({ ...previous, recovered: true }, "2.0.75")?.phase).toBe("succeeded")
+})
+
 test("acknowledges nothing the launch did not serve as an installed update", () => {
   const failure = { ...previous, status: "failed", error: "Health check failed" }
   expect(acknowledgedStartupResult(failure, startupUpdateState(failure, "2.0.74"))).toBeUndefined()

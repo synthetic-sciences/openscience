@@ -49,6 +49,22 @@ export function createUpdateController(
   let syncing: Promise<DesktopUpdateState | undefined> | undefined
   let armed: (() => Promise<void>) | undefined
 
+  /** Fire — or drop — the restart armed by one press, now that the state has
+   * settled. Never called while a mutation is in flight: the desktop can answer
+   * the staging request with an already verified bundle, and a restart started
+   * from inside that request would be refused as a concurrent mutation.
+   * `downloadAndRestart` settles that case once its own mutation has ended. */
+  const settleArmed = () => {
+    if (!armed) return
+    if (state.phase === "ready") {
+      const restart = armed
+      armed = undefined
+      return restart()
+    }
+    // A discarded, cancelled or failed download ends the one-press intent.
+    if (!transitional.has(state.phase)) armed = undefined
+  }
+
   const merge = (next: DesktopUpdateState) => {
     setState({
       phase: next.phase,
@@ -71,15 +87,7 @@ export function createUpdateController(
       cancelling: false,
     })
     if (transitional.has(next.phase)) schedule()
-    if (!armed) return
-    if (next.phase === "ready") {
-      const restart = armed
-      armed = undefined
-      void restart()
-      return
-    }
-    // A discarded, cancelled or failed download ends the one-press intent.
-    if (!transitional.has(next.phase)) armed = undefined
+    if (!mutation) void settleArmed()
   }
 
   const sync = () => {
@@ -177,7 +185,7 @@ export function createUpdateController(
     downloadAndRestart(restart: () => Promise<void>) {
       if (state.phase === "ready" || state.phase === "restart_blocked") return restart()
       armed = restart
-      return stage().catch((error: unknown) => {
+      return stage().then(settleArmed, (error: unknown) => {
         armed = undefined
         throw error
       })

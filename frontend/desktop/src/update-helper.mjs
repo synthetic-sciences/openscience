@@ -830,10 +830,18 @@ async function install(payload) {
   // Cleanup failures must never roll a healthy install back; record and log
   // them while leaving the working update in place.
   await transaction(payload, "committed", { old: oldIdentity, new: newIdentity })
+  // The updated application proved its health from a running window, so it has
+  // already published "Updated to X" from memory and shown the notice. The
+  // receipt is therefore born acknowledged and no later plain launch replays
+  // it. The trade is deliberate: a launch that dies between this receipt and
+  // painting the banner never shows the notice at all, which is the better
+  // failure than saying it on every start.
+  const settled = new Date().toISOString()
   await receipt(payload.result, {
     status: "succeeded",
     version: payload.version,
-    completed_at: new Date().toISOString(),
+    completed_at: settled,
+    acknowledged_at: settled,
     health: startupHealth,
   })
   const cleanup = []
@@ -846,10 +854,12 @@ async function install(payload) {
     await exactRemove(swapper, payload.root, rootIdentity).catch((cause) => cleanup.push(cause))
   }
   if (!cleanup.length) await removeDurable(payload.journal, { force: true }).catch((cause) => cleanup.push(cause))
+  const finished = new Date().toISOString()
   await receipt(payload.result, {
     status: "succeeded",
     version: payload.version,
-    completed_at: new Date().toISOString(),
+    completed_at: finished,
+    acknowledged_at: finished,
     health: startupHealth,
     cleanup_error: cleanup.length
       ? cleanup.map((cause) => (cause instanceof Error ? cause.message : String(cause))).join("; ")
