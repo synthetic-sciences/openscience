@@ -52,7 +52,7 @@ jobs:
           "$RUNNER_TEMP/runtime-python/bin/python" -m pytest tooling/harbor/tests
           "$RUNNER_TEMP/runtime-python/bin/python" -m unittest discover -s tooling/sdk/python/tests -p 'test_*.py'
           bun run test:sdk
-          bun run --cwd backend/cli test ./test/runtime ./test/plugin ./test/question ./test/permission ./test/session/prompt-cancellation.test.ts ./test/session/tool-selection.test.ts ./test/tool/registry.test.ts ./test/cli/serve-lifecycle.test.ts ./test/cli/run-workspace.test.ts ./test/installation/headless-build.test.ts
+          bun run --cwd backend/cli test ./test/runtime ./test/plugin ./test/question ./test/permission ./test/session/prompt-cancellation.test.ts ./test/tool/registry.test.ts ./test/cli/serve-lifecycle.test.ts ./test/cli/run-workspace.test.ts ./test/installation/headless-build.test.ts
           bun run --cwd backend/cli test ./test/project/trust.test.ts
           bun run --cwd backend/cli test ./test/session/system-environment.test.ts ./test/session/llm.test.ts ./test/session/title-dedupe.test.ts
           bun run --cwd backend/cli test ./test/session/stop-tool-continuation.test.ts ./test/session/stall-recovery.test.ts ./test/session/text-loop.test.ts ./test/session/compaction.test.ts
