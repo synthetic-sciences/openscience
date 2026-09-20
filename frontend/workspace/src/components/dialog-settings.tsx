@@ -93,6 +93,14 @@ const SETTINGS_STYLES = `
 .settings-dialog textarea {
   font-family: inherit;
 }
+/* A control that opts into the monospace utility (Storage's data-directory
+   path, Connectors' SSH/host fields via FormField's mono prop) keeps it:
+   .font-mono is a Tailwind utility in the low-priority utilities layer, so
+   the dialog's own unlayered font-family: inherit reset above otherwise
+   always wins over it regardless of specificity. */
+.settings-dialog .font-mono {
+  font-family: var(--font-mono);
+}
 .settings-dialog .atlas-section-label,
 .settings-section-label {
   color: var(--color-text-muted);
