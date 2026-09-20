@@ -65,6 +65,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **A stopped server actually shuts down.** `openscience serve` and `openscience web` have a shutdown that drains connections, releases the runtimes a session left running and withdraws the local-server advertisement — and none of it ran. The modules that spawn kernels install their own SIGTERM and SIGINT hooks so a kernel can never outlive its parent, and those hooks ended the process first, on the spot, with 143. The server now owns the signal and those hooks defer to it, so Ctrl+C and `kill` stop the server in order and exit 0; kernels are still torn down on the way out, and a second signal still takes the immediate exit for anyone who has waited long enough.
 - **One composer menu at a time.** Tools, the working folder chip, the model picker and the effort picker were four separate menus that each only closed themselves, so opening one left the others open on top of each other. Opening any of them now closes whatever else is open, and the working folder menu closes on a click outside it like the rest.
 - **"Updated to OpenScience X" is said once.** The desktop app replayed the
   post-update notice on every launch, because the stored update result was

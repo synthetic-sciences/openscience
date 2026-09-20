@@ -156,9 +156,10 @@ export async function advertiseDesktopServer(
 
 /** Withdraw the advertisement, unless a newer sidecar already replaced it: a
  *  slow exit must not unadvertise the app's next server. Synchronous, because
- *  the only moment that survives every shutdown path — including the immediate
- *  `process.exit` the kernel signal hooks perform on SIGTERM — is an `exit`
- *  handler. Best effort, like the write side: a concurrent withdrawal from a
+ *  a graceful shutdown is not the only way a sidecar ends and an `exit`
+ *  handler is the one moment that survives the rest — the immediate
+ *  `process.exit` of an unowned signal, a repeated signal, the shutdown
+ *  watchdog. Best effort, like the write side: a concurrent withdrawal from a
  *  second sidecar, a permission change, or a relocatable data root that went
  *  away must not throw out of an `exit` handler and change the process's exit
  *  code. */

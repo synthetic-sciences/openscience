@@ -14,7 +14,7 @@ openscience serve --port 0 --format json
 
 Port `0` lets the runtime choose an available local port. The command prints one JSON readiness record containing `type: "server.ready"`, `schemaVersion: 1`, `url`, `pid`, and `version`. Use that URL, then check `GET /global/health`. Without `--format json`, the command keeps its human-readable announcement.
 
-The process remains available until SIGINT, SIGTERM, or its bound desktop parent exits. It closes HTTP/event connections and performs runtime cleanup before exiting. Stopping a server is different from disconnecting an observing client: do not assume an active model loop resumes after the server exits. Inspect detached jobs through their retained job records and reconcile remote state before submitting replacements.
+The process remains available until SIGINT, SIGTERM, or its bound desktop parent exits. It closes HTTP/event connections and performs runtime cleanup before exiting, and a stop that completes exits `0`. Repeating the signal while it drains stops the process immediately instead, with `128` plus the signal number. Stopping a server is different from disconnecting an observing client: do not assume an active model loop resumes after the server exits. Inspect detached jobs through their retained job records and reconcile remote state before submitting replacements.
 
 ## Connect to a separately managed server
 

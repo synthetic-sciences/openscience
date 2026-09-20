@@ -2,6 +2,7 @@ import { Server } from "../../server/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { GracefulShutdown } from "../../process/graceful-shutdown"
+import { ShutdownSignal } from "../../process/shutdown-signal"
 import { DesktopParent } from "../../process/desktop-parent"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
@@ -24,23 +25,25 @@ export const ServeCommand = cmd({
     // serve` is a deliberate second server, not the one a plain `openscience`
     // should attach to. The run id is what this server answers `/global/health`
     // with, so a reader can tell our listener from anything else that took the
-    // port. Withdrawal runs from an `exit` handler: the kernel signal hooks in
-    // this process graph exit on SIGTERM without unwinding this handler, and a
-    // record outliving its process is only ever ignored.
-    if (parent && server.port) {
-      const port = server.port
+    // port. The shutdown below withdraws the record, and an `exit` handler is
+    // the safety net for the paths that never reach it (a crash, a second
+    // signal, the watchdog); a record outliving its process is only ever
+    // ignored.
+    const advertisedPort = parent ? server.port : undefined
+    if (advertisedPort) {
       process.once("exit", () => withdrawDesktopServer(Global.Path.data, process.pid))
       await advertiseDesktopServer(Global.Path.data, {
-        port,
+        port: advertisedPort,
         pid: process.pid,
         version: Installation.VERSION,
         runId: ServerIdentity.current.runId,
       })
     }
     const signal = Promise.withResolvers<void>()
-    const stop = () => signal.resolve()
-    process.once("SIGINT", stop)
-    process.once("SIGTERM", stop)
+    // One owner for this process's termination signals. The kernel hooks that
+    // otherwise exit on SIGTERM defer while this claim stands, so the shutdown
+    // body below is what ends the process.
+    const release = ShutdownSignal.claim(() => signal.resolve())
     const format = args.format ?? process.env.OPENSCIENCE_SERVER_READY_FORMAT ?? "text"
     console.log(
       format === "json"
@@ -56,9 +59,11 @@ export const ServeCommand = cmd({
     try {
       await Promise.race([signal.promise, parent?.exited ?? new Promise<never>(() => undefined)])
     } finally {
-      process.off("SIGINT", stop)
-      process.off("SIGTERM", stop)
+      release()
     }
+    // Stop advertising before draining: a terminal launch that arrives during
+    // the drain must start its own server, not attach to one that is leaving.
+    if (advertisedPort) withdrawDesktopServer(Global.Path.data, process.pid)
     const watchdog = setTimeout(() => process.exit(1), 10_000)
     watchdog.unref?.()
     try {

@@ -2,6 +2,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import type { ChildProcess } from "node:child_process"
 import { dlopen, FFIType, ptr } from "bun:ffi"
+import { ShutdownSignal } from "@/process/shutdown-signal"
 import { WindowsJob } from "@/process/windows-job"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { AuthorityProcessLedger } from "@/project/authority-process"
@@ -80,8 +81,20 @@ export namespace KernelProcessIdentity {
     process.on("exit", () => {
       for (const hook of hooks) hook()
     })
-    process.on("SIGTERM", () => process.exit(128 + 15))
-    process.on("SIGINT", () => process.exit(128 + 2))
+    // A signal nothing handles kills this process without running the `exit`
+    // hooks above, so kernel children would outlive it. Exiting here restores
+    // them, but it also pre-empts any owner of the signal. Defer to one when
+    // it exists: a server's shutdown body ends in an ordinary exit, which runs
+    // the very same hooks once its runtimes have been released.
+    for (const [signal, code] of [
+      ["SIGTERM", 128 + 15],
+      ["SIGINT", 128 + 2],
+    ] as const) {
+      process.on(signal, () => {
+        if (ShutdownSignal.owned(signal)) return
+        process.exit(code)
+      })
+    }
   }
 
   export function capture(proc: ChildProcess): KernelProcess | undefined {
