@@ -3,14 +3,14 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("../assets/fonts/cmc/cmunorm.woff2") format("woff2");
+  src: url("/fonts/cmc/cmunorm.woff2") format("woff2");
 }
 @font-face {
   font-family: "Computer Modern Concrete";
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("../assets/fonts/cmc/cmunobx.woff2") format("woff2");
+  src: url("/fonts/cmc/cmunobx.woff2") format("woff2");
 }
 
 :root {
