@@ -58,9 +58,9 @@ describe("projects loading placement", () => {
       "--science-home-bar",
       "--science-home-copy-gap",
       "--science-home-heading-stack",
+      "--science-home-loading-pad",
       "--science-home-main-top",
       "--science-home-state-gap",
-      "--science-home-state-top",
       "--science-home-title-leading",
       "--science-home-title-size",
     ])
@@ -93,7 +93,7 @@ describe("projects loading placement", () => {
       [".science-home__heading-copy", "gap", "--science-home-copy-gap"],
       [".science-home__heading-copy > p", "font-size", "--font-size-base"],
       [".science-home__state", "margin-top", "--science-home-state-gap"],
-      [".science-home__state--loading", "padding", "--science-home-state-top"],
+      [".science-home__state.science-home__state--loading", "padding", "--science-home-loading-pad"],
       [".science-home__button", "min-height", "--science-home-action-height"],
     ]
     for (const [selector, property, term] of bound) {
@@ -104,5 +104,26 @@ describe("projects loading placement", () => {
     // The heading's stacked band and the card at its narrowest keep theirs too.
     expect(declared(".science-home__heading", "gap").at(-1)).toStartWith("var(--science-home-heading-gap)")
     expect(declared(".science-home__state", "padding").at(-1)).toStartWith("var(--science-home-state-top)")
+  })
+
+  /**
+   * .science-home__state--loading is the same specificity as the generic
+   * ≤520 ".science-home__state" rule and loses to it on source order alone,
+   * so the loading card needs both a token of its own AND a selector that
+   * actually outranks the band -- either half missing lets the band silently
+   * retune the loading card's padding back down with the generic card's.
+   */
+  test("no band retunes the loading card's own padding", () => {
+    for (const band of ["@media (max-width: 760px)", "@media (max-width: 520px)", "@media (pointer: coarse)"]) {
+      const start = css.indexOf(band)
+      const block = css.slice(start, css.indexOf("\n}\n", start))
+      expect(block, `${band} redefines the loading card's own padding token`).not.toContain(
+        "--science-home-loading-pad",
+      )
+    }
+    const loadingRule = css.match(/\.science-home__state\.science-home__state--loading\s*\{(?<body>[^}]*)\}/)?.groups
+      ?.body
+    expect(loadingRule, "the loading card's rule must name both classes to outrank the ≤520 band").toBeDefined()
+    expect(loadingRule).toContain("padding: var(--science-home-loading-pad)")
   })
 })

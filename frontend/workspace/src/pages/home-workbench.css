@@ -15,11 +15,19 @@
   /* The heading is one row until the actions stack under the copy. */
   --science-home-heading-stack: 0px;
   --science-home-state-gap: 30px;
+  /* The generic card's (error/empty) own ≤520 retune -- never the loading
+     card's; see --science-home-loading-pad below. */
   --science-home-state-top: 40px;
+  /* The loading card's own vertical padding. Deliberately never redefined by
+     a band: the ≤520 rule below retunes the generic card via
+     --science-home-state-top, and without its own token the loading card
+     would inherit that retune too (same property, equal selector specificity,
+     later in the cascade) and silently lose its padding at narrow widths. */
+  --science-home-loading-pad: 40px;
   --science-home-loader-top: calc(
     var(--science-home-bar) + var(--science-home-main-top) + var(--science-home-title-size) *
       var(--science-home-title-leading) + var(--science-home-copy-gap) + var(--font-size-base) * 1.5 +
-      var(--science-home-heading-stack) + var(--science-home-state-gap) + var(--science-home-state-top)
+      var(--science-home-heading-stack) + var(--science-home-state-gap) + var(--science-home-loading-pad)
   );
 }
 
@@ -538,9 +546,15 @@
   gap: 6px;
 }
 
-.science-home__state--loading {
+/* Both classes named: a single ".science-home__state--loading" is the same
+   specificity as the ≤520 ".science-home__state" rule below and loses to it
+   on source order, which is what silently retuned this card's padding to the
+   generic card's narrower one. The compound selector outranks it instead, at
+   every width, so this card's own padding-top stays what the fallback above
+   sums into --science-home-loader-top. */
+.science-home__state.science-home__state--loading {
   justify-content: center;
-  padding: var(--science-home-state-top) 26px;
+  padding: var(--science-home-loading-pad) 26px;
 }
 
 .science-home__state strong {

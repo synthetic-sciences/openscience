@@ -90,4 +90,94 @@ for (const scheme of schemes) {
     await expect(loader).toHaveCount(0)
     await expect(page.getByRole("region", { name: "Files", exact: true })).toBeVisible()
   })
+
+  test(`the projects route fallback lines up with the page's own loading card (${scheme})`, async ({ page }, info) => {
+    await useScheme(page, scheme)
+    const readyGate = Promise.withResolvers<void>()
+    // Global bootstrap (path/config/catalog/auth, gated here by its first
+    // call) is what keeps the page on its own "loading" card once Home
+    // mounts -- unlike the two cases above, there is no real request to gate
+    // for app.tsx's <Suspense fallback={<LoadingScreen class="science-home__fallback" .../>}>
+    // itself: the only resource anywhere under it is FdaBanner's own probe,
+    // and FdaBanner checks `!probe.loading` before ever calling `probe()`
+    // (atlas/FdaBanner.tsx), so Suspense has nothing pending to catch. A
+    // cold "/" load's full request list, traced independently, confirms it:
+    // Home's own heading and card are already in the DOM before the probe
+    // request is even issued. So the fallback is built here instead, out of
+    // the same classes and attributes LoadingScreen/AtomLoader emit, sized to
+    // #root -- it draws with the same already-loaded stylesheet and custom
+    // element the running page has, and is measured exactly like the card.
+    await page.route(/\/global\/health(?:\?|$)/, async (route) => {
+      await readyGate.promise
+      await route.continue()
+    })
+    await page.goto("/")
+
+    const card = page.locator(".science-home__state--loading")
+    const cardLoader = card.locator('synsci-loader[caption="Loading projects"]')
+    await expect(cardLoader.getByRole("progressbar")).toBeVisible()
+    // No page band to centre in yet -- just the mark's own absolute height,
+    // so it can be compared directly against the fallback's below.
+    const cardBounds = await placement(card, cardLoader, { top: 0, bottom: 0 })
+    expect(Math.abs(cardBounds.x)).toBeLessThanOrEqual(2)
+    expect(cardBounds.overflow).toBeLessThanOrEqual(1)
+    expect(cardBounds.size).toBe(144)
+    await page.screenshot({ path: info.outputPath(`projects-card-${scheme}.png`) })
+
+    await page.evaluate(() => {
+      const root = document.getElementById("root")!
+      const rect = root.getBoundingClientRect()
+      const cs = getComputedStyle(root)
+      const fixture = document.createElement("div")
+      fixture.id = "e2e-fallback-fixture"
+      Object.assign(fixture.style, {
+        position: "fixed",
+        left: `${rect.left}px`,
+        top: `${rect.top}px`,
+        width: `${rect.width}px`,
+        height: `${rect.height}px`,
+        display: cs.display,
+        flexDirection: cs.flexDirection,
+        paddingTop: cs.paddingTop,
+        paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom,
+        paddingLeft: cs.paddingLeft,
+        pointerEvents: "none",
+      })
+      // LoadingScreen's own output (frontend/ui/src/components/atom-loader.tsx).
+      const host = document.createElement("div")
+      host.setAttribute("data-component", "loading-screen")
+      host.className = "science-home__fallback"
+      host.setAttribute("role", "status")
+      host.setAttribute("aria-live", "polite")
+      // AtomLoader's own output for size=144 caption="Loading projects", no progress.
+      const loader = document.createElement("synsci-loader")
+      loader.setAttribute("data-component", "atom-loader")
+      loader.setAttribute("role", "img")
+      loader.setAttribute("aria-label", "Loading projects")
+      loader.style.setProperty("--atom-loader-size", "144px")
+      loader.setAttribute("size", "144")
+      loader.setAttribute("caption", "Loading projects")
+      loader.textContent = "Loading projects"
+      host.appendChild(loader)
+      fixture.appendChild(host)
+      document.body.appendChild(fixture)
+    })
+    const fallback = page.locator("#e2e-fallback-fixture .science-home__fallback")
+    const fallbackLoader = fallback.locator("synsci-loader")
+    await expect(fallbackLoader.getByRole("progressbar")).toBeVisible()
+    const fallbackBounds = await placement(fallback, fallbackLoader, { top: 0, bottom: 0 })
+    expect(Math.abs(fallbackBounds.x)).toBeLessThanOrEqual(2)
+    expect(fallbackBounds.size).toBe(144)
+    await page.screenshot({ path: info.outputPath(`projects-fallback-${scheme}.png`) })
+    await page.evaluate(() => document.getElementById("e2e-fallback-fixture")?.remove())
+
+    // The fallback stands in for this exact card, so their marks must land at
+    // the same height -- not each merely centred within its own box.
+    expect(Math.abs(fallbackBounds.y - cardBounds.y)).toBeLessThanOrEqual(2)
+
+    readyGate.resolve()
+    await expect(card).toHaveCount(0)
+    await expect(page.getByRole("button", { name: /new project/i }).first()).toBeVisible()
+  })
 }
