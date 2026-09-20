@@ -29,6 +29,16 @@ export namespace CliShim {
     platform?: NodeJS.Platform
   }
 
+  /** This copy of OpenScience may not own the slot; the message is the reason
+   *  `status()` reports. Anything else `install()` rejects with is a write
+   *  the system refused, named by what it was for. */
+  export class RefusedError extends Error {
+    constructor(reason: string) {
+      super(reason)
+      this.name = "CliShimRefusedError"
+    }
+  }
+
   export const Status = z
     .object({
       home: z.string(),
@@ -50,7 +60,13 @@ export namespace CliShim {
 
   function resolve(options: Options) {
     const home = options.home ?? Global.Path.home
-    const bin = options.bin ?? (options.home ? path.join(options.home, ".openscience", "bin") : Global.Path.bin)
+    // The installer's directory, spelled from the home directory the way its
+    // PATH line is. Not `Global.Path.bin`: that is the tool cache under the
+    // data root, which the stable data-root link spells as
+    // ~/.config/openscience/data-root/bin and a relocated root moves off the
+    // home volume, and `openscience uninstall` only strips a line that names
+    // ~/.openscience/bin.
+    const bin = options.bin ?? path.join(home, ".openscience", "bin")
     const env = options.env ?? process.env
     return {
       home,
@@ -94,6 +110,16 @@ export namespace CliShim {
 
   function tilde(file: string, home: string) {
     return file.startsWith(home + path.sep) ? `~${file.slice(home.length)}` : file
+  }
+
+  /** A write the module was entitled to make and the system refused: the
+   *  sentence says what it was for, the system's reason follows. */
+  function failed(step: string) {
+    return (error: unknown): never => {
+      const reason = error instanceof Error ? error.message : String(error)
+      log.error("could not install the command-line tool", { step, reason })
+      throw new Error(`${step}: ${reason}`, { cause: error })
+    }
   }
 
   function pathLine(shell: string, bin: string) {
@@ -257,18 +283,21 @@ export namespace CliShim {
       () => false,
     )
     if (!writable) return
-    await fs.appendFile(file, `\n${MARKER}\n${pathLine(o.shell, o.bin)}\n`)
+    await fs
+      .appendFile(file, `\n${MARKER}\n${pathLine(o.shell, o.bin)}\n`)
+      .catch(failed(`Could not add the PATH line to ${tilde(file, o.home)}`))
     log.info("added the command-line directory to PATH", { file })
   }
 
-  /** Create or re-point the link and add the PATH line. Rejects with the
-   *  reason when this process may not own the slot. */
+  /** Create or re-point the link and add the PATH line. Rejects with
+   *  `RefusedError` when this process may not own the slot, and with an error
+   *  naming the write when the system refused one. */
   export async function install(options: Options = {}): Promise<Status> {
     const o = resolve(options)
     const before = await status(options)
-    if (!before.installable) throw new Error(before.reason)
+    if (before.reason !== undefined) throw new RefusedError(before.reason)
     if (!before.current) {
-      await link(o)
+      await link(o).catch(failed(`Could not create ${tilde(o.link, o.home)}`))
       log.info("linked the command-line tool", { link: o.link, target: o.execPath })
     }
     await configure(o)

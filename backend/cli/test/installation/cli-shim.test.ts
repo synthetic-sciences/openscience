@@ -3,6 +3,8 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { CliShim } from "../../src/installation/cli-shim"
+import { cleanShellConfig } from "../../src/cli/cmd/uninstall"
+import { Global } from "../../src/global"
 
 const roots: string[] = []
 
@@ -66,6 +68,29 @@ describe("CliShim", () => {
     const second = await CliShim.install(f.options)
     expect(second).toEqual(first)
     expect(await f.file(".zshrc")).toBe(`alias ll='ls -l'\n\n# openscience\nexport PATH=${f.bin}:$PATH\n`)
+
+    // The line is the one `openscience uninstall` takes back out.
+    await cleanShellConfig(path.join(f.home, ".zshrc"))
+    expect(await f.file(".zshrc")).toBe("alias ll='ls -l'\n")
+  })
+
+  test("names the installer's directory when nothing overrides the home", async () => {
+    // No `home` and no `bin`: the directory a real install reports and writes
+    // into the shell's startup file. It is the standalone installer's
+    // ~/.openscience/bin whatever the data root is, so the line is one
+    // `openscience uninstall` recognises.
+    const f = await fixture({ files: { ".zshrc": "# mine\n" } })
+    const status = await CliShim.status({ execPath: f.execPath, env: f.options.env, platform: "darwin" })
+    const directory = path.join(Global.Path.home, ".openscience", "bin")
+    expect(status).toMatchObject({
+      home: Global.Path.home,
+      directory,
+      path: path.join(directory, "openscience"),
+      line: `export PATH=${directory}:$PATH`,
+    })
+    await fs.writeFile(path.join(f.home, ".zshrc"), `# mine\n\n# openscience\n${status.line}\n`)
+    await cleanShellConfig(path.join(f.home, ".zshrc"))
+    expect(await f.file(".zshrc")).toBe("# mine\n")
   })
 
   test.each([

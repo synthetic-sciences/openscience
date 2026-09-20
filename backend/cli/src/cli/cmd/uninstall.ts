@@ -314,7 +314,7 @@ async function getShellConfigFile(): Promise<string | null> {
   return null
 }
 
-async function cleanShellConfig(file: string) {
+export async function cleanShellConfig(file: string) {
   const content = await Bun.file(file).text()
   const lines = content.split("\n")
 

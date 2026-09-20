@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { CliSettingsRoutes, cliSettingsApp } from "../../src/server/routes/settings/cli"
 import { CliShim } from "../../src/installation/cli-shim"
+import { Global } from "../../src/global"
 
 const roots: string[] = []
 
@@ -34,6 +35,7 @@ describe("/settings/cli routes", () => {
     const response = await CliSettingsRoutes().request("/")
     expect(response.status).toBe(200)
     const body = CliShim.Status.parse(await response.json())
+    expect(body.directory).toBe(path.join(Global.Path.home, ".openscience", "bin"))
     expect(body.path).toBe(path.join(body.directory, "openscience"))
     expect(body.line).toContain(body.directory)
     // The test runner is neither a bundle nor a desktop sidecar.
@@ -74,6 +76,21 @@ describe("/settings/cli routes", () => {
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: expect.stringContaining("did not create") })
     expect(await Bun.file(link).text()).toBe("standalone")
+    expect(await Bun.file(path.join(f.home, ".zshrc")).text()).toBe("")
+  })
+
+  test("POST /install answers 500 with what failed when the system refuses the write", async () => {
+    const f = await desktop()
+    // A file where the folder should be: the slot reads as empty, so this is
+    // not a refusal of ours but a write the OS would not make.
+    const bin = path.join(f.home, ".openscience", "bin")
+    await fs.mkdir(path.dirname(bin), { recursive: true })
+    await fs.writeFile(bin, "not a folder")
+    const response = await f.app.request("/install", { method: "POST" })
+    expect(response.status).toBe(500)
+    const body = await response.json()
+    expect(body.error).toMatch(/^Could not create ~\/\.openscience\/bin\/openscience: \S/)
+    expect(await Bun.file(bin).text()).toBe("not a folder")
     expect(await Bun.file(path.join(f.home, ".zshrc")).text()).toBe("")
   })
 })

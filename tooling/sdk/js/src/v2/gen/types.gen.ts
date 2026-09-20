@@ -9688,9 +9688,15 @@ export type SettingsCliInstallData = {
 
 export type SettingsCliInstallErrors = {
   /**
-   * This copy of OpenScience cannot own the command-line tool
+   * This copy of OpenScience may not own the command-line tool; the reason is the one the status reports
    */
   409: {
+    error: string
+  }
+  /**
+   * The system refused a write; the message says what could not be done
+   */
+  500: {
     error: string
   }
 }

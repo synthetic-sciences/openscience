@@ -42,7 +42,12 @@ export function cliSettingsApp(options: CliShim.Options = {}) {
             content: { "application/json": { schema: resolver(CliShim.Status) } },
           },
           409: {
-            description: "This copy of OpenScience cannot own the command-line tool",
+            description:
+              "This copy of OpenScience may not own the command-line tool; the reason is the one the status reports",
+            content: { "application/json": { schema: resolver(Failure) } },
+          },
+          500: {
+            description: "The system refused a write; the message says what could not be done",
             content: { "application/json": { schema: resolver(Failure) } },
           },
         },
@@ -50,10 +55,17 @@ export function cliSettingsApp(options: CliShim.Options = {}) {
       async (c) => {
         const outcome = await CliShim.install(options).then(
           (value) => ({ value }),
-          (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }),
+          (error: unknown) => ({ error }),
         )
-        if ("error" in outcome) return c.json(Failure.parse({ error: outcome.error }), 409)
-        return c.json(outcome.value)
+        if (!("error" in outcome)) return c.json(outcome.value)
+        // The module's own refusal is the person's to resolve (a foreign
+        // install in the slot, a copy that is not a lasting bundle); a write
+        // the system refused is a failure of ours to report as one.
+        if (outcome.error instanceof CliShim.RefusedError) {
+          return c.json(Failure.parse({ error: outcome.error.message }), 409)
+        }
+        const reason = outcome.error instanceof Error ? outcome.error.message : String(outcome.error)
+        return c.json(Failure.parse({ error: reason }), 500)
       },
     )
 }
