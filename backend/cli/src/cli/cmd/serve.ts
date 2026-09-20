@@ -5,6 +5,7 @@ import { GracefulShutdown } from "../../process/graceful-shutdown"
 import { DesktopParent } from "../../process/desktop-parent"
 import { Installation } from "../../installation"
 import { Global } from "../../global"
+import { ServerIdentity } from "../../server/identity"
 import { advertiseDesktopServer, withdrawDesktopServer } from "../local-server"
 
 export const ServeCommand = cmd({
@@ -21,13 +22,20 @@ export const ServeCommand = cmd({
     using parent = DesktopParent.watch()
     // Only the app's own sidecar advertises itself. A terminal `openscience
     // serve` is a deliberate second server, not the one a plain `openscience`
-    // should attach to. Withdrawal runs from an `exit` handler: the kernel
-    // signal hooks in this process graph exit on SIGTERM without unwinding
-    // this handler, and a record outliving its process is only ever ignored.
+    // should attach to. The run id is what this server answers `/global/health`
+    // with, so a reader can tell our listener from anything else that took the
+    // port. Withdrawal runs from an `exit` handler: the kernel signal hooks in
+    // this process graph exit on SIGTERM without unwinding this handler, and a
+    // record outliving its process is only ever ignored.
     if (parent && server.port) {
       const port = server.port
       process.once("exit", () => withdrawDesktopServer(Global.Path.data, process.pid))
-      await advertiseDesktopServer(Global.Path.data, { port, pid: process.pid, version: Installation.VERSION })
+      await advertiseDesktopServer(Global.Path.data, {
+        port,
+        pid: process.pid,
+        version: Installation.VERSION,
+        runId: ServerIdentity.current.runId,
+      })
     }
     const signal = Promise.withResolvers<void>()
     const stop = () => signal.resolve()

@@ -349,6 +349,9 @@ export namespace Installation {
     return knownTags.has(channel) ? channel : "latest"
   }
 
+  /** The newest published GitHub release. The desktop app's signed bundles are
+   *  released there and nowhere else, so this — not the npm dist-tag the
+   *  package managers resolve — is the version a desktop copy upgrades to. */
   function githubLatest() {
     return releaseFetch("https://api.github.com/repos/synthetic-sciences/OpenScience/releases/latest")
       .then((res) => {
@@ -396,6 +399,7 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
+    // `desktop` and anything else without a package registry behind it.
     return githubLatest()
   }
 }

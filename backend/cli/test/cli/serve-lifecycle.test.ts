@@ -103,6 +103,14 @@ test("a desktop-spawned sidecar advertises its port in the data root and withdra
     // no embedded workspace, so the stricter version.json probe a terminal
     // launch runs on top of this has its own coverage in local-server.test.ts.
     expect(await probeLocalServer(localServerBase(record!.port))).toBe(true)
+    // The recorded run id is the one this server answers health with, so the
+    // record can only ever be redeemed against the process that wrote it.
+    const health = await fetch(`${localServerBase(record!.port)}/global/health`, {
+      headers: { accept: "application/json" },
+    }).then((response) => response.json())
+    expect(record!.run_id).toBe(health.runId)
+    expect(await probeLocalServer(localServerBase(record!.port), record!.run_id)).toBe(true)
+    expect(await probeLocalServer(localServerBase(record!.port), "another-run")).toBe(false)
 
     await child.close()
     expect(await Bun.file(advertised).exists()).toBe(false)

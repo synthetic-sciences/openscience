@@ -396,7 +396,14 @@ process.exit(await DarwinUpdateSwap.run(process.argv.at(-1) ?? ""))
     const executable = path.join(bundle, "Contents", "MacOS", "openscience")
     const sidecar = path.join(bundle, "Contents", "Resources", "sidecar", "openscience")
     await mkdir(path.dirname(sidecar), { recursive: true })
-    await Bun.write(sidecar, Bun.file("/bin/sleep"))
+    // A real process that outlives the app has to stand in for the packaged
+    // sidecar, because the helper holds the rollback until that exact process
+    // is gone. It is a copy of the test runtime because macOS SIGKILLs a copy
+    // of a system tool such as /bin/sleep — those are arm64e platform binaries,
+    // and an arm64e image that is not one cannot be exec'd however it is signed
+    // — and because a shebang script puts its interpreter in argv[0], which no
+    // longer matches the sidecar path the helper checks the command against.
+    await Bun.write(sidecar, Bun.file(process.execPath))
     await chmod(sidecar, 0o755)
     await Bun.write(
       executable,
@@ -409,7 +416,7 @@ const input = process.argv.find((value) => value.startsWith("--openscience-updat
 if (!input) process.exit(2)
 const request = JSON.parse(Buffer.from(input.slice("--openscience-update-health=".length), "base64url").toString("utf8"))
 const sidecar = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../Resources/sidecar/openscience")
-const service = spawn(sidecar, ["2"], { detached: true, stdio: "ignore" })
+const service = spawn(sidecar, ["-e", "setTimeout(() => {}, 2000)"], { detached: true, stdio: "ignore" })
 await new Promise((resolve, reject) => { service.once("spawn", resolve); service.once("error", reject) })
 service.unref()
 const started = execFileSync("/bin/ps", ["-p", String(service.pid), "-o", "lstart="], { encoding: "utf8" }).trim()
@@ -423,6 +430,11 @@ process.exit(70)
     )
     await chmod(executable, 0o755)
     expect((await Bun.$`codesign --force --deep --sign - ${bundle}`.quiet()).exitCode).toBe(0)
+    // Name the environment rather than the rollback when the host refuses to
+    // run the stand-in sidecar: a sidecar that never starts makes the update
+    // uncertain, not failed, and the assertions below would blame the helper.
+    const probe = Bun.spawn([sidecar, "-e", ""], { stdout: "ignore", stderr: "ignore" })
+    expect(await probe.exited).toBe(0)
     return bundle
   }
 

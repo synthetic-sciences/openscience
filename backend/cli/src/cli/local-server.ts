@@ -2,6 +2,9 @@ import { base64Encode } from "@synsci/util/encode"
 import fs from "node:fs/promises"
 import { existsSync, readFileSync, rmSync } from "node:fs"
 import path from "node:path"
+import { Log } from "../util/log"
+
+const log = Log.create({ service: "local-server" })
 
 const DEFAULT_LOCAL_PORT = 4096
 const FALLBACK_LOCAL_PORT = 4097
@@ -16,7 +19,14 @@ export function localWorkspaceUrl(base: string, directory?: string) {
   return `${base}/${base64Encode(directory)}/session`
 }
 
-export function probeLocalServer(base: string, timeout = 1200) {
+/**
+ * `runId` is the server's own per-process identity (`ServerIdentity.current`),
+ * which `/global/health` already reports. Passing one turns the probe from
+ * "something healthy answers here" into "the exact process that claimed this
+ * port answers here", so a record naming a port this process never listened on
+ * is inert.
+ */
+export function probeLocalServer(base: string, runId?: string, timeout = 1200) {
   return fetch(`${base}/global/health`, {
     headers: { accept: "application/json" },
     signal: AbortSignal.timeout(timeout),
@@ -25,7 +35,10 @@ export function probeLocalServer(base: string, timeout = 1200) {
       if (!response.ok) return false
       const body = await response.json().catch(() => undefined)
       if (!body || typeof body !== "object" || Array.isArray(body)) return false
-      return "healthy" in body && body.healthy === true && "version" in body && typeof body.version === "string"
+      if (!("healthy" in body) || body.healthy !== true) return false
+      if (!("version" in body) || typeof body.version !== "string") return false
+      if (runId === undefined) return true
+      return "runId" in body && body.runId === runId
     })
     .catch(() => false)
 }
@@ -36,8 +49,8 @@ export function probeLocalServer(base: string, timeout = 1200) {
  * an older packaged server can survive an upgrade. The launcher must only
  * reuse a server that proves it owns a matching workspace bundle.
  */
-export async function probeWorkspaceServer(base: string, version: string, timeout = 1200) {
-  const healthy = await probeLocalServer(base, timeout)
+export async function probeWorkspaceServer(base: string, version: string, runId?: string, timeout = 1200) {
+  const healthy = await probeLocalServer(base, runId, timeout)
   if (!healthy) return false
   // `version.json` is a file in the workspace bundle, not an API route, and
   // the server answers an API-shaped request (`accept: application/json`) for
@@ -70,6 +83,10 @@ export type DesktopServerRecord = {
   port: number
   pid: number
   version: string
+  /** The advertiser's own `ServerIdentity.current.runId`. A reader accepts the
+   *  advertised port only when the server listening there reports this exact
+   *  id, so nothing but the process that wrote the record can answer for it. */
+  run_id: string
   started_at: string
 }
 
@@ -88,15 +105,51 @@ function running(pid: number) {
   }
 }
 
+/** The pid that owns `desktop-server.json.<pid>.tmp`, for the names this module
+ *  writes and no others. */
+function temporaryOwner(entry: string) {
+  if (!entry.startsWith(`${DESKTOP_SERVER_FILE}.`) || !entry.endsWith(".tmp")) return
+  const owner = entry.slice(DESKTOP_SERVER_FILE.length + 1, -".tmp".length)
+  return /^\d+$/.test(owner) ? Number(owner) : undefined
+}
+
+/** A kill between the write and the rename orphans a temporary file that
+ *  nothing would ever clean up. Sweep the ones whose writer is gone; another
+ *  sidecar's in-flight temporary is left where it is. */
+async function sweepTemporaries(directory: string, pid: number) {
+  const entries = await fs.readdir(directory).catch(() => [])
+  await Promise.all(
+    entries.map((entry) => {
+      const owner = temporaryOwner(entry)
+      if (owner === undefined || (owner !== pid && running(owner))) return
+      return fs.rm(path.join(directory, entry), { force: true }).catch(() => undefined)
+    }),
+  )
+}
+
 /** Publish the desktop sidecar's port for terminal launches. Best effort: a
  *  read-only or full data root must not stop the app's server from serving. */
-export async function advertiseDesktopServer(directory: string, input: { port: number; pid: number; version: string }) {
+export async function advertiseDesktopServer(
+  directory: string,
+  input: { port: number; pid: number; version: string; runId: string },
+) {
   const file = desktopServerPath(directory)
   const temporary = `${file}.${input.pid}.tmp`
-  const record: DesktopServerRecord = { schema: 1, ...input, started_at: new Date().toISOString() }
+  const record: DesktopServerRecord = {
+    schema: 1,
+    port: input.port,
+    pid: input.pid,
+    version: input.version,
+    run_id: input.runId,
+    started_at: new Date().toISOString(),
+  }
+  await sweepTemporaries(directory, input.pid)
   await Bun.write(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 })
     .then(() => fs.rename(temporary, file))
-    .catch(async () => {
+    .catch(async (error) => {
+      // The app's server still serves; only terminal launches lose the
+      // shortcut to it, which is invisible without a line saying why.
+      log.warn("desktop server advertisement failed", { file, error })
       await fs.rm(temporary, { force: true }).catch(() => undefined)
     })
 }
@@ -113,11 +166,26 @@ export function withdrawDesktopServer(directory: string, pid: number) {
   const file = desktopServerPath(directory)
   try {
     if (!existsSync(file)) return
-    const record = parseDesktopServer(readFileSync(file, "utf8"))
+    const contents = readFileSync(file, "utf8")
+    const record = parseDesktopServer(contents)
     if (record && record.pid !== pid) return
+    // A record this build cannot read is still someone's: a newer sidecar
+    // writing a schema from the future owns its own withdrawal. Only bytes
+    // that are not JSON at all belong to nobody, and those would otherwise sit
+    // in the data root forever, shadowing every later advertisement.
+    if (!record && isJson(contents)) return
     rmSync(file, { force: true })
   } catch {
     // Nothing to withdraw if we can no longer read or remove the file.
+  }
+}
+
+function isJson(contents: string) {
+  try {
+    JSON.parse(contents)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -137,6 +205,7 @@ function parseDesktopServer(contents: string | undefined) {
   if (port === undefined || !Number.isSafeInteger(port) || port < 1 || port > 65535) return
   if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) return
   if (typeof value.version !== "string" || !value.version) return
+  if (typeof value.run_id !== "string" || !value.run_id) return
   if (typeof value.started_at !== "string" || !value.started_at) return
   return value as DesktopServerRecord
 }
@@ -149,14 +218,16 @@ export async function readDesktopServer(directory: string) {
   )
 }
 
-/** The advertised port, once the process behind it proves it is a live
- *  workspace of this exact version. A record whose process is gone, whose
- *  version has moved on, or whose port does not answer is ignored, so the
- *  caller falls through to the stable ports. */
+/** The advertised port, once the process behind it proves it is the live
+ *  workspace that advertised it. A record whose process is gone, whose version
+ *  has moved on, whose port does not answer, or whose port answers as a
+ *  different server run is ignored, so the caller falls through to the stable
+ *  ports. */
 export async function findDesktopServer(version: string, directory: string) {
   const record = await readDesktopServer(directory)
   if (!record || record.version !== version || !running(record.pid)) return
-  return (await probeWorkspaceServer(localServerBase(record.port), version)) ? record.port : undefined
+  const match = await probeWorkspaceServer(localServerBase(record.port), version, record.run_id)
+  return match ? record.port : undefined
 }
 
 export async function findWorkspaceServer(
