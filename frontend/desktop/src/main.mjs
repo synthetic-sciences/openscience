@@ -21,7 +21,7 @@ import {
   stageCurrent,
   verify as verifyUpdate,
 } from "./updater.mjs"
-import { startupUpdateState } from "./update-state.mjs"
+import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
 
 const execute = promisify(execFile)
@@ -561,6 +561,12 @@ async function updateRequest(request, response) {
   timer.unref?.()
 }
 
+async function writeResultFile(file, value) {
+  const temporary = `${file}.tmp-${process.pid}`
+  await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600 })
+  await rename(temporary, file)
+}
+
 async function updates() {
   if (!app.isPackaged || process.platform !== "darwin") return
   state.updateCache = path.join(app.getPath("userData"), "updates")
@@ -594,8 +600,13 @@ async function updates() {
   const stored = await readFile(resultFile, "utf8")
     .then((value) => JSON.parse(value))
     .catch(() => undefined)
-  if (stored) await rm(resultFile, { force: true })
   state.updateResult = startupUpdateState(stored, app.getVersion(), validateUpdateHealthRequest()?.version)
+  const acknowledged = acknowledgedStartupResult(stored, state.updateResult)
+  // Serving "Updated to X" is what spends it. Recording that on disk, rather
+  // than only removing the file, means a result written again by update
+  // recovery cannot replay the notice on a later launch either.
+  if (acknowledged) await writeResultFile(resultFile, acknowledged)
+  else if (stored) await rm(resultFile, { force: true })
   const recovered = updateHealthRequest()
     ? undefined
     : await recoverUpdate(state.updateCache, {

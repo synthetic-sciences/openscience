@@ -8,6 +8,16 @@ type State = DesktopUpdateState & {
   dismissed: boolean
 }
 
+/**
+ * The release this installation can move to right now, if any. A finished
+ * update result describes what is already installed, so it never outranks a
+ * newer release; an update that is actually in flight does.
+ */
+export function offeredUpdate(state: Pick<State, "phase" | "available">) {
+  if (!state.available) return undefined
+  return state.phase === "idle" || state.phase === "succeeded" ? state.available : undefined
+}
+
 const controllers = new WeakMap<object, ReturnType<typeof createUpdateController>>()
 // Phases the supervisor advances on its own. A blocked restart is not one of
 // them: it waits for the user, so polling it only burns the transport.
@@ -37,6 +47,7 @@ export function createUpdateController(
   const pending = new Map<string, Promise<unknown>>()
   let mutation: { action: string; promise: Promise<unknown> } | undefined
   let syncing: Promise<DesktopUpdateState | undefined> | undefined
+  let armed: (() => Promise<void>) | undefined
 
   const merge = (next: DesktopUpdateState) => {
     setState({
@@ -48,11 +59,27 @@ export function createUpdateController(
       completed_at: next.completed_at,
       error: next.error,
       migration_required: next.migration_required,
-      available: next.phase === "succeeded" ? undefined : (next.version ?? state.available),
+      // A finished update spends only the offer it installed. A release found
+      // since is still ahead of this app and has to survive the result.
+      available:
+        next.phase === "succeeded"
+          ? state.available === next.version
+            ? undefined
+            : state.available
+          : (next.version ?? state.available),
       checking: false,
       cancelling: false,
     })
     if (transitional.has(next.phase)) schedule()
+    if (!armed) return
+    if (next.phase === "ready") {
+      const restart = armed
+      armed = undefined
+      void restart()
+      return
+    }
+    // A discarded, cancelled or failed download ends the one-press intent.
+    if (!transitional.has(next.phase)) armed = undefined
   }
 
   const sync = () => {
@@ -107,8 +134,21 @@ export function createUpdateController(
     return active
   }
 
+  const stage = () =>
+    mutate("stage", async () => {
+      if (!platform.stageUpdate) throw new Error("In-app staging is unavailable for this installation")
+      setState({ phase: "downloading", error: undefined, dismissed: false })
+      try {
+        merge(await platform.stageUpdate())
+      } catch (error) {
+        setState({ phase: "failed", error: message(error) })
+        throw error
+      }
+    })
+
   return {
     state,
+    stage,
     start() {
       void sync().catch(() => undefined)
     },
@@ -131,16 +171,15 @@ export function createUpdateController(
         }
       })
     },
-    stage() {
-      return mutate("stage", async () => {
-        if (!platform.stageUpdate) throw new Error("In-app staging is unavailable for this installation")
-        setState({ phase: "downloading", error: undefined, dismissed: false })
-        try {
-          merge(await platform.stageUpdate())
-        } catch (error) {
-          setState({ phase: "failed", error: message(error) })
-          throw error
-        }
+    /** One press: download and verify the update, then restart as soon as it
+     * is ready. The restart runs through `restart` so the caller keeps its own
+     * confirmation for a restart the server refuses while turns are running. */
+    downloadAndRestart(restart: () => Promise<void>) {
+      if (state.phase === "ready" || state.phase === "restart_blocked") return restart()
+      armed = restart
+      return stage().catch((error: unknown) => {
+        armed = undefined
+        throw error
       })
     },
     /** Restart into the staged update. `mode: "now"` pauses running agent
@@ -160,6 +199,7 @@ export function createUpdateController(
     },
     cancel() {
       return mutate("cancel", async () => {
+        armed = undefined
         if (!platform.cancelUpdate) return
         clearTimeout(timer)
         setState("cancelling", true)

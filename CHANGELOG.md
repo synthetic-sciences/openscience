@@ -62,6 +62,20 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Fixed
 
 - **One composer menu at a time.** Tools, the working folder chip, the model picker and the effort picker were four separate menus that each only closed themselves, so opening one left the others open on top of each other. Opening any of them now closes whatever else is open, and the working folder menu closes on a click outside it like the rest.
+- **"Updated to OpenScience X" is said once.** The desktop app replayed the
+  post-update notice on every launch, because the stored update result was
+  re-read at each start and nothing recorded that it had been shown. A served
+  result is now acknowledged on disk, so the notice appears on the first healthy
+  launch after an update and never again — dismissing it holds too. A failed
+  update still reports itself until the next attempt.
+- **A newer release is offered on launch, and installs in one press.** The
+  startup notice now says "OpenScience X is available" whenever a newer stable
+  release exists, even while the previous update's result is still on screen,
+  where the download action used to be hidden entirely. Its primary action,
+  **Download and restart**, downloads, verifies and restarts without a second
+  press, keeping the pause-and-continue confirmation when agent turns are
+  running; **Later**, **What's new** and **Cancel download** are unchanged.
+  Settings → General → Check for updates reads the same state.
 - **Files a worker leaves in its own scratch open from the lead's transcript.** The lead session now holds read access to each delegated child's workspace, so a report's side outputs (rendered pages, staged inputs, tool output files) open instead of failing silently.
 - **One PDF viewer.** A saved Result's PDF shows its pager and zoom in the file header like every other file view, and the viewer's own bar, where it still appears inline in chat, matches that header.
 - **A declined reload card is named.** When Ace pauses because the Wallet's card was declined, the message says so and points at the card update instead of "the last charge failed recently" or a reload that never completes.

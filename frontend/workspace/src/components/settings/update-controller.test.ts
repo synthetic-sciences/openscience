@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { DesktopUpdateState, Platform } from "@/context/platform"
-import { createUpdateController, formatUpdateBytes, pollDelay } from "./update-controller"
+import { createUpdateController, formatUpdateBytes, offeredUpdate, pollDelay } from "./update-controller"
 
 const flush = async () => {
   for (let i = 0; i < 4; i++) await Promise.resolve()
@@ -138,6 +138,138 @@ describe("desktop update controller", () => {
     await Promise.resolve()
     expect(controller.state.phase).toBe("succeeded")
     expect(controller.state.available).toBeUndefined()
+  })
+
+  test("keeps a newer release offered while a finished result is still on screen", async () => {
+    const calls: string[] = []
+    const candidate = platform({
+      states: [{ phase: "succeeded", version: "2.0.126", completed_at: "2026-09-20T09:44:55.838Z" }],
+      calls,
+    })
+    candidate.checkUpdate = async () => {
+      calls.push("check")
+      return { updateAvailable: true, version: "2.0.127" }
+    }
+    const controller = createUpdateController(candidate)
+
+    await controller.check()
+    expect(controller.state.available).toBe("2.0.127")
+
+    controller.start()
+    await flush()
+    expect(controller.state.phase).toBe("succeeded")
+    expect(controller.state.version).toBe("2.0.126")
+    expect(controller.state.available).toBe("2.0.127")
+    expect(offeredUpdate(controller.state)).toBe("2.0.127")
+  })
+
+  test("a newer release outranks a finished or absent update, never an active one", () => {
+    expect(offeredUpdate({ phase: "succeeded", available: "2.0.127" })).toBe("2.0.127")
+    expect(offeredUpdate({ phase: "idle", available: "2.0.127" })).toBe("2.0.127")
+    expect(offeredUpdate({ phase: "succeeded" })).toBeUndefined()
+    expect(offeredUpdate({ phase: "downloading", available: "2.0.127" })).toBeUndefined()
+    expect(offeredUpdate({ phase: "ready", available: "2.0.127" })).toBeUndefined()
+    expect(offeredUpdate({ phase: "failed", available: "2.0.127" })).toBeUndefined()
+  })
+
+  test("one press downloads, follows the staging and restarts once it is verified", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const candidate = platform({
+      states: [
+        { phase: "verifying", version: "2.0.54" },
+        { phase: "ready", version: "2.0.54" },
+      ],
+      calls,
+    })
+    const controller = createUpdateController(candidate, {
+      schedule: (run) => {
+        queued.push(run)
+        return queued.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    let restarts = 0
+    const restart = async () => {
+      restarts++
+      await controller.apply()
+    }
+
+    await controller.downloadAndRestart(restart)
+    expect(controller.state.phase).toBe("downloading")
+    expect(restarts).toBe(0)
+
+    queued.shift()?.()
+    await flush()
+    expect(controller.state.phase).toBe("verifying")
+    expect(restarts).toBe(0)
+
+    queued.shift()?.()
+    await flush()
+    expect(restarts).toBe(1)
+    expect(controller.state.phase).toBe("restarting")
+    expect(calls).toEqual(["stage", "state", "state", "apply"])
+  })
+
+  test("restarts straight away when the update is already verified", async () => {
+    const calls: string[] = []
+    const controller = createUpdateController(platform({ states: [{ phase: "ready", version: "2.0.54" }], calls }))
+    controller.start()
+    await flush()
+    expect(controller.state.phase).toBe("ready")
+
+    let restarts = 0
+    await controller.downloadAndRestart(async () => {
+      restarts++
+      await controller.apply()
+    })
+    expect(restarts).toBe(1)
+    expect(calls).toEqual(["state", "apply"])
+  })
+
+  test("a cancelled download never restarts on its own afterwards", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const candidate = platform({ states: [{ phase: "ready", version: "2.0.54" }], calls })
+    const controller = createUpdateController(candidate, {
+      schedule: (run) => {
+        queued.push(run)
+        return queued.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    let restarts = 0
+
+    await controller.downloadAndRestart(async () => {
+      restarts++
+    })
+    expect(controller.state.phase).toBe("downloading")
+    await controller.cancel()
+    expect(controller.state.phase).toBe("idle")
+
+    controller.start()
+    await flush()
+    expect(controller.state.phase).toBe("ready")
+    expect(restarts).toBe(0)
+  })
+
+  test("a failed download reports the failure instead of restarting", async () => {
+    const calls: string[] = []
+    const candidate = platform({ states: [{ phase: "ready", version: "2.0.54" }], calls })
+    candidate.stageUpdate = async () => {
+      calls.push("stage")
+      throw new Error("publisher verification failed")
+    }
+    const controller = createUpdateController(candidate)
+    let restarts = 0
+
+    await expect(controller.downloadAndRestart(async () => void restarts++)).rejects.toThrow(
+      "publisher verification failed",
+    )
+    expect(controller.state.phase).toBe("failed")
+
+    controller.start()
+    await flush()
+    expect(controller.state.phase).toBe("ready")
+    expect(restarts).toBe(0)
   })
 
   test("coalesces banner and Settings state reads", async () => {

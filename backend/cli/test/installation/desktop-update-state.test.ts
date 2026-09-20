@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { startupUpdateState } from "../../../../frontend/desktop/src/update-state.mjs"
+import { acknowledgedStartupResult, startupUpdateState } from "../../../../frontend/desktop/src/update-state.mjs"
 
 const previous = { status: "succeeded", version: "2.0.75", completed_at: "2026-09-06T10:00:00Z" }
 
@@ -26,6 +26,34 @@ test("preserves a failed update result while the previous healthy version is run
     completed_at: previous.completed_at,
     error: "Health check failed",
   })
+})
+
+test("shows a succeeded result once and ignores it on every later launch", () => {
+  const served = startupUpdateState(previous, "2.0.75")
+  expect(served).toEqual({
+    phase: "succeeded",
+    version: "2.0.75",
+    completed_at: previous.completed_at,
+    error: undefined,
+  })
+
+  const acknowledged = acknowledgedStartupResult(previous, served)
+  expect(acknowledged?.status).toBe("succeeded")
+  expect(acknowledged?.version).toBe("2.0.75")
+  expect(acknowledged?.completed_at).toBe(previous.completed_at)
+  expect(Number.isFinite(Date.parse(acknowledged?.acknowledged_at ?? ""))).toBe(true)
+
+  expect(startupUpdateState(acknowledged, "2.0.75")).toBeUndefined()
+  expect(acknowledgedStartupResult(acknowledged, served)).toBeUndefined()
+})
+
+test("acknowledges nothing the launch did not serve as an installed update", () => {
+  const failure = { ...previous, status: "failed", error: "Health check failed" }
+  expect(acknowledgedStartupResult(failure, startupUpdateState(failure, "2.0.74"))).toBeUndefined()
+  expect(startupUpdateState({ ...failure, acknowledged_at: "2026-09-06T11:00:00Z" }, "2.0.74")?.phase).toBe("failed")
+  // A supervised launch reports its own restart, so the stored result stays untouched.
+  expect(acknowledgedStartupResult(previous, startupUpdateState(previous, "2.0.75", "2.0.76"))).toBeUndefined()
+  expect(acknowledgedStartupResult(undefined, { phase: "succeeded", version: "2.0.75" })).toBeUndefined()
 })
 
 test("ignores malformed persisted results", () => {

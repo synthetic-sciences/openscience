@@ -1,17 +1,98 @@
-import { Show, createEffect, onCleanup, type Component } from "solid-js"
+import { Show, createEffect, createMemo, onCleanup, type Component } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { showToast } from "@synsci/ui/toast"
 import { UpdateRefused } from "@/utils/update-error"
-import { usePlatform } from "@/context/platform"
+import { usePlatform, type DesktopUpdateState } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { DialogSettings } from "@/components/dialog-settings"
 import { URLS } from "@/config/urls"
-import { formatUpdateBytes, updateController } from "./update-controller"
+import { formatUpdateBytes, offeredUpdate, updateController } from "./update-controller"
 import "./startup-update.css"
 
 type UpdateResult = { updateAvailable: boolean; version?: string }
+
+type NoticeState = Pick<
+  DesktopUpdateState,
+  "phase" | "version" | "transferred" | "total" | "completed_at" | "error" | "migration_required"
+> & { available?: string }
+
+export type UpdateNotice = {
+  kind: "available" | "preparing" | "ready" | "restarting" | "blocked" | "failed" | "succeeded"
+  title: string
+  detail?: string
+  /** Undefined when the notice has nothing for the person to start. */
+  primary?: { label: string; busy: boolean }
+}
+
+/**
+ * What the notice says, and what pressing its primary action means. A release
+ * the app can still move to outranks a finished update result: the result is
+ * about a version already installed, the release is the one thing left to do.
+ */
+export function updateNotice(state: NoticeState): UpdateNotice | undefined {
+  const offered = offeredUpdate(state)
+  if (offered) {
+    return {
+      kind: "available",
+      title: `OpenScience ${offered} is available`,
+      detail: "One press downloads and verifies the signed update, then restarts OpenScience.",
+      primary: { label: "Download and restart", busy: false },
+    }
+  }
+  if (state.phase === "ready") {
+    return {
+      kind: "ready",
+      title: `OpenScience ${state.version ?? state.available} is verified`,
+      detail: state.migration_required
+        ? "This copy is administrator-owned. OpenScience will install the verified update in your user Applications folder, then reopen there."
+        : "Ready when you are. Restart only after your current work is finished.",
+      primary: { label: state.migration_required ? "Move & restart" : "Restart to update", busy: false },
+    }
+  }
+  if (state.phase === "succeeded") {
+    return {
+      kind: "succeeded",
+      title: `Updated to OpenScience ${state.version}`,
+      detail: "The signed update is installed and your workspace is healthy.",
+    }
+  }
+  if (state.phase === "restarting") {
+    return {
+      kind: "restarting",
+      title: `Restarting OpenScience ${state.version ?? ""}`.trim(),
+      detail: "Finishing the update. OpenScience will reopen automatically.",
+      primary: { label: "Restarting…", busy: true },
+    }
+  }
+  if (state.phase === "restart_blocked") {
+    return {
+      kind: "blocked",
+      title: "OpenScience is waiting to restart safely",
+      detail: state.error ?? "Finish or close the active runtime, then retry the restart.",
+      primary: { label: "Retry restart", busy: false },
+    }
+  }
+  if (state.phase === "failed") {
+    return {
+      kind: "failed",
+      title: "OpenScience could not prepare the update",
+      detail: state.error,
+      primary: { label: "Retry", busy: false },
+    }
+  }
+  if (state.phase === "idle") return undefined
+  return {
+    kind: "preparing",
+    title: `Preparing OpenScience ${state.version ?? state.available}`,
+    detail:
+      state.phase === "downloading"
+        ? `${formatUpdateBytes(state.transferred)}${state.total ? ` of ${formatUpdateBytes(state.total)}` : ""} downloaded`
+        : "Checking the signed, notarized app before restart.",
+    primary: { label: "Preparing…", busy: true },
+  }
+}
 
 export function queueStartupUpdateCheck(input: {
   enabled: boolean
@@ -56,14 +137,12 @@ export const StartupUpdateCheck: Component = () => {
   let queued = false
   let cancel = () => {}
 
-  const action = async () => {
-    const restarting = updates.state.phase === "ready" || updates.state.phase === "restart_blocked"
-    const run = restarting ? () => updates.apply() : () => updates.stage()
-    await run().catch(async (error: unknown) => {
+  const restart = async () => {
+    await updates.apply().catch(async (error: unknown) => {
       // Running agent turns are the one blocker the person can wave through:
       // the server pauses them with a named reason and continues them after
       // the restart. Offer that instead of a toast that leads nowhere.
-      if (restarting && error instanceof UpdateRefused && error.pausable) {
+      if (error instanceof UpdateRefused && error.pausable) {
         // Loaded here: the dialog helper pulls in client-only components,
         // and this module's pure helpers are imported in server-side tests.
         const { confirmDialog } = await import("@/atlas/dialogs")
@@ -90,7 +169,19 @@ export const StartupUpdateCheck: Component = () => {
       }
       showToast({
         variant: "error",
-        title: restarting ? "OpenScience is still running" : "Update failed",
+        title: "OpenScience is still running",
+        description: error instanceof Error ? error.message : String(error),
+      })
+    })
+  }
+
+  // One press covers the whole update: the download runs in the background and
+  // the restart follows the moment the staged bundle is verified.
+  const action = async () => {
+    await updates.downloadAndRestart(restart).catch((error: unknown) => {
+      showToast({
+        variant: "error",
+        title: "Update failed",
         description: error instanceof Error ? error.message : String(error),
       })
     })
@@ -118,77 +209,29 @@ export const StartupUpdateCheck: Component = () => {
   })
 
   onCleanup(() => cancel())
+  const notice = createMemo(() => updateNotice(updates.state))
   return (
-    <Show when={!updates.state.dismissed && (updates.state.available || updates.state.phase !== "idle")}>
+    <Show when={!updates.state.dismissed && notice()}>
       <aside
         class="startup-update"
         data-phase={updates.state.phase}
         aria-label="OpenScience update"
         aria-live="polite"
-        aria-busy={["downloading", "extracting", "verifying", "restarting"].includes(updates.state.phase)}
+        aria-busy={notice()?.primary?.busy === true}
       >
         <span class="startup-update__icon" aria-hidden="true">
           <Icon name="download" size="small" />
         </span>
         <span class="startup-update__copy">
-          <strong>
-            {updates.state.phase === "ready"
-              ? `OpenScience ${updates.state.version ?? updates.state.available} is verified`
-              : updates.state.phase === "succeeded"
-                ? `Updated to OpenScience ${updates.state.version}`
-                : updates.state.phase === "restarting"
-                  ? `Restarting OpenScience ${updates.state.version ?? ""}`.trim()
-                  : updates.state.phase === "restart_blocked"
-                    ? "OpenScience is waiting to restart safely"
-                    : updates.state.phase === "failed"
-                      ? "OpenScience could not prepare the update"
-                      : ["downloading", "extracting", "verifying"].includes(updates.state.phase)
-                        ? `Preparing OpenScience ${updates.state.version ?? updates.state.available}`
-                        : `OpenScience ${updates.state.available} is available`}
-          </strong>
-          <small>
-            {updates.state.phase === "ready"
-              ? updates.state.migration_required
-                ? "This copy is administrator-owned. OpenScience will install the verified update in your user Applications folder, then reopen there."
-                : "Ready when you are. Restart only after your current work is finished."
-              : updates.state.phase === "succeeded"
-                ? "The signed update is installed and your workspace is healthy."
-                : updates.state.phase === "restarting"
-                  ? "Finishing the update. OpenScience will reopen automatically."
-                  : updates.state.phase === "restart_blocked"
-                    ? (updates.state.error ?? "Finish or close the active runtime, then retry the restart.")
-                    : updates.state.phase === "failed"
-                      ? updates.state.error
-                      : updates.state.phase === "downloading"
-                        ? `${formatUpdateBytes(updates.state.transferred)}${updates.state.total ? ` of ${formatUpdateBytes(updates.state.total)}` : ""} downloaded`
-                        : ["extracting", "verifying"].includes(updates.state.phase)
-                          ? "Checking the signed, notarized app before restart."
-                          : "Download in the background, then choose when to restart."}
-          </small>
+          <strong>{notice()?.title}</strong>
+          <small>{notice()?.detail}</small>
           <Show when={updates.state.progress !== undefined && updates.state.phase === "downloading"}>
             <progress max="1" value={updates.state.progress} aria-label="Update download progress" />
           </Show>
         </span>
-        <Show when={platform.stageUpdate && updates.state.phase !== "succeeded"}>
-          <Button
-            size="small"
-            variant="primary"
-            disabled={["downloading", "extracting", "verifying", "restarting"].includes(updates.state.phase)}
-            onClick={() => void action()}
-          >
-            {updates.state.phase === "ready"
-              ? updates.state.migration_required
-                ? "Move & restart"
-                : "Restart to update"
-              : updates.state.phase === "restarting"
-                ? "Restarting…"
-                : updates.state.phase === "restart_blocked"
-                  ? "Retry restart"
-                  : updates.state.phase === "failed"
-                    ? "Retry"
-                    : ["downloading", "extracting", "verifying"].includes(updates.state.phase)
-                      ? "Preparing…"
-                      : "Download update"}
+        <Show when={platform.stageUpdate && notice()?.primary}>
+          <Button size="small" variant="primary" disabled={notice()?.primary?.busy} onClick={() => void action()}>
+            {notice()?.primary?.label}
           </Button>
         </Show>
         <Show
@@ -203,6 +246,11 @@ export const StartupUpdateCheck: Component = () => {
             onClick={() => void cancelUpdate()}
           >
             {updates.state.cancelling ? "Discarding…" : updates.state.phase === "ready" ? "Discard" : "Cancel download"}
+          </Button>
+        </Show>
+        <Show when={notice()?.kind === "available"}>
+          <Button size="small" variant="secondary" onClick={() => updates.dismiss()}>
+            Later
           </Button>
         </Show>
         <Button
