@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Only the two scripts beside this file run here; the loader keeps its
+         styles in its shadow root, which needs the inline allowance. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'"
+    />
+    <title>OpenScience</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      :root[data-color-scheme="light"] {
+        color-scheme: light;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+      body {
+        display: grid;
+        place-items: center;
+        background: var(--background-base);
+        color: var(--text-strong);
+        font:
+          500 12px/1 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      synsci-loader {
+        flex: 0 0 auto;
+        font: inherit;
+      }
+      /* A line above matches the caption line below, so the mark itself is centred. */
+      synsci-loader[caption]:defined::before {
+        content: "";
+        display: block;
+        flex: none;
+        height: 1em;
+      }
+      /* Until the module defines the element, the caption still reads. */
+      synsci-loader:not(:defined) {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        min-height: 200px;
+        opacity: 0.62;
+      }
+      synsci-loader:not(:defined)::after {
+        content: attr(caption);
+      }
+    </style>
+  </head>
+  <body>
+    <synsci-loader size="180" caption="Starting your local workspace"></synsci-loader>
+    <script src="splash.js"></script>
+    <script type="module" src="synsci-loader.js"></script>
+  </body>
+</html>

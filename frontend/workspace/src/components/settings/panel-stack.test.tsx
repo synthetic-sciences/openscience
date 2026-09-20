@@ -78,7 +78,11 @@ describe("SettingsPanelStack", () => {
   test("a steady resource keeps the panel on screen while it refetches", async () => {
     const harness = fixture.createRefreshingPanelFixture({ steady: true })
     const host = mount(harness.view)
-    expect(host.querySelector(".settings-panel-loading")).not.toBeNull()
+    const loading = host.querySelector(".settings-panel-loading")
+    expect(loading).not.toBeNull()
+    expect(loading?.getAttribute("role")).toBe("status")
+    expect(loading?.querySelector("synsci-loader")?.getAttribute("caption")).toBe("Loading settings")
+    expect(loading?.textContent).toContain("Loading settings")
 
     harness.resolve(["ollama"])
     await settle()

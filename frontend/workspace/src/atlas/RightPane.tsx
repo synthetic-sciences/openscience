@@ -27,7 +27,7 @@ import { FileIcon } from "@synsci/ui/file-icon"
 import { StoredArtifactView } from "@/artifacts/StoredArtifactView"
 import { confirmDialog } from "@/atlas/dialogs"
 import { discardFileDraft } from "@/atlas/file-drafts"
-import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { PaneResizer } from "@/atlas/PaneResizer"
 import {
   IconArchive,
@@ -724,9 +724,11 @@ function InspectorLoading(props: { label: string }): JSX.Element {
   return (
     <div
       data-component="inspector-loading"
-      style={{ flex: 1, display: "flex", "align-items": "center", "justify-content": "center" }}
+      role="status"
+      aria-live="polite"
+      style={{ flex: 1, "min-height": 0, display: "grid", "place-items": "center" }}
     >
-      <AsciiSpinner size={10} label={`Loading ${props.label.toLowerCase()}…`} color="var(--color-text-faint)" />
+      <AtomLoader size={144} caption={`Loading ${props.label.toLowerCase()}`} />
     </div>
   )
 }

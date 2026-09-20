@@ -632,7 +632,10 @@ describe("files pane", () => {
     host.querySelector<HTMLButtonElement>('[data-file-row="alpha"]')?.click()
     await settle()
 
-    expect(host.querySelector("[data-files-loading]")).not.toBeNull()
+    const loading = host.querySelector("[data-files-loading]")
+    expect(loading).not.toBeNull()
+    expect(loading?.querySelector("synsci-loader")?.getAttribute("caption")).toMatch(/^Loading /)
+    expect(loading?.textContent).toMatch(/^Loading /)
     expect(host.querySelector<HTMLButtonElement>('[data-file-row="beta"]')).toBeNull()
     expect(host.textContent).not.toContain("This folder is empty.")
 

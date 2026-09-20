@@ -1,5 +1,6 @@
 import { Dynamic } from "solid-js/web"
 import { For, Suspense, createEffect, onCleanup, type Accessor, type Component } from "solid-js"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 
 export interface SettingsPanelStackItem<Id extends string = string> {
   id: Id
@@ -52,18 +53,7 @@ export function SettingsPanelStack<Id extends string>(props: {
           <Suspense
             fallback={
               <div class="settings-panel-loading" role="status" aria-label="Loading settings">
-                <div class="settings-panel-loading__header">
-                  <span class="settings-panel-loading__line" data-size="title" />
-                  <span class="settings-panel-loading__line" data-size="copy" />
-                </div>
-                <div class="settings-panel-loading__body">
-                  <span class="settings-panel-loading__line" data-size="label" />
-                  <div class="settings-panel-loading__rows" aria-hidden="true">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                </div>
+                <AtomLoader size={144} caption="Loading settings" />
               </div>
             }
           >

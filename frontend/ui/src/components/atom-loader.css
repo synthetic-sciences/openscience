@@ -1,0 +1,39 @@
+[data-component="atom-loader"] {
+  flex: 0 0 auto;
+  max-width: 100%;
+  color: var(--text-strong);
+  font: var(--font-weight-medium) var(--font-size-small) / 1 var(--font-family-sans);
+}
+
+/* A caption line below the canvas would pull the mark above the centre of
+   whatever holds it; a matching line above keeps the mark itself centred. */
+[data-component="atom-loader"][caption]:defined::before {
+  content: "";
+  display: block;
+  flex: none;
+  height: 1em;
+}
+
+/* Before the element upgrades, or where the canvas cannot draw, the caption
+   reads as plain text at the foot of the box the mark will occupy, so nothing
+   shifts when the particles arrive. */
+[data-component="atom-loader"]:not(:defined) {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: calc(var(--atom-loader-size, 160px) + 3.8em);
+  color: var(--text-weak);
+  white-space: nowrap;
+}
+
+[data-component="loading-screen"] {
+  display: grid;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  background: var(--background-base);
+}

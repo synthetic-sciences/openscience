@@ -26,6 +26,7 @@ import { usePlatform } from "@/context/platform"
 import { useTerminal } from "@/context/terminal"
 import { PromptInput } from "@/components/prompt-input"
 import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { PaneResizer } from "@/atlas/PaneResizer"
 import { AppHeader } from "@/atlas/AppHeader"
 import { FONT_SANS } from "@/styles/tokens"
@@ -163,6 +164,9 @@ export default function Page(): JSX.Element {
   // A transcript that failed to load must say so instead of posing as a new,
   // empty conversation.
   const [loadFailure, setLoadFailure] = createSignal<{ id: string; message: string }>()
+  // The transcript of the session being entered is still on its way. Until it
+  // lands the conversation shows the loader instead of posing as a new, empty one.
+  const [opening, setOpening] = createSignal<string>()
 
   const hydrateSession = (id: string) => {
     const pending = hydration.get(id)
@@ -387,12 +391,15 @@ export default function Page(): JSX.Element {
       (id) => {
         if (!id || id === "new") return
         setLoadFailure(undefined)
+        setOpening(id)
         ;(async () => {
           try {
             await hydrateSession(id)
           } catch (error) {
             if (discardUnavailableSession(id, error)) return
             setLoadFailure({ id, message: error instanceof Error ? error.message : String(error) })
+          } finally {
+            setOpening((current) => (current === id ? undefined : current))
           }
         })()
       },
@@ -1189,22 +1196,8 @@ export default function Page(): JSX.Element {
             >
               <Switch>
                 <Match when={params.id === undefined}>
-                  <div
-                    role="status"
-                    aria-live="polite"
-                    style={{
-                      flex: 1,
-                      display: "flex",
-                      "align-items": "center",
-                      "justify-content": "center",
-                      gap: "8px",
-                      color: "var(--color-text-muted)",
-                      "font-family": FONT_SANS,
-                      "font-size": "12px",
-                    }}
-                  >
-                    <AsciiSpinner size={10} />
-                    <span>Opening your last session…</span>
+                  <div class="session-empty" role="status" aria-live="polite">
+                    <AtomLoader size={180} caption="Opening your last session" />
                   </div>
                 </Match>
                 <Match when={params.id && messages().length === 0 && loadFailure()?.id === params.id}>
@@ -1240,6 +1233,11 @@ export default function Page(): JSX.Element {
                         This worker starts when its lead delegates a task. Its work and handoff will appear here.
                       </p>
                     </div>
+                  </div>
+                </Match>
+                <Match when={params.id && messages().length === 0 && opening() === params.id}>
+                  <div class="session-empty" role="status" aria-live="polite">
+                    <AtomLoader size={180} caption="Opening session" />
                   </div>
                 </Match>
                 <Match when={params.id && messages().length === 0}>

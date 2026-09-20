@@ -1,6 +1,7 @@
 import { For, Match, Show, Switch, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { AppHeader } from "@/atlas/AppHeader"
 import {
   IconArchive,
@@ -160,12 +161,8 @@ export function ProjectsWorkbench(props: {
 
           <Switch>
             <Match when={props.state === "loading"}>
-              <section class="science-home__state" role="status" aria-live="polite">
-                <span class="science-home__spinner" aria-hidden="true" />
-                <div>
-                  <strong>Loading projects…</strong>
-                  <span>Reading projects from this server.</span>
-                </div>
+              <section class="science-home__state science-home__state--loading" role="status" aria-live="polite">
+                <AtomLoader size={144} caption="Loading projects" />
               </section>
             </Match>
 

@@ -11,10 +11,10 @@ import {
   type ParentProps,
 } from "solid-js"
 import { createStore } from "solid-js/store"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { Button } from "@synsci/ui/button"
 import { TextField } from "@synsci/ui/text-field"
 import { ProviderIcon } from "@synsci/ui/provider-icon"
-import { Wordmark } from "@/atlas/Wordmark"
 import { ProviderLogo } from "@/components/settings/ProviderLogo"
 import { settingsApi } from "@/components/settings/api"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "@/components/settings/account-deadline"
@@ -22,7 +22,6 @@ import { URLS } from "@/config/urls"
 import { usePlatform } from "@/context/platform"
 import type { Platform } from "@/context/platform"
 import { useServer } from "@/context/server"
-import { AsciiSpinner } from "./shared/AsciiSpinner"
 import "./DesktopOnboarding.css"
 
 /** The setup revision every install sees once. Mirrors ONBOARDING_VERSION on the server. */
@@ -103,8 +102,7 @@ function DesktopOnboardingLoading() {
   return (
     <main class="desktop-onboarding desktop-onboarding--loading" aria-label="Loading desktop setup">
       <div class="desktop-onboarding__loading" role="status" aria-live="polite">
-        <Wordmark size="md" />
-        <AsciiSpinner label="Preparing your workspace…" color="var(--color-text-muted)" />
+        <AtomLoader size={180} caption="Preparing your workspace" />
       </div>
     </main>
   )

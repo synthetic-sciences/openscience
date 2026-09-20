@@ -14,6 +14,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -1399,8 +1400,7 @@ export function FilesPane(
           inside a folder that was never opened. */}
       <Show when={sourceLoading()}>
         <div class="files-loading" role="status" data-files-loading>
-          <span class="files-loading__spark" aria-hidden="true" />
-          Loading {current().name}…
+          <AtomLoader size={120} caption={`Loading ${current().name}`} />
         </div>
       </Show>
 

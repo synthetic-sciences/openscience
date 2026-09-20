@@ -23,9 +23,11 @@ import {
 } from "./updater.mjs"
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
+import { defaultAppearance, parseAppearance, readAppearance, splashQuery, writeAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
+const splashPage = fileURLToPath(new URL("./splash/splash.html", import.meta.url))
 const windows = new Set()
 // The only web permissions the workspace uses; every other request (camera,
 // microphone, geolocation, MIDI, ...) is denied without prompting.
@@ -57,6 +59,41 @@ const state = {
   updateRelaunch: undefined,
   updateStartupFailure: undefined,
   stopTask: undefined,
+  /** The colours the workspace last painted; the splash and window paint the same before it mounts. */
+  appearance: undefined,
+}
+
+function appearanceFile() {
+  return path.join(app.getPath("userData"), "appearance.json")
+}
+
+function appearance() {
+  return state.appearance ?? defaultAppearance()
+}
+
+// The workspace owns its theme. Reading the tokens it resolved keeps the next
+// launch's splash and window on the same colours, whichever theme or scheme
+// the user picked, instead of a fixed dark that flashes on a light workspace.
+async function rememberAppearance(window) {
+  // A window already torn down throws on webContents itself, not only in the script.
+  const reported = await Promise.resolve()
+    .then(() =>
+      window.webContents.executeJavaScript(
+        `(() => {
+          const style = getComputedStyle(document.documentElement)
+          return {
+            mode: document.documentElement.dataset.colorScheme,
+            background: style.getPropertyValue("--background-base").trim(),
+            foreground: style.getPropertyValue("--text-strong").trim(),
+          }
+        })()`,
+      ),
+    )
+    .catch(() => undefined)
+  const next = parseAppearance(reported)
+  if (!next) return
+  state.appearance = next
+  await writeAppearance(appearanceFile(), next)
 }
 
 function external(value) {
@@ -679,9 +716,7 @@ async function bootstrap(splash) {
       "OpenScience is running from the downloaded disk image. Install it in Applications now so future updates work automatically.",
   })
   if (prompt.response !== 0) return false
-  await splash.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Installing in Applications…</p></div></main>')}`,
-  )
+  await splash.loadFile(splashPage, { query: splashQuery(appearance(), "install") })
   let staged
   try {
     staged = await stageCurrent({
@@ -911,7 +946,7 @@ async function createWindow() {
     minHeight: 640,
     show: false,
     title: "OpenScience",
-    backgroundColor: "#11110f",
+    backgroundColor: appearance().background,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -922,6 +957,7 @@ async function createWindow() {
   window.once("ready-to-show", () => window.show())
   window.on("page-title-updated", dock)
   window.on("focus", dock)
+  window.on("close", () => void rememberAppearance(window))
   window.on("closed", () => {
     windows.delete(window)
     if (!state.exiting) dock()
@@ -948,6 +984,7 @@ async function createWindow() {
       .catch(() => false)
     if (mounted) {
       dock()
+      void rememberAppearance(window)
       return window
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
@@ -982,22 +1019,21 @@ app
       }
       applicationMenu()
       await updates()
+      state.appearance = await readAppearance(appearanceFile())
       splash = new BrowserWindow({
         width: 520,
         height: 300,
         resizable: false,
         show: false,
         title: "OpenScience",
-        backgroundColor: "#11110f",
+        backgroundColor: appearance().background,
         webPreferences: {
           contextIsolation: true,
           nodeIntegration: false,
           sandbox: true,
         },
       })
-      await splash.loadURL(
-        `data:text/html;charset=utf-8,${encodeURIComponent('<main style="background:#11110f;color:#e8e5dc;display:grid;font:14px system-ui;height:100vh;margin:0;place-items:center"><div><h1 style="font-size:20px;margin:0 0 8px">OpenScience</h1><p style="color:#9d998f;margin:0">Starting your local workspace…</p></div></main>')}`,
-      )
+      await splash.loadFile(splashPage, { query: splashQuery(appearance(), "start") })
       splash.show()
       if (await bootstrap(splash)) return
       if (process.platform === "win32") {

@@ -22,19 +22,13 @@ import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
 import { resolveDefaultServerUrl } from "@/config/server-url"
-import { AsciiSpinner } from "@/atlas/shared/AsciiSpinner"
+import { LoadingScreen } from "@synsci/ui/atom-loader"
 import { DesktopOnboarding } from "@/atlas/DesktopOnboarding"
 import Home from "@/pages/home"
 import { Session } from "@/pages/session-loader"
 import { DEFAULT_PANEL, preloadPanel } from "@/components/settings/registry"
 import { StartupUpdateCheck } from "@/components/settings/startup-update"
 import "./app.css"
-
-const Loading = () => (
-  <div class="size-full" style={{ display: "flex", "align-items": "center", "justify-content": "center" }}>
-    <AsciiSpinner label="loading…" color="var(--color-text-faint)" />
-  </div>
-)
 
 const NotFound = () => (
   <main class="app-not-found" aria-labelledby="not-found-title">
@@ -161,7 +155,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/"
                   component={() => (
-                    <Suspense fallback={<Loading />}>
+                    <Suspense fallback={<LoadingScreen caption="Loading projects" />}>
                       <Home />
                     </Suspense>
                   )}
@@ -173,7 +167,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
                     component={(p) => (
                       <Show when={p.params.id ?? "new"}>
                         <CommentsProvider>
-                          <Session fallback={<Loading />} />
+                          <Session fallback={<LoadingScreen caption="Opening session" />} />
                         </CommentsProvider>
                       </Show>
                     )}

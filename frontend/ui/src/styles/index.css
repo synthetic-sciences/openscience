@@ -10,6 +10,7 @@
    markdown) and LatexView (math artifacts) each load it lazily on first use. */
 
 @import "../components/accordion.css" layer(components);
+@import "../components/atom-loader.css" layer(components);
 @import "../components/basic-tool.css" layer(components);
 @import "../components/button.css" layer(components);
 @import "../components/card.css" layer(components);

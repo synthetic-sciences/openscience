@@ -1598,35 +1598,19 @@
 }
 
 .files-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px 8px;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-small);
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  place-items: center;
+  padding: 16px 12px 24px;
 }
-.files-loading__spark {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-text-faint);
-  animation: files-pulse 1s ease-in-out infinite;
-}
-@keyframes files-pulse {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  50% {
-    opacity: 1;
-  }
+/* A listing still on its way yields the pane to the loader; rows that stay on
+   screen through a refresh keep their own height beneath it. */
+.files-loading ~ .files-table,
+.files-loading ~ .artifact-surface {
+  flex: 0 1 auto;
 }
 @media (prefers-reduced-motion: reduce) {
-  .files-loading__spark {
-    animation: none;
-    opacity: 0.6;
-  }
-
   .files-source__button,
   .files-menu__item,
   .files-menu__revoke,

@@ -213,6 +213,28 @@ test("a fresh desktop starts at the account step with no way to skip it", async 
   expect(view.host.textContent).toContain("1 / 4")
 })
 
+test("the desktop shows the loader with its caption until the setup state arrives", async () => {
+  let release: (() => void) | undefined
+  const app = fixture({
+    preferences: () =>
+      new Promise(
+        (resolve) =>
+          (release = () =>
+            resolve(Response.json({ desktop_onboarding_version: 0, desktop_onboarding_step: "account" }))),
+      ),
+  })
+  const view = app.mount()
+  await until(() => view.host.querySelector('[aria-label="Loading desktop setup"]') !== null)
+  const status = view.host.querySelector('[aria-label="Loading desktop setup"] [role="status"]')
+  expect(status?.querySelector("synsci-loader")?.getAttribute("caption")).toBe("Preparing your workspace")
+  expect(status?.textContent).toContain("Preparing your workspace")
+  expect(view.host.textContent).not.toContain("Research workspace loaded")
+  await until(() => typeof release === "function")
+  release!()
+  await until(() => heading(view.host) === "Welcome to OpenScience")
+  expect(view.host.querySelector('[aria-label="Loading desktop setup"]')).toBeNull()
+})
+
 test("browser sign-in waits for workspace approval, then advances to Ace", async () => {
   let release: (() => void) | undefined
   const app = fixture({ login: () => new Promise((resolve) => (release = () => resolve(Response.json({ ok: true })))) })

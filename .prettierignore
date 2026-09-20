@@ -12,6 +12,11 @@ dist/
 # curated skill content consumed verbatim by agents
 backend/cli/skills/
 
+# the atom loader web component, kept byte-identical to its handoff; the shared
+# UI copy is the source and frontend/ui's atom-loader test pins the desktop copy to it
+frontend/ui/src/components/synsci-loader.js
+frontend/desktop/src/splash/synsci-loader.js
+
 # recorded live-API responses, replayed verbatim by the connector conformance
 # suite (regenerate with: bun run script/record-fetch-fixtures.ts)
 backend/cli/test/science/fixtures/

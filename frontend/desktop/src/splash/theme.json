@@ -1,0 +1,4 @@
+{
+  "dark": { "background-base": "#191919", "text-strong": "#f2f2f2" },
+  "light": { "background-base": "#f7f7f7", "text-strong": "#1f1f1f" }
+}

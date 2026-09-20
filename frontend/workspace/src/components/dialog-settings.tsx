@@ -456,43 +456,15 @@ const SETTINGS_STYLES = `
 .settings-panel-loading {
   width: 100%;
   height: 100%;
+  display: grid;
+  place-items: center;
   background: var(--settings-canvas);
 }
-/* The skeleton shares .settings-page-header / .settings-page-body geometry so
-   a lazy panel resolves in place instead of shifting its title and body. */
-.settings-panel-loading__header {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--settings-space-1);
-  padding: var(--settings-space-5) max(var(--settings-space-6), calc((100% - 900px) / 2)) var(--settings-space-3);
-  border-bottom: 0;
-}
-.settings-panel-loading__body {
-  display: flex;
-  max-width: 900px;
-  flex-direction: column;
-  gap: var(--settings-space-5);
-  margin-inline: auto;
-  padding: var(--settings-space-3) var(--settings-space-6) var(--settings-space-7);
-}
-.settings-panel-loading__line,
+/* Section skeletons keep the rows' geometry so a section resolves in place. */
 .settings-panel-loading__rows span {
   display: block;
   border-radius: var(--settings-radius-control);
   background: var(--settings-surface-muted);
-}
-.settings-panel-loading__line[data-size="title"] {
-  width: 132px;
-  height: var(--settings-leading-title);
-}
-.settings-panel-loading__line[data-size="copy"] {
-  width: min(420px, 72%);
-  height: var(--settings-leading-body);
-}
-.settings-panel-loading__line[data-size="label"] {
-  width: 84px;
-  height: var(--settings-leading-helper);
 }
 .settings-panel-loading__rows {
   overflow: hidden;
@@ -1465,12 +1437,6 @@ const SETTINGS_STYLES = `
     padding: 20px 20px 16px;
   }
   .settings-page-body {
-    padding: 16px 20px 36px;
-  }
-  .settings-panel-loading__header {
-    padding: 20px 20px 16px;
-  }
-  .settings-panel-loading__body {
     padding: 16px 20px 36px;
   }
   .credential-form-grid {
