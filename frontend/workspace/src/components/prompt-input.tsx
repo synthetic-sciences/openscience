@@ -1240,13 +1240,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const index = slashFlat().findIndex((item) => item.id === activeId)
     if (index >= slashRendered()) setSlashRendered(index + SLASH_SLICE)
   })
-  createEffect(
-    on(
-      slashGroups,
-      () => setSlashRendered(SLASH_SLICE),
-      { defer: true },
-    ),
-  )
+  createEffect(on(slashGroups, () => setSlashRendered(SLASH_SLICE), { defer: true }))
 
   const createPill = (part: FileAttachmentPart | AgentPart | ConversationAttachmentPart) => {
     const pill = document.createElement("span")

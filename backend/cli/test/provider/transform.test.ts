@@ -637,9 +637,8 @@ describe("ProviderTransform.message - Mistral tool call IDs", () => {
   })
 
   test("deterministically retries a digest collision", () => {
-    const ids = ProviderTransform.mistralToolIDs(
-      ["first", "second", "first"],
-      (value) => (value.includes("\0") ? "bbbbbbbbb" : "aaaaaaaaa"),
+    const ids = ProviderTransform.mistralToolIDs(["first", "second", "first"], (value) =>
+      value.includes("\0") ? "bbbbbbbbb" : "aaaaaaaaa",
     )
     expect([...ids.entries()]).toEqual([
       ["first", "aaaaaaaaa"],

@@ -38,7 +38,10 @@ export namespace ProviderTransform {
       if (result.has(id)) continue
       for (let nonce = 0; ; nonce++) {
         const value = nonce ? `${id}\0${nonce}` : id
-        const candidate = digest(value).replace(/[^a-zA-Z0-9]/g, "").slice(0, 9).padEnd(9, "0")
+        const candidate = digest(value)
+          .replace(/[^a-zA-Z0-9]/g, "")
+          .slice(0, 9)
+          .padEnd(9, "0")
         if (used.has(candidate)) continue
         result.set(id, candidate)
         used.add(candidate)

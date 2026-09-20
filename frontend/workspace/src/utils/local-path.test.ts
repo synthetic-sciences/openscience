@@ -25,9 +25,7 @@ describe("local path operations", () => {
     expect(joinLocalPath("/", "var/log")).toBe("/var/log")
     expect(joinLocalPath("C:\\Users\\aayam", "research/data")).toBe("C:/Users/aayam/research/data")
     expect(joinLocalPath("\\\\server\\share", "team\\paper")).toBe("//server/share/team/paper")
-    expect(resolveTypedLocalPath("../outside", "/home/aayam/work", "/home/aayam")).toBe(
-      "/home/aayam/work/../outside",
-    )
+    expect(resolveTypedLocalPath("../outside", "/home/aayam/work", "/home/aayam")).toBe("/home/aayam/work/../outside")
   })
 
   test("finds roots and never navigates above them", () => {
@@ -75,9 +73,7 @@ describe("local path operations", () => {
   })
 
   test("expands tilde and relative input while leaving validation-relevant segments intact", () => {
-    expect(resolveTypedLocalPath("~/paper", "C:\\Users\\aayam\\work", "C:\\Users\\aayam")).toBe(
-      "C:/Users/aayam/paper",
-    )
+    expect(resolveTypedLocalPath("~/paper", "C:\\Users\\aayam\\work", "C:\\Users\\aayam")).toBe("C:/Users/aayam/paper")
     expect(resolveTypedLocalPath("notes", "\\\\server\\share\\team", "C:\\Users\\aayam")).toBe(
       "//server/share/team/notes",
     )

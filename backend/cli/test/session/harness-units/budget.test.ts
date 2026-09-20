@@ -102,10 +102,7 @@ test("timed external prompts reset their matching start while untimed and synthe
   })
   expect(HarnessState.get("ses_turns")).toMatchObject({ startedAt: 20_000, deadline: 50_000 })
 
-  await send(
-    { id: "msg_3", role: "user", time: { created: 30_000 } },
-    [{ type: "text", text: "untimed follow-up" }],
-  )
+  await send({ id: "msg_3", role: "user", time: { created: 30_000 } }, [{ type: "text", text: "untimed follow-up" }])
   expect(HarnessState.get("ses_turns")).toMatchObject({ startedAt: 20_000, deadline: 50_000 })
 
   await send(
