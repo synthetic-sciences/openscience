@@ -17,8 +17,13 @@ async function desktopCopy() {
   const bundle = path.join(root, "OpenScience.app", "Contents", "Resources", "sidecar")
   await fs.mkdir(bundle, { recursive: true })
   const binary = path.join(bundle, "openscience")
-  await fs.link(process.execPath, binary).catch(() => fs.copyFile(process.execPath, binary))
-  await fs.chmod(binary, 0o755)
+  // A hard link shares the real Bun binary's inode, so chmod on the link would
+  // change the mode of the actual executable running this test. Only the copy
+  // fallback is a file of its own and needs its own chmod.
+  await fs.link(process.execPath, binary).catch(async () => {
+    await fs.copyFile(process.execPath, binary)
+    await fs.chmod(binary, 0o755)
+  })
   return binary
 }
 

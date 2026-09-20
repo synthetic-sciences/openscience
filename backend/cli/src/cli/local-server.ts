@@ -105,13 +105,20 @@ export async function advertiseDesktopServer(directory: string, input: { port: n
  *  slow exit must not unadvertise the app's next server. Synchronous, because
  *  the only moment that survives every shutdown path — including the immediate
  *  `process.exit` the kernel signal hooks perform on SIGTERM — is an `exit`
- *  handler. */
+ *  handler. Best effort, like the write side: a concurrent withdrawal from a
+ *  second sidecar, a permission change, or a relocatable data root that went
+ *  away must not throw out of an `exit` handler and change the process's exit
+ *  code. */
 export function withdrawDesktopServer(directory: string, pid: number) {
   const file = desktopServerPath(directory)
-  if (!existsSync(file)) return
-  const record = parseDesktopServer(readFileSync(file, "utf8"))
-  if (record && record.pid !== pid) return
-  rmSync(file, { force: true })
+  try {
+    if (!existsSync(file)) return
+    const record = parseDesktopServer(readFileSync(file, "utf8"))
+    if (record && record.pid !== pid) return
+    rmSync(file, { force: true })
+  } catch {
+    // Nothing to withdraw if we can no longer read or remove the file.
+  }
 }
 
 function parseDesktopServer(contents: string | undefined) {
