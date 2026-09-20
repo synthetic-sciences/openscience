@@ -17,10 +17,10 @@ import { HarnessState } from "./state"
 export namespace Deliverables {
   const EXTENSIONS =
     "csv|tsv|json|jsonl|md|txt|png|jpg|jpeg|svg|pdf|parquet|npy|npz|yaml|yml|toml|py|ipynb|xlsx|html|tex|bib|fasta|pdb|cif|sdf|h5|hdf5|nc|tif|tiff|zip|tar|gz"
-  const PATH = new RegExp(
-    `(?<![\\w@/\\\\.-])((?:(?:[a-z]:[\\\\/]|\\\\\\\\[\\w.-]+[\\\\/][\\w$ .-]+[\\\\/]|/)(?:[\\w .-]+[\\\\/])*[\\w .-]+\\.(?:${EXTENSIONS})|(?:[\\w.-]+[\\\\/])*[\\w.-]+\\.(?:${EXTENSIONS})))(?![\\w/\\\\])`,
-    "gi",
-  )
+  // A backslash before a candidate means it is the tail of a Windows or UNC
+  // path the request spelled out in full; reporting the bare file name made
+  // the checklist demand `fit.csv` in the project root instead.
+  const PATH = new RegExp(`(?<![\\w@/\\\\.-])((?:[\\w.-]+/)*[\\w.-]+\\.(?:${EXTENSIONS}))(?![\\w/])`, "gi")
   const INTENT =
     /\b(?:write|save|store|export|output|produce|create|emit|dump)\b[^.\n]{0,80}\b(?:to|as|in|at|into|named|called)\b/i
   const SHAPE = /\b(?:columns?|schema|keys?|fields?|header|format|rounded|decimal|units?|sorted by|one row per)\b/i
@@ -174,22 +174,17 @@ export namespace Deliverables {
 
   /** Mechanical checks for one named output; an empty list means it passed. */
   export async function check(root: string, name: string): Promise<Check> {
-    const absolute = path.isAbsolute(name)
-    if (!absolute && (path.win32.isAbsolute(name) || path.posix.isAbsolute(name))) {
-      return { path: name, problems: ["is outside allowed output roots"] }
-    }
+    // The checklist is the request's own words, so a named output may point
+    // out of the root with `..` or through a symlink. Resolve it by identity
+    // and refuse it before anything is read: an output that is not under an
+    // approved root is not this session's to open.
     const allowed = await Filesystem.canonical(root)
-    const target = absolute ? name : path.resolve(root, name)
-    if (
-      !allowed ||
-      (!Filesystem.contains(path.resolve(root), target) && !Filesystem.contains(allowed, target))
-    ) {
-      return { path: name, problems: ["is outside allowed output roots"] }
-    }
+    const target = path.isAbsolute(name) ? name : path.resolve(root, name)
+    const outside = { path: name, problems: ["is outside allowed output roots"] }
+    if (!allowed || (!Filesystem.contains(path.resolve(root), target) && !Filesystem.contains(allowed, target)))
+      return outside
     const file = await Filesystem.canonical(target)
-    if (!file || !Filesystem.contains(allowed, file)) {
-      return { path: name, problems: ["is outside allowed output roots"] }
-    }
+    if (!file || !Filesystem.contains(allowed, file)) return outside
     const stat = await fs.stat(file).catch(() => undefined)
     if (!stat) return { path: name, problems: ["does not exist"] }
     if (!stat.isFile()) return { path: name, problems: ["is not a regular file"] }

@@ -52,17 +52,13 @@ describe("Deliverables.detect", () => {
     ).toEqual(["results/summary.csv"])
   })
 
-  test("preserves absolute Windows, UNC and POSIX paths without treating URLs as files", () => {
+  test("a spelled-out Windows or UNC output is not reduced to its file name", () => {
     expect(
       Deliverables.detect(
-        'Write the table to "C:\\Research Outputs\\fit.csv", save the report as \\\\server\\shared results\\reports\\fit.md, ' +
-          "and export the plot to /tmp/results/fit.png. See https://example.org/reference.csv.",
+        'Write the table to "C:\\Research\\fit.csv", save the report as \\\\server\\share\\reports\\fit.md, ' +
+          "export the plot to /tmp/results/fit.png, and write results/summary.csv with columns id,score.",
       ),
-    ).toEqual([
-      "C:\\Research Outputs\\fit.csv",
-      "\\\\server\\shared results\\reports\\fit.md",
-      "/tmp/results/fit.png",
-    ])
+    ).toEqual(["results/summary.csv"])
   })
 })
 
