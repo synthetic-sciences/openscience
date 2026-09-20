@@ -862,7 +862,7 @@ See [tool-calling-guide-for-local-llms](https://unsloth.ai/docs/basics/tool-call
 ### 🛠️ Improving generation speed <a href="#improving-generation-speed" id="improving-generation-speed"></a>
 
 {% hint style="success" %}
-If usvLLM / SGLang, try using our FP8-Dynamic quants which can boost throughput by 25% or more! See [#fp8-qwen3-coder-next-in-vllm](#fp8-qwen3-coder-next-in-vllm "mention")
+If using vLLM / SGLang, try using our FP8-Dynamic quants which can boost throughput by 25% or more! See [#fp8-qwen3-coder-next-in-vllm](#fp8-qwen3-coder-next-in-vllm "mention")
 {% endhint %}
 
 If you have more VRAM, you can try offloading more MoE layers, or offloading whole layers themselves.

@@ -71,7 +71,7 @@ If you're new, follow our step-by-step [Fine-tuning Guide](https://unsloth.ai/do
 * `/workspace/unsloth-notebooks/` — Example fine-tuning notebooks
 * `/home/unsloth/` — User home directory
 
-### 📖 Usage Ex# Full Example
+### 📖 Full Example
 
 ```bash
 docker run -d -e JUPYTER_PORT=8000 \
@@ -110,7 +110,7 @@ ssh -i ~/.ssh/container_key -p 2222 unsloth@localhost
 
 ```bash
 # Generate SSH key pair
-ssh-keygen-b 4096 -f ~/.ssh/container_key
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/container_key
 
 # Connect to container
 ssh -i ~/.ssh/container_key -p 2222 unsloth@localhost
