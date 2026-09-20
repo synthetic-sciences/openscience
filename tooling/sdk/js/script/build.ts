@@ -2,7 +2,6 @@
 
 import { $ } from "bun"
 import path from "path"
-import { rm } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 
 import { createClient } from "@hey-api/openapi-ts"
@@ -54,6 +53,6 @@ await Bun.write(sseRuntime, settledCancel)
 
 await $`bun prettier --write src/gen`
 await $`bun prettier --write src/v2`
-await rm(path.join(dir, "dist"), { recursive: true, force: true })
+await $`rm -rf dist`
 await $`bun tsc -p tsconfig.build.json`
-await rm(path.join(dir, "openapi.json"))
+await $`rm openapi.json`

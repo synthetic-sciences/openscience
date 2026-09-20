@@ -2,7 +2,6 @@ import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "path"
 import os from "os"
 import { chmod, mkdir, mkdtemp, rm } from "node:fs/promises"
-import { fileURLToPath, pathToFileURL } from "node:url"
 import {
   NpmArtifactConflict,
   NpmPermissionError,
@@ -118,10 +117,12 @@ async function readState(file: string) {
   return (await Bun.file(file).json()) as FakeState
 }
 
-test("file URLs decode native module paths without URL pathname artifacts", () => {
-  const native = path.resolve(import.meta.dir, "module path with spaces")
-  expect(fileURLToPath(pathToFileURL(native))).toBe(native)
+// Every release script cds and joins onto this root. A URL pathname keeps
+// percent escapes and, on Windows, a leading slash before the drive letter.
+test("the release root is a filesystem path, not a URL pathname", async () => {
   expect(path.resolve(releaseRoot)).toBe(path.resolve(import.meta.dir, "../../../.."))
+  expect(releaseRoot).not.toContain("%")
+  expect(await Bun.file(path.join(releaseRoot, "package.json")).exists()).toBe(true)
 })
 
 // A single local registry observes how many dist-tag writes and reads
