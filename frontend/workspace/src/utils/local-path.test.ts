@@ -56,6 +56,21 @@ describe("local path operations", () => {
     expect(isLocalPathWithin("\\\\server\\shared\\team", "\\\\server\\share")).toBe(false)
   })
 
+  test("a drive root contains the paths on its drive", () => {
+    expect(isLocalPathWithin("C:\\Windows", "C:\\")).toBe(true)
+    expect(isLocalPathWithin("C:\\", "C:\\")).toBe(true)
+    expect(isLocalPathWithin("D:\\Windows", "C:\\")).toBe(false)
+    expect(isLocalPathWithin("\\\\server\\share\\team", "\\\\server\\share\\")).toBe(true)
+  })
+
+  test("breadcrumbs walk a drive root down to the folder", () => {
+    expect(localPathBreadcrumbs("C:\\Research\\paper", "C:\\Users\\aayam")).toEqual([
+      { label: "C:/", path: "C:/" },
+      { label: "Research", path: "C:/Research" },
+      { label: "paper", path: "C:/Research/paper" },
+    ])
+  })
+
   test("builds drive and UNC breadcrumbs without crossing roots", () => {
     expect(localPathBreadcrumbs("/home/aayam/research", "/home/aayam")).toEqual([
       { label: "~", path: "/home/aayam" },
@@ -96,5 +111,10 @@ describe("relativeLocalPath", () => {
     expect(relativeLocalPath("C:\\Research\\CERBench2\\paper.tex", "C:\\Research\\CERBench")).toBe(
       "C:/Research/CERBench2/paper.tex",
     )
+  })
+
+  test("strips a drive or UNC root without eating the first segment", () => {
+    expect(relativeLocalPath("C:\\Research\\paper.tex", "C:\\")).toBe("Research/paper.tex")
+    expect(relativeLocalPath("\\\\server\\share\\team\\paper.tex", "\\\\server\\share\\")).toBe("team/paper.tex")
   })
 })

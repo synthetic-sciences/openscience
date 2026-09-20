@@ -33,11 +33,17 @@ function comparable(path: string) {
   return drive.test(normalized) || unc.test(normalized) ? normalized.toLowerCase() : normalized
 }
 
+/** A drive root already ends in its separator (`C:/`), a POSIX root is the separator itself,
+ * and every other root needs one appended before a prefix test means "inside this directory". */
+function boundary(root: string) {
+  return root.endsWith("/") ? root : `${root}/`
+}
+
 export function isLocalPathWithin(path: string, directory: string) {
   const target = comparable(path)
   const root = comparable(directory)
   if (!root) return target === root
-  return target === root || target.startsWith(root === "/" ? "/" : `${root}/`)
+  return target === root || target.startsWith(boundary(root))
 }
 
 export function joinLocalPath(directory: string, path: string) {
@@ -105,5 +111,5 @@ export function relativeLocalPath(file: string, directory: string) {
   const root = normalizeLocalPath(directory)
   if (!isLocalPathWithin(target, root)) return target
   if (comparable(target) === comparable(root)) return ""
-  return target.slice(root === "/" ? 1 : root.length + 1)
+  return target.slice(boundary(root).length)
 }
