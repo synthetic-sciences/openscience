@@ -2,16 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- Only the two scripts beside this file run here; the loader keeps its
-         styles in its shadow root, which needs the inline allowance. -->
+    <!-- Only the scripts and the stylesheet beside this file load here; the
+         loader keeps its own styles in its shadow root, which needs the inline
+         allowance. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'"
+      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
     />
     <title>OpenScience</title>
+    <!-- The pre-upgrade rules are the shared UI package's, copied beside this file. -->
+    <link rel="stylesheet" href="atom-loader-fallback.css" />
     <style>
       :root {
         color-scheme: dark;
+        /* The shared rules reach for the workspace's weak text token; here only
+           the two colours in the URL exist to derive it from. */
+        --text-weak: color-mix(in srgb, var(--text-strong) 62%, transparent);
       }
       :root[data-color-scheme="light"] {
         color-scheme: light;
@@ -42,25 +48,6 @@
         flex: 0 0 auto;
         font: inherit;
       }
-      /* A line above matches the caption line below, so the mark itself is centred. */
-      synsci-loader[caption]:defined::before {
-        content: "";
-        display: block;
-        flex: none;
-        height: 1em;
-      }
-      /* Until the module defines the element, the caption still reads. */
-      synsci-loader:not(:defined) {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-end;
-        min-height: 200px;
-        opacity: 0.62;
-      }
-      synsci-loader:not(:defined)::after {
-        content: attr(caption);
-      }
     </style>
   </head>
   <body>
@@ -69,7 +56,8 @@
       caption="Starting your local workspace"
       role="img"
       aria-label="Starting your local workspace"
-    ></synsci-loader>
+      >Starting your local workspace</synsci-loader
+    >
     <script src="splash.js"></script>
     <script type="module" src="synsci-loader.js"></script>
   </body>

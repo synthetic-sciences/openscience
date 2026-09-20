@@ -1,0 +1,26 @@
+/* The loader's pre-upgrade appearance, shared verbatim with the Electron
+   splash: it has no bundler, so frontend/desktop/src/splash/atom-loader-fallback.css
+   is a copy of this file and frontend/ui/src/components/atom-loader.test.ts pins
+   the two together, the way it pins the two copies of synsci-loader.js. */
+
+/* A caption line below the canvas would pull the mark above the centre of
+   whatever holds it; a matching line above keeps the mark itself centred. */
+synsci-loader[caption]:defined::before {
+  content: "";
+  display: block;
+  flex: none;
+  height: 1em;
+}
+
+/* Before the element upgrades, or where the canvas cannot draw, the caption
+   reads as plain text at the foot of the box the mark will occupy, so nothing
+   shifts when the particles arrive. */
+synsci-loader:not(:defined) {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: calc(var(--atom-loader-size, 160px) + 3.8em);
+  color: var(--text-weak);
+  white-space: nowrap;
+}

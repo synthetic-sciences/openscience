@@ -71,6 +71,40 @@ describe("AtomLoader", () => {
     expect(loader?.getAttribute("progress")).toBe("0.4")
   })
 
+  test("a determinate caller gets a progressbar host carrying the value", () => {
+    // `img` has presentational children, so the canvas the component labels as
+    // a progressbar is pruned under it; the value has to be on the host.
+    const host = mount(() => subject.AtomLoader({ progress: 0.4, caption: "Uploading" }))
+    const loader = host.querySelector("synsci-loader")
+    expect(loader?.getAttribute("role")).toBe("progressbar")
+    expect(loader?.getAttribute("aria-valuenow")).toBe("40")
+    expect(loader?.getAttribute("aria-valuetext")).toBe("40%")
+    expect(loader?.getAttribute("aria-label")).toBe("Uploading")
+  })
+
+  test("reports a complete and an untouched determinate mark as 100 and 0", () => {
+    const full = mount(() => subject.AtomLoader({ progress: 1 })).querySelector("synsci-loader")
+    expect(full?.getAttribute("aria-valuenow")).toBe("100")
+    const none = mount(() => subject.AtomLoader({ progress: 0 })).querySelector("synsci-loader")
+    expect(none?.getAttribute("role")).toBe("progressbar")
+    expect(none?.getAttribute("aria-valuenow")).toBe("0")
+  })
+
+  test("an indeterminate mark stays an image with no value", () => {
+    const host = mount(() => subject.AtomLoader({ caption: "Loading files" }))
+    const loader = host.querySelector("synsci-loader")
+    expect(loader?.getAttribute("role")).toBe("img")
+    expect(loader?.hasAttribute("aria-valuenow")).toBe(false)
+    expect(loader?.hasAttribute("aria-valuetext")).toBe(false)
+  })
+
+  test("a progress that is not a real fraction stays indeterminate", () => {
+    const host = mount(() => subject.AtomLoader({ progress: Number.NaN }))
+    const loader = host.querySelector("synsci-loader")
+    expect(loader?.getAttribute("role")).toBe("img")
+    expect(loader?.hasAttribute("aria-valuenow")).toBe(false)
+  })
+
   test("stays undefined where the canvas cannot draw instead of throwing", () => {
     mount(() => subject.AtomLoader({ caption: "Loading files" }))
     expect(customElements.get("synsci-loader")).toBeUndefined()
@@ -108,6 +142,30 @@ describe("desktop splash", () => {
     expect(splash).toBe(shared)
   })
 
+  test("ships the same pre-upgrade stylesheet as the shared UI package", async () => {
+    const shared = await Bun.file(new URL("./atom-loader-fallback.css", import.meta.url)).text()
+    const splash = await Bun.file(
+      new URL("../../../desktop/src/splash/atom-loader-fallback.css", import.meta.url),
+    ).text()
+    expect(splash).toBe(shared)
+  })
+
+  test("loads that stylesheet within a policy that allows it", async () => {
+    const page = await Bun.file(new URL("../../../desktop/src/splash/splash.html", import.meta.url)).text()
+    document.head.innerHTML = page.slice(page.indexOf("<head>") + "<head>".length, page.indexOf("</head>"))
+    try {
+      const policy = document.querySelector<HTMLMetaElement>('meta[http-equiv="Content-Security-Policy"]')?.content
+      const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"]')
+      expect(link?.getAttribute("href")).toBe("atom-loader-fallback.css")
+      // A same-origin stylesheet needs 'self'; the component's shadow styles
+      // and the page's own block still need the inline allowance.
+      expect(policy).toContain("style-src 'self' 'unsafe-inline'")
+      expect(policy).toContain("default-src 'none'")
+    } finally {
+      document.head.innerHTML = ""
+    }
+  })
+
   test("captions and labels the mark for the state in its URL", async () => {
     const page = await Bun.file(new URL("../../../desktop/src/splash/splash.html", import.meta.url)).text()
     const script = await Bun.file(new URL("../../../desktop/src/splash/splash.js", import.meta.url)).text()
@@ -121,10 +179,15 @@ describe("desktop splash", () => {
         document.body.innerHTML = markup
         history.replaceState(null, "", `/?state=${state}&scheme=light&background=%23f7f7f7&foreground=%231f1f1f`)
         new Function(script)()
-        const loader = document.querySelector("synsci-loader")
+        const loader = document.querySelector<HTMLElement>("synsci-loader")
         expect(loader?.getAttribute("caption")).toBe(caption)
         expect(loader?.getAttribute("aria-label")).toBe(caption)
         expect(loader?.getAttribute("role")).toBe("img")
+        // The shared pre-upgrade rules show the element's own text, as the
+        // workspace's wrapper does; the splash has no ::after of its own, and
+        // it reserves the box from the size the mark will draw at.
+        expect(loader?.textContent).toBe(caption)
+        expect(loader?.style.getPropertyValue("--atom-loader-size")).toBe(`${loader?.getAttribute("size")}px`)
         expect(document.documentElement.dataset.colorScheme).toBe("light")
         expect(document.documentElement.style.getPropertyValue("--background-base")).toBe("#f7f7f7")
       }

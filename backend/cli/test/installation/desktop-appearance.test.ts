@@ -1,14 +1,17 @@
 import { expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readdir, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import {
+  appearanceTempFile,
   defaultAppearance,
   mergeAppearance,
   parseAppearance,
   readAppearance,
   resolveAppearance,
+  saveAppearance,
   splashQuery,
+  sweepAppearance,
   writeAppearance,
 } from "../../../../frontend/desktop/src/appearance.mjs"
 
@@ -86,6 +89,72 @@ test("round-trips through the appearance file and ignores one it cannot use", as
     await Bun.write(file, JSON.stringify({ mode: "light", ...light }))
     expect(await readAppearance(file)).toBeUndefined()
     expect(parseAppearance({ scheme: "dark" })).toEqual({ scheme: "dark", theme: "openscience", colors: {} })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("stages every write under its own name, so overlapping writes cannot share one", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "openscience-appearance-"))
+  try {
+    const file = path.join(dir, "appearance.json")
+    const staged = new Set([appearanceTempFile(file), appearanceTempFile(file), appearanceTempFile(file)])
+    expect(staged.size).toBe(3)
+    for (const name of staged) {
+      expect(path.dirname(name)).toBe(dir)
+      expect(name.startsWith(`${file}.${process.pid}.`)).toBe(true)
+      expect(name.endsWith(".tmp")).toBe(true)
+    }
+
+    // A theme change landing while the window closes is two writes at once.
+    const records = [
+      { scheme: "system", theme: "openscience", colors: { dark } },
+      { scheme: "light", theme: "nord", colors: { light } },
+      { scheme: "dark", theme: "openscience", colors: { dark, light } },
+    ]
+    await Promise.all(records.map((record) => writeAppearance(file, record)))
+    const stored = await readAppearance(file)
+    expect(records.some((record) => Bun.deepEquals(record, stored))).toBe(true)
+    // Nothing half-written is left behind for the next launch to trip over.
+    expect(await readdir(dir)).toEqual(["appearance.json"])
+
+    // A kill between write and rename leaves one, and no later write reclaims
+    // a name it will never use again: the next launch sweeps it.
+    await Bun.write(appearanceTempFile(file), "{}")
+    await Bun.write(path.join(dir, "notes.txt"), "kept")
+    expect(await sweepAppearance(file)).toBe(1)
+    expect((await readdir(dir)).sort()).toEqual(["appearance.json", "notes.txt"])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("keeps what the workspace reports, and keeps the last good record when it reports nothing", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "openscience-appearance-"))
+  try {
+    const file = path.join(dir, "appearance.json")
+    const painted = await saveAppearance(file, undefined, {
+      mode: "dark",
+      scheme: "system",
+      theme: "openscience",
+      ...dark,
+    })
+    expect(painted).toEqual({ scheme: "system", theme: "openscience", colors: { dark } })
+    expect(await readAppearance(file)).toEqual(painted)
+
+    // The OS flipped and the workspace repainted: the other mode joins it.
+    const both = await saveAppearance(file, painted, {
+      mode: "light",
+      scheme: "system",
+      theme: "openscience",
+      ...light,
+    })
+    expect(both).toEqual({ scheme: "system", theme: "openscience", colors: { dark, light } })
+    expect(await readAppearance(file)).toEqual(both)
+
+    // A window torn down mid-read answers nothing; the file keeps what it had.
+    expect(await saveAppearance(file, both, undefined)).toEqual(both)
+    expect(await readAppearance(file)).toEqual(both)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

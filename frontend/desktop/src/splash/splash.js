@@ -17,4 +17,9 @@
   // The component keeps its own caption out of the accessibility tree; the
   // host's label is what a screen reader voices.
   loader.setAttribute("aria-label", caption)
+  // The shadow root has no slot, so this text only shows until the element
+  // upgrades -- the same pre-upgrade caption the workspace's wrapper renders,
+  // in the box the shared rules reserve for the mark that is coming.
+  loader.textContent = caption
+  loader.style.setProperty("--atom-loader-size", `${loader.getAttribute("size")}px`)
 })()

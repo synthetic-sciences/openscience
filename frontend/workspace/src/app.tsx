@@ -157,8 +157,12 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   component={() => (
                     // The projects page shows the same mark at 144 in its own card once
                     // it renders, so the route fallback matches it instead of jumping
-                    // from a full-surface size.
-                    <Suspense fallback={<LoadingScreen caption="Loading projects" size={144} />}>
+                    // from a full-surface size -- and stands it where the card will,
+                    // rather than centred on a surface the page does not have
+                    // (--science-home-loader-top in pages/home-workbench.css).
+                    <Suspense
+                      fallback={<LoadingScreen class="science-home__fallback" caption="Loading projects" size={144} />}
+                    >
                       <Home />
                     </Suspense>
                   )}

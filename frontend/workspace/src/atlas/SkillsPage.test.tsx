@@ -44,7 +44,7 @@ const fixtures = [
     origin: "user" as const,
   },
 ]
-function fixture(server: string, disabled: string[] = [], projectDisabled = false) {
+function fixture(server: string, disabled: string[] = [], projectDisabled = false, hold?: Promise<void>) {
   const [config, setConfig] = stores.createStore({ disabled })
   const calls: Array<{ names: string[]; enabled: boolean }> = []
   const writes: Array<{ name: string; content: string }> = []
@@ -57,8 +57,9 @@ function fixture(server: string, disabled: string[] = [], projectDisabled = fals
   const added: Array<{ path: string; persist?: string }> = []
   const service: SkillsPageServices = {
     server,
-    load: async () =>
-      fixtures.map((skill) => ({
+    load: async () => {
+      await hold
+      return fixtures.map((skill) => ({
         name: skill.name,
         description: `${skill.name} research workflow. More detail follows.`,
         location: skill.location,
@@ -72,7 +73,8 @@ function fixture(server: string, disabled: string[] = [], projectDisabled = fals
             : disabled.includes(skill.name)
               ? "server"
               : undefined,
-      })),
+      }))
+    },
     disabled: () => config.disabled,
     permission: () => ({ skill: "allow" }),
     select: async (names, enabled) => {
@@ -112,6 +114,25 @@ const toggleOf = (host: HTMLElement, name: string) =>
   rows(host)
     .find((row) => row.querySelector("code")?.textContent === `/${name}`)
     ?.querySelector<HTMLInputElement>('input[role="switch"]')
+
+test("the catalog waits on the atom mark and yields it to the first shelves", async () => {
+  const gate = Promise.withResolvers<void>()
+  const { host } = fixture("http://skills-test:4100", [], false, gate.promise)
+  await settle()
+
+  const loader = host.querySelector('[data-component="atom-loader"]')
+  expect(loader?.getAttribute("caption")).toBe("Loading skills")
+  // A pane, not a whole surface.
+  expect(Number(loader?.getAttribute("size"))).toBeGreaterThanOrEqual(120)
+  expect(Number(loader?.getAttribute("size"))).toBeLessThanOrEqual(160)
+  expect(loader?.closest('[role="status"]')).not.toBeNull()
+  expect(host.textContent).not.toContain("Fetching the latest catalog")
+
+  gate.resolve()
+  await settle()
+  expect(host.querySelector('[data-component="atom-loader"]')).toBeNull()
+  expect(names(host)).toEqual(["/figures", "/my-notes"])
+})
 
 test("core leads, the library folds into shelves, and views narrow the catalog without touching policy", async () => {
   const { host, calls, config } = fixture("http://skills-test:4101", ["chemistry"])

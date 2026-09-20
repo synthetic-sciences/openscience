@@ -735,6 +735,14 @@
   text-align: center;
 }
 
+/* The catalog is a surface, so it waits on the atom mark rather than an icon
+   over a sentence. Same padding as the empty states it stands beside. */
+.skills-workspace__loading {
+  display: grid;
+  place-items: center;
+  padding: 40px 16px;
+}
+
 .skills-workspace__empty strong {
   color: var(--color-text);
   font-size: var(--font-size-medium);

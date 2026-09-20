@@ -1,3 +1,34 @@
+/* The route's own loading state (the Suspense fallback in app.tsx) stands in
+   for this page before it renders, and it renders outside .science-home, with
+   none of the chrome above the card. So everything between the top of the
+   surface and the top of the loading card's mark is declared once, here, and
+   both the page's rules and the fallback's offset read it: move one of these
+   and the fallback moves with it instead of the mark jumping on cold boot.
+   The lede below the title is one line at every width the page lays out for. */
+:root {
+  --science-home-bar: 54px;
+  --science-home-main-top: 52px;
+  --science-home-title-size: 29px;
+  --science-home-title-leading: 1.08;
+  --science-home-copy-gap: 8px;
+  --science-home-action-height: 38px;
+  /* The heading is one row until the actions stack under the copy. */
+  --science-home-heading-stack: 0px;
+  --science-home-state-gap: 30px;
+  --science-home-state-top: 40px;
+  --science-home-loader-top: calc(
+    var(--science-home-bar) + var(--science-home-main-top) + var(--science-home-title-size) *
+      var(--science-home-title-leading) + var(--science-home-copy-gap) + var(--font-size-base) * 1.5 +
+      var(--science-home-heading-stack) + var(--science-home-state-gap) + var(--science-home-state-top)
+  );
+}
+
+/* The fallback shows the card's mark where the card will put it. */
+.science-home__fallback {
+  align-content: start;
+  padding-top: var(--science-home-loader-top);
+}
+
 .science-home {
   display: flex;
   min-height: 0;
@@ -15,7 +46,7 @@
 }
 
 .science-home__bar.g-strip {
-  min-height: 54px;
+  min-height: var(--science-home-bar);
   gap: 10px !important;
   padding: 8px 24px !important;
   border-bottom-color: var(--color-border);
@@ -143,7 +174,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 52px 32px 80px;
+  padding: var(--science-home-main-top) 32px 80px;
 }
 
 .science-home__content {
@@ -162,7 +193,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--science-home-copy-gap);
 }
 
 .science-home__heading-copy > p {
@@ -185,9 +216,9 @@
   margin: 0;
   color: var(--color-text);
   font-family: var(--font-family-sans);
-  font-size: 29px;
+  font-size: var(--science-home-title-size);
   font-weight: var(--font-weight-emphasis);
-  line-height: 1.08;
+  line-height: var(--science-home-title-leading);
   letter-spacing: -0.028em;
 }
 
@@ -492,7 +523,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 28px;
-  margin-top: 30px;
+  margin-top: var(--science-home-state-gap);
   padding: 24px 26px;
 }
 
@@ -509,7 +540,7 @@
 
 .science-home__state--loading {
   justify-content: center;
-  padding: 40px 26px;
+  padding: var(--science-home-state-top) 26px;
 }
 
 .science-home__state strong {
@@ -530,7 +561,7 @@
 
 .science-home__button {
   display: inline-flex;
-  min-height: 38px;
+  min-height: var(--science-home-action-height);
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -581,6 +612,12 @@
 }
 
 @media (max-width: 760px) {
+  :root {
+    --science-home-main-top: 42px;
+    --science-home-heading-gap: 22px;
+    --science-home-heading-stack: calc(var(--science-home-heading-gap) + var(--science-home-action-height));
+  }
+
   .science-home__bar.g-strip {
     padding-inline: 14px !important;
   }
@@ -600,13 +637,13 @@
   }
 
   .science-home__main {
-    padding: 42px 20px 60px;
+    padding: var(--science-home-main-top) 20px 60px;
   }
 
   .science-home__heading {
     align-items: flex-start;
     flex-direction: column;
-    gap: 22px;
+    gap: var(--science-home-heading-gap);
   }
 
   .science-home__toolbar {
@@ -625,12 +662,14 @@
 }
 
 @media (max-width: 520px) {
-  .science-home__main {
-    padding: 34px 14px 48px;
+  :root {
+    --science-home-main-top: 34px;
+    --science-home-title-size: 26px;
+    --science-home-state-top: 22px;
   }
 
-  .science-home__title h1 {
-    font-size: 26px;
+  .science-home__main {
+    padding: var(--science-home-main-top) 14px 48px;
   }
 
   .science-home__heading-copy > p {
@@ -675,7 +714,7 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 18px;
-    padding: 22px;
+    padding: var(--science-home-state-top);
   }
 }
 
@@ -707,13 +746,20 @@
 }
 
 @media (pointer: coarse) {
+  :root {
+    --science-home-action-height: 44px;
+    /* The taller controls outgrow the strip's own minimum: their height plus
+       its 8px padding twice and its 1px rule. */
+    --science-home-bar: calc(var(--science-home-action-height) + 17px);
+  }
+
   .science-home__icon,
   .science-home__server,
   .science-home__button,
   .science-home__project-action,
   .science-home__search button {
     min-width: 44px;
-    min-height: 44px;
+    min-height: var(--science-home-action-height);
   }
 
   .science-home__archived > summary,

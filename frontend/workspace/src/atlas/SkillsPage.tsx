@@ -17,6 +17,7 @@ import {
 } from "solid-js"
 import { Switch } from "@synsci/ui/switch"
 import { createStore } from "solid-js/store"
+import { AtomLoader } from "@synsci/ui/atom-loader"
 import { Icon } from "@synsci/ui/icon"
 import { showToast } from "@synsci/ui/toast"
 import { useGlobalSDK } from "@/context/global-sdk"
@@ -609,7 +610,11 @@ export default function SkillsPage(props: { embedded?: boolean; services?: Skill
               </Show>
               <Show
                 when={!skills.loading || all().length > 0}
-                fallback={<CatalogState icon="refresh" title="Loading skills" hint="Fetching the latest catalog…" />}
+                fallback={
+                  <div class="skills-workspace__loading" role="status" aria-live="polite">
+                    <AtomLoader size={144} caption="Loading skills" />
+                  </div>
+                }
               >
                 <Show
                   when={!skills.error || all().length > 0}
@@ -1159,7 +1164,7 @@ function FolderForm(props: {
 }
 
 function CatalogState(props: {
-  icon: "refresh" | "alert-circle" | "magnifying-glass"
+  icon: "alert-circle" | "magnifying-glass"
   title: string
   hint: string
   action?: string

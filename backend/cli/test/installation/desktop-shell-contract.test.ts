@@ -16,6 +16,19 @@ test("declares UTF-8 for every inline desktop document", async () => {
   for (const document of documents) expect(document).toBe("data:text/html;charset=utf-8,")
 })
 
+test("records what the workspace painted before the quit path tears the windows down", async () => {
+  const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
+  const stop = source.slice(source.indexOf("function stop()"), source.indexOf("function applicationMenu()"))
+
+  // `window.destroy()` skips `close`, so the close-time write never runs on a
+  // quit; the read has to happen while the renderers are still answering.
+  expect(stop.indexOf("rememberAppearance(window)")).toBeGreaterThan(-1)
+  expect(stop.indexOf("rememberAppearance(window)")).toBeLessThan(stop.indexOf("window.destroy()"))
+  // The renderer's own signal that the theme or scheme moved mid-session.
+  expect(source).toContain('window.webContents.on("did-change-theme-color"')
+  expect(source).toContain('nativeTheme.on("updated"')
+})
+
 test("desktop sidecar inherits the terminal's OpenScience root selectors unchanged", async () => {
   const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
   const begin = source.indexOf("async function start()")

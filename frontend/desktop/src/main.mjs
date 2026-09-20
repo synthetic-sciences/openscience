@@ -23,7 +23,7 @@ import {
 } from "./updater.mjs"
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
-import { mergeAppearance, readAppearance, resolveAppearance, splashQuery, writeAppearance } from "./appearance.mjs"
+import { readAppearance, resolveAppearance, saveAppearance, splashQuery, sweepAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -61,6 +61,8 @@ const state = {
   stopTask: undefined,
   /** The scheme and per-mode colours the workspace last reported; the splash and window paint from it before it mounts. */
   appearance: undefined,
+  /** The tail of the serialized appearance writes, so the quit path can wait for the last one. */
+  appearanceTask: undefined,
 }
 
 function appearanceFile() {
@@ -77,9 +79,12 @@ function appearance() {
 // the workspace will paint, whichever theme or scheme the user picked, instead
 // of a fixed dark that flashes on a light workspace. The storage key is the
 // workspace's own (STORAGE_KEYS in frontend/ui/src/theme/context.tsx).
-async function rememberAppearance(window) {
-  // A window already torn down throws on webContents itself, not only in the script.
-  const reported = await Promise.resolve()
+async function readAppearanceReport(window) {
+  if (window.isDestroyed()) return
+  // A window already torn down throws on webContents itself, not only in the
+  // script, and a wedged renderer never answers at all; the quit path waits on
+  // this, so it cannot wait forever.
+  const probe = Promise.resolve()
     .then(() =>
       window.webContents.executeJavaScript(
         `(() => {
@@ -99,10 +104,21 @@ async function rememberAppearance(window) {
       ),
     )
     .catch(() => undefined)
-  const next = mergeAppearance(state.appearance, reported)
-  if (!next) return
-  state.appearance = next
-  await writeAppearance(appearanceFile(), next)
+  return Promise.race([probe, new Promise((resolve) => setTimeout(resolve, 2_000))])
+}
+
+/**
+ * One write at a time, in order: the theme-colour signal and the window's own
+ * close can land together, and each fold reads the record the previous one left.
+ */
+function rememberAppearance(window) {
+  state.appearanceTask = Promise.resolve(state.appearanceTask)
+    .catch(() => undefined)
+    .then(async () => {
+      state.appearance = await saveAppearance(appearanceFile(), state.appearance, await readAppearanceReport(window))
+    })
+    .catch(() => undefined)
+  return state.appearanceTask
 }
 
 function external(value) {
@@ -852,6 +868,13 @@ function stop() {
   if (state.stopTask) return state.stopTask
   state.exiting = true
   state.stopTask = (async () => {
+    // Quit destroys the windows rather than closing them, so their `close`
+    // handler never runs: read what they painted while the renderers are alive.
+    // Bounded, because quitting must not wait on a renderer that stopped answering.
+    await Promise.race([
+      Promise.all(Array.from(windows, (window) => rememberAppearance(window))),
+      new Promise((resolve) => setTimeout(resolve, 3_000)),
+    ])
     await drainService()
     if (state.updateStartupFailure) {
       await acknowledgeUpdateFailure(state.updateStartupFailure, true)
@@ -967,6 +990,12 @@ async function createWindow() {
   window.on("page-title-updated", dock)
   window.on("focus", dock)
   window.on("close", () => void rememberAppearance(window))
+  // The workspace repaints <meta name="theme-color"> with the background token
+  // it just resolved (applyThemeCss in frontend/ui/src/theme/context.tsx), so
+  // Chromium's theme-colour change is the renderer telling the shell that the
+  // theme or the scheme moved. Without it a mid-session change reached the file
+  // only if the close-time write won its race with the quit.
+  window.webContents.on("did-change-theme-color", () => void rememberAppearance(window))
   window.on("closed", () => {
     windows.delete(window)
     if (!state.exiting) dock()
@@ -1029,6 +1058,8 @@ app
       applicationMenu()
       await updates()
       state.appearance = await readAppearance(appearanceFile())
+      // No write is in flight yet, so anything still staged is from a kill.
+      void sweepAppearance(appearanceFile())
       splash = new BrowserWindow({
         width: 520,
         height: 300,
@@ -1111,6 +1142,13 @@ app
 
 app.on("activate", () => {
   if (!windows.size) void createWindow()
+})
+
+// A System-scheme workspace repaints when the OS appearance flips; record the
+// mode it moved to so the next launch opens on it rather than on the pair it
+// last painted.
+nativeTheme.on("updated", () => {
+  for (const window of windows) void rememberAppearance(window)
 })
 
 app.on("before-quit", (event) => {
