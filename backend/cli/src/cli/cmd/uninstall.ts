@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
+import { CliShim } from "../../installation/cli-shim"
 import { Global } from "../../global"
 import { $ } from "bun"
 import fs from "fs/promises"
@@ -21,6 +22,7 @@ interface RemovalTargets {
   directories: Array<{ path: string; label: string; keep: boolean }>
   shellConfig: string | null
   binary: string | null
+  link: string | null
 }
 
 export const UninstallCommand = cmd({
@@ -94,10 +96,19 @@ export const UninstallCommand = cmd({
 async function collectRemovalTargets(args: UninstallArgs, method: Installation.Method): Promise<RemovalTargets> {
   const directories = uninstallDirectories(args)
 
-  const shellConfig = method === "curl" ? await getShellConfigFile() : null
+  // The desktop app writes the installer's PATH line and links the sidecar
+  // from ~/.openscience/bin; both go the way the curl install's do.
+  const shellConfig = method === "curl" || method === "desktop" ? await getShellConfigFile() : null
   const binary = method === "curl" ? process.execPath : null
+  const link =
+    method === "desktop"
+      ? await CliShim.status().then(
+          (status) => (status.exists && status.ours && status.target ? status.path : null),
+          () => null,
+        )
+      : null
 
-  return { directories, shellConfig, binary }
+  return { directories, shellConfig, binary, link }
 }
 
 export function uninstallDirectories(args: Pick<UninstallArgs, "keepConfig" | "keepData" | "purge">) {
@@ -132,6 +143,10 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
 
   if (targets.binary) {
     prompts.log.info(`  ✓ Binary: ${shortenPath(targets.binary)}`)
+  }
+
+  if (targets.link) {
+    prompts.log.info(`  ✓ Command-line link: ${shortenPath(targets.link)}`)
   }
 
   if (targets.shellConfig) {
@@ -185,6 +200,17 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
       errors.push(`Shell config: ${err.message}`)
     } else {
       spinner.stop("Cleaned shell config")
+    }
+  }
+
+  if (targets.link) {
+    spinner.start("Removing the command-line link...")
+    const err = await CliShim.remove().catch((e) => e)
+    if (err instanceof Error) {
+      spinner.stop("Failed to remove the command-line link", 1)
+      errors.push(`Command-line link: ${err.message}`)
+    } else {
+      spinner.stop("Removed the command-line link")
     }
   }
 

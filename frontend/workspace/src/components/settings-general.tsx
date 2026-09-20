@@ -1,10 +1,11 @@
-import { Component, For, Show, createMemo, onCleanup, onMount, type JSX } from "solid-js"
+import { Component, For, Show, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useTheme, type ColorScheme } from "@synsci/ui/theme"
 import { showToast } from "@synsci/ui/toast"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
@@ -12,6 +13,8 @@ import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { URLS } from "@/config/urls"
 import { formatUpdateBytes, offeredUpdate, updateController } from "./settings/update-controller"
 import { PanelBody, PanelHeader, PanelScroll, Section as SettingsSection } from "./settings/_shared"
+import { SettingsRow } from "./settings/general-row"
+import { CommandLineToolRow, createCommandLineClient } from "./settings/command-line-tool"
 import "./settings-general.css"
 
 let demoSoundState = {
@@ -486,7 +489,26 @@ export const AppearanceSections: Component = () => {
           </div>
         </Show>
       </SettingsSection>
+
+      <Show when={platform.platform === "desktop"}>
+        <CommandLineSection />
+      </Show>
     </>
+  )
+}
+
+// Only the desktop app can own the link in ~/.openscience/bin, so the web
+// build neither shows the row nor asks the server about it.
+const CommandLineSection: Component = () => {
+  const sdk = useGlobalSDK()
+  const platform = usePlatform()
+  const client = createCommandLineClient(sdk.url, platform.fetch ?? fetch)
+  return (
+    <SettingsSection title="Command line">
+      <div class="settings-card">
+        <CommandLineToolRow client={client} />
+      </div>
+    </SettingsSection>
   )
 }
 
@@ -501,23 +523,5 @@ export const SettingsGeneral: Component = () => {
         <AppearanceSections />
       </PanelBody>
     </PanelScroll>
-  )
-}
-
-interface SettingsRowProps {
-  title: string
-  description: string | JSX.Element
-  children: JSX.Element
-}
-
-const SettingsRow: Component<SettingsRowProps> = (props) => {
-  return (
-    <div class="settings-row justify-between">
-      <div class="flex min-w-0 flex-1 basis-[220px] flex-col gap-0.5">
-        <span class="text-14-medium text-text-strong">{props.title}</span>
-        <span class="text-12-regular text-text-weak">{props.description}</span>
-      </div>
-      <div class="ml-auto max-w-full flex-shrink-0">{props.children}</div>
-    </div>
   )
 }

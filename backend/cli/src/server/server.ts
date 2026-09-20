@@ -58,6 +58,7 @@ import { SettingsPreferencesRoutes } from "./routes/settings/preferences"
 import { UsageLoggingRoutes } from "./routes/settings/usage-logging"
 import { LocalModelsRoutes } from "./routes/settings/local"
 import { SandboxSettingsRoutes } from "./routes/settings/sandbox"
+import { CliSettingsRoutes } from "./routes/settings/cli"
 import { UpdatesSettingsRoutes, desktopUpdateShutdownAuthorized } from "./routes/settings/updates"
 import { ScientificToolsSettingsRoutes } from "./routes/settings/scientific-tools"
 import { projectSelection } from "./project-selection"
@@ -281,6 +282,7 @@ export namespace Server {
         .route("/settings/local", LocalModelsRoutes())
         .route("/settings/sandbox", SandboxSettingsRoutes())
         .route("/settings/updates", UpdatesSettingsRoutes())
+        .route("/settings/cli", CliSettingsRoutes())
         .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
         .route("/settings/billing", BillingSettingsRoutes())
         .route("/settings/wallet", WalletSettingsRoutes())

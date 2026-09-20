@@ -66,6 +66,8 @@ The app and `openscience` in a terminal are two doors into the same workspace, a
 
 The app carries its own copy of the command-line app inside the application bundle and updates it with the app. When the `openscience` on your PATH is that copy — `ls -l $(which openscience)` points into `OpenScience.app` or a `resources/sidecar` folder — `openscience upgrade` says so and sends you to **Customize → General → Check for updates**, instead of installing over the app's files. Install the CLI through npm or the standalone installer above if you would rather update it from a terminal.
 
+To use that copy from a terminal, open **Customize → General → Command line tool** and choose **Install**. The app links `~/.openscience/bin/openscience` to its own copy and adds that folder to your shell's startup file (`~/.zshrc`, `~/.bashrc`, or fish's `config.fish`) the same way the standalone installer does; open a new terminal afterwards. The row says whether the tool is installed and on your PATH, and shows the line to add when no startup file could take it. Each time the app launches it re-points its own link if the app was moved or reinstalled; it never creates a link you did not ask for and never replaces an `openscience` it did not create. `openscience uninstall` run from that link removes the link and the PATH line again. The Linux AppImage runs from a temporary mount and cannot be linked, so use the standalone installer on Linux; on Windows, install the CLI separately.
+
 While the app is running, `openscience` and `openscience web` open a browser tab on the server the app already started, with the same sessions and files, rather than starting a second one. Quit the app and the same command starts a server of its own.
 
 ## Verify the installation

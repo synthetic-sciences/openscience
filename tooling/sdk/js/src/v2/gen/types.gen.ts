@@ -2380,6 +2380,22 @@ export type NotFoundError = {
   }
 }
 
+export type CliShimStatus = {
+  home: string
+  directory: string
+  path: string
+  exists: boolean
+  target?: string
+  current: boolean
+  ours: boolean
+  onPath: boolean
+  shell: string
+  line: string
+  config?: string
+  installable: boolean
+  reason?: string
+}
+
 export type ApiAuth = {
   type: "api"
   key: string
@@ -9646,6 +9662,49 @@ export type SettingsUpdatesDisposeResponses = {
 }
 
 export type SettingsUpdatesDisposeResponse = SettingsUpdatesDisposeResponses[keyof SettingsUpdatesDisposeResponses]
+
+export type SettingsCliStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/cli"
+}
+
+export type SettingsCliStatusResponses = {
+  /**
+   * Command-line tool status
+   */
+  200: CliShimStatus
+}
+
+export type SettingsCliStatusResponse = SettingsCliStatusResponses[keyof SettingsCliStatusResponses]
+
+export type SettingsCliInstallData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/cli/install"
+}
+
+export type SettingsCliInstallErrors = {
+  /**
+   * This copy of OpenScience cannot own the command-line tool
+   */
+  409: {
+    error: string
+  }
+}
+
+export type SettingsCliInstallError = SettingsCliInstallErrors[keyof SettingsCliInstallErrors]
+
+export type SettingsCliInstallResponses = {
+  /**
+   * Command-line tool status after the install
+   */
+  200: CliShimStatus
+}
+
+export type SettingsCliInstallResponse = SettingsCliInstallResponses[keyof SettingsCliInstallResponses]
 
 export type SettingsScientificToolsData = {
   body?: never

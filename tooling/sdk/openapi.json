@@ -22931,6 +22931,74 @@
         ]
       }
     },
+    "/settings/cli": {
+      "get": {
+        "operationId": "settings.cli.status",
+        "summary": "Command-line tool status",
+        "description": "Whether ~/.openscience/bin/openscience exists, what it points at, and whether the directory is on PATH.",
+        "responses": {
+          "200": {
+            "description": "Command-line tool status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliShimStatus"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.cli.status({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/cli/install": {
+      "post": {
+        "operationId": "settings.cli.install",
+        "summary": "Install or repair the command-line tool",
+        "description": "Link ~/.openscience/bin/openscience to the desktop app's own copy and add the directory to the shell PATH the way the standalone installer does.",
+        "responses": {
+          "200": {
+            "description": "Command-line tool status after the install",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CliShimStatus"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This copy of OpenScience cannot own the command-line tool",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.cli.install({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/scientific-tools": {
       "get": {
         "operationId": "settings.scientificTools",
@@ -61794,6 +61862,62 @@
         "required": [
           "name",
           "data"
+        ]
+      },
+      "CliShimStatus": {
+        "type": "object",
+        "properties": {
+          "home": {
+            "type": "string"
+          },
+          "directory": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "ours": {
+            "type": "boolean"
+          },
+          "onPath": {
+            "type": "boolean"
+          },
+          "shell": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "config": {
+            "type": "string"
+          },
+          "installable": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "home",
+          "directory",
+          "path",
+          "exists",
+          "current",
+          "ours",
+          "onPath",
+          "shell",
+          "line",
+          "installable"
         ]
       },
       "ApiAuth": {

@@ -335,6 +335,9 @@ import type {
   SessionUpdateResponses,
   SettingsBillingGetResponses,
   SettingsBillingUpdateResponses,
+  SettingsCliInstallErrors,
+  SettingsCliInstallResponses,
+  SettingsCliStatusResponses,
   SettingsComputeEnvironmentsRepairResponses,
   SettingsComputeGetResponses,
   SettingsComputeJobsCancelErrors,
@@ -2084,6 +2087,32 @@ export class Updates extends HeyApiClient {
   }
 }
 
+export class Cli extends HeyApiClient {
+  /**
+   * Command-line tool status
+   *
+   * Whether ~/.openscience/bin/openscience exists, what it points at, and whether the directory is on PATH.
+   */
+  public status<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsCliStatusResponses, unknown, ThrowOnError>({
+      url: "/settings/cli",
+      ...options,
+    })
+  }
+
+  /**
+   * Install or repair the command-line tool
+   *
+   * Link ~/.openscience/bin/openscience to the desktop app's own copy and add the directory to the shell PATH the way the standalone installer does.
+   */
+  public install<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<SettingsCliInstallResponses, SettingsCliInstallErrors, ThrowOnError>({
+      url: "/settings/cli/install",
+      ...options,
+    })
+  }
+}
+
 export class ScientificTool extends HeyApiClient {
   /**
    * Install a packaged scientific tool runtime
@@ -2430,6 +2459,11 @@ export class Settings extends HeyApiClient {
   private _updates?: Updates
   get updates(): Updates {
     return (this._updates ??= new Updates({ client: this.client }))
+  }
+
+  private _cli?: Cli
+  get cli(): Cli {
+    return (this._cli ??= new Cli({ client: this.client }))
   }
 
   private _scientificTool?: ScientificTool

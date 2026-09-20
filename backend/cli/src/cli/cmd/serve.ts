@@ -4,6 +4,7 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { GracefulShutdown } from "../../process/graceful-shutdown"
 import { DesktopParent } from "../../process/desktop-parent"
 import { Installation } from "../../installation"
+import { CliShim } from "../../installation/cli-shim"
 import { Global } from "../../global"
 import { ServerIdentity } from "../../server/identity"
 import { advertiseDesktopServer, withdrawDesktopServer } from "../local-server"
@@ -36,6 +37,10 @@ export const ServeCommand = cmd({
         version: Installation.VERSION,
         runId: ServerIdentity.current.runId,
       })
+      // The link in ~/.openscience/bin names the bundle it was made from, so a
+      // moved or reinstalled app re-points its own link here. A missing link
+      // stays missing until the person asks for one in Customize.
+      void CliShim.repair().catch(() => undefined)
     }
     const signal = Promise.withResolvers<void>()
     const stop = () => signal.resolve()

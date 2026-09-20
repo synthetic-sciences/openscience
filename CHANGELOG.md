@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+### Added
+
+- **The desktop app installs its command-line tool.** **Customize → General → Command line tool** links `~/.openscience/bin/openscience` to the app's own copy and adds that folder to your shell's startup file the way the standalone installer does, so `openscience` in a new terminal opens the running app. The row says whether the tool is installed and on your PATH, and shows the line to add when it is not. On every launch the app re-points a link of its own that names a moved or reinstalled bundle; it never creates a link you did not ask for and never replaces an `openscience` it did not create. `openscience uninstall` run from that link removes the link and the PATH line. The Linux AppImage runs from a temporary mount and cannot be linked, so the row says to use the standalone installer there; Windows is unchanged.
+
 ### Changed
 
 - **Files opens where the work is.** The pane used to land on Project files, the managed project directory that is empty until something writes there, while the folders you connected sat behind **More**. It now opens on the folder this conversation works in — whichever the composer names, scratch included — keeps whatever you picked last, and gives connected folders their own tabs beside Project files (up to three; the rest stay in the menu). The location menu hangs from the trigger's right edge when the left edge would push it past the pane, so paths and access badges stay readable.
