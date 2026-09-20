@@ -56,6 +56,7 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ModelSettingsPopover } from "./model-settings-popover"
+import { composerOverlays, registerOverlayDetails } from "./overlay-group"
 import {
   loadedSkillNamesThisTurn,
   recordRecentSkill,
@@ -460,12 +461,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     choice.click()
   }
 
-  const dismissResearchTools = (event: PointerEvent) => {
-    if (!researchToolsRef?.open) return
-    if (event.target instanceof Node && researchToolsRef.contains(event.target)) return
-    closeResearchTools()
-  }
-
   const commentInReview = (path: string) => {
     const sessionID = params.id
     if (!sessionID) return false
@@ -801,14 +796,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     document.addEventListener("dragover", handleGlobalDragOver)
     document.addEventListener("dragleave", handleGlobalDragLeave)
     document.addEventListener("drop", handleGlobalDrop)
-    document.addEventListener("pointerdown", dismissResearchTools)
     if (!params.id || params.id === "new") queueMicrotask(() => editorRef.focus())
   })
   onCleanup(() => {
     document.removeEventListener("dragover", handleGlobalDragOver)
     document.removeEventListener("dragleave", handleGlobalDragLeave)
     document.removeEventListener("drop", handleGlobalDrop)
-    document.removeEventListener("pointerdown", dismissResearchTools)
   })
 
   createEffect(() => {
@@ -3092,17 +3085,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   </Button>
                 </Tooltip>
                 <details
-                  ref={(element) => (researchToolsRef = element)}
+                  ref={(element) => {
+                    researchToolsRef = element
+                    registerOverlayDetails(composerOverlays, "tools", element)
+                  }}
                   class="workspace-composer__research-tools"
                   onToggle={(event) => {
                     if (event.currentTarget.open) return
                     resetResearchTools()
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Escape") return
-                    event.preventDefault()
-                    closeResearchTools()
-                    researchToolsRef?.querySelector("summary")?.focus()
                   }}
                 >
                   <summary aria-label="Tools">

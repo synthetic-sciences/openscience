@@ -2,6 +2,7 @@ import { For, Show, createMemo, createResource, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Icon } from "@synsci/ui/icon"
 import type { OpenScienceClient } from "@synsci/sdk/v2/client"
+import { composerOverlays, registerOverlayDetails } from "./overlay-group"
 import "./working-folder.css"
 
 /** "scratch" pins the session's temporary directory; a path pins a connected
@@ -100,15 +101,12 @@ export const WorkingFolderChip: Component<{
   return (
     <Show when={roots().length > 0}>
       <details
-        ref={(element) => (details = element)}
+        ref={(element) => {
+          details = element
+          registerOverlayDetails(composerOverlays, "folder", element)
+        }}
         class="working-folder"
         onToggle={(event) => setChoice("open", event.currentTarget.open)}
-        onKeyDown={(event) => {
-          if (event.key !== "Escape") return
-          event.preventDefault()
-          details?.removeAttribute("open")
-          details?.querySelector("summary")?.focus()
-        }}
       >
         <summary aria-label={`Working in ${label()}`} aria-disabled={props.disabled ? "true" : undefined}>
           <Icon name="folder" size="small" />

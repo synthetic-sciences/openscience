@@ -29,6 +29,7 @@ import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups
 import { exactRouteFastMode, type FastMode } from "./model-fast"
 import { providerRate, rateBasis, rateLine, routeRates, type RouteRates } from "@/context/model-pricing"
 import { modelControl } from "./model-presentation"
+import { composerOverlays, registerOverlay } from "./overlay-group"
 import { curateQuickModelRows, curateQuickModels } from "./model-quick"
 import "./model-settings-popover.css"
 
@@ -688,7 +689,13 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
   const close = () => {
     setOpen(false)
     resetMenu()
+    composerOverlays.close("model")
   }
+
+  // The composer footer holds four menus; the group is what makes opening one
+  // close the rest, whichever of them the person reaches for next.
+  registerOverlay(composerOverlays, "model", close)
+  registerOverlay(composerOverlays, "effort", () => setEffortOpen(false))
 
   const control = createMemo(() =>
     modelControl({
@@ -821,9 +828,9 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       <Kobalte
         open={open()}
         onOpenChange={(next) => {
-          setOpen(next)
-          if (next) setEffortOpen(false)
-          if (!next) resetMenu()
+          if (!next) return close()
+          setOpen(true)
+          composerOverlays.open("model")
         }}
         modal={mobile()}
         placement="top-end"
@@ -1121,9 +1128,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
           open={effortOpen()}
           onOpenChange={(next) => {
             setEffortOpen(next)
-            if (!next) return
-            setOpen(false)
-            resetMenu()
+            if (next) composerOverlays.open("effort")
+            else composerOverlays.close("effort")
           }}
           modal={mobile()}
           onEffortSelect={(id) => local.model.variant.set(id)}

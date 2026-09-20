@@ -61,6 +61,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **One composer menu at a time.** Tools, the working folder chip, the model picker and the effort picker were four separate menus that each only closed themselves, so opening one left the others open on top of each other. Opening any of them now closes whatever else is open, and the working folder menu closes on a click outside it like the rest.
 - **Files a worker leaves in its own scratch open from the lead's transcript.** The lead session now holds read access to each delegated child's workspace, so a report's side outputs (rendered pages, staged inputs, tool output files) open instead of failing silently.
 - **One PDF viewer.** A saved Result's PDF shows its pager and zoom in the file header like every other file view, and the viewer's own bar, where it still appears inline in chat, matches that header.
 - **A declined reload card is named.** When Ace pauses because the Wallet's card was declined, the message says so and points at the card update instead of "the last charge failed recently" or a reload that never completes.
