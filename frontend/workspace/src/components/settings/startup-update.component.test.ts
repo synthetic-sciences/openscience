@@ -3,6 +3,11 @@ import { fileURLToPath } from "node:url"
 import solid from "vite-plugin-solid"
 import type { Platform } from "@/context/platform"
 import { createTestServer } from "../../../test/vite"
+import type { CommandLineStatus } from "./command-line-tool"
+import type { CommandLineServices } from "../settings-general"
+
+// happy-dom replaces the global Response; Bun's HTTP server needs its native one.
+const Response = (await Bun.fetch("data:text/plain,")).constructor as typeof globalThis.Response
 
 const server = await createTestServer({
   root: fileURLToPath(new URL("../../..", import.meta.url)),
@@ -68,6 +73,35 @@ async function mount(staging: boolean) {
 
 const buttons = (host: HTMLElement) => Array.from(host.querySelectorAll("button")).map((button) => button.textContent)
 
+/** A real local server for the command-line row's `GET /settings/cli` — the
+ * General panel renders that row too on a desktop platform, the same server
+ * shape #663's own `command-line-tool.test.tsx` serves it against. */
+function serveCommandLine(): { services: CommandLineServices; stop: () => void } {
+  const home = "/Users/ada"
+  const status: CommandLineStatus = {
+    home,
+    directory: `${home}/.openscience/bin`,
+    path: `${home}/.openscience/bin/openscience`,
+    exists: true,
+    current: true,
+    ours: true,
+    onPath: true,
+    shell: "zsh",
+    line: `export PATH=${home}/.openscience/bin:$PATH`,
+    installable: true,
+  }
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url)
+      if (request.method === "GET" && url.pathname === "/settings/cli") return Response.json(status)
+      return Response.json({ error: "not_found", path: url.pathname }, { status: 404 })
+    },
+  })
+  return { services: { sdk: { url: server.url.origin } }, stop: () => void server.stop(true) }
+}
+
 describe("launch update notice", () => {
   test("offers one press on an installation that can stage the update", async () => {
     const { host } = await mount(true)
@@ -99,10 +133,16 @@ describe("launch update notice", () => {
 describe("Customize → General update row", () => {
   test("describes the same offer as the notice, for its own button", async () => {
     const subject = platform(true)
+    // happy-dom's fetch cannot parse a response from Bun's own HTTP server
+    // (HPE_UNEXPECTED_CONTENT_LENGTH); the command-line row's request needs
+    // Bun's fetch, the same swap #663's own command-line-tool.test.tsx makes.
+    subject.value.fetch = Bun.fetch as unknown as typeof fetch
     await controllers.updateController(subject.value).check()
+    const { services, stop } = serveCommandLine()
+    cleanups.push(stop)
     const host = document.createElement("div")
     document.body.append(host)
-    cleanups.push(web.render(fixture.createGeneralFixture(subject.value), host))
+    cleanups.push(web.render(fixture.createGeneralFixture(subject.value, services), host))
 
     const row = Array.from(host.querySelectorAll(".settings-row")).find((element) =>
       element.textContent?.includes("OpenScience 2.0.127 is available"),

@@ -37,11 +37,16 @@ const playDemoSound = (src: string, volume: number) => {
   }, 100)
 }
 
+/** Lets a test mount `AppearanceSections` on a desktop platform without the
+ * app's full GlobalSDK/event-stream context — the command-line row needs
+ * only the base URL, the same seam `UsageLogging` and `ManagedInference` use. */
+export type CommandLineServices = { sdk: Pick<ReturnType<typeof useGlobalSDK>, "url"> }
+
 // The appearance / notification / sound / update controls, without any
 // outer scroll wrapper or header — so the new General settings panel can compose
 // them below its Account / Model / Licensing sections. `SettingsGeneral` below
 // keeps the standalone panel (scroll + header) for any legacy mount.
-export const AppearanceSections: Component = () => {
+export const AppearanceSections: Component<{ services?: CommandLineServices }> = (props) => {
   const theme = useTheme()
   const language = useLanguage()
   const platform = usePlatform()
@@ -456,7 +461,7 @@ export const AppearanceSections: Component = () => {
       </SettingsSection>
 
       <Show when={platform.platform === "desktop"}>
-        <CommandLineSection />
+        <CommandLineSection services={props.services} />
       </Show>
     </>
   )
@@ -464,8 +469,8 @@ export const AppearanceSections: Component = () => {
 
 // Only the desktop app can own the link in ~/.openscience/bin, so the web
 // build neither shows the row nor asks the server about it.
-const CommandLineSection: Component = () => {
-  const sdk = useGlobalSDK()
+const CommandLineSection: Component<{ services?: CommandLineServices }> = (props) => {
+  const sdk = props.services?.sdk ?? useGlobalSDK()
   const platform = usePlatform()
   const client = createCommandLineClient(sdk.url, platform.fetch ?? fetch)
   return (
