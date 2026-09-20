@@ -275,7 +275,7 @@ export const SETTINGS_STYLES = `
 .settings-nav__label {
   padding: 0 var(--settings-space-2) 1px;
   color: var(--color-text-faint);
-  font-size: 11px;
+  font-size: var(--font-size-x-small);
   font-weight: var(--font-weight-medium);
   line-height: 1.35;
   letter-spacing: 0.02em;

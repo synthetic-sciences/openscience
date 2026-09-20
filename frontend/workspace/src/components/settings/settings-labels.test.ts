@@ -21,17 +21,28 @@ const [fixture, dialog, web] = await Promise.all([
   server.ssrLoadModule("solid-js/web") as Promise<typeof import("solid-js/web")>,
 ])
 const sidebar = await Bun.file(new URL("../../pages/session-sidebar.css", import.meta.url)).text()
+// The real tokens both rules read (font size, weight, family). Loading the
+// theme layer itself, rather than standing in for it, is what makes the
+// cross-surface comparisons below hold by construction: they fail if the two
+// rules ever resolve differently, not only if someone edits this file.
+// happy-dom's CSS parser drops a plain rule's declarations that precede a
+// nested at-rule (verified: `:root { --a: 1; @media (...) { } }` parses to
+// `:root { }`, losing --a), and theme.css nests `@media
+// (prefers-color-scheme: dark)` as :root's last rule — loading the file
+// verbatim would silently empty out every token below. Load only the
+// light-mode :root block that precedes it, still the file's own text.
+const themeSource = await Bun.file(new URL("../../../../ui/src/styles/theme.css", import.meta.url)).text()
+const themeCut = themeSource.indexOf("@media (prefers-color-scheme: dark)")
+if (themeCut < 0) throw new Error("theme.css no longer nests a prefers-color-scheme block inside :root")
+const theme = `${themeSource.slice(0, themeCut)}}`
 
-// Stand-ins for the theme layer both surfaces inherit from, so a computed value
-// names the declaration that won instead of a token happy-dom cannot resolve.
-const TOKENS = `
-.settings-dialog, .session-sidebar {
+// `--font-mono` stays a stand-in: it is a Tailwind `@theme` utility token that
+// only exists after the Tailwind build runs, which this harness does not do.
+// The mono test below checks which declaration's cascade wins, not the
+// font's real value, so a distinguishable placeholder is enough.
+const MONO_TOKEN = `
+.settings-dialog {
   --font-mono: ProbeMono;
-  --font-family-sans: ProbeSans;
-  --font-family-mono: ProbeMono;
-  --font-size-x-small: 11px;
-  --font-weight-medium: 500;
-  --sidebar-space-2: 8px;
 }
 `
 
@@ -71,7 +82,7 @@ function tracking(selector: string) {
 
 describe("Customize dialog labels and fields", () => {
   test("a field that asks for monospace keeps it inside the dialog", () => {
-    const host = styled([dialog.SETTINGS_STYLES, TOKENS])
+    const host = styled([dialog.SETTINGS_STYLES, MONO_TOKEN])
     host.className = "settings-dialog"
     cleanups.push(web.render(fixture.ConnectorFields, host))
 
@@ -86,7 +97,7 @@ describe("Customize dialog labels and fields", () => {
 
   test("the rail names its groups in the project sidebar's own label metrics", () => {
     const host = styled(
-      [dialog.SETTINGS_STYLES, sidebar, TOKENS],
+      [dialog.SETTINGS_STYLES, sidebar, theme],
       `<div class="settings-dialog"><div class="settings-nav__label">Account</div></div>
        <div class="session-sidebar"><div class="session-sidebar__group-label">Workspace</div></div>`,
     )
