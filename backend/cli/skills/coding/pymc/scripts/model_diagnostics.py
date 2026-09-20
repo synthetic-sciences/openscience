@@ -15,7 +15,6 @@ Usage:
 """
 
 import arviz as az
-import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
@@ -264,8 +263,6 @@ def create_diagnostic_report(idata, var_names=None, output_dir='diagnostics/', s
     print(f"\nDiagnostic report complete! Files saved in '{output_dir}'")
 
     return results
-
-
 
 
 # Example usage
