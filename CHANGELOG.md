@@ -11,6 +11,21 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Changed
 
 - **The update notice offers only what this build can do.** Off macOS, and in an unpackaged build, there is no in-app download, so the launch notice no longer promises a one-press **Download and restart** it cannot honour. It says the release is available and offers **Download installer**, which opens the release page; the macOS app keeps the one press. Customize → General says the same thing as the notice, in its own words for its own button.
+- **The folder picker works on Windows.** Drive letters, UNC shares and backslashes are understood everywhere the
+  picker touches a path: the breadcrumbs, the parent-folder button, the typed path field, recents, and the label for
+  the current folder. The macOS-only Applications shortcut and the Full Disk Access hint appear only on macOS.
+- **A slower answer no longer wins.** The server dialog's health dots, the folder picker's navigation, and the
+  composer's `@` and `/` menus ignore a reply that a newer request has overtaken, so Enter can no longer pick a row
+  from the query you already replaced.
+- **Time budgets restart with the request that sets them.** A second timed request measures from its own deadline and
+  gets its own reminders instead of measuring from the session's first message and staying silent, and the "half the
+  budget" reminder no longer arrives after the 85% one.
+- **Parallel tool calls sent to Mistral stay distinct.** Identifiers were shortened to nine characters, which
+  collapsed every call made in the same few seconds onto one identifier; each call now keeps its own.
+- **Deliverable checks stay inside the approved output roots.** A named output that resolves outside the session's
+  tool directory or the project, through `..` or a symlink, is reported as outside them rather than opened and
+  validated, and an output spelled out as a full Windows or UNC path is no longer reduced to its bare file name and
+  demanded in the project root.
 - **Files opens where the work is.** The pane used to land on Project files, the managed project directory that is empty until something writes there, while the folders you connected sat behind **More**. It now opens on the folder this conversation works in — whichever the composer names, scratch included — keeps whatever you picked last, and gives connected folders their own tabs beside Project files (up to three; the rest stay in the menu). The location menu hangs from the trigger's right edge when the left edge would push it past the pane, so paths and access badges stay readable.
 - **A connected folder can be disconnected from Files.** Every connected row in the Files location menu has a **Revoke** control. It names the folder and the access it ends, then revokes the grant across its scope and stops the kernels that mounted it; the pane moves to another location and forgets the one it lost. A failure says so and leaves the folder connected.
 - **Files lists a working folder it did not connect.** A conversation delegated by another works in its lead's folder, and a folder approved for the whole installation can be the one a conversation writes in. Neither was a location the pane offered, so Files fell back to Project files and the folder actually being written in had no row at all. Both are now listed beside the folders connected here, with the same access badge, and the pane opens on whichever one the conversation works in. A folder inherited from a lead session is browsed from here but not revoked from here: that grant is the lead's to end.
@@ -311,26 +326,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   with 403 on every funded call.
 
 ### Changed
-
-- **Windows paths and asynchronous pickers are reliable.** The folder picker
-  understands drive letters, UNC roots, backslashes, breadcrumbs and relative
-  paths on Windows. Server health checks and `@` mention results no longer let
-  an older request overwrite or select from the latest query.
-
-- **Downloads and docs choose the right assets.** Macs whose architecture
-  cannot be detected now offer explicit Apple Silicon and Intel downloads
-  instead of defaulting to Apple Silicon, and documentation fonts and icons
-  load when the site is hosted under `/docs`.
-
-- **Harness continuations preserve the original request.** Time budgets now
-  start from real requests carrying a deadline, while synthetic continuations
-  no longer redefine deliverables. Mistral parallel tool calls also retain
-  distinct, valid IDs.
-
-- **Release tooling works on Windows and fails fast on npm errors.** Package
-  builds resolve Windows file URLs correctly, and genuine npm permission or
-  dist-tag failures are reported immediately instead of entering retry or
-  visibility waits.
 
 - **NVIDIA BioNeMo: the DiffDock route and the repo's front door.** The hosted
   DiffDock endpoint moved to `/v1/biology/mit/diffdock`; the old
