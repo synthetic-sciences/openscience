@@ -16,7 +16,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   the current folder. The macOS-only Applications shortcut and the Full Disk Access hint appear only on macOS.
 - **A slower answer no longer wins.** The server dialog's health dots, the folder picker's navigation, and the
   composer's `@` and `/` menus ignore a reply that a newer request has overtaken, so Enter can no longer pick a row
-  from the query you already replaced.
+  from the query you already replaced. While the `@` picker's file search is still running it says so, instead of
+  saying there is nothing matching yet.
 - **Time budgets restart with the request that sets them.** A second timed request measures from its own deadline and
   gets its own reminders instead of measuring from the session's first message and staying silent, and the "half the
   budget" reminder no longer arrives after the 85% one.
