@@ -239,6 +239,66 @@ describe("desktop update controller", () => {
     expect(calls).toEqual(["stage", "apply"])
   })
 
+  test("a second download press finishes the one press the banner started", async () => {
+    const calls: string[] = []
+    const queued: Array<() => void> = []
+    const candidate = platform({ states: [], calls })
+    let stages = 0
+    // The banner's press starts the download; the press from Customize lands on
+    // a bundle the desktop has already verified, so that request is the one
+    // that answers `ready`.
+    candidate.stageUpdate = async () => {
+      calls.push("stage")
+      stages++
+      return stages === 1
+        ? { phase: "downloading", version: "2.0.54", transferred: 10, total: 100 }
+        : { phase: "ready", version: "2.0.54" }
+    }
+    const controller = createUpdateController(candidate, {
+      schedule: (run) => {
+        queued.push(run)
+        return queued.length as unknown as ReturnType<typeof setTimeout>
+      },
+    })
+    let restarts = 0
+
+    await controller.downloadAndRestart(async () => {
+      restarts++
+      await controller.apply()
+    })
+    expect(controller.state.phase).toBe("downloading")
+    expect(restarts).toBe(0)
+
+    await controller.stage()
+
+    expect(restarts).toBe(1)
+    expect(controller.state.phase).toBe("restarting")
+    expect(calls).toEqual(["stage", "stage", "apply"])
+  })
+
+  test("an offer the check could not name is spent by the update that installs it", async () => {
+    const calls: string[] = []
+    const candidate = platform({
+      states: [{ phase: "succeeded", version: "2.0.54", completed_at: "2026-09-20T09:44:55.838Z" }],
+      calls,
+    })
+    candidate.checkUpdate = async () => {
+      calls.push("check")
+      return { updateAvailable: true }
+    }
+    const controller = createUpdateController(candidate)
+
+    await controller.check()
+    expect(controller.state.available).toBe("latest")
+
+    controller.start()
+    await flush()
+
+    expect(controller.state.phase).toBe("succeeded")
+    expect(controller.state.available).toBeUndefined()
+    expect(offeredUpdate(controller.state)).toBeUndefined()
+  })
+
   test("restarts straight away when the update is already verified", async () => {
     const calls: string[] = []
     const controller = createUpdateController(platform({ states: [{ phase: "ready", version: "2.0.54" }], calls }))

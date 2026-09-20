@@ -10,7 +10,8 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
 import { URLS } from "@/config/urls"
-import { formatUpdateBytes, offeredUpdate, updateController } from "./settings/update-controller"
+import { updateController } from "./settings/update-controller"
+import { updateNotice, updateNoticeLine } from "./settings/startup-update"
 import { PanelBody, PanelHeader, PanelScroll, Section as SettingsSection } from "./settings/_shared"
 import "./settings-general.css"
 
@@ -88,7 +89,18 @@ export const AppearanceSections: Component = () => {
       })
   }
 
+  // The row says what this surface's press does: it downloads, and the restart
+  // is a second press. An installation without in-app staging has neither, so
+  // the copy and the button both point at the release page. The banner reads
+  // the same notice, so the two surfaces cannot describe one update differently.
+  const notice = createMemo(() => updateNotice(updates.state, platform.stageUpdate ? "download" : "installer"))
+  const updateDescription = createMemo(() => {
+    const current = notice()
+    return current ? updateNoticeLine(current) : language.t("settings.updates.row.check.description")
+  })
+
   const updateAction = () => {
+    if (!platform.stageUpdate) return platform.openLink(URLS.releases)
     const run =
       updates.state.phase === "ready" || updates.state.phase === "restart_blocked" ? updates.apply : updates.stage
     void run().catch((error: unknown) => {
@@ -373,58 +385,11 @@ export const AppearanceSections: Component = () => {
             </div>
           </SettingsRow>
 
-          <SettingsRow
-            title={language.t("settings.updates.row.check.title")}
-            description={
-              // A release this copy can still move to is what the row is for;
-              // the last update's result is only news while nothing is newer.
-              offeredUpdate(updates.state)
-                ? `OpenScience ${updates.state.available} is available. Download the signed update and restart when you are ready.`
-                : updates.state.phase === "ready"
-                  ? updates.state.migration_required
-                    ? `OpenScience ${updates.state.version} is verified. It will move to your user Applications folder before restarting because this installation is administrator-owned.`
-                    : `OpenScience ${updates.state.version} is signed, verified, and ready to restart.`
-                  : updates.state.phase === "succeeded"
-                    ? `Updated to OpenScience ${updates.state.version}. The relaunched workspace passed its health check.`
-                    : updates.state.phase === "restarting"
-                      ? `Restarting into OpenScience ${updates.state.version}. The app will reopen automatically.`
-                      : updates.state.phase === "restart_blocked"
-                        ? (updates.state.error ?? "OpenScience is waiting for the local runtime to finish safely.")
-                        : updates.state.phase === "downloading"
-                          ? `${formatUpdateBytes(updates.state.transferred)}${updates.state.total ? ` of ${formatUpdateBytes(updates.state.total)}` : ""} downloaded.`
-                          : ["extracting", "verifying"].includes(updates.state.phase)
-                            ? "Verifying the signed, notarized app before restart."
-                            : updates.state.phase === "failed"
-                              ? (updates.state.error ?? "The update could not be prepared.")
-                              : language.t("settings.updates.row.check.description")
-            }
-          >
+          <SettingsRow title={language.t("settings.updates.row.check.title")} description={updateDescription()}>
             <div class="flex max-w-full flex-wrap items-center justify-end gap-2">
-              <Show when={updates.state.available && platform.stageUpdate}>
-                <Button
-                  size="small"
-                  variant="primary"
-                  disabled={["downloading", "extracting", "verifying", "restarting"].includes(updates.state.phase)}
-                  onClick={updateAction}
-                >
-                  {updates.state.phase === "ready"
-                    ? updates.state.migration_required
-                      ? "Move & restart"
-                      : "Restart to update"
-                    : updates.state.phase === "restarting"
-                      ? "Restarting…"
-                      : updates.state.phase === "restart_blocked"
-                        ? "Retry restart"
-                        : ["downloading", "extracting", "verifying"].includes(updates.state.phase)
-                          ? "Preparing…"
-                          : updates.state.phase === "failed"
-                            ? "Retry download"
-                            : `Download ${updates.state.available}`}
-                </Button>
-              </Show>
-              <Show when={updates.state.available && !platform.stageUpdate}>
-                <Button size="small" variant="primary" onClick={() => platform.openLink(URLS.releases)}>
-                  Download installer
+              <Show when={updates.state.available && notice()?.primary}>
+                <Button size="small" variant="primary" disabled={notice()?.primary?.busy} onClick={updateAction}>
+                  {notice()?.primary?.label}
                 </Button>
               </Show>
               <Show

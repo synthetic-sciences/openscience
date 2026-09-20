@@ -386,7 +386,9 @@ async function syncDirectory(directory) {
   }
 }
 
-async function durableJson(file, value) {
+/** A JSON record that survives a power cut: written to a temp sibling unique to
+ * this write, fsynced, renamed, and the directory fsynced after the rename. */
+export async function durableJson(file, value) {
   const temporary = `${file}.tmp-${process.pid}-${randomBytes(4).toString("hex")}`
   const handle = await open(temporary, "w", 0o600)
   try {

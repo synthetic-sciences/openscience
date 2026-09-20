@@ -20,7 +20,7 @@ import { useGlobalSDK } from "@/context/global-sdk"
 // Scoped to the settings dialog only. Gives shared primitives and legacy
 // panels one calm OpenScience hierarchy, grid, and surface stack without
 // changing global component CSS or tokens.
-const SETTINGS_STYLES = `
+export const SETTINGS_STYLES = `
 .settings-dialog,
 [data-component="dialog"]:has([data-slot="dialog-content"].settings-dialog) {
   --settings-space-1: 4px;
@@ -266,17 +266,18 @@ const SETTINGS_STYLES = `
 .settings-nav__sections::-webkit-scrollbar {
   display: none;
 }
-/* Each group is named once, in the section-label voice, above its rows.
-   Sentence case and --color-text-faint match the project sidebar's own
-   group labels (.session-sidebar__group-label / .session-sidebar__label) —
-   no text-transform: the design contract forbids forcing ordinary interface
-   copy into a different case. */
+/* Each group is named once, in the section-label voice, above its rows. This
+   is the project sidebar's own group label (.session-sidebar__group-label /
+   .session-sidebar__label) down to its metrics: same colour, size, weight,
+   tracking, line height and padding, and no text-transform — the design
+   contract forbids forcing ordinary interface copy into a different case.
+   settings-labels.test.ts holds the two rules to the same computed values. */
 .settings-nav__label {
-  padding: 0 var(--settings-space-2) 4px;
+  padding: 0 var(--settings-space-2) 1px;
   color: var(--color-text-faint);
   font-size: 11px;
   font-weight: var(--font-weight-medium);
-  line-height: 16px;
+  line-height: 1.35;
   letter-spacing: 0.02em;
 }
 .settings-nav__section {

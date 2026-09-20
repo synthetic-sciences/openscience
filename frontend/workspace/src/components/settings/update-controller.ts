@@ -18,6 +18,10 @@ export function offeredUpdate(state: Pick<State, "phase" | "available">) {
   return state.phase === "idle" || state.phase === "succeeded" ? state.available : undefined
 }
 
+// What an offer is called when the check reports one without naming a version.
+// It cannot be compared with an installed version, so any success spends it.
+const UNNAMED = "latest"
+
 const controllers = new WeakMap<object, ReturnType<typeof createUpdateController>>()
 // Phases the supervisor advances on its own. A blocked restart is not one of
 // them: it waits for the user, so polling it only burns the transport.
@@ -53,7 +57,9 @@ export function createUpdateController(
    * settled. Never called while a mutation is in flight: the desktop can answer
    * the staging request with an already verified bundle, and a restart started
    * from inside that request would be refused as a concurrent mutation.
-   * `downloadAndRestart` settles that case once its own mutation has ended. */
+   * `mutate` settles that case once any mutation has ended — including a second
+   * stage pressed in Settings while the banner's one press was still following
+   * the first, which is the request that can answer `ready`. */
   const settleArmed = () => {
     if (!armed) return
     if (state.phase === "ready") {
@@ -79,7 +85,7 @@ export function createUpdateController(
       // since is still ahead of this app and has to survive the result.
       available:
         next.phase === "succeeded"
-          ? state.available === next.version
+          ? state.available === next.version || state.available === UNNAMED
             ? undefined
             : state.available
           : (next.version ?? state.available),
@@ -137,6 +143,9 @@ export function createUpdateController(
     polls = 0
     const active = run().finally(() => {
       if (mutation?.promise === active) mutation = undefined
+      // Whichever request ends the download settles the armed restart, not only
+      // the one `downloadAndRestart` started.
+      void settleArmed()
     })
     mutation = { action, promise: active }
     return active
@@ -169,7 +178,7 @@ export function createUpdateController(
           const result = await platform.checkUpdate({ refresh: !background })
           setState({
             checking: false,
-            available: result.updateAvailable ? (result.version ?? "latest") : undefined,
+            available: result.updateAvailable ? (result.version ?? UNNAMED) : undefined,
             dismissed: false,
           })
           return result
@@ -185,7 +194,7 @@ export function createUpdateController(
     downloadAndRestart(restart: () => Promise<void>) {
       if (state.phase === "ready" || state.phase === "restart_blocked") return restart()
       armed = restart
-      return stage().then(settleArmed, (error: unknown) => {
+      return stage().catch((error: unknown) => {
         armed = undefined
         throw error
       })

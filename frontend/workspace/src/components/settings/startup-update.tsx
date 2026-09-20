@@ -27,18 +27,44 @@ export type UpdateNotice = {
 }
 
 /**
+ * What the surface's primary press actually does, so the copy never promises a
+ * button this installation or this surface does not have:
+ * `"download-and-restart"` is the launch notice's one press; `"download"` is
+ * Customize → General, where the restart is a second press; `"installer"` is an
+ * installation without in-app staging (off macOS, or an unpackaged build),
+ * where the only thing to press opens the release page.
+ */
+export type UpdatePress = "download-and-restart" | "download" | "installer"
+
+const offerCopy: Record<UpdatePress, (version: string) => { detail: string; label: string }> = {
+  "download-and-restart": () => ({
+    detail: "One press downloads and verifies the signed update, then restarts OpenScience.",
+    label: "Download and restart",
+  }),
+  download: (version) => ({
+    detail: "Download the signed update and restart when you are ready.",
+    label: `Download ${version}`,
+  }),
+  installer: () => ({
+    detail: "Download in the background, then choose when to restart.",
+    label: "Download installer",
+  }),
+}
+
+/**
  * What the notice says, and what pressing its primary action means. A release
  * the app can still move to outranks a finished update result: the result is
  * about a version already installed, the release is the one thing left to do.
  */
-export function updateNotice(state: NoticeState): UpdateNotice | undefined {
+export function updateNotice(state: NoticeState, press: UpdatePress): UpdateNotice | undefined {
   const offered = offeredUpdate(state)
   if (offered) {
+    const copy = offerCopy[press](offered)
     return {
       kind: "available",
       title: `OpenScience ${offered} is available`,
-      detail: "One press downloads and verifies the signed update, then restarts OpenScience.",
-      primary: { label: "Download and restart", busy: false },
+      detail: copy.detail,
+      primary: { label: copy.label, busy: false },
     }
   }
   if (state.phase === "ready") {
@@ -92,6 +118,14 @@ export function updateNotice(state: NoticeState): UpdateNotice | undefined {
         : "Checking the signed, notarized app before restart.",
     primary: { label: "Preparing…", busy: true },
   }
+}
+
+/** The same notice as one sentence, for a surface with a single copy slot
+ * (Customize → General's row description) rather than a title and a detail. */
+export function updateNoticeLine(notice: UpdateNotice) {
+  const detail = notice.detail?.trim()
+  if (!detail) return `${notice.title}.`
+  return `${notice.title}. ${/[.!?]$/.test(detail) ? detail : `${detail}.`}`
 }
 
 export function queueStartupUpdateCheck(input: {
@@ -176,8 +210,11 @@ export const StartupUpdateCheck: Component = () => {
   }
 
   // One press covers the whole update: the download runs in the background and
-  // the restart follows the moment the staged bundle is verified.
+  // the restart follows the moment the staged bundle is verified. Without
+  // in-app staging there is no such press, so the notice offers the release
+  // page instead and says so.
   const action = async () => {
+    if (!platform.stageUpdate) return platform.openLink(URLS.releases)
     await updates.downloadAndRestart(restart).catch((error: unknown) => {
       showToast({
         variant: "error",
@@ -209,7 +246,9 @@ export const StartupUpdateCheck: Component = () => {
   })
 
   onCleanup(() => cancel())
-  const notice = createMemo(() => updateNotice(updates.state))
+  const notice = createMemo(() =>
+    updateNotice(updates.state, platform.stageUpdate ? "download-and-restart" : "installer"),
+  )
   return (
     <Show when={!updates.state.dismissed && notice()}>
       <aside
@@ -229,7 +268,7 @@ export const StartupUpdateCheck: Component = () => {
             <progress max="1" value={updates.state.progress} aria-label="Update download progress" />
           </Show>
         </span>
-        <Show when={platform.stageUpdate && notice()?.primary}>
+        <Show when={notice()?.primary}>
           <Button size="small" variant="primary" disabled={notice()?.primary?.busy} onClick={() => void action()}>
             {notice()?.primary?.label}
           </Button>
@@ -257,14 +296,17 @@ export const StartupUpdateCheck: Component = () => {
           size="small"
           variant="secondary"
           onClick={() => {
-            if (!platform.stageUpdate || updates.state.phase === "failed") {
+            // A failed staging leaves the release page as the way out. Without
+            // staging the primary action is already that page, so this button
+            // stays the one that opens the notes.
+            if (platform.stageUpdate && updates.state.phase === "failed") {
               platform.openLink(URLS.releases)
               return
             }
             dialog.show(() => <DialogSettings initial="general" />)
           }}
         >
-          {!platform.stageUpdate || updates.state.phase === "failed" ? "Download installer" : "What's new"}
+          {platform.stageUpdate && updates.state.phase === "failed" ? "Download installer" : "What's new"}
         </Button>
         <Show when={!["restarting", "restart_blocked"].includes(updates.state.phase)}>
           <button

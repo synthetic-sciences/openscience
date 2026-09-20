@@ -13,6 +13,7 @@ import {
   current as currentUpdate,
   destination as updateDestination,
   discard as discardUpdate,
+  durableJson,
   portable as portableUpdate,
   reconcileTransactions as reconcileUpdateTransactions,
   recover as recoverUpdate,
@@ -607,12 +608,6 @@ async function updateRequest(request, response) {
   timer.unref?.()
 }
 
-async function writeResultFile(file, value) {
-  const temporary = `${file}.tmp-${process.pid}`
-  await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600 })
-  await rename(temporary, file)
-}
-
 async function updates() {
   if (!app.isPackaged || process.platform !== "darwin") return
   state.updateCache = path.join(app.getPath("userData"), "updates")
@@ -650,10 +645,12 @@ async function updates() {
   const acknowledged = acknowledgedStartupResult(stored, state.updateResult)
   // Serving "Updated to X" is what spends it. Recording that on disk, rather
   // than only removing the file, means a result written again by update
-  // recovery cannot replay the notice on a later launch either. This is a
-  // safety net for a notice already shown, never a reason to refuse the
-  // launch, so a cache that will not take the write is ignored.
-  if (acknowledged) await writeResultFile(resultFile, acknowledged).catch(() => undefined)
+  // recovery cannot replay the notice on a later launch either. It goes down
+  // through the same durable write as the helper's own receipts, so a power
+  // cut right after it cannot bring the notice back. It is still only a safety
+  // net for a notice already shown, never a reason to refuse the launch, so a
+  // cache that will not take the write is ignored.
+  if (acknowledged) await durableJson(resultFile, acknowledged).catch(() => undefined)
   else if (stored) await rm(resultFile, { force: true })
   const recovered = updateHealthRequest()
     ? undefined
