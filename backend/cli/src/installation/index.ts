@@ -74,6 +74,14 @@ export namespace Installation {
     const script = (input.scriptPath ?? "").replaceAll("\\", "/").toLowerCase()
     const installed = `${exec}\n${script}`
 
+    // The desktop app ships this CLI as the sidecar inside its own application
+    // bundle: `OpenScience.app/Contents/Resources/sidecar/openscience` on
+    // macOS, `resources/sidecar/openscience[.exe]` in electron-builder's
+    // Windows and Linux layouts. A terminal running that copy — directly or
+    // through the `~/.openscience/bin` symlink the app installs — inherits
+    // none of the desktop update environment, so the executable's own location
+    // is the only thing that can tell us the app owns it.
+    if (exec.includes("/resources/sidecar/openscience")) return "desktop" as const
     if (exec.includes("/.openscience/bin/") || exec.includes("/.synsc/bin/")) return "curl" as const
     // legacy pre-rename curl installs lived under ~/.synsc/bin
     // ~/.local/bin is ALSO npm's target with `--prefix ~/.local`, pipx, and many
@@ -92,9 +100,15 @@ export namespace Installation {
     return "unknown" as const
   }
 
+  /** The Electron shell hands its signed updater to the sidecar it spawns.
+   *  Only that process can stage or apply a desktop update; the same
+   *  executable started from a terminal has to send the user to the app. */
+  export function desktopUpdateAvailable() {
+    return !!(process.env.OPENSCIENCE_DESKTOP_UPDATE_URL && process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN)
+  }
+
   export async function method() {
-    if (process.env.OPENSCIENCE_DESKTOP_UPDATE_URL && process.env.OPENSCIENCE_DESKTOP_UPDATE_TOKEN)
-      return "desktop" as const
+    if (desktopUpdateAvailable()) return "desktop" as const
     return methodFromPaths({ execPath: process.execPath, scriptPath: process.argv[1] })
   }
 

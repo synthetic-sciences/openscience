@@ -1,4 +1,7 @@
 import { base64Encode } from "@synsci/util/encode"
+import fs from "node:fs/promises"
+import { existsSync, readFileSync, rmSync } from "node:fs"
+import path from "node:path"
 
 const DEFAULT_LOCAL_PORT = 4096
 const FALLBACK_LOCAL_PORT = 4097
@@ -36,8 +39,13 @@ export function probeLocalServer(base: string, timeout = 1200) {
 export async function probeWorkspaceServer(base: string, version: string, timeout = 1200) {
   const healthy = await probeLocalServer(base, timeout)
   if (!healthy) return false
+  // `version.json` is a file in the workspace bundle, not an API route, and
+  // the server answers an API-shaped request (`accept: application/json`) for
+  // an unmatched route with a JSON 404 before it ever looks at the bundle. Ask
+  // for the file the way a browser would, or every probe fails and each launch
+  // starts another server.
   return fetch(`${base}/version.json`, {
-    headers: { accept: "application/json" },
+    headers: { accept: "*/*" },
     signal: AbortSignal.timeout(timeout),
   })
     .then(async (response) => {
@@ -49,7 +57,108 @@ export async function probeWorkspaceServer(base: string, version: string, timeou
     .catch(() => false)
 }
 
-export async function findWorkspaceServer(version: string, ports: readonly number[] = LOCAL_WORKSPACE_PORTS) {
+/**
+ * The desktop app starts its sidecar on a random port, so the stable ports
+ * below never find it and a terminal launch would start a second server beside
+ * the app. The sidecar advertises itself in the data root both entry points
+ * already share; this is the file it writes.
+ */
+export const DESKTOP_SERVER_FILE = "desktop-server.json"
+
+export type DesktopServerRecord = {
+  schema: 1
+  port: number
+  pid: number
+  version: string
+  started_at: string
+}
+
+function desktopServerPath(directory: string) {
+  return path.join(directory, DESKTOP_SERVER_FILE)
+}
+
+/** A record left behind by a killed or crashed sidecar names a pid that is
+ *  gone. EPERM is another user's live process, not a dead one. */
+function running(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error instanceof Error && "code" in error && error.code === "EPERM"
+  }
+}
+
+/** Publish the desktop sidecar's port for terminal launches. Best effort: a
+ *  read-only or full data root must not stop the app's server from serving. */
+export async function advertiseDesktopServer(directory: string, input: { port: number; pid: number; version: string }) {
+  const file = desktopServerPath(directory)
+  const temporary = `${file}.${input.pid}.tmp`
+  const record: DesktopServerRecord = { schema: 1, ...input, started_at: new Date().toISOString() }
+  await Bun.write(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 })
+    .then(() => fs.rename(temporary, file))
+    .catch(async () => {
+      await fs.rm(temporary, { force: true }).catch(() => undefined)
+    })
+}
+
+/** Withdraw the advertisement, unless a newer sidecar already replaced it: a
+ *  slow exit must not unadvertise the app's next server. Synchronous, because
+ *  the only moment that survives every shutdown path — including the immediate
+ *  `process.exit` the kernel signal hooks perform on SIGTERM — is an `exit`
+ *  handler. */
+export function withdrawDesktopServer(directory: string, pid: number) {
+  const file = desktopServerPath(directory)
+  if (!existsSync(file)) return
+  const record = parseDesktopServer(readFileSync(file, "utf8"))
+  if (record && record.pid !== pid) return
+  rmSync(file, { force: true })
+}
+
+function parseDesktopServer(contents: string | undefined) {
+  const record = (() => {
+    try {
+      return contents === undefined ? undefined : (JSON.parse(contents) as unknown)
+    } catch {
+      return undefined
+    }
+  })()
+  if (!record || typeof record !== "object" || Array.isArray(record)) return
+  const value = record as Partial<DesktopServerRecord>
+  const port = typeof value.port === "number" ? value.port : undefined
+  const pid = typeof value.pid === "number" ? value.pid : undefined
+  if (value.schema !== 1) return
+  if (port === undefined || !Number.isSafeInteger(port) || port < 1 || port > 65535) return
+  if (pid === undefined || !Number.isSafeInteger(pid) || pid <= 1) return
+  if (typeof value.version !== "string" || !value.version) return
+  if (typeof value.started_at !== "string" || !value.started_at) return
+  return value as DesktopServerRecord
+}
+
+export async function readDesktopServer(directory: string) {
+  return parseDesktopServer(
+    await Bun.file(desktopServerPath(directory))
+      .text()
+      .catch(() => undefined),
+  )
+}
+
+/** The advertised port, once the process behind it proves it is a live
+ *  workspace of this exact version. A record whose process is gone, whose
+ *  version has moved on, or whose port does not answer is ignored, so the
+ *  caller falls through to the stable ports. */
+export async function findDesktopServer(version: string, directory: string) {
+  const record = await readDesktopServer(directory)
+  if (!record || record.version !== version || !running(record.pid)) return
+  return (await probeWorkspaceServer(localServerBase(record.port), version)) ? record.port : undefined
+}
+
+export async function findWorkspaceServer(
+  version: string,
+  ports: readonly number[] = LOCAL_WORKSPACE_PORTS,
+  directory?: string,
+) {
+  const desktop = directory ? await findDesktopServer(version, directory) : undefined
+  if (desktop) return desktop
   const matches = await Promise.all(
     ports.map(async (port) => ({ port, match: await probeWorkspaceServer(localServerBase(port), version) })),
   )

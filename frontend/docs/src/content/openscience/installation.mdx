@@ -60,6 +60,14 @@ Open a new terminal if `openscience` is not found after installation. The standa
 
 For Linux compatibility requirements and platform-specific CLI archives, check the release notes. Choose the build that matches your architecture and distribution.
 
+## Desktop app and the command line
+
+The app and `openscience` in a terminal are two doors into the same workspace, and they work side by side.
+
+The app carries its own copy of the command-line app inside the application bundle and updates it with the app. When the `openscience` on your PATH is that copy — `ls -l $(which openscience)` points into `OpenScience.app` or a `resources/sidecar` folder — `openscience upgrade` says so and sends you to **Customize → General → Check for updates**, instead of installing over the app's files. Install the CLI through npm or the standalone installer above if you would rather update it from a terminal.
+
+While the app is running, `openscience` and `openscience web` open a browser tab on the server the app already started, with the same sessions and files, rather than starting a second one. Quit the app and the same command starts a server of its own.
+
 ## Verify the installation
 
 ```bash
@@ -85,6 +93,8 @@ Or update an npm installation through npm:
 ```bash
 npm install -g @synsci/openscience@latest
 ```
+
+A CLI that came with the desktop app is updated by the app; see [Desktop app and the command line](#desktop-app-and-the-command-line).
 
 Check `openscience --version` after updating and reopen the workspace. Read the [changelog](https://github.com/synthetic-sciences/openscience/blob/main/CHANGELOG.md) for behavior changes.
 

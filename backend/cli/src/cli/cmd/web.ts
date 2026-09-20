@@ -8,6 +8,7 @@ import { openUrl } from "../../util/open-url"
 import { WEB_INDEX } from "../../web/assets"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
 import { GracefulShutdown } from "../../process/graceful-shutdown"
+import { Global } from "../../global"
 import {
   LOCAL_WORKSPACE_PORTS,
   findWorkspaceServer,
@@ -74,7 +75,7 @@ export const WebCommand = cmd({
       ? (await probeWorkspaceServer(localServerBase(opts.port), Installation.VERSION))
         ? opts.port
         : undefined
-      : await findWorkspaceServer(Installation.VERSION)
+      : await findWorkspaceServer(Installation.VERSION, LOCAL_WORKSPACE_PORTS, Global.Path.data)
     UI.empty()
     UI.println(UI.logo("  "))
     UI.empty()
@@ -93,7 +94,7 @@ export const WebCommand = cmd({
 
     const base = `http://localhost:${server.port}`
     if (opts.port === 0 && !LOCAL_WORKSPACE_PORTS.includes(server.port as (typeof LOCAL_WORKSPACE_PORTS)[number])) {
-      const racedPort = await findWorkspaceServer(Installation.VERSION)
+      const racedPort = await findWorkspaceServer(Installation.VERSION, LOCAL_WORKSPACE_PORTS, Global.Path.data)
       if (racedPort) {
         await server.stop(true)
         const target = localWorkspaceUrl(localServerBase(racedPort), directory)

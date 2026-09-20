@@ -4,6 +4,18 @@ import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { cmd } from "./cmd"
 
+const DOWNLOAD = "https://openscience.sh/download"
+
+/** What `openscience upgrade` can do with the copy it is running from. The
+ *  desktop app's sidecar can only reach the app's signed updater while the app
+ *  started it; run from a terminal, the same executable has nothing to drive
+ *  and must point at the app instead of reporting a dev install. */
+export function upgradeAction(input: { method: Installation.Method; desktopUpdates: boolean }) {
+  if (input.method === "desktop" && !input.desktopUpdates) return "desktop-app" as const
+  if (input.method === "unknown") return "manual" as const
+  return "upgrade" as const
+}
+
 export const UpgradeCommand = cmd({
   command: "upgrade [target]",
   describe: "upgrade openscience to the latest or a specific version",
@@ -42,7 +54,19 @@ export const UpgradeCommand = cmd({
       prompts.outro("Done")
       return
     }
-    if (method === "unknown") {
+    const action = upgradeAction({ method, desktopUpdates: Installation.desktopUpdateAvailable() })
+    if (action === "desktop-app") {
+      prompts.log.info(
+        [
+          `This copy of openscience is the OpenScience desktop app's command-line sidecar (${Installation.VERSION} → ${target}).`,
+          "Update it from the app: Customize → General → Check for updates.",
+          `Or download the latest release: ${DOWNLOAD}`,
+        ].join("\n"),
+      )
+      prompts.outro("Done")
+      return
+    }
+    if (action === "manual") {
       prompts.log.info("Manual or dev install detected, skipping upgrade")
       prompts.outro("Done")
       return

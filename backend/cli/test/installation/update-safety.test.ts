@@ -38,6 +38,26 @@ describe("Installation update safety", () => {
     ).toBe("unknown")
   })
 
+  test("recognizes the desktop app's own sidecar, which a terminal runs without any desktop environment", () => {
+    expect(
+      Installation.methodFromPaths({
+        execPath: "/Applications/OpenScience.app/Contents/Resources/sidecar/openscience",
+      }),
+    ).toBe("desktop")
+    expect(
+      Installation.methodFromPaths({
+        execPath: "C:\\Program Files\\OpenScience\\resources\\sidecar\\openscience.exe",
+      }),
+    ).toBe("desktop")
+    expect(Installation.methodFromPaths({ execPath: "/opt/OpenScience/resources/sidecar/openscience" })).toBe("desktop")
+    // A curl install is still a curl install, and a project directory that
+    // merely ends in "resources" is not an application bundle.
+    expect(Installation.methodFromPaths({ execPath: "/Users/researcher/.openscience/bin/openscience" })).toBe("curl")
+    expect(
+      Installation.methodFromPaths({ execPath: "/Users/researcher/project/my-resources/sidecar/openscience" }),
+    ).toBe("unknown")
+  })
+
   test("always checks npm releases through the fixed public registry", async () => {
     const urls: string[] = []
     globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
