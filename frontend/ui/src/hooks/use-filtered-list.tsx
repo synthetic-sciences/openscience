@@ -17,36 +17,57 @@ export interface FilteredListProps<T> {
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
-  const [store, setStore] = createStore({ filter: "", resolved: "" })
+  const [store, setStore] = createStore({ filter: "", resolved: "", revision: 0 })
 
   type Group = { category: string; items: [T, ...T[]] }
   const empty: Group[] = []
 
-  const [grouped, { refetch }] = createResource(
-    () => store.filter,
-    async (filter) => {
-      const query = filter ?? ""
-      const needle = query.toLowerCase()
-      const items = typeof props.items === "function" ? props.items(query) : props.items
-      const all = (await Promise.resolve(items)) || []
-      const result = pipe(
-        all,
-        (x) => {
-          if (!needle) return x
-          if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
-            return fuzzysort.go(needle, x).map((x) => x.target) as T[]
-          }
-          return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
-        },
-        groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
-        entries(),
-        map(([k, v]) => ({ category: k, items: props.sortBy ? v.sort(props.sortBy) : v })),
-        (groups) => (props.sortGroupsBy ? groups.sort(props.sortGroupsBy) : groups),
-      )
-      return result
+  // `props.items` belongs in the resource source: a reactive items accessor (a memo over a store, for
+  // example) has to re-run the query when what it returns changes. The source is memoized, so the
+  // resource's own refetch would re-run the fetcher over the same value and never call an items
+  // function again; `revision` is the handle that invalidates that memo.
+  const source = () => ({
+    filter: store.filter,
+    revision: store.revision,
+    items: typeof props.items === "function" ? props.items(store.filter) : props.items,
+  })
+
+  const query = async ({ filter, items }: ReturnType<typeof source>) => {
+    const needle = (filter ?? "").toLowerCase()
+    const all = (await Promise.resolve(items)) || []
+    return pipe(
+      all,
+      (x) => {
+        if (!needle) return x
+        if (!props.filterKeys && Array.isArray(x) && x.every((e) => typeof e === "string")) {
+          return fuzzysort.go(needle, x).map((x) => x.target) as T[]
+        }
+        return fuzzysort.go(needle, x, { keys: props.filterKeys! }).map((x) => x.obj)
+      },
+      groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
+      entries(),
+      map(([k, v]) => ({ category: k, items: props.sortBy ? v.sort(props.sortBy) : v })),
+      (groups) => (props.sortGroupsBy ? groups.sort(props.sortGroupsBy) : groups),
+    )
+  }
+
+  let pending: Promise<Group[]> = Promise.resolve(empty)
+
+  const [grouped] = createResource(
+    source,
+    (input) => {
+      pending = query(input)
+      return pending
     },
     { initialValue: empty },
   )
+
+  // Awaiting the in-flight query settles after the resource has taken its value: the resource
+  // registered its own continuation on this same promise first.
+  const refetch = () => {
+    setStore("revision", (value) => value + 1)
+    return pending
+  }
 
   const groups = createMemo(() => (store.resolved === store.filter ? grouped.latest || empty : empty))
 

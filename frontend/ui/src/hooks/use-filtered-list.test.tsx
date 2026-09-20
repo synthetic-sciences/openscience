@@ -107,4 +107,110 @@ describe("useFilteredList async queries", () => {
     expect(selected).toEqual(["current", "current"])
     owner.dispose()
   })
+
+  // An empty list while a newer query is in flight is not "nothing matches". Consumers whose
+  // items arrive over the network say which of the two the reader is looking at.
+  test("an empty list is distinguishable from a query still in flight", async () => {
+    type Item = { id: string }
+    const requests = new Map<string, ReturnType<typeof deferred<Item[]>>>()
+    const owner = reactive.createRoot((dispose) => {
+      const list = hooks.useFilteredList<Item>({
+        items: (query) => {
+          const request = deferred<Item[]>()
+          requests.set(query, request)
+          return request.promise
+        },
+        key: (item) => item.id,
+        filterKeys: ["id"],
+      })
+      return { list, dispose }
+    })
+
+    await settle()
+    requests.get("")!.resolve([{ id: "paper.tex" }])
+    await settle()
+    expect(owner.list.flat().map((item) => item.id)).toEqual(["paper.tex"])
+    expect(owner.list.grouped.loading).toBe(false)
+
+    owner.list.onInput("repor")
+    await settle()
+    expect(owner.list.flat()).toEqual([])
+    expect(owner.list.grouped.loading).toBe(true)
+
+    requests.get("repor")!.resolve([])
+    await settle()
+    expect(owner.list.flat()).toEqual([])
+    expect(owner.list.grouped.loading).toBe(false)
+
+    owner.dispose()
+  })
+})
+
+describe("useFilteredList reactive items", () => {
+  type Row = { id: string }
+
+  const mount = (items: () => Row[]) =>
+    reactive.createRoot((dispose) => {
+      const list = hooks.useFilteredList<Row>({
+        items: () => items(),
+        key: (item) => item.id,
+        filterKeys: ["id"],
+      })
+      return { list, dispose }
+    })
+
+  test("a memo items source still updates the list when it changes", async () => {
+    const [rows, setRows] = reactive.createSignal<Row[]>([{ id: "alpha" }, { id: "beta" }])
+    const owner = mount(reactive.createMemo(() => rows().map((row) => ({ ...row }))))
+
+    await settle()
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["alpha", "beta"])
+
+    setRows([{ id: "alpha" }, { id: "beta" }, { id: "gamma" }])
+    await settle()
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["alpha", "beta", "gamma"])
+
+    setRows([{ id: "alpha" }, { id: "gamma" }])
+    await settle()
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["alpha", "gamma"])
+
+    owner.dispose()
+  })
+
+  test("a reorder of the same items is reflected", async () => {
+    const [rows, setRows] = reactive.createSignal<Row[]>([{ id: "alpha" }, { id: "beta" }, { id: "gamma" }])
+    const owner = mount(reactive.createMemo(() => rows().map((row) => ({ ...row }))))
+
+    await settle()
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["alpha", "beta", "gamma"])
+
+    setRows([{ id: "gamma" }, { id: "alpha" }, { id: "beta" }])
+    await settle()
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["gamma", "alpha", "beta"])
+    expect(owner.list.active()).toBe("gamma")
+
+    owner.dispose()
+  })
+
+  test("items that change under an unchanged query never blank the list", async () => {
+    const [rows, setRows] = reactive.createSignal<Row[]>([{ id: "alpha" }])
+    const seen: number[] = []
+    const owner = reactive.createRoot((dispose) => {
+      const list = hooks.useFilteredList<Row>({
+        items: () => rows().map((row) => ({ ...row })),
+        key: (item) => item.id,
+        filterKeys: ["id"],
+      })
+      reactive.createEffect(() => seen.push(list.flat().length))
+      return { list, dispose }
+    })
+
+    await settle()
+    setRows([{ id: "alpha" }, { id: "beta" }])
+    await settle()
+
+    expect(owner.list.flat().map((row) => row.id)).toEqual(["alpha", "beta"])
+    expect(seen.slice(1)).not.toContain(0)
+    owner.dispose()
+  })
 })
