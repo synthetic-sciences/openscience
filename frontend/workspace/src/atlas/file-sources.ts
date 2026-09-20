@@ -22,6 +22,10 @@ export interface FilesystemSnapshot {
   projectID: string
   directory: string
   grants: FilesystemGrant[]
+  /** Where the session's relative paths land right now: the folder pinned for
+   * this conversation, the one the server chose for it, or the session's own
+   * scratch directory. Absent from servers older than the field. */
+  toolDirectory?: string
   enforcement: {
     broker: "enforced"
     processWrite: "grant_only"
@@ -91,6 +95,7 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
     typeof root.directory !== "string" ||
     !equalFilePath(root.directory, identity.directory) ||
     !Array.isArray(root.grants) ||
+    (root.toolDirectory !== undefined && typeof root.toolDirectory !== "string") ||
     enforcement?.broker !== "enforced" ||
     enforcement.processWrite !== "grant_only" ||
     (enforcement.processRead !== "grant_only" && enforcement.processRead !== "policy_only")
@@ -146,6 +151,7 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
     projectID: root.projectID,
     directory: normalizeFilePath(root.directory),
     grants,
+    ...(root.toolDirectory ? { toolDirectory: normalizeFilePath(root.toolDirectory) } : {}),
     enforcement: {
       broker: "enforced",
       processWrite: "grant_only",
@@ -167,16 +173,32 @@ export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
   )
 }
 
+/** The folders the server will consider when this conversation has pinned
+ * none. Mirrors `workingRootCandidates` in the CLI's session filesystem:
+ * durable writable folders the user connected, plus the ones a parent session
+ * handed down. Deliberately wider than `connectedFilesystemGrants`, which
+ * decides what the pane lists rather than what the agent works in. */
+function workingRootCandidates(snapshot?: FilesystemSnapshot) {
+  return activeFilesystemGrants(snapshot)
+    .filter(
+      (grant) =>
+        (grant.source === "permission" || grant.source === "api" || grant.source === "parent") &&
+        grant.scope !== "once" &&
+        grant.access === "write",
+    )
+    .toSorted((left, right) => right.time.created - left.time.created)
+}
+
 /**
- * The connected folder this conversation works in — the one the composer's
- * "Working in …" chip names. The server pins the newest writable connected
- * grant when nothing was chosen explicitly, so the pane resolves it the same
- * way instead of inventing a second answer from the same grants.
+ * The folder this conversation works in — the one the composer's "Working in …"
+ * chip names. The server has already resolved it, pinned choice and all, so the
+ * answer is read off the snapshot rather than guessed a second time from the
+ * grants, where a pinned folder leaves no trace. A scratch working folder comes
+ * back as the session workspace root, which the pane offers as "This session".
+ * Older servers send no answer; only then is it recomputed.
  */
 export function workingFilesystemRoot(snapshot?: FilesystemSnapshot) {
-  return connectedFilesystemGrants(snapshot)
-    .filter((grant) => grant.access === "write" && grant.scope !== "once")
-    .toSorted((left, right) => right.time.created - left.time.created)[0]?.path
+  return snapshot?.toolDirectory ?? workingRootCandidates(snapshot)[0]?.path
 }
 
 export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {

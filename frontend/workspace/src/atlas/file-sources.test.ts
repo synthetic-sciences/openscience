@@ -209,28 +209,82 @@ describe("filesystem source isolation", () => {
     expect(sessionFilesystemRoot()).toBeUndefined()
   })
 
-  // What the composer's "Working in …" chip names: the newest writable
-  // connected folder. The read-only grant is not somewhere work can land, and
-  // the workspace scratch grant is not a folder anyone connected.
-  test("names the newest writable connected folder as the conversation's working folder", () => {
-    const newer = {
+  const newest = {
+    id: "fsg_newest",
+    path: "/data/rinr",
+    access: "write",
+    scope: "project",
+    source: "permission",
+    time: { created: 9 },
+  } as const
+
+  // The composer's "Working in …" chip reads the server's `toolDirectory`. A
+  // folder pinned there leaves no trace in the grants, so recomputing from them
+  // contradicts the chip the moment anyone pins an older folder.
+  test("names the working folder the server resolved, not the newest grant", () => {
+    const pinned = {
       ...snapshot,
-      grants: [
-        ...snapshot.grants,
-        {
-          id: "fsg_newest",
-          path: "/data/rinr",
-          access: "write",
-          scope: "project",
-          source: "permission",
-          time: { created: 9 },
-        },
-      ],
+      toolDirectory: "/data/publish",
+      grants: [...snapshot.grants, newest],
     } satisfies FilesystemSnapshot
+
+    expect(workingFilesystemRoot(pinned)).toBe("/data/publish")
+  })
+
+  // Pinning "Scratch" puts the conversation in its own temporary directory —
+  // the session workspace grant, which the pane offers as "This session" and
+  // never as a connected folder.
+  test("names the session scratch root when the conversation is pinned to Scratch", () => {
+    const scratch = {
+      ...snapshot,
+      toolDirectory: "/work/alpha",
+      grants: [...snapshot.grants, newest],
+    } satisfies FilesystemSnapshot
+
+    expect(workingFilesystemRoot(scratch)).toBe("/work/alpha")
+    expect(sessionFilesystemRoot(scratch)).toBe("/work/alpha")
+  })
+
+  // Older servers send no `toolDirectory`, and then the pane has to guess.
+  test("falls back to the newest writable connected folder when none is sent", () => {
+    const newer = { ...snapshot, grants: [...snapshot.grants, newest] } satisfies FilesystemSnapshot
 
     expect(workingFilesystemRoot(snapshot)).toBe("/data/publish")
     expect(workingFilesystemRoot(newer)).toBe("/data/rinr")
     expect(workingFilesystemRoot()).toBeUndefined()
+  })
+
+  // The guess weighs what the server weighs: a folder inherited from a parent
+  // session is a working folder there, and an installation-wide grant is not
+  // disqualified from being one, while a one-shot grant never is.
+  test("weighs the candidates the server weighs when it has to guess", () => {
+    const inherited = {
+      ...snapshot,
+      grants: [snapshot.grants[0], { ...newest, id: "fsg_parent", path: "/data/inherited", source: "parent" }],
+    } satisfies FilesystemSnapshot
+    const installation = {
+      ...snapshot,
+      grants: [snapshot.grants[0], { ...newest, id: "fsg_wide", path: "/data/shared", scope: "installation" }],
+    } satisfies FilesystemSnapshot
+    const transient = {
+      ...snapshot,
+      grants: [snapshot.grants[0], { ...newest, id: "fsg_once", path: "/data/drop", scope: "once" }],
+    } satisfies FilesystemSnapshot
+
+    expect(workingFilesystemRoot(inherited)).toBe("/data/inherited")
+    expect(workingFilesystemRoot(installation)).toBe("/data/shared")
+    expect(workingFilesystemRoot(transient)).toBeUndefined()
+  })
+
+  test("carries the resolved working folder through the guard in the pane's path spelling", () => {
+    const identity = { sessionID: "ses_alpha", projectID: "prj_alpha", directory: "/work/alpha" }
+
+    expect(parseFilesystemSnapshot({ ...snapshot, toolDirectory: "/data/publish/." }, identity)?.toolDirectory).toBe(
+      "/data/publish",
+    )
+    // A working folder that is not a path makes the payload malformed, and the
+    // guard rejects a malformed payload whole rather than half-trusting it.
+    expect(parseFilesystemSnapshot({ ...snapshot, toolDirectory: 7 }, identity)).toBeUndefined()
   })
 
   test("leaves a read-only grant out of the working folder", () => {

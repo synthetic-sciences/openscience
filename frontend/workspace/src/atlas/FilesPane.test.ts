@@ -119,24 +119,37 @@ const DIRECTORY = "/home/keertan/proj"
 const SESSION = "ses_1"
 
 // parseFilesystemSnapshot rejects the whole payload if any field is off, so
-// this mirrors the server's shape exactly.
-const snapshot = (grants: unknown[]) => ({
+// this mirrors the server's shape exactly. `toolDirectory` is where the server
+// says relative paths land — what the composer's "Working in …" chip names.
+const snapshot = (grants: unknown[], toolDirectory?: string) => ({
   version: 1,
   revision: 3,
   sessionID: SESSION,
   projectID: "prj_1",
   directory: DIRECTORY,
   grants,
+  ...(toolDirectory ? { toolDirectory } : {}),
   enforcement: { broker: "enforced", processWrite: "grant_only", processRead: "policy_only" },
 })
 
-const grant = (id: string, path: string, access: "read" | "write") => ({
+const grant = (id: string, path: string, access: "read" | "write", created = 1) => ({
   id,
   path,
   access,
   scope: "project",
   source: "api",
-  time: { created: 1 },
+  time: { created },
+})
+
+/** The session's own temporary directory, which the pane offers as "This
+ * session" and the composer's chip calls "Scratch". */
+const scratchGrant = (path: string) => ({
+  id: "fsg_scratch",
+  path,
+  access: "write",
+  scope: "session",
+  source: "workspace",
+  time: { created: 0 },
 })
 
 describe("files pane", () => {
@@ -174,6 +187,63 @@ describe("files pane", () => {
     expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
     expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("false")
     expect(listed).toContain("/home/keertan/codes/RINR")
+  })
+
+  // The composer can pin any connected folder as the working one, and the pane
+  // has to follow that choice rather than the newest grant: otherwise the
+  // composer says one folder and Files opens on another.
+  test("follows the working folder the composer pins, not the newest connected one", async () => {
+    const listed: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(
+              snapshot(
+                [
+                  grant("fsg_notes", "/home/keertan/codes/notes", "write", 1),
+                  grant("fsg_rinr", "/home/keertan/codes/RINR", "write", 9),
+                ],
+                "/home/keertan/codes/notes",
+              ),
+            )
+          if (path === "/file") listed.push(String(query?.path))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-id="fsg_notes"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("false")
+    expect(listed).toContain("/home/keertan/codes/notes")
+  })
+
+  // Pinning "Scratch" is the other half of that choice: the conversation works
+  // in its own temporary directory, which the pane calls "This session".
+  test("opens on This session when the composer pins Scratch", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(
+              snapshot(
+                [scratchGrant("/scratch/ses_1"), grant("fsg_rinr", "/home/keertan/codes/RINR", "write", 9)],
+                "/scratch/ses_1",
+              ),
+            )
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-source="session"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("false")
   })
 
   test("keeps an explicit pick over the working folder it would otherwise open on", async () => {

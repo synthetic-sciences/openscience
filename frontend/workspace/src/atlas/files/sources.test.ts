@@ -156,9 +156,32 @@ describe("where the pane opens", () => {
 
   test("uses project files when the session works in no connected folder", () => {
     expect(defaultSource(list, {}).id).toBe("project")
-    // A working root outside the connected set is the session's own scratch,
-    // which has its own tab; it does not silently select nothing.
-    expect(defaultSource(list, { workingRoot: "/scratch/ses_1" }).id).toBe("project")
+    // A working root that names no listed location — an inherited or
+    // installation-wide grant the pane does not offer — leaves the default
+    // where it was rather than selecting nothing.
+    expect(defaultSource(list, { workingRoot: "/data/elsewhere" }).id).toBe("project")
+  })
+
+  // Pinning "Scratch" in the composer moves the conversation into the session's
+  // own temporary directory. That location has a tab of its own, so the pane
+  // opens on it rather than falling through to the empty project root.
+  test("opens on This session when the conversation works in its own scratch", () => {
+    const withScratch = buildSources({
+      projectRoot: "/home/keertan/.openscience/projects/prj_1",
+      projectName: "RINR",
+      grants: [grant("g2", "/home/keertan/codes/RINR", "write")],
+      sessionRoot: "/scratch/ses_1",
+    })
+
+    expect(defaultSource(withScratch, { workingRoot: "/scratch/ses_1" }).id).toBe("session")
+    // The tab strip is unchanged by it: This session already has a permanent
+    // tab, so nothing is promoted in its name.
+    expect(primarySources(withScratch, "/scratch/ses_1").map((source) => source.id)).toEqual([
+      "project",
+      "g2",
+      "session",
+      "artifacts",
+    ])
   })
 
   test("matches the working folder through path spelling rather than string equality", () => {

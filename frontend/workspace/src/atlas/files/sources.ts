@@ -107,22 +107,27 @@ export function buildSources(input: {
   return list
 }
 
-const connectedAt = (list: PaneSource[], root?: string) => {
+const sourceAt = (list: PaneSource[], kinds: PaneSource["kind"][], root?: string) => {
   if (!root) return
   const target = normalizeFilePath(root)
-  return list.find((source) => source.kind === "connected" && normalizeFilePath(source.root) === target)
+  return list.find((source) => kinds.includes(source.kind) && normalizeFilePath(source.root) === target)
 }
+
+const connectedAt = (list: PaneSource[], root?: string) => sourceAt(list, ["connected"], root)
 
 /**
  * Where the pane opens. An explicit pick wins for as long as it still names a
  * source that exists; with none, the conversation's working folder beats the
  * project root, which is a managed directory (`~/.openscience/projects/<id>`)
  * that stays empty unless something deliberately writes there.
+ *
+ * The working folder is a path, not a kind: pinning "Scratch" in the composer
+ * points it at the session's own directory, which is "This session" here.
  */
 export function defaultSource(list: PaneSource[], input: { remembered?: string; workingRoot?: string }): PaneSource {
   return (
     list.find((source) => source.id === input.remembered) ??
-    connectedAt(list, input.workingRoot) ??
+    sourceAt(list, ["connected", "session"], input.workingRoot) ??
     list.find((source) => source.kind === "project") ??
     list.find((source) => source.kind === "artifacts") ??
     list[0]!
