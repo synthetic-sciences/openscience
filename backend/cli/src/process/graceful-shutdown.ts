@@ -19,8 +19,10 @@ const DEFAULT_TIMEOUT_MS = 8_000
  * observes the same disposal instead of launching competing ledger teardown. */
 export function createGracefulDisposer(input: Dependencies) {
   let pending: Promise<void> | undefined
+  let attempted = false
 
-  return async (options: Options = {}) => {
+  const dispose = async (options: Options = {}) => {
+    attempted = true
     input.seal()
     if (!pending) {
       const operation = Promise.allSettled([input.stopCommands(), input.disposeInstances()]).then((results) => {
@@ -53,6 +55,20 @@ export function createGracefulDisposer(input: Dependencies) {
       if (timer) clearTimeout(timer)
     }
   }
+
+  /** The catch-all disposal a process runs on its way out, for the commands
+   *  that never disposed anything themselves. A command that already ran the
+   *  disposal has made this process's one attempt, and a failed attempt drops
+   *  the memo above so a *retry* starts over — right for a desktop handoff
+   *  that will ask again, wrong here: nothing is left to retry with, and a
+   *  second teardown from scratch would spend a leaving process's last
+   *  seconds redoing work that just failed. */
+  const final = async (options: Options = {}) => {
+    if (attempted) return
+    await dispose(options)
+  }
+
+  return Object.assign(dispose, { final })
 }
 
 const dispose = createGracefulDisposer({
@@ -63,4 +79,5 @@ const dispose = createGracefulDisposer({
 
 export namespace GracefulShutdown {
   export const run = dispose
+  export const final = dispose.final
 }

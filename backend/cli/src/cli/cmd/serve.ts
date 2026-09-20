@@ -1,7 +1,7 @@
 import { Server } from "../../server/server"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { GracefulShutdown } from "../../process/graceful-shutdown"
+import { DESKTOP_STOP_DEADLINE_MS, STOP_DEADLINE_MS, stopServer } from "../server-stop"
 import { ShutdownSignal } from "../../process/shutdown-signal"
 import { DesktopParent } from "../../process/desktop-parent"
 import { Installation } from "../../installation"
@@ -64,13 +64,9 @@ export const ServeCommand = cmd({
     // Stop advertising before draining: a terminal launch that arrives during
     // the drain must start its own server, not attach to one that is leaving.
     if (advertisedPort) withdrawDesktopServer(Global.Path.data, process.pid)
-    const watchdog = setTimeout(() => process.exit(1), 10_000)
-    watchdog.unref?.()
-    try {
-      await server.stop(true)
-      await GracefulShutdown.run({ timeoutMs: 8_000 })
-    } finally {
-      clearTimeout(watchdog)
-    }
+    // A sidecar is stopped by a shell that gives it far less time than a
+    // service manager does, and it is the same shell's SIGKILL that would
+    // orphan this process's kernels. Bound the stop by whoever is waiting.
+    await stopServer(server, { deadlineMs: parent ? DESKTOP_STOP_DEADLINE_MS : STOP_DEADLINE_MS })
   },
 })

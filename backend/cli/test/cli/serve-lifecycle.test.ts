@@ -199,6 +199,9 @@ test("SIGTERM runs the shutdown body instead of the kernel signal hook's immedia
     // on that path is what the exit code stands for, so assert both.
     expect(await proc.exited).toBe(0)
     expect(await stderr).toContain("disposing all instances")
+    // A stop is not an error. Nothing from the shutdown may reach the CLI's
+    // fatal path, which prints this banner for anything it cannot format.
+    expect(await stderr).not.toContain("Unexpected error")
   } finally {
     proc.kill("SIGKILL")
     await proc.exited

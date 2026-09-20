@@ -277,7 +277,7 @@ async function run() {
     // Most notably, some docker-container-based MCP servers don't handle such signals unless
     // run using `docker run --init`.
     // Explicitly exit to avoid any hanging subprocesses.
-    await GracefulShutdown.run({ timeoutMs: 8_000 }).catch(() => undefined)
+    await GracefulShutdown.final({ timeoutMs: 8_000 }).catch(() => undefined)
     await UsageLogging.drain().catch(() => undefined)
     await disposeDataRootOperation().catch(() => undefined)
     await Log.flush().catch(() => undefined)
