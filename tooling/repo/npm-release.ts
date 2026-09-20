@@ -767,13 +767,18 @@ async function addDistTag(name: string, version: string, tag: string, options: N
 }
 
 async function removeDistTag(name: string, tag: string, options: NpmCommandOptions) {
+  // A rollback walks every artifact, including the ones whose promotion never ran, so a tag that
+  // was never written is nothing to undo. `npm dist-tag rm` exits non-zero on a missing tag, and
+  // reporting that as a rollback failure would turn a clean rollback into an incomplete one.
+  const before = await distTags(name, options)
+  if (!(tag in before)) return false
   const result = await run(["dist-tag", "rm", name, tag], options)
   if (result.exitCode !== 0) {
     throw new Error(`Could not remove ${name}'s ${tag} dist-tag: ${failure(result)}`)
   }
   for (let attempt = 1; attempt <= visibilityAttempts(options); attempt++) {
     const after = await distTags(name, options)
-    if (!(tag in after)) return
+    if (!(tag in after)) return true
     if (attempt < visibilityAttempts(options)) await Bun.sleep(visibilityRetryDelay(options))
   }
   throw new Error(`Could not remove ${name}'s ${tag} dist-tag: ${failure(result)}`)

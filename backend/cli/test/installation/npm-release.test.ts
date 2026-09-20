@@ -48,6 +48,7 @@ type FakeState = {
   publishSpecs?: string[]
   publishVisibilityReads?: number
   tagAdds?: string[]
+  tagRemovals?: string[]
   tagVisibilityReads?: number
   tags: Record<string, Record<string, string>>
 }
@@ -190,7 +191,14 @@ async function tagRegistry(file: string) {
       }
       if (args[0] === "dist-tag" && args[1] === "rm") {
         if (activity.current) activity.rollbackWhileActive = true
+        // npm exits non-zero when the tag is not there to remove, the way it does for a
+        // rollback over an artifact whose promotion never ran.
+        if (!(args[3] in (state.tags[args[2]] ?? {}))) {
+          return Response.json({ exitCode: 1, stderr: `npm error dist-tag rm: ${args[3]} is not a dist-tag` })
+        }
         delete state.tags[args[2]]?.[args[3]]
+        state.tagRemovals ??= []
+        state.tagRemovals.push(`${args[2]}:${args[3]}`)
         return Response.json({ exitCode: 0 })
       }
       return Response.json({ exitCode: 1, stderr: "unsupported registry command" })
@@ -677,6 +685,30 @@ test("parallel promotion failure removes newly created tags only after pending w
 
   expect(registry.activity.current).toBe(0)
   expect(registry.activity.rollbackWhileActive).toBe(false)
+  for (const name of releasePackageNames()) expect(registry.state.tags[name]?.latest).toBeUndefined()
+})
+
+// The rollback walks every artifact in reverse, so it reaches the ones the promotion never got
+// to. Those have no tag to remove, and npm exits non-zero on a missing tag: a rollback that
+// treats that as a failure reports "rollback was incomplete" for a rollback that was complete.
+test("rollback skips the artifacts whose promotion never ran instead of reporting them as failures", async () => {
+  const base = await fixturePackage()
+  const artifacts = releasePackageNames().map((name) => ({ ...base, name }))
+  const file = await stateFile({ failTagReadAfterAdd: releasePromotionNames()[0] })
+  await using registry = await tagRegistry(file)
+
+  const failure = await promoteRelease(artifacts, registry.options).catch((error: unknown) => error)
+
+  expect(failure).toBeInstanceOf(Error)
+  expect(failure).not.toBeInstanceOf(AggregateError)
+  expect((failure as Error).message).toContain("transient dist-tag read failure")
+  // Only the tags the promotion actually wrote were removed.
+  expect(registry.state.tagRemovals?.toSorted()).toEqual(
+    releasePromotionNames()
+      .slice(0, 5)
+      .map((name) => `${name}:latest`)
+      .toSorted(),
+  )
   for (const name of releasePackageNames()) expect(registry.state.tags[name]?.latest).toBeUndefined()
 })
 
