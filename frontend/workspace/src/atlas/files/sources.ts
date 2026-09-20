@@ -1,4 +1,4 @@
-import { fileSourceName, normalizeFilePath, type FilesystemGrant } from "@/atlas/file-sources"
+import { equalFilePath, fileSourceName, type FilesystemGrant } from "@/atlas/file-sources"
 
 /**
  * The picker is an information architecture, not a list of storage backends.
@@ -17,6 +17,10 @@ export interface PaneSource {
   root: string
   kind: "artifacts" | "trash" | "project" | "session" | "connected" | "modal"
   readonly?: boolean
+  /** Authority this conversation was handed by the session that delegated to
+   * it, rather than a folder connected here. It is browsable like any other
+   * connected folder, but ending it is the lead's decision, not this pane's. */
+  inherited?: boolean
   live?: boolean
 }
 
@@ -45,7 +49,7 @@ export function buildSources(input: {
   // grant. That is not isolated scratch space, and listing the same path twice
   // under two lifetimes would be actively misleading. Only a distinct,
   // normalized location earns the Session workspace source.
-  if (input.sessionRoot && normalizeFilePath(input.sessionRoot) !== normalizeFilePath(input.projectRoot)) {
+  if (input.sessionRoot && !equalFilePath(input.sessionRoot, input.projectRoot)) {
     list.push({
       id: "session",
       group: "Working files",
@@ -73,6 +77,7 @@ export function buildSources(input: {
       root: grant.path,
       kind: "connected",
       readonly: grant.access === "read",
+      inherited: grant.source === "parent",
     })
   }
   // One entry per provider, not one per volume: Remote is where every cloud
@@ -107,10 +112,13 @@ export function buildSources(input: {
   return list
 }
 
+// Matched the way the rest of the pane matches paths: a Windows drive letter
+// makes the whole path case-insensitive, so a working folder the server spells
+// `C:\Research\RINR` names the source whose grant arrived as `c:/research/rinr`
+// rather than falling through to the empty project root.
 const sourceAt = (list: PaneSource[], kinds: PaneSource["kind"][], root?: string) => {
   if (!root) return
-  const target = normalizeFilePath(root)
-  return list.find((source) => kinds.includes(source.kind) && normalizeFilePath(source.root) === target)
+  return list.find((source) => kinds.includes(source.kind) && equalFilePath(source.root, root))
 }
 
 const connectedAt = (list: PaneSource[], root?: string) => sourceAt(list, ["connected"], root)

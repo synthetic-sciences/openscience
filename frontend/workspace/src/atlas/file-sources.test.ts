@@ -276,6 +276,48 @@ describe("filesystem source isolation", () => {
     expect(workingFilesystemRoot(transient)).toBeUndefined()
   })
 
+  // #652: those same two kinds of grant were named as the working folder and
+  // listed nowhere, so the pane had no row to open on and fell back to the
+  // managed project root, which is empty.
+  test("lists the working folder as a connected location even when it is inherited or installation-wide", () => {
+    const inherited = {
+      ...snapshot,
+      toolDirectory: "/data/inherited",
+      grants: [...snapshot.grants, { ...newest, id: "fsg_parent", path: "/data/inherited", source: "parent" }],
+    } satisfies FilesystemSnapshot
+    const installation = {
+      ...snapshot,
+      toolDirectory: "/data/wide",
+      grants: [...snapshot.grants, { ...newest, id: "fsg_wide", path: "/data/wide", scope: "installation" }],
+    } satisfies FilesystemSnapshot
+
+    expect(connectedFilesystemGrants(inherited).map((grant) => grant.id)).toEqual([
+      "fsg_read",
+      "fsg_publish",
+      "fsg_parent",
+    ])
+    expect(connectedFilesystemGrants(installation).map((grant) => grant.id)).toEqual([
+      "fsg_read",
+      "fsg_publish",
+      "fsg_wide",
+    ])
+  })
+
+  test("still keeps an installation-wide folder this conversation does not work in out of the list", () => {
+    // `fsg_installation` is approved everywhere, not connected here, and the
+    // conversation works in /data/publish. Listing every such grant would put
+    // folders from other projects in this project's pane.
+    expect(connectedFilesystemGrants(snapshot).map((grant) => grant.id)).toEqual(["fsg_read", "fsg_publish"])
+  })
+
+  test("adds no row for a conversation working in its own scratch", () => {
+    const scratch = { ...snapshot, toolDirectory: "/work/alpha" } satisfies FilesystemSnapshot
+
+    expect(workingFilesystemRoot(scratch)).toBe("/work/alpha")
+    expect(sessionFilesystemRoot(scratch)).toBe("/work/alpha")
+    expect(connectedFilesystemGrants(scratch).map((grant) => grant.id)).toEqual(["fsg_read", "fsg_publish"])
+  })
+
   test("carries the resolved working folder through the guard in the pane's path spelling", () => {
     const identity = { sessionID: "ses_alpha", projectID: "prj_alpha", directory: "/work/alpha" }
 

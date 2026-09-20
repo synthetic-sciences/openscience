@@ -71,7 +71,10 @@ export function containsFilePath(root: string, target: string) {
   return child === parent || child.startsWith(`${parent}/`)
 }
 
-function equalFilePath(left: string, right: string) {
+/** Two spellings of one location. A Windows volume is case-insensitive, so
+ * `C:\Research` and `c:/research` are the same folder and must compare equal;
+ * a POSIX path is not, and `/Data` is not `/data`. */
+export function equalFilePath(left: string, right: string) {
   const first = normalizeFilePath(left)
   const second = normalizeFilePath(right)
   if (!/^[a-z]:\//.test(first) && !/^[a-z]:\//.test(second)) return first === second
@@ -167,10 +170,28 @@ function activeFilesystemGrants(snapshot?: FilesystemSnapshot) {
 /** Folders the user connected or approved for this project. The project's
  * own roots, skill directories and one-shot tool grants are runtime authority,
  * not working files. */
-export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
+function projectFilesystemGrants(snapshot?: FilesystemSnapshot) {
   return activeFilesystemGrants(snapshot).filter(
     (grant) => (grant.source === "permission" || grant.source === "api") && grant.scope !== "installation",
   )
+}
+
+/**
+ * The folders the pane lists as connected locations: the ones connected or
+ * approved for this project, plus the folder this conversation actually works
+ * in when that is a grant the list would otherwise skip — one inherited from a
+ * lead session, or one approved installation-wide.
+ *
+ * Those two are working folders that no row named, so the pane had nowhere to
+ * open and fell back to the managed project root, which is empty. A folder the
+ * agent writes in has to be reachable from the pane that browses it.
+ */
+export function connectedFilesystemGrants(snapshot?: FilesystemSnapshot) {
+  const listed = projectFilesystemGrants(snapshot)
+  const working = workingFilesystemRoot(snapshot)
+  if (!working || listed.some((grant) => equalFilePath(grant.path, working))) return listed
+  const inherited = workingRootCandidates(snapshot).find((grant) => equalFilePath(grant.path, working))
+  return inherited ? [...listed, inherited] : listed
 }
 
 /** The folders the server will consider when this conversation has pinned

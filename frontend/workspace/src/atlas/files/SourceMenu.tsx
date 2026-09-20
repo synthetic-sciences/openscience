@@ -1,4 +1,4 @@
-import { For, Show, createSignal, type JSX } from "solid-js"
+import { For, Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import { groupSources, type PaneSource } from "@/atlas/files/sources"
 import {
   IconArchive,
@@ -68,20 +68,33 @@ export function SourceMenu(props: {
   // Measured rather than declared: the pane is resizable and the menu's own
   // width is capped against the container, so only the live geometry knows
   // whether the default alignment fits.
+  const pane = () => refs.trigger?.closest(".files-pane") ?? undefined
   const measure = () => {
     const trigger = refs.trigger?.getBoundingClientRect()
     const menu = refs.menu?.getBoundingClientRect()
     if (!trigger || !menu) return
-    const pane = refs.trigger?.closest(".files-pane")?.getBoundingClientRect()
-    const viewport = globalThis.innerWidth || pane?.right || trigger.right
+    const box = pane()?.getBoundingClientRect()
+    const viewport = globalThis.innerWidth || box?.right || trigger.right
     setAlign(
       menuAlignment({
         trigger,
         width: menu.width,
-        bounds: { left: Math.max(pane?.left ?? 0, 0), right: Math.min(pane?.right ?? viewport, viewport) },
+        bounds: { left: Math.max(box?.left ?? 0, 0), right: Math.min(box?.right ?? viewport, viewport) },
       }),
     )
   }
+  // The pane is a draggable column and the menu can outlive several of its
+  // widths: an alignment measured once at open hangs the menu outside the pane
+  // for the rest of a drag that narrows it. Observing the pane rather than the
+  // window also catches the divider moving while the window stands still.
+  createEffect(() => {
+    if (!open() || typeof ResizeObserver === "undefined") return
+    const target = pane()
+    if (!target) return
+    const observer = new ResizeObserver(() => measure())
+    observer.observe(target)
+    onCleanup(() => observer.disconnect())
+  })
   const items = () => Array.from(refs.menu?.querySelectorAll<HTMLElement>('[role^="menuitem"]') ?? [])
   const focusItem = (item: HTMLElement | undefined) => {
     if (!item) return
@@ -279,8 +292,12 @@ export function SourceMenu(props: {
                           </span>
                         </button>
                         {/* A connected folder is a durable grant, so the way out
-                            sits on the row that shows it. */}
-                        <Show when={source.kind === "connected" && props.onRevoke}>
+                            sits on the row that shows it. A folder inherited
+                            from the session that delegated this one is not this
+                            conversation's to end: the lead granted it, and the
+                            control would revoke authority the reader never
+                            connected. */}
+                        <Show when={source.kind === "connected" && !source.inherited && props.onRevoke}>
                           <button
                             type="button"
                             class="files-menu__revoke"

@@ -56,7 +56,7 @@ import { confirmDialog } from "@/atlas/dialogs"
 import { projectHref, projectPathname } from "@/utils/project-route"
 import { createMediaQuery } from "@solid-primitives/media"
 import { ModelSettingsPopover } from "./model-settings-popover"
-import { composerOverlays, registerOverlayDetails } from "./overlay-group"
+import { ComposerTools } from "./composer-tools"
 import {
   loadedSkillNamesThisTurn,
   recordRecentSkill,
@@ -3084,122 +3084,111 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Icon name="paperclip" class="size-4" />
                   </Button>
                 </Tooltip>
-                <details
+                <ComposerTools
                   ref={(element) => {
                     researchToolsRef = element
-                    registerOverlayDetails(composerOverlays, "tools", element)
                   }}
-                  class="workspace-composer__research-tools"
-                  onToggle={(event) => {
-                    if (event.currentTarget.open) return
-                    resetResearchTools()
-                  }}
+                  onClose={resetResearchTools}
                 >
-                  <summary aria-label="Tools">
-                    <span class="workspace-composer__research-tools-label">Tools</span>
-                    <Icon name="chevron-down" size="small" />
-                  </summary>
-                  <div class="workspace-composer__research-tools-menu" role="group" aria-label="Tools">
-                    <section class="workspace-composer__research-controls" aria-label="Research roles">
-                      <ResearchSlider
-                        label="Delegation"
-                        value={delegation().level}
-                        options={DELEGATION_LEVELS}
-                        disabled={!capabilities()}
-                        onSelect={(value) => saveDelegation({ level: value as DelegationLevel })}
-                      />
-                      {/* Independence governs the lead's own questions, not only
+                  <section class="workspace-composer__research-controls" aria-label="Research roles">
+                    <ResearchSlider
+                      label="Delegation"
+                      value={delegation().level}
+                      options={DELEGATION_LEVELS}
+                      disabled={!capabilities()}
+                      onSelect={(value) => saveDelegation({ level: value as DelegationLevel })}
+                    />
+                    {/* Independence governs the lead's own questions, not only
                           delegated work, so it stays visible with delegation off. */}
-                      <ResearchSlider
-                        label="Independence"
-                        value={delegation().autonomy}
-                        options={DELEGATION_AUTONOMY}
-                        onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
-                      />
-                      <div class="workspace-composer__research-access">
-                        <Show
-                          when={!researchAccess.error}
-                          fallback={
-                            <button
-                              type="button"
-                              class="workspace-composer__research-access-retry"
-                              onClick={() => void researchAccessControls.refetch()}
-                            >
-                              Access settings unavailable · Retry
-                            </button>
-                          }
-                        >
-                          <details
-                            class="workspace-composer__research-setting workspace-composer__research-choice"
-                            onToggle={toggleResearchChoice}
+                    <ResearchSlider
+                      label="Independence"
+                      value={delegation().autonomy}
+                      options={DELEGATION_AUTONOMY}
+                      onSelect={(value) => saveDelegation({ autonomy: value as DelegationAutonomy })}
+                    />
+                    <div class="workspace-composer__research-access">
+                      <Show
+                        when={!researchAccess.error}
+                        fallback={
+                          <button
+                            type="button"
+                            class="workspace-composer__research-access-retry"
+                            onClick={() => void researchAccessControls.refetch()}
                           >
-                            <summary aria-label={`Action approval, ${researchAccessLabel()}`}>
-                              <span class="workspace-composer__research-setting-label">Action approval</span>
-                              <strong class="workspace-composer__research-setting-value" aria-live="polite">
-                                {researchAccessSaving() ? "Saving…" : researchAccessLabel()}
-                              </strong>
-                              <Icon name="chevron-right" size="small" />
-                            </summary>
-                            <div
-                              class="workspace-composer__research-choice-menu"
-                              role="radiogroup"
-                              aria-label="How should OpenScience actions be approved?"
-                              aria-busy={researchAccessSaving() ? "true" : undefined}
-                              onKeyDown={navigateResearchChoices}
-                            >
-                              <For each={RESEARCH_ACCESS_OPTIONS}>
-                                {(option) => (
-                                  <button
-                                    type="button"
-                                    role="radio"
-                                    data-research-access={option.value}
-                                    data-tone={option.value === "full" ? "warning" : undefined}
-                                    aria-checked={selectedResearchAccess() === option.value}
-                                    tabindex={selectedResearchAccess() === option.value ? 0 : -1}
-                                    disabled={researchAccess.loading || researchAccessSaving()}
-                                    onClick={(event) => {
-                                      void applyResearchAccess(option.value, event.currentTarget)
-                                      event.currentTarget.closest("details")?.removeAttribute("open")
-                                    }}
-                                  >
-                                    <span>
-                                      <strong>{option.label}</strong>
-                                      <small>
-                                        {option.value !== "full" &&
-                                        currentResearchAccess()?.sandboxStatus.available === false
-                                          ? `Fail-closed until setup: ${currentResearchAccess()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
-                                          : option.description}
-                                      </small>
-                                    </span>
-                                    <Show when={selectedResearchAccess() === option.value}>
-                                      <Icon name="check" size="small" />
-                                    </Show>
-                                  </button>
-                                )}
-                              </For>
-                            </div>
-                          </details>
-                        </Show>
-                        <button
-                          type="button"
-                          class="workspace-composer__research-setting workspace-composer__research-control workspace-composer__research-connectors"
-                          onClick={() => {
-                            closeResearchTools()
-                            dialog.show(() => <DialogSettings initial="connectors" />)
-                          }}
+                            Access settings unavailable · Retry
+                          </button>
+                        }
+                      >
+                        <details
+                          class="workspace-composer__research-setting workspace-composer__research-choice"
+                          onToggle={toggleResearchChoice}
                         >
-                          <span class="workspace-composer__research-setting-label">MCP servers</span>
-                          <strong class="workspace-composer__research-setting-value">
-                            {configuredConnectorCount() === 0
-                              ? "None configured"
-                              : `${configuredConnectorCount()} configured`}
-                          </strong>
-                          <Icon name="chevron-right" size="small" />
-                        </button>
-                      </div>
-                    </section>
-                  </div>
-                </details>
+                          <summary aria-label={`Action approval, ${researchAccessLabel()}`}>
+                            <span class="workspace-composer__research-setting-label">Action approval</span>
+                            <strong class="workspace-composer__research-setting-value" aria-live="polite">
+                              {researchAccessSaving() ? "Saving…" : researchAccessLabel()}
+                            </strong>
+                            <Icon name="chevron-right" size="small" />
+                          </summary>
+                          <div
+                            class="workspace-composer__research-choice-menu"
+                            role="radiogroup"
+                            aria-label="How should OpenScience actions be approved?"
+                            aria-busy={researchAccessSaving() ? "true" : undefined}
+                            onKeyDown={navigateResearchChoices}
+                          >
+                            <For each={RESEARCH_ACCESS_OPTIONS}>
+                              {(option) => (
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  data-research-access={option.value}
+                                  data-tone={option.value === "full" ? "warning" : undefined}
+                                  aria-checked={selectedResearchAccess() === option.value}
+                                  tabindex={selectedResearchAccess() === option.value ? 0 : -1}
+                                  disabled={researchAccess.loading || researchAccessSaving()}
+                                  onClick={(event) => {
+                                    void applyResearchAccess(option.value, event.currentTarget)
+                                    event.currentTarget.closest("details")?.removeAttribute("open")
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{option.label}</strong>
+                                    <small>
+                                      {option.value !== "full" &&
+                                      currentResearchAccess()?.sandboxStatus.available === false
+                                        ? `Fail-closed until setup: ${currentResearchAccess()?.sandboxStatus.reason ?? "sandbox backend not installed"}`
+                                        : option.description}
+                                    </small>
+                                  </span>
+                                  <Show when={selectedResearchAccess() === option.value}>
+                                    <Icon name="check" size="small" />
+                                  </Show>
+                                </button>
+                              )}
+                            </For>
+                          </div>
+                        </details>
+                      </Show>
+                      <button
+                        type="button"
+                        class="workspace-composer__research-setting workspace-composer__research-control workspace-composer__research-connectors"
+                        onClick={() => {
+                          closeResearchTools()
+                          dialog.show(() => <DialogSettings initial="connectors" />)
+                        }}
+                      >
+                        <span class="workspace-composer__research-setting-label">MCP servers</span>
+                        <strong class="workspace-composer__research-setting-value">
+                          {configuredConnectorCount() === 0
+                            ? "None configured"
+                            : `${configuredConnectorCount()} configured`}
+                        </strong>
+                        <Icon name="chevron-right" size="small" />
+                      </button>
+                    </div>
+                  </section>
+                </ComposerTools>
                 <WorkingFolderChip
                   client={sdk.client}
                   sessionID={params.id && params.id !== "new" ? params.id : undefined}

@@ -39,11 +39,13 @@ const mount = (view: () => JSX.Element) => {
  * happy-dom lays nothing out, so the geometry the menu measures is supplied
  * here: a selector per box, and the window width the pane sits in.
  */
-const layout = (boxes: Array<{ match: string; left: number; right: number }>, viewport: number) => {
+type Boxes = Array<{ match: string; left: number; right: number }>
+const layout = (boxes: Boxes, viewport: number) => {
+  const current = { boxes }
   const rect = Object.getOwnPropertyDescriptor(Element.prototype, "getBoundingClientRect")!
   const width = Object.getOwnPropertyDescriptor(globalThis, "innerWidth")
   Element.prototype.getBoundingClientRect = function (this: Element) {
-    const box = boxes.find((candidate) => this.matches(candidate.match)) ?? { left: 0, right: 0 }
+    const box = current.boxes.find((candidate) => this.matches(candidate.match)) ?? { left: 0, right: 0 }
     const size = { ...box, width: box.right - box.left, height: 0, top: 0, bottom: 0, x: box.left, y: 0 }
     return { ...size, toJSON: () => size } as DOMRect
   }
@@ -52,6 +54,36 @@ const layout = (boxes: Array<{ match: string; left: number; right: number }>, vi
     Object.defineProperty(Element.prototype, "getBoundingClientRect", rect)
     if (width) Object.defineProperty(globalThis, "innerWidth", width)
   })
+  /** The same boxes after the pane was dragged to another width. */
+  return (next: Boxes) => (current.boxes = next)
+}
+
+/**
+ * happy-dom has a ResizeObserver, but nothing it could observe: no layout
+ * engine means no box ever changes size. This one records what the menu asked
+ * to watch and hands back the trigger for it.
+ */
+const observeResizes = () => {
+  const watched: Array<{ target: Element; resize: () => void }> = []
+  const original = Object.getOwnPropertyDescriptor(globalThis, "ResizeObserver")
+  class Recorder {
+    constructor(private readonly callback: () => void) {}
+    observe(target: Element) {
+      watched.push({ target, resize: () => this.callback() })
+    }
+    disconnect() {
+      watched.length = 0
+    }
+  }
+  Object.defineProperty(globalThis, "ResizeObserver", {
+    configurable: true,
+    writable: true,
+    value: Recorder as unknown as typeof ResizeObserver,
+  })
+  cleanups.push(() => {
+    if (original) Object.defineProperty(globalThis, "ResizeObserver", original)
+  })
+  return watched
 }
 
 const SOURCES = [
@@ -200,6 +232,25 @@ describe("source menu", () => {
     expect(revoke.getAttribute("tabindex")).toBe("-1")
   })
 
+  // A delegated conversation works in the folder its lead granted it. The row
+  // is there to browse from; ending that access is the lead's decision.
+  test("offers no revoke on a folder inherited from the session that delegated this one", () => {
+    const lead = { ...SOURCES[2]!, id: "lead", name: "RINR", readonly: false, inherited: true }
+    const host = mount(() =>
+      subject.SourceMenu({
+        sources: [...SOURCES, lead],
+        active: SOURCES[1]!,
+        onPick: () => {},
+        onRevoke: () => {},
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="lead"]')).not.toBeNull()
+    expect(host.querySelector('[data-source-revoke="lead"]')).toBeNull()
+    expect(host.querySelector('[data-source-revoke="ro"]')).not.toBeNull()
+  })
+
   test("hides the revoke control when no handler can act on it", () => {
     const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
@@ -295,6 +346,56 @@ describe("source menu", () => {
     await Promise.resolve()
 
     expect(host.querySelector("[data-source-menu]")?.getAttribute("data-align")).toBe("end")
+  })
+
+  // The pane is a draggable column. The alignment was measured once per open,
+  // so narrowing the pane under an open menu left it hanging outside until the
+  // next time someone opened it.
+  test("re-measures the alignment when the pane is resized under an open menu", async () => {
+    const watched = observeResizes()
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    host.className = "files-pane"
+    const resize = layout(
+      [
+        { match: ".files-pane", left: 0, right: 1440 },
+        { match: ".files-source__button", left: 240, right: 328 },
+        { match: ".files-menu", left: 240, right: 540 },
+      ],
+      1440,
+    )
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await Promise.resolve()
+    expect(host.querySelector("[data-source-menu]")?.getAttribute("data-align")).toBe("start")
+
+    // The divider is dragged left: the pane keeps the menu's trigger near its
+    // right edge, and the menu no longer fits hanging rightwards.
+    resize([
+      { match: ".files-pane", left: 900, right: 1440 },
+      { match: ".files-source__button", left: 1180, right: 1268 },
+      { match: ".files-menu", left: 1180, right: 1480 },
+    ])
+    expect(watched.map((entry) => entry.target)).toEqual([host])
+    watched.forEach((entry) => entry.resize())
+    await Promise.resolve()
+
+    expect(host.querySelector("[data-source-menu]")?.getAttribute("data-align")).toBe("end")
+  })
+
+  test("watches nothing once the menu is closed", async () => {
+    const watched = observeResizes()
+    const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[1]!, onPick: () => {} }))
+    host.className = "files-pane"
+
+    const trigger = host.querySelector<HTMLButtonElement>("[data-source-button]")!
+    trigger.click()
+    await Promise.resolve()
+    expect(watched).toHaveLength(1)
+
+    trigger.click()
+    await Promise.resolve()
+
+    expect(watched).toHaveLength(0)
   })
 
   test("keeps the menu on the trigger's left edge when it already fits", async () => {

@@ -63,6 +63,10 @@ import { createFileRequestOwner, isFileRequestCancellation } from "@/atlas/file-
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
+/** Everything a listing is addressed by: the walked path, the session whose
+ * capability reads it, and the source and project it belongs to. */
+type ListingKey = readonly [string, string | undefined, PaneSource["kind"], string, string]
+
 /** The durable location handed to the inspector's single work-tab owner. */
 export interface PaneFile {
   name: string
@@ -239,6 +243,32 @@ async function revokeAccess(transport: Transport, identity: FilesystemIdentity, 
   }).then(json)
 }
 
+/**
+ * Ending a grant, or the reason it did not end. The request goes to the
+ * session that granted the folder — the caller pins that identity with the
+ * click, because a confirmation can outlive the pane's view of it. With no
+ * identity there is nothing to address, and a confirmation that sends nothing
+ * still has to say so: otherwise the folder stays connected while the person
+ * who confirmed believes it is gone.
+ */
+export async function revokeGrant(input: {
+  transport: Transport
+  owner?: FilesystemIdentity
+  grantID: string
+  /** What the pane can already say about why it cannot act. */
+  reason?: string
+}): Promise<{ ok: true } | { ok: false; detail: string }> {
+  if (!input.owner)
+    return {
+      ok: false,
+      detail: input.reason || "This folder belongs to a session this pane is no longer showing.",
+    }
+  return revokeAccess(input.transport, input.owner, input.grantID).then(
+    () => ({ ok: true }) as const,
+    (value) => ({ ok: false, detail: concise(value) }) as const,
+  )
+}
+
 /** Rename lives in a dialog because a 150px card is not a text field. */
 function RenameArtifact(props: {
   artifact: StoredArtifact
@@ -394,6 +424,14 @@ export function FilesPane(
     }),
   )
   const accessSnapshot = () => (snapshot.latest?.scope === scope() ? snapshot.latest.value : undefined)
+  /**
+   * The grant snapshot is what says where the pane opens: until it answers,
+   * "Project files" is a guess, and listing it flashes an empty managed
+   * directory a frame before the working folder replaces it. A failed read
+   * still answers (with no grants), so this holds for the request, not for a
+   * result — and it holds nothing at all where no snapshot is ever fetched.
+   */
+  const resolving = () => Boolean(identity()) && snapshot.latest?.scope !== scope()
   const filesystemChanged = sdk?.event.on("session.filesystem.changed", (event) => {
     if (event.properties.sessionID !== sessionID()) return
     void refetchSnapshot()
@@ -529,128 +567,138 @@ export function FilesPane(
   // moved. Compare the parts instead.
   // The source id joins the key so that switching between two Modal Volumes,
   // which share a kind and an empty root, actually re-lists.
-  const key = createMemo(() => [where(), sessionID(), current().kind, current().id, scope()] as const, undefined, {
-    equals: (a, b) => a.every((value, index) => value === b[index]),
-  })
+  // No key while the snapshot is still in flight: a resource with no source
+  // does not fetch, which is how the first listing waits for the location it
+  // will actually open on instead of spending a request on the project root.
+  const key = createMemo<ListingKey | undefined>(
+    () => (resolving() ? undefined : [where(), sessionID(), current().kind, current().id, scope()]),
+    undefined,
+    { equals: (a, b) => (a && b ? a.every((value, index) => value === b[index]) : a === b) },
+  )
   const listingRequest = createFileRequestOwner()
   const listingRetry = { key: "", count: 0 }
   onCleanup(() => listingRequest.dispose())
-  const [entries, { refetch: refetchEntries }] = createResource<
-    { key: string; rows: FileRow[] },
-    ReturnType<typeof key>
-  >(key, async ([target, session, kind, id], info) => {
-    const ownerKey = JSON.stringify(key())
-    if (listingRetry.key !== ownerKey) {
-      listingRetry.key = ownerKey
-      listingRetry.count = 0
-    }
-    const ticket = listingRequest.begin(ownerKey)
-    const previous = info.value?.key === ownerKey ? info.value : { key: ownerKey, rows: [] }
-    const owns = () => listingRequest.owns(ticket, ownerKey) && JSON.stringify(key()) === ownerKey
-    const success = (rows: FileRow[]) => {
-      if (owns()) {
+  const [entries, { refetch: refetchEntries }] = createResource<{ key: string; rows: FileRow[] }, ListingKey>(
+    key,
+    async ([target, session, kind, id], info) => {
+      const ownerKey = JSON.stringify(key())
+      if (listingRetry.key !== ownerKey) {
+        listingRetry.key = ownerKey
         listingRetry.count = 0
-        setListingError("")
       }
-      return { key: ownerKey, rows }
-    }
-    const failure = (value: unknown, source = current().name) => {
-      if (!owns()) return previous
-      if (isFileRequestCancellation(value)) {
-        if (listingRetry.count === 0) {
-          listingRetry.count++
-          queueMicrotask(() => {
-            if (owns()) void refetchEntries()
-          })
-        } else {
-          setListingError("Refresh was interrupted. Showing the last known files.")
+      const ticket = listingRequest.begin(ownerKey)
+      const previous = info.value?.key === ownerKey ? info.value : { key: ownerKey, rows: [] }
+      const owns = () => listingRequest.owns(ticket, ownerKey) && JSON.stringify(key()) === ownerKey
+      const success = (rows: FileRow[]) => {
+        if (owns()) {
+          listingRetry.count = 0
+          setListingError("")
         }
+        return { key: ownerKey, rows }
+      }
+      const failure = (value: unknown, source = current().name) => {
+        if (!owns()) return previous
+        if (isFileRequestCancellation(value)) {
+          if (listingRetry.count === 0) {
+            listingRetry.count++
+            queueMicrotask(() => {
+              if (owns()) void refetchEntries()
+            })
+          } else {
+            setListingError("Refresh was interrupted. Showing the last known files.")
+          }
+          return previous
+        }
+        setListingError(fileListingFailure(value, source))
         return previous
       }
-      setListingError(fileListingFailure(value, source))
-      return previous
-    }
 
-    // The artifacts and trash pseudo-sources always have root "" — they are
-    // backed by the artifact store, not the filesystem, and the server
-    // falls back an empty path to the project root (File.list(dir || root)),
-    // which would silently list the project's files mislabeled as
-    // artifacts. Every other kind always carries a real root once a live
-    // project context exists, so gate on the source kind rather than on
-    // target emptiness.
-    if (kind === "artifacts" || kind === "trash") {
-      // No listing is attempted, so the previous listing's failure no longer
-      // describes anything on screen — leaving it up puts "this folder could
-      // not be read" over a perfectly good trash list.
-      if (owns()) {
-        setError("")
-        setListingError("")
+      // The artifacts and trash pseudo-sources always have root "" — they are
+      // backed by the artifact store, not the filesystem, and the server
+      // falls back an empty path to the project root (File.list(dir || root)),
+      // which would silently list the project's files mislabeled as
+      // artifacts. Every other kind always carries a real root once a live
+      // project context exists, so gate on the source kind rather than on
+      // target emptiness.
+      if (kind === "artifacts" || kind === "trash") {
+        // No listing is attempted, so the previous listing's failure no longer
+        // describes anything on screen — leaving it up puts "this folder could
+        // not be read" over a perfectly good trash list.
+        if (owns()) {
+          setError("")
+          setListingError("")
+        }
+        return Promise.resolve({ key: ownerKey, rows: [] })
       }
-      return Promise.resolve({ key: ownerKey, rows: [] })
-    }
-    // A Volume is not on this machine: it lists over Modal's API, and its
-    // entries carry a path relative to the volume root rather than to any
-    // directory on disk.
-    if (kind === "modal") {
-      // The first level inside Modal is the Volume list; everything below it is
-      // a path inside whichever Volume was entered.
-      const [volume, ...rest] = target.split("/").filter(Boolean)
-      if (!volume) {
-        return transport("/settings/compute/modal/volumes", { signal: ticket.controller.signal })
+      // A Volume is not on this machine: it lists over Modal's API, and its
+      // entries carry a path relative to the volume root rather than to any
+      // directory on disk.
+      if (kind === "modal") {
+        // The first level inside Modal is the Volume list; everything below it is
+        // a path inside whichever Volume was entered.
+        const [volume, ...rest] = target.split("/").filter(Boolean)
+        if (!volume) {
+          return transport("/settings/compute/modal/volumes", { signal: ticket.controller.signal })
+            .then(listingJson)
+            .then((value) => {
+              if (!Array.isArray(value)) return success([])
+              // Volumes are folders here: entering one lists it.
+              return success(
+                (value as Array<{ name: string }>).map((item) => ({
+                  name: item.name,
+                  type: "directory" as const,
+                })),
+              )
+            })
+            .catch((value) => failure(value, "Modal Volumes"))
+        }
+        return transport(
+          `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`,
+          { signal: ticket.controller.signal },
+          {
+            path: `/${rest.join("/")}`,
+          },
+        )
           .then(listingJson)
           .then((value) => {
             if (!Array.isArray(value)) return success([])
-            // Volumes are folders here: entering one lists it.
             return success(
-              (value as Array<{ name: string }>).map((item) => ({
-                name: item.name,
-                type: "directory" as const,
+              (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
+                name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
+                type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
+                size: entry.size,
+                path: entry.path,
               })),
             )
           })
-          .catch((value) => failure(value, "Modal Volumes"))
+          .catch((value) => failure(value, volume))
       }
-      return transport(
-        `/settings/compute/modal/volumes/${encodeURIComponent(volume)}/files`,
-        { signal: ticket.controller.signal },
-        {
-          path: `/${rest.join("/")}`,
-        },
-      )
+      const query = fileListQuery(kind, target, session)
+      return transport("/file", { signal: ticket.controller.signal }, query)
         .then(listingJson)
         .then((value) => {
-          if (!Array.isArray(value)) return success([])
-          return success(
-            (value as Array<{ path: string; type: string; size: number }>).map((entry) => ({
-              name: entry.path.split("/").filter(Boolean).at(-1) ?? entry.path,
-              type: entry.type === "directory" ? ("directory" as const) : ("file" as const),
-              size: entry.size,
-              path: entry.path,
-            })),
-          )
+          // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
+          // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
+          // wrapper only exists on the generated client's RequestResult, never on the body.
+          if (Array.isArray(value)) return success(value as FileRow[])
+          const data = (value as { data?: unknown }).data
+          return success(Array.isArray(data) ? (data as FileRow[]) : [])
         })
-        .catch((value) => failure(value, volume))
-    }
-    const query = fileListQuery(kind, target, session)
-    return transport("/file", { signal: ticket.controller.signal }, query)
-      .then(listingJson)
-      .then((value) => {
-        // GET /file returns a bare FileNode[] (backend/cli/src/server/routes/file.ts:158-182,
-        // FileListResponses in tooling/sdk/js/src/v2/gen/types.gen.ts:7889). The {data}
-        // wrapper only exists on the generated client's RequestResult, never on the body.
-        if (Array.isArray(value)) return success(value as FileRow[])
-        const data = (value as { data?: unknown }).data
-        return success(Array.isArray(data) ? (data as FileRow[]) : [])
-      })
-      .catch((value) => failure(value))
-  })
+        .catch((value) => failure(value))
+    },
+  )
 
   const sourceLoading = createMemo(() => {
+    if (resolving()) return true
     const kind = current().kind
     if (kind === "artifacts") return artifacts.loading
     if (kind === "trash") return artifacts.loading || deleted.loading
     return entries.loading
   })
+
+  /** Naming the location while the pane is still deciding on one would put
+   * "Loading Project files" over a wait that ends somewhere else. */
+  const loadingLabel = () => (resolving() ? "Loading files" : `Loading ${current().name}`)
 
   const sourceError = createMemo(() => {
     const kind = current().kind
@@ -698,7 +746,10 @@ export function FilesPane(
 
   const rows = createMemo(() => {
     const query = filter().trim().toLowerCase()
-    const list = entries.latest?.key === JSON.stringify(key()) ? entries.latest.rows : []
+    // No key means no location has been settled on yet, and the rows of the
+    // last one describe somewhere the pane is no longer showing.
+    const listing = key()
+    const list = listing && entries.latest?.key === JSON.stringify(listing) ? entries.latest.rows : []
     return query ? list.filter((row) => row.name.toLowerCase().includes(query)) : list
   })
   const available = (row: FileRow) => !busy() && !entries.loading && !listingError() && rows().includes(row)
@@ -1087,20 +1138,19 @@ export function FilesPane(
   // remembered pick goes with it — reopening on a folder the app can no longer
   // read is how the same grant looks like a broken pane a week later.
   const revokeSource = (source: PaneSource) => {
-    if (source.kind !== "connected") return
+    // An inherited folder is the lead session's grant, not a connection made
+    // here; the menu offers no control for it and neither does this.
+    if (source.kind !== "connected" || source.inherited) return
     // Captured with the click, not read inside submit: a dialog can outlive
     // the session that raised it, and a grant belongs to one session.
     const owner = identity()
     const submit = async () => {
-      if (!owner) return
-      const revoked = await revokeAccess(transport, owner, source.id).then(
-        () => true,
-        (value) => {
-          toast.error(`Access to ${source.name} could not be revoked`, concise(value))
-          return false
-        },
-      )
-      if (!revoked || !mounted) return
+      const result = await revokeGrant({ transport, owner, grantID: source.id, reason: blocked() })
+      if (!result.ok) {
+        toast.error(`Access to ${source.name} could not be revoked`, result.detail)
+        return
+      }
+      if (!mounted) return
       if (picked() === source.id) choose(undefined)
       return refetchSnapshot()
     }
@@ -1400,7 +1450,7 @@ export function FilesPane(
           inside a folder that was never opened. */}
       <Show when={sourceLoading()}>
         <div class="files-loading" role="status" data-files-loading>
-          <AtomLoader size={120} caption={`Loading ${current().name}`} />
+          <AtomLoader size={120} caption={loadingLabel()} />
         </div>
       </Show>
 

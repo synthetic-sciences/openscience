@@ -35,6 +35,14 @@ export function createOverlayGroup(): OverlayGroup {
       setCurrent(undefined)
     },
     register(id, close) {
+      // An id is the only handle the group has on a member, so a second live
+      // member under one id silently takes the first one's place: the first
+      // can no longer be closed by the group, and its own unregister is a
+      // no-op against a closer that is not its own. The group cannot pick a
+      // winner, so it says so where the mistake is rather than leaving a menu
+      // that will not close. Not gated on a dev build: the same wiring bug in
+      // a packaged app is the one nobody can reproduce.
+      if (closers.has(id)) console.warn(`Overlay group: "${id}" is already registered by another open surface.`)
       closers.set(id, close)
       return () => {
         if (closers.get(id) !== close) return
@@ -71,7 +79,9 @@ export function registerOverlayDetails(group: OverlayGroup, id: string, element:
     if (event.key !== "Escape" || !element.open) return
     event.preventDefault()
     close()
-    element.querySelector("summary")?.focus()
+    // This menu's own summary: `summary` alone matches any descendant, and the
+    // Tools menu carries a `<details>` of its own inside it.
+    element.querySelector<HTMLElement>(":scope > summary")?.focus()
   }
   element.addEventListener("toggle", toggle)
   element.addEventListener("keydown", keydown)

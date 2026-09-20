@@ -3,13 +3,19 @@ import type { FilesystemGrant } from "@/atlas/file-sources"
 import { buildSources, defaultSource, groupSources, primarySources } from "./sources"
 import { middle } from "./truncate"
 
-const grant = (id: string, path: string, access: "read" | "write"): FilesystemGrant => ({
+const grant = (
+  id: string,
+  path: string,
+  access: "read" | "write",
+  over: Partial<FilesystemGrant> = {},
+): FilesystemGrant => ({
   id,
   path,
   access,
   scope: "session",
   source: "permission",
   time: { created: 0 },
+  ...over,
 })
 
 describe("pane sources", () => {
@@ -34,6 +40,20 @@ describe("pane sources", () => {
     expect(entry?.id).toBe("trash")
     expect(entry?.group).toBe("Recovery")
     expect(entry?.detail).toContain("30 days")
+  })
+
+  // A delegated conversation is handed its lead's working folder. It browses
+  // it like any other connected folder, but the grant is the lead's, so the
+  // pane must not offer to end it from here.
+  test("marks a folder inherited from a lead session rather than presenting it as one connected here", () => {
+    const list = buildSources({
+      projectRoot: "/p",
+      projectName: "p",
+      grants: [grant("g_own", "/data/rinr", "write"), grant("g_lead", "/data/lead", "write", { source: "parent" })],
+    })
+
+    expect(list.find((s) => s.id === "g_lead")).toMatchObject({ kind: "connected", inherited: true })
+    expect(list.find((s) => s.id === "g_own")?.inherited).toBe(false)
   })
 
   test("marks a read grant read-only so the badge has something true to show", () => {
@@ -156,8 +176,7 @@ describe("where the pane opens", () => {
 
   test("uses project files when the session works in no connected folder", () => {
     expect(defaultSource(list, {}).id).toBe("project")
-    // A working root that names no listed location — an inherited or
-    // installation-wide grant the pane does not offer — leaves the default
+    // A working root that names no listed location at all leaves the default
     // where it was rather than selecting nothing.
     expect(defaultSource(list, { workingRoot: "/data/elsewhere" }).id).toBe("project")
   })
@@ -187,6 +206,26 @@ describe("where the pane opens", () => {
   test("matches the working folder through path spelling rather than string equality", () => {
     expect(defaultSource(list, { workingRoot: "/home/keertan/codes/RINR/" }).id).toBe("g2")
     expect(defaultSource(list, { workingRoot: "/home/keertan/codes/./RINR" }).id).toBe("g2")
+  })
+
+  // A Windows volume is case-insensitive, so the server's spelling of the
+  // working folder and the grant's need not agree letter for letter. They did
+  // have to, and a pane on Windows opened on the empty project root instead.
+  test("matches a Windows working folder the server spelled in another case", () => {
+    const windows = buildSources({
+      projectRoot: "C:\\Users\\keertan\\.openscience\\projects\\prj_1",
+      projectName: "RINR",
+      grants: [grant("g1", "C:\\Research\\RINR", "write")],
+    })
+
+    expect(defaultSource(windows, { workingRoot: "c:/research/rinr" }).id).toBe("g1")
+    expect(primarySources(windows, "c:/research/rinr").map((source) => source.id)).toEqual([
+      "project",
+      "g1",
+      "artifacts",
+    ])
+    // POSIX paths keep their case: /Data and /data are two different folders.
+    expect(defaultSource(list, { workingRoot: "/home/keertan/codes/rinr" }).id).toBe("project")
   })
 })
 

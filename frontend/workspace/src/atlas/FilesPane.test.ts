@@ -132,13 +132,20 @@ const snapshot = (grants: unknown[], toolDirectory?: string) => ({
   enforcement: { broker: "enforced", processWrite: "grant_only", processRead: "policy_only" },
 })
 
-const grant = (id: string, path: string, access: "read" | "write", created = 1) => ({
+const grant = (
+  id: string,
+  path: string,
+  access: "read" | "write",
+  created = 1,
+  over: Record<string, unknown> = {},
+) => ({
   id,
   path,
   access,
   scope: "project",
   source: "api",
   time: { created },
+  ...over,
 })
 
 /** The session's own temporary directory, which the pane offers as "This
@@ -187,6 +194,111 @@ describe("files pane", () => {
     expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
     expect(host.querySelector('[data-workspace-source="project"]')?.getAttribute("aria-selected")).toBe("false")
     expect(listed).toContain("/home/keertan/codes/RINR")
+  })
+
+  // #659: a delegated conversation is handed its lead's working folder. The
+  // grant is inherited rather than connected here, the pane listed only the
+  // folders connected here, and so it opened on the empty project root while
+  // the agent wrote into a folder with no row at all.
+  test("opens on a working folder inherited from the session that delegated this one", async () => {
+    const listed: string[] = []
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(
+              snapshot(
+                [grant("fsg_lead", "/home/keertan/codes/RINR", "write", 1, { source: "parent", scope: "session" })],
+                "/home/keertan/codes/RINR",
+              ),
+            )
+          if (path === "/file") listed.push(String(query?.path))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-id="fsg_lead"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(listed).toContain("/home/keertan/codes/RINR")
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="fsg_lead"]')).not.toBeNull()
+    // The lead granted it, so the lead ends it. Revoking from here would take
+    // authority the reader never gave.
+    expect(host.querySelector('[data-source-revoke="fsg_lead"]')).toBeNull()
+  })
+
+  // An installation-wide approval is not this project's connected folder, so
+  // the list leaves it out — unless it is the folder this conversation works
+  // in, which has to be reachable from the pane that browses it.
+  test("opens on a working folder approved installation-wide", async () => {
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path) => {
+          if (path === `/session/${SESSION}/filesystem`)
+            return listing(
+              snapshot(
+                [
+                  grant("fsg_wide", "/home/keertan/data/shared", "write", 1, { scope: "installation" }),
+                  grant("fsg_other", "/home/keertan/data/elsewhere", "read", 2, { scope: "installation" }),
+                ],
+                "/home/keertan/data/shared",
+              ),
+            )
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(host.querySelector('[data-workspace-id="fsg_wide"]')?.getAttribute("aria-selected")).toBe("true")
+
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    expect(host.querySelector('[data-source-item="fsg_other"]')).toBeNull()
+    // Approved everywhere is still a folder connected somewhere: ending it
+    // from the row that browses it is the same control as any other.
+    expect(host.querySelector('[data-source-revoke="fsg_wide"]')).not.toBeNull()
+  })
+
+  // #659: the pane resolved its location from a snapshot that had not arrived,
+  // so it listed the managed project root — empty by design — and replaced it
+  // with the working folder a frame later.
+  test("waits for the grant snapshot instead of flashing the empty project root", async () => {
+    const listed: string[] = []
+    let arrive: (() => void) | undefined
+    const host = mount(() =>
+      subject.FilesPane({
+        session: SESSION,
+        directory: DIRECTORY,
+        request: async (path, _init, query) => {
+          if (path === `/session/${SESSION}/filesystem`) {
+            await new Promise<void>((resolve) => (arrive = resolve))
+            return listing(snapshot([grant("fsg_rinr", "/home/keertan/codes/RINR", "write")]))
+          }
+          if (path === "/file") listed.push(String(query?.path))
+          return listing([])
+        },
+      }),
+    )
+    await settle()
+
+    expect(listed).toEqual([])
+    expect(host.querySelector("[data-files-loading]")).not.toBeNull()
+    expect(host.querySelector("[data-folder-empty]")).toBeNull()
+
+    arrive!()
+    await settle()
+
+    expect(listed).toEqual(["/home/keertan/codes/RINR"])
+    expect(host.querySelector('[data-workspace-id="fsg_rinr"]')?.getAttribute("aria-selected")).toBe("true")
+    expect(host.querySelector("[data-files-loading]")).toBeNull()
   })
 
   // The composer can pin any connected folder as the working one, and the pane
@@ -1531,6 +1643,40 @@ describe("files pane", () => {
     ).toContain("Access to pdebench could not be revoked")
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
     expect(host.querySelector('[data-source-item="fsg_1"]')).not.toBeNull()
+  })
+
+  // A confirmation can outlive the session it was raised for. Confirming then
+  // sent nothing and reported nothing, so the folder stayed connected while
+  // the person who confirmed was told nothing at all.
+  test("reports a revoke it has no session to send, and sends nothing", async () => {
+    const calls: Array<{ path: string; method?: string }> = []
+    const transport = async (path: string, init?: RequestInit) => {
+      calls.push({ path, method: init?.method })
+      return listing({ id: "fsg_1" })
+    }
+    const owner = { sessionID: SESSION, projectID: "prj_1", directory: DIRECTORY }
+
+    expect(
+      await subject.revokeGrant({ transport, grantID: "fsg_1", reason: "Send a message first: the session is new." }),
+    ).toEqual({ ok: false, detail: "Send a message first: the session is new." })
+    // With no reason of the pane's own it still says something true.
+    expect(await subject.revokeGrant({ transport, grantID: "fsg_1" })).toMatchObject({ ok: false })
+    expect(calls).toEqual([])
+
+    expect(await subject.revokeGrant({ transport, owner, grantID: "fsg_1" })).toEqual({ ok: true })
+    expect(calls).toEqual([{ path: `/session/${SESSION}/filesystem/fsg_1`, method: "DELETE" }])
+  })
+
+  test("reports the server's refusal in one line a person can act on", async () => {
+    const transport = async () => new Response("grant belongs to another session", { status: 400 })
+
+    expect(
+      await subject.revokeGrant({
+        transport,
+        owner: { sessionID: SESSION, projectID: "prj_1", directory: DIRECTORY },
+        grantID: "fsg_1",
+      }),
+    ).toEqual({ ok: false, detail: "grant belongs to another session" })
   })
 
   test("connects a folder from the source menu with an explicit write choice", async () => {
