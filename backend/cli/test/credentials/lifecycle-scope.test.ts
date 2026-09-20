@@ -22,17 +22,25 @@ test("an admitted SDK callback can re-enter and serialize sibling credential wri
 })
 
 test("an unawaited descendant cannot retain a disposed credential lease", async () => {
-  const timerReady = Promise.withResolvers<void>()
+  const startLate = Promise.withResolvers<void>()
   const lateDone = Promise.withResolvers<void>()
+  const order: string[] = []
   let lateStarted = false
 
   await CredentialLifecycle.admit(async () => {
-    setTimeout(() => {
-      timerReady.resolve()
-      void CredentialLifecycle.serialized(async () => {
+    // An SDK callback can start a credential write from a continuation of the
+    // admitted scope that runs long after the scope closed. This `.then`
+    // inherits the admitted async context exactly as a stray timer would, but
+    // the test decides when it runs: gating it on a wall clock raced the 20ms
+    // delay against releasing one cross-process lease and taking another, and
+    // lost that race whenever the filesystem was slow enough (CI), which then
+    // stranded the blocker's lease below for the rest of the process.
+    void startLate.promise.then(() =>
+      CredentialLifecycle.serialized(async () => {
         lateStarted = true
-      }).then(lateDone.resolve, lateDone.reject)
-    }, 20)
+        order.push("late")
+      }).then(lateDone.resolve, lateDone.reject),
+    )
   })
 
   const releaseBlocker = Promise.withResolvers<void>()
@@ -40,16 +48,27 @@ test("an unawaited descendant cannot retain a disposed credential lease", async 
   const blocker = CredentialLifecycle.serialized(async () => {
     blockerStarted.resolve()
     await releaseBlocker.promise
+    order.push("blocker")
   })
-  await blockerStarted.promise
-  await timerReady.promise
-  await Bun.sleep(20)
-  expect(lateStarted).toBe(false)
 
-  releaseBlocker.resolve()
-  await blocker
+  try {
+    // The descendant is only released once the blocker demonstrably holds the
+    // lease, so it has no lease to inherit and no way to run before the
+    // blocker returns it.
+    await blockerStarted.promise
+    startLate.resolve()
+    await Bun.sleep(20)
+    expect(lateStarted).toBe(false)
+  } finally {
+    // A failed expectation must not leave the cross-process credential lease
+    // held: every later admit, serialized write and dispatch in this process
+    // would wait out the 30s mutation lease and time out with it.
+    releaseBlocker.resolve()
+    await blocker
+  }
+
   await lateDone.promise
-  expect(lateStarted).toBe(true)
+  expect(order).toEqual(["blocker", "late"])
 })
 
 test("a credential-checked network response does not hold the global mutation lease", async () => {
