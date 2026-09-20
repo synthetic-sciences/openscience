@@ -56,12 +56,31 @@ export function dirPath(directory: string) {
 
 const prefix = (value: string) => new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s|$)`)
 
+/**
+ * Picks a connected folder by name and asserts the pane actually switched to
+ * it. Up to three connected folders can be promoted to primary tabs
+ * (`[data-workspace-source="connected"]`) beside Project files; any beyond
+ * that stay in the overflow menu behind `[data-source-button]`. While a
+ * primary tab is active that trigger's own label reads "More" (SourceMenu's
+ * `triggerLabel`), so the trigger's text cannot say which source is current
+ * either way. Prefer the tab when this folder has one, otherwise use the
+ * menu, then confirm the switch through what the browser itself renders for
+ * the current source rather than the trigger.
+ */
 async function pickSource(page: Page, name: string) {
-  const picker = page.locator("[data-source-button]")
-  const label = picker.locator(".files-source__name")
-  if ((await picker.getAttribute("aria-expanded")) !== "true") await picker.click()
-  await page.getByRole("menuitemradio", { name: prefix(name) }).click()
-  await expect(label).toHaveText(name)
+  const files = page.getByRole("region", { name: "Files", exact: true })
+  const tab = files.locator('[data-workspace-source="connected"]').filter({ hasText: prefix(name) })
+  if (await tab.isVisible().catch(() => false)) {
+    await tab.click()
+    await expect(tab).toHaveAttribute("aria-selected", "true")
+  } else {
+    const picker = files.locator("[data-source-button]")
+    if ((await picker.getAttribute("aria-expanded")) !== "true") await picker.click()
+    await page.getByRole("menuitemradio", { name: prefix(name) }).click()
+  }
+  const browser = files.locator("[data-files-browser]")
+  await expect(browser).toHaveAttribute("data-source-kind", "connected")
+  await expect(browser.locator("[data-refresh-source]")).toHaveAttribute("aria-label", `Refresh ${name}`)
 }
 
 /** Opens the Files browser and selects the project's working-files source. */
