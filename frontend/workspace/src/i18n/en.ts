@@ -183,6 +183,7 @@ export const dict = {
   "prompt.mode.shell.exit": "Esc to exit",
 
   "prompt.popover.emptyResults": "No matching results",
+  "prompt.popover.searching": "Searching…",
   "prompt.popover.emptyCommands": "No matching commands",
   "prompt.dropzone.label": "Drop files to attach",
   "prompt.dropzone.hint": "Images, PDFs, text, code, and data · up to 20 MB each",

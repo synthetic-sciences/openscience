@@ -857,6 +857,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const AT_RECENT = 5
 
   const {
+    grouped: atGrouped,
     groups: atGroups,
     filter: atFilter,
     flat: atFlat,
@@ -2649,7 +2650,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <Show
                 when={atFlat().length > 0}
                 fallback={
-                  <div class="workspace-composer__suggestion-empty">{language.t("prompt.popover.emptyResults")}</div>
+                  // The file search is a network round trip and the rows only appear once the
+                  // answer to the query being typed arrives, so an empty list mid-search is not
+                  // yet "nothing matches".
+                  <div class="workspace-composer__suggestion-empty">
+                    <Show when={atGrouped.loading} fallback={language.t("prompt.popover.emptyResults")}>
+                      {language.t("prompt.popover.searching")}
+                    </Show>
+                  </div>
                 }
               >
                 <div class="workspace-composer__at" data-preview={atPreview() ? "true" : undefined}>
