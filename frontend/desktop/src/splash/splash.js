@@ -11,5 +11,10 @@
   if (background) root.style.setProperty("--background-base", background)
   if (foreground) root.style.setProperty("--text-strong", foreground)
   const captions = { start: "Starting your local workspace", install: "Installing in Applications" }
-  document.querySelector("synsci-loader").setAttribute("caption", captions[params.get("state")] ?? captions.start)
+  const caption = captions[params.get("state")] ?? captions.start
+  const loader = document.querySelector("synsci-loader")
+  loader.setAttribute("caption", caption)
+  // The component keeps its own caption out of the accessibility tree; the
+  // host's label is what a screen reader voices.
+  loader.setAttribute("aria-label", caption)
 })()

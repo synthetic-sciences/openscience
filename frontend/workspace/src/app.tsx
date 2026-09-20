@@ -155,7 +155,10 @@ export function AppInterface(props: { defaultUrl?: string }) {
                 <Route
                   path="/"
                   component={() => (
-                    <Suspense fallback={<LoadingScreen caption="Loading projects" />}>
+                    // The projects page shows the same mark at 144 in its own card once
+                    // it renders, so the route fallback matches it instead of jumping
+                    // from a full-surface size.
+                    <Suspense fallback={<LoadingScreen caption="Loading projects" size={144} />}>
                       <Home />
                     </Suspense>
                   )}

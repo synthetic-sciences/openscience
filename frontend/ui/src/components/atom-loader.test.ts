@@ -47,11 +47,21 @@ describe("AtomLoader", () => {
     expect(loader?.getAttribute("style")).toContain("--atom-loader-size: 120px")
   })
 
+  test("names the mark with its caption for assistive tech", () => {
+    // The component's own caption is aria-hidden and its canvas says only
+    // "Loading", so the caption has to be the host's accessible name.
+    const host = mount(() => subject.AtomLoader({ caption: "Opening session…" }))
+    const loader = host.querySelector("synsci-loader")
+    expect(loader?.getAttribute("role")).toBe("img")
+    expect(loader?.getAttribute("aria-label")).toBe("Opening session")
+  })
+
   test("defaults to a 160 mark captioned Loading", () => {
     const host = mount(() => subject.AtomLoader({}))
     const loader = host.querySelector("synsci-loader")
     expect(loader?.getAttribute("size")).toBe("160")
     expect(loader?.getAttribute("caption")).toBe("Loading")
+    expect(loader?.getAttribute("aria-label")).toBe("Loading")
     expect(loader?.textContent).toBe("Loading")
   })
 
@@ -76,6 +86,7 @@ describe("LoadingScreen", () => {
     const loader = screen?.querySelector("synsci-loader")
     expect(loader?.getAttribute("size")).toBe("180")
     expect(loader?.getAttribute("caption")).toBe("Starting workspace")
+    expect(loader?.getAttribute("aria-label")).toBe("Starting workspace")
     expect(screen?.textContent).toBe("Starting workspace")
   })
 
@@ -95,6 +106,33 @@ describe("desktop splash", () => {
     const shared = await Bun.file(new URL("./synsci-loader.js", import.meta.url)).text()
     const splash = await Bun.file(new URL("../../../desktop/src/splash/synsci-loader.js", import.meta.url)).text()
     expect(splash).toBe(shared)
+  })
+
+  test("captions and labels the mark for the state in its URL", async () => {
+    const page = await Bun.file(new URL("../../../desktop/src/splash/splash.html", import.meta.url)).text()
+    const script = await Bun.file(new URL("../../../desktop/src/splash/splash.js", import.meta.url)).text()
+    const markup = page.slice(page.indexOf("<body>") + "<body>".length, page.indexOf("<script"))
+    const states = [
+      ["start", "Starting your local workspace"],
+      ["install", "Installing in Applications"],
+    ] as const
+    try {
+      for (const [state, caption] of states) {
+        document.body.innerHTML = markup
+        history.replaceState(null, "", `/?state=${state}&scheme=light&background=%23f7f7f7&foreground=%231f1f1f`)
+        new Function(script)()
+        const loader = document.querySelector("synsci-loader")
+        expect(loader?.getAttribute("caption")).toBe(caption)
+        expect(loader?.getAttribute("aria-label")).toBe(caption)
+        expect(loader?.getAttribute("role")).toBe("img")
+        expect(document.documentElement.dataset.colorScheme).toBe("light")
+        expect(document.documentElement.style.getPropertyValue("--background-base")).toBe("#f7f7f7")
+      }
+    } finally {
+      history.replaceState(null, "", "/")
+      delete document.documentElement.dataset.colorScheme
+      document.documentElement.removeAttribute("style")
+    }
   })
 
   test("paints the default theme's base background and strong text in both schemes", async () => {

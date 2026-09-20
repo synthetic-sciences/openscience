@@ -41,19 +41,28 @@ const caption = (value: string | undefined) => (value ?? "Loading").replace(/[.â
  */
 export function AtomLoader(props: { size?: number; caption?: string; progress?: number; class?: string }) {
   const size = () => props.size ?? 160
-  // Light-DOM text is never rendered once the shadow root attaches, so this
+  const text = () => caption(props.caption)
+  // The component keeps its own caption out of the accessibility tree and
+  // names its canvas "Loading", so the host carries the caption as the mark's
+  // alternative text; that is what a screen reader voices for the status
+  // region around it. A label on a role-less element would sit on a generic
+  // node, which readers pass over.
+  //
+  // Light-DOM text is never rendered once the shadow root attaches, so it
   // duplicates nothing on screen; it is what shows before the element upgrades
   // and what a test can read.
   return (
     <synsci-loader
       class={props.class}
       data-component="atom-loader"
+      role="img"
+      aria-label={text()}
       style={{ "--atom-loader-size": `${size()}px` }}
       attr:size={size()}
-      attr:caption={caption(props.caption)}
+      attr:caption={text()}
       attr:progress={props.progress}
     >
-      {caption(props.caption)}
+      {text()}
     </synsci-loader>
   )
 }

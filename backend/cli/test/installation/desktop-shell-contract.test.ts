@@ -9,8 +9,11 @@ test("lists existing macOS windows before the New Window Dock action", async () 
 test("declares UTF-8 for every inline desktop document", async () => {
   const source = await Bun.file(new URL("../../../../frontend/desktop/src/main.mjs", import.meta.url)).text()
 
-  expect(source).not.toContain("data:text/html,")
-  expect(source.match(/data:text\/html;charset=utf-8,/g)).toHaveLength(3)
+  // The splash pages are files now; whatever documents remain inline (the
+  // startup error page today) must each carry the charset.
+  const documents = source.match(/data:text\/html[^,]*,/g) ?? []
+  expect(documents.length).toBeGreaterThan(0)
+  for (const document of documents) expect(document).toBe("data:text/html;charset=utf-8,")
 })
 
 test("desktop sidecar inherits the terminal's OpenScience root selectors unchanged", async () => {

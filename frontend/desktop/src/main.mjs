@@ -7,7 +7,7 @@ import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
-import { app, BrowserWindow, dialog, Menu, session, shell } from "electron"
+import { app, BrowserWindow, dialog, Menu, nativeTheme, session, shell } from "electron"
 import {
   apply as applyUpdate,
   current as currentUpdate,
@@ -23,7 +23,7 @@ import {
 } from "./updater.mjs"
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
-import { defaultAppearance, parseAppearance, readAppearance, splashQuery, writeAppearance } from "./appearance.mjs"
+import { mergeAppearance, readAppearance, resolveAppearance, splashQuery, writeAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
@@ -59,7 +59,7 @@ const state = {
   updateRelaunch: undefined,
   updateStartupFailure: undefined,
   stopTask: undefined,
-  /** The colours the workspace last painted; the splash and window paint the same before it mounts. */
+  /** The scheme and per-mode colours the workspace last reported; the splash and window paint from it before it mounts. */
   appearance: undefined,
 }
 
@@ -68,12 +68,15 @@ function appearanceFile() {
 }
 
 function appearance() {
-  return state.appearance ?? defaultAppearance()
+  // Resolved at each paint, so a System scheme follows the OS as it is now.
+  return resolveAppearance(state.appearance, nativeTheme.shouldUseDarkColors)
 }
 
-// The workspace owns its theme. Reading the tokens it resolved keeps the next
-// launch's splash and window on the same colours, whichever theme or scheme
-// the user picked, instead of a fixed dark that flashes on a light workspace.
+// The workspace owns its theme. Reading the tokens it resolved, and the scheme
+// choice behind them, keeps the next launch's splash and window on the colours
+// the workspace will paint, whichever theme or scheme the user picked, instead
+// of a fixed dark that flashes on a light workspace. The storage key is the
+// workspace's own (STORAGE_KEYS in frontend/ui/src/theme/context.tsx).
 async function rememberAppearance(window) {
   // A window already torn down throws on webContents itself, not only in the script.
   const reported = await Promise.resolve()
@@ -81,8 +84,14 @@ async function rememberAppearance(window) {
       window.webContents.executeJavaScript(
         `(() => {
           const style = getComputedStyle(document.documentElement)
+          let scheme = null
+          try {
+            scheme = localStorage.getItem("openscience-color-scheme")
+          } catch {}
           return {
             mode: document.documentElement.dataset.colorScheme,
+            scheme,
+            theme: document.documentElement.dataset.theme,
             background: style.getPropertyValue("--background-base").trim(),
             foreground: style.getPropertyValue("--text-strong").trim(),
           }
@@ -90,7 +99,7 @@ async function rememberAppearance(window) {
       ),
     )
     .catch(() => undefined)
-  const next = parseAppearance(reported)
+  const next = mergeAppearance(state.appearance, reported)
   if (!next) return
   state.appearance = next
   await writeAppearance(appearanceFile(), next)
