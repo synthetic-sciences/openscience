@@ -7,7 +7,7 @@ run inside the OpenScience host process.
 ## Shape
 
 The contract is `@synsci/plugin` (`tooling/plugin/src/index.ts`).
-`tooling/plugin/src/example.ts` is the smallest complete plugin:
+The smallest complete plugin:
 
 ```ts
 import type { Plugin } from "@synsci/plugin"
