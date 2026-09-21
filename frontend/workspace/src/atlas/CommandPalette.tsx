@@ -9,6 +9,7 @@ import { uiStore } from "@/atlas/store/ui"
 import { IconBolt, IconFile, IconFolder, IconMessageSquare, IconSearch } from "@/atlas/shared/Icon"
 import { projectHref, projectPathname, resolveProjectRoute } from "@/utils/project-route"
 import { projectName } from "@/pages/home-projects"
+import { scopeLabel } from "./command-palette-scope"
 import { createProjectRequest } from "@/utils/openscience-fetch"
 import { requestProjectSearch, type ProjectSearchHits } from "@/atlas/project-search"
 import "./CommandPalette.css"
@@ -36,11 +37,6 @@ type Hits = ProjectSearchHits
 const EMPTY: Hits = { sessions: [], messages: [], files: [], artifacts: [] }
 const DEBOUNCE = 250
 const REVEAL_TIMEOUT = 2000
-
-function routeName(project: { worktree: string }) {
-  const parts = project.worktree.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] ?? "Current project"
-}
 
 function sentenceCase(value: string | undefined, fallback = "Commands") {
   const text = value?.trim() || fallback
@@ -270,11 +266,7 @@ export function CommandPalette(props: CommandPaletteProps): JSX.Element {
     return Array.from(map.entries()).map(([category, cmds]) => ({ category, cmds }))
   })
 
-  const scope = createMemo(() => {
-    const project = active()
-    if (!project) return "All projects"
-    return routeName(project.project)
-  })
+  const scope = createMemo(() => scopeLabel(active(), sync.data.project))
 
   const status = createMemo(() => {
     if (searching()) return "Searching…"
