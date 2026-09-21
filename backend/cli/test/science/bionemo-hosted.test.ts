@@ -245,6 +245,50 @@ describe("hosted BioNeMo adapters", () => {
     ).toThrow("affinity sample count")
   })
 
+  test("accepts the nulls NVIDIA returns for deprecated Boltz-2 matrices and single-chain OpenFold3 interfaces", async () => {
+    const { parseBioNemoOutput } = await import("../../src/science/bionemo/schema")
+    const cif = "data_test\n_atom_site.id 1\n"
+    const boltz = { structures: [{ structure: cif, format: "mmcif" }], confidence_scores: [0.91] }
+    expect(parseBioNemoOutput("boltz2", { ...boltz, pae: null, pde: null })).toMatchObject({ pae: null, pde: null })
+    expect(parseBioNemoOutput("boltz2", boltz)).not.toHaveProperty("pae")
+    const matrix = [
+      [
+        [0.1, 0.2],
+        [0.2, 0.1],
+      ],
+    ]
+    expect(parseBioNemoOutput("boltz2", { ...boltz, pae: matrix, pde: matrix })).toMatchObject({
+      pae: matrix,
+      pde: matrix,
+    })
+    expect(() => parseBioNemoOutput("boltz2", { ...boltz, pae: [matrix[0], matrix[0]] })).toThrow("structure count")
+    for (const pae of ["none", 0, [[["0.1"]]], {}])
+      expect(() => parseBioNemoOutput("boltz2", { ...boltz, pae }), JSON.stringify(pae)).toThrow()
+    expect(() => parseBioNemoOutput("boltz2", { ...boltz, confidence_scores: null, pae: null, pde: null })).toThrow()
+
+    const scored = {
+      structure: cif,
+      format: "cif",
+      confidence_score: 0.9,
+      complex_plddt_score: 0.8,
+      complex_pde_score: 0.2,
+      ptm_score: 0.7,
+    }
+    const fold = (structure: Record<string, unknown>) => ({ outputs: [{ structures_with_scores: [structure] }] })
+    expect(parseBioNemoOutput("openfold3", fold({ ...scored, iptm_score: null }))).toMatchObject(
+      fold({ iptm_score: null }),
+    )
+    expect(parseBioNemoOutput("openfold3", fold({ ...scored, iptm_score: 0.6 }))).toMatchObject(
+      fold({ iptm_score: 0.6 }),
+    )
+    for (const structure of [
+      scored,
+      { ...scored, iptm_score: "0.6" },
+      { ...scored, iptm_score: null, ptm_score: null },
+    ])
+      expect(() => parseBioNemoOutput("openfold3", fold(structure)), JSON.stringify(structure)).toThrow()
+  })
+
   test("accepts NVIDIA GenMol numeric parameters without rewriting legacy approved payloads", async () => {
     const { BioNemoHosted } = await import("../../src/science/bionemo/client")
     const { parseBioNemoInput } = await import("../../src/science/bionemo/schema")
@@ -847,6 +891,156 @@ await Instance.provide({
             }),
           ).rejects.toThrow(dispatchID!)
           expect(requests).toBe(1)
+        },
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test("finalizes fulfilled replies that carry nulls and reports a fulfilled schema mismatch without polling", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const originalFetch = globalThis.fetch
+    try {
+      const { CredentialsRoutes } = await import("../../src/server/routes/settings/credentials")
+      const { Instance } = await import("../../src/project/instance")
+      const { ProjectTrust } = await import("../../src/project/trust")
+      const { Session } = await import("../../src/session")
+      const { SessionFilesystem } = await import("../../src/session/filesystem")
+      const { BioNemoHosted } = await import("../../src/science/bionemo/client")
+      await Instance.provide({
+        directory: tmp.path,
+        init: async () => {
+          const current = await ProjectTrust.status(Instance.project)
+          await ProjectTrust.update(Instance.project, { trusted: true, root: current.root })
+        },
+        fn: async () => {
+          await CredentialsRoutes().request("/nvidia", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ fields: { api_key: "nvapi-hosted-test-secret" } }),
+          })
+          const session = await Session.create({})
+          const cif = "data_test\n_atom_site.id 1\n"
+          const counts = { posts: 0, polls: 0 }
+          // The status route answers these synchronous NIMs' request ids the
+          // way NVCF does, so a regression into polling fails the assertions
+          // below instead of hanging.
+          const serve = (requestID: string, body: unknown, status = 200, lifecycle = "fulfilled") =>
+            (async (_input: string | URL | Request, init?: RequestInit) => {
+              if (init?.method !== "POST") {
+                counts.polls++
+                return new Response(JSON.stringify({ status: 404, title: "Not Found" }), {
+                  status: 404,
+                  headers: { "content-type": "application/json", "retry-after": "0" },
+                })
+              }
+              counts.posts++
+              return new Response(JSON.stringify(body), {
+                status,
+                headers: { "content-type": "application/json", "nvcf-status": lifecycle, "nvcf-reqid": requestID },
+              })
+            }) as unknown as typeof fetch
+          const read = async (root: string, file: string) =>
+            Bun.file(path.join(await SessionFilesystem.workspace(session.id), root, file)).text()
+
+          globalThis.fetch = serve("nvcf-boltz2-sync", {
+            structures: [{ structure: cif, format: "mmcif" }],
+            confidence_scores: [0.91],
+            ptm_scores: [0.8],
+            iptm_scores: [0],
+            pae: null,
+            pde: null,
+          })
+          const boltz = await BioNemoHosted.start("boltz2", session.id, {
+            polymers: [{ molecule_type: "protein", sequence: "MQIFVKTLTGKTITLEVEPSDTIENVKAK" }],
+          })
+          if (!("artifacts" in boltz)) throw new Error("Expected a completed Boltz-2 result")
+          expect(boltz.artifacts.map((artifact) => artifact.path)).toEqual(["response.json", "artifact-1.cif"])
+          expect(boltz.provider_request_id).toBe("nvcf-boltz2-sync")
+          expect(JSON.parse(await read(boltz.root, "response.json"))).toMatchObject({ pae: null, pde: null })
+          expect(await read(boltz.root, "artifact-1.cif")).toBe(cif)
+
+          const folded = {
+            structure: cif,
+            format: "cif",
+            confidence_score: 0.9,
+            complex_plddt_score: 0.8,
+            complex_pde_score: 0.2,
+            ptm_score: 0.7,
+            iptm_score: null,
+          }
+          const fold = (sequence: string) => ({
+            inputs: [
+              {
+                molecules: [
+                  {
+                    type: "protein",
+                    sequence,
+                    msa: { main: { a3m: { alignment: `>query\n${sequence}`, format: "a3m" } } },
+                  },
+                ],
+              },
+            ],
+          })
+          globalThis.fetch = serve("nvcf-openfold3-sync", { outputs: [{ structures_with_scores: [folded] }] })
+          const openfold = await BioNemoHosted.start("openfold3", session.id, fold("ARNDCQEGHILKMFPSTWYV"))
+          if (!("artifacts" in openfold)) throw new Error("Expected a completed OpenFold3 result")
+          expect(openfold.artifacts.map((artifact) => artifact.path)).toEqual(["response.json", "artifact-1.cif"])
+          expect(JSON.parse(await read(openfold.root, "response.json"))).toMatchObject({
+            outputs: [{ structures_with_scores: [{ iptm_score: null }] }],
+          })
+          expect(counts).toEqual({ posts: 2, polls: 0 })
+
+          const marker = "PRIVATE-RESPONSE-VALUE"
+          globalThis.fetch = serve("nvcf-openfold3-mismatch", {
+            outputs: [{ structures_with_scores: [{ ...folded, ptm_score: marker, complex_pde_score: [marker] }] }],
+          })
+          const mismatch = await BioNemoHosted.start("openfold3", session.id, fold("ARNDCQEGHILKMFPSTWYVA")).then(
+            () => "",
+            (error) => (error instanceof Error ? error.message : String(error)),
+          )
+          expect(mismatch).toContain("does not match the openfold3 output schema for api-schema-1.0.0")
+          expect(mismatch).toContain("outputs.0.structures_with_scores.0.ptm_score: ")
+          expect(mismatch).toContain("outputs.0.structures_with_scores.0.complex_pde_score: ")
+          expect(mismatch).not.toContain("iptm_score")
+          expect(mismatch).not.toContain(marker)
+          expect(mismatch).not.toContain("status polling")
+          expect(counts).toEqual({ posts: 3, polls: 0 })
+          await expect(BioNemoHosted.start("openfold3", session.id, fold("ARNDCQEGHILKMFPSTWYVA"))).rejects.toThrow(
+            mismatch,
+          )
+          expect(counts).toEqual({ posts: 3, polls: 0 })
+          const store = await Bun.file(
+            path.join(Global.Path.data, "scientific-capability-hosted-dispatches.json"),
+          ).text()
+          expect(store).not.toContain(marker)
+
+          // A reply NVIDIA has not declared complete still reconciles through
+          // the status route, and a fulfilled poll is judged the same way.
+          globalThis.fetch = serve("nvcf-genmol-queued", { requestId: "nvcf-genmol-queued" }, 202, "pending")
+          const queued = await BioNemoHosted.start("genmol", session.id, { smiles: "CCO" })
+          expect(queued).toMatchObject({
+            state: "unknown",
+            provider_request_id: "nvcf-genmol-queued",
+            poll_attempts: 3,
+          })
+          expect(counts).toEqual({ posts: 4, polls: 3 })
+          globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+            expect(init?.method).toBe("GET")
+            counts.polls++
+            return new Response(JSON.stringify({ status: "success", molecules: [{ smiles: "CCO", score: marker }] }), {
+              headers: { "content-type": "application/json", "nvcf-status": "fulfilled" },
+            })
+          }) as unknown as typeof fetch
+          const polled = await BioNemoHosted.start("genmol", session.id, { smiles: "CCO" }).then(
+            () => "",
+            (error) => (error instanceof Error ? error.message : String(error)),
+          )
+          expect(polled).toContain("does not match the genmol output schema")
+          expect(polled).toContain("molecules.0.score: ")
+          expect(polled).not.toContain(marker)
+          expect(counts).toEqual({ posts: 4, polls: 4 })
         },
       })
     } finally {

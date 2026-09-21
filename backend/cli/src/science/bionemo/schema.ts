@@ -659,10 +659,10 @@ const affinity = z
   })
 
 const boltzSampleValues = z.array(z.number()).max(25).optional()
-const boltzErrorMatrix = z
-  .array(z.array(z.array(z.number()).max(4_096)).max(4_096))
-  .max(25)
-  .optional()
+// The Boltz-2 NIM documents `pae` and `pde` as deprecated in the JSON response
+// and always null (the matrices go to .npz files on a self-hosted NIM), so null
+// has to parse like an absent field or every hosted response is rejected.
+const boltzErrorMatrix = nullable(z.array(z.array(z.array(z.number()).max(4_096)).max(4_096)).max(25))
 const pairChainScores = z
   .array(
     z.record(
@@ -829,7 +829,9 @@ const OpenFold3Output = z
                   complex_plddt_score: z.number(),
                   complex_pde_score: z.number(),
                   ptm_score: z.number(),
-                  iptm_score: z.number(),
+                  // A single-chain input has no interface to score, and the
+                  // NIM answers null even though its reference types a number.
+                  iptm_score: z.number().nullable(),
                 }),
               )
               .min(1)

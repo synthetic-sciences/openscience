@@ -152,6 +152,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   capacity checks pruned every old result while the provider's prefix was
   warm, re-reading 143k tokens to reclaim 70k; they now clear what the budget
   needs, newest-eligible first.
+- **Hosted Boltz-2 and OpenFold3 runs finish instead of ending in "status polling returned non-terminal HTTP 404".** NVIDIA's Boltz-2 NIM always answers `pae: null` and `pde: null` (deprecated in its JSON response), and OpenFold3 answers `iptm_score: null` for a single-chain input, which has no interface to score. The output schemas rejected both, so every completed result was discarded, no artifacts were written, and the run fell through to a status route that answers 404 for these synchronous NIMs. Both nulls now parse. A response NVIDIA marks fulfilled that still fails its output schema is reported as that, naming the offending fields (paths and types, never response values), and is no longer polled.
 
 ## v2.0.115 – v2.0.119 — 2026-09-17
 

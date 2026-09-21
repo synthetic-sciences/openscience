@@ -11,7 +11,7 @@ import {
   BioNemoHostedResult,
   type BioNemoDispatchRecord,
 } from "./dispatch"
-import { BioNemoCapabilityID, parseBioNemoInput, parseBioNemoOutput, type BioNemoCapabilityID as ID } from "./schema"
+import { BioNemoCapabilityID, BioNemoOutputs, parseBioNemoInput, type BioNemoCapabilityID as ID } from "./schema"
 import { retryAfterMilliseconds } from "./polling"
 import { decodeBioNemoResult, downloadBioNemoResult, readBioNemoBody } from "./download"
 
@@ -631,14 +631,14 @@ async function reconcile(input: {
       throw new Error(message)
     }
     if ((response.status === 200 || response.status === 302) && !captured.captureError) {
-      const parsed = BioNemoOutputsSafe.parse(input.id, captured.parsed)
-      if (parsed && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
+      const terminal = parseOutput(input.id, captured.parsed)
+      if (terminal.output && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
         try {
           return await finalize({
             id: input.id,
             sessionID: input.sessionID,
             preview: input.preview,
-            parsed,
+            parsed: terminal.output,
             providerRequestID,
             startedAt: input.record.created_at,
             httpStatus: response.status,
@@ -656,6 +656,24 @@ async function reconcile(input: {
           })
           return pendingResult(input.preview, record)
         }
+      }
+      const mismatch = fulfilledMismatch({
+        id: input.id,
+        captured,
+        mismatch: terminal.mismatch,
+        httpStatus: response.status,
+      })
+      if (mismatch) {
+        const message = cleanString(mismatch, input.secret)
+        await BioNemoHostedDispatch.fail({
+          preview: input.preview,
+          sessionID: input.sessionID,
+          status: "failed",
+          error: message,
+          http_status: response.status,
+          provider_request_id: providerRequestID,
+        })
+        throw new Error(message)
       }
     }
     if (response.status === 401 || response.status === 403) {
@@ -696,14 +714,27 @@ async function reconcile(input: {
   return pendingResult(input.preview, record)
 }
 
-const BioNemoOutputsSafe = {
-  parse(id: ID, value: unknown) {
-    try {
-      return parseBioNemoOutput(id, value)
-    } catch {
-      return undefined
-    }
-  },
+// A rejected body can be large or carry sequence data, so a mismatch is described
+// by issue paths and zod's messages (which name types and keys, never values),
+// bounded in count and length before they reach an error or the dispatch store.
+function parseOutput(id: ID, value: unknown): { output?: Record<string, unknown>; mismatch?: string } {
+  const result = BioNemoOutputs[id].safeParse(value)
+  if (result.success) return { output: result.data as Record<string, unknown> }
+  const issues = result.error.issues.slice(0, 8).map((issue) => {
+    const where = issue.path.map((part) => String(part).slice(0, 64)).join(".") || "response"
+    return `${where}: ${issue.message.slice(0, 200)}`
+  })
+  const more = result.error.issues.length - issues.length
+  return { mismatch: `${issues.join("; ")}${more > 0 ? `; and ${more} more` : ""}` }
+}
+
+// NVIDIA has already declared the request complete, so the status route has
+// nothing further to return and polling it only replaces the real fault with a
+// 404. A bare acceptance envelope is excluded: it carries no result to judge.
+function fulfilledMismatch(input: { id: ID; captured: Captured; mismatch?: string; httpStatus: number }) {
+  if (!input.mismatch || !input.captured.lifecycle || !SUCCESS.has(input.captured.lifecycle)) return undefined
+  if (acceptanceEnvelope(input.captured.parsed)) return undefined
+  return `NVIDIA ${input.id} completed (HTTP ${input.httpStatus}, status ${input.captured.lifecycle}) but its response does not match the ${input.id} output schema for ${specs[input.id].apiSchemaVersion}: ${input.mismatch}. No artifacts were written. This is an OpenScience output-schema mismatch to report, not a pending NVIDIA job.`
 }
 
 export namespace BioNemoHosted {
@@ -893,14 +924,14 @@ export namespace BioNemoHosted {
     }
 
     if ((response.status === 200 || response.status === 302) && !captured.captureError) {
-      const terminal = BioNemoOutputsSafe.parse(id, captured.parsed)
-      if (terminal && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
+      const terminal = parseOutput(id, captured.parsed)
+      if (terminal.output && (!captured.lifecycle || SUCCESS.has(captured.lifecycle))) {
         try {
           return await finalize({
             id,
             sessionID,
             preview,
-            parsed: terminal,
+            parsed: terminal.output,
             providerRequestID,
             startedAt,
             httpStatus: response.status,
@@ -917,6 +948,19 @@ export namespace BioNemoHosted {
             secret,
           })
         }
+      }
+      const mismatch = fulfilledMismatch({ id, captured, mismatch: terminal.mismatch, httpStatus: response.status })
+      if (mismatch) {
+        const message = cleanString(mismatch, secret)
+        await BioNemoHostedDispatch.fail({
+          preview,
+          sessionID,
+          status: "failed",
+          error: message,
+          http_status: response.status,
+          provider_request_id: providerRequestID,
+        })
+        throw new Error(message)
       }
     }
 
