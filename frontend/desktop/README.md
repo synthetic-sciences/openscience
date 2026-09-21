@@ -8,6 +8,24 @@ Release builds produce:
 - Windows NSIS `.exe`
 - Linux `.AppImage`
 
+## Run the shell from source
+
+The shell runs unpackaged against a runtime built from the same checkout. From the repository root:
+
+```bash
+bun run setup --web
+cd backend/cli && bun run build --single --skip-install   # the native runtime for this machine only
+cd ../../frontend/desktop
+OPENSCIENCE_DESKTOP_SIDECAR="$PWD/../../backend/cli/dist/@synsci/openscience-<platform>-<arch>/bin/openscience" \
+  node_modules/.bin/electron .
+```
+
+`<platform>-<arch>` is the directory the build wrote, for example `darwin-arm64`, `linux-x64` or `windows-x64` (where the binary is `openscience.exe`). Without `OPENSCIENCE_DESKTOP_SIDECAR` an unpackaged shell looks for that same path for the current platform and architecture.
+
+A packaged app accepts only a runtime that reports the app's own version, which is how a self-update proves it relaunched into the runtime it shipped with. A runtime built from source reports its build stamp (`0.0.0-main-<timestamp>`) instead, so an unpackaged shell, or one given `OPENSCIENCE_DESKTOP_SIDECAR`, checks only that the runtime is live and writes the version it reports to stderr. The sidecar's own output is echoed to the terminal and kept in `openscience-sidecar.log` under Electron's logs directory.
+
+## Packaging
+
 Set `OPENSCIENCE_DESKTOP_SIDECAR` to the native runtime before running `bun run dist`. Local builds are unsigned on Windows and ad-hoc signed on macOS. Production packaging sets `OPENSCIENCE_DESKTOP_SIGNED=true`.
 
 macOS signing uses `CSC_LINK` and `CSC_KEY_PASSWORD`; notarization additionally uses `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`. Stable production releases require those credentials and sign, notarize, and staple both the app bundle and its outer DMG installer.

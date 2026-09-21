@@ -24,6 +24,7 @@ import {
 } from "./updater.mjs"
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
+import { healthyRuntime, pinnedVersion } from "./service-health.mjs"
 import { readAppearance, resolveAppearance, saveAppearance, splashQuery, sweepAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
@@ -333,21 +334,24 @@ async function proveServiceHealth() {
     ?.json()
     .then((value) => value)
     .catch(() => undefined)
-  if (
-    !response?.ok ||
-    health?.healthy !== true ||
-    health?.version !== app.getVersion() ||
-    typeof health?.runId !== "string" ||
-    !health.runId ||
-    service.exitCode !== null ||
-    service.signalCode !== null
-  ) {
+  const request = validateUpdateHealthRequest()
+  const version = pinnedVersion({
+    packaged: app.isPackaged,
+    sidecar: Boolean(process.env.OPENSCIENCE_DESKTOP_SIDECAR),
+    supervised: Boolean(request),
+    version: app.getVersion(),
+  })
+  if (!response?.ok || !healthyRuntime(health, version) || service.exitCode !== null || service.signalCode !== null) {
     throw new Error("The local OpenScience runtime failed its final desktop health check")
+  }
+  // Nothing else records which runtime an unpinned shell ended up talking to.
+  if (version === undefined) {
+    process.stderr.write(`[openscience] sidecar reports version ${health.version}; shell is ${app.getVersion()}\n`)
   }
   return {
     // Exact process identity belongs to the supervised macOS update receipt.
     // Ordinary startup still checks runtime health on every platform.
-    identity: validateUpdateHealthRequest() ? await processIdentity(service.pid, state.serviceExecutable) : undefined,
+    identity: request ? await processIdentity(service.pid, state.serviceExecutable) : undefined,
     health: { version: health.version, run_id: health.runId },
   }
 }

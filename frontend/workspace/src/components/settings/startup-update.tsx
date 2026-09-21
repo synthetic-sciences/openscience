@@ -46,7 +46,7 @@ const offerCopy: Record<UpdatePress, (version: string) => { detail: string; labe
     label: `Download ${version}`,
   }),
   installer: () => ({
-    detail: "Download in the background, then choose when to restart.",
+    detail: "Get the installer from the releases page and reinstall to update.",
     label: "Download installer",
   }),
 }

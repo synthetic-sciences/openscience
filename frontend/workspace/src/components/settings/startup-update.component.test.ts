@@ -106,9 +106,9 @@ describe("launch update notice", () => {
   test("offers one press on an installation that can stage the update", async () => {
     const { host } = await mount(true)
 
-    expect(host.querySelector(".startup-update")?.textContent).toContain(
-      "One press downloads and verifies the signed update",
-    )
+    const notice = host.querySelector(".startup-update")
+    expect(notice?.textContent).toContain("One press downloads and verifies the signed update")
+    expect(notice?.textContent).not.toContain("releases page")
     expect(buttons(host)).toContain("Download and restart")
   })
 
@@ -117,8 +117,12 @@ describe("launch update notice", () => {
 
     const notice = host.querySelector(".startup-update")
     expect(notice?.textContent).toContain("OpenScience 2.0.127 is available")
+    expect(notice?.textContent).toContain("Get the installer from the releases page and reinstall to update.")
+    // Nothing downloads in the app and there is no restart step to choose.
     expect(notice?.textContent).not.toContain("One press")
-    expect(buttons(host)).toContain("Download installer")
+    expect(notice?.textContent).not.toContain("in the background")
+    expect(notice?.textContent).not.toContain("restart")
+    expect(buttons(host)).toEqual(expect.arrayContaining(["Download installer", "Later", "What's new"]))
     expect(buttons(host)).not.toContain("Download and restart")
 
     const installer = Array.from(host.querySelectorAll("button")).find(
@@ -130,28 +134,53 @@ describe("launch update notice", () => {
   })
 })
 
+/** Customize → General against a platform that has found 2.0.127, and the row
+ * that describes the offer. */
+async function mountGeneral(staging: boolean) {
+  const subject = platform(staging)
+  // happy-dom's fetch cannot parse a response from Bun's own HTTP server
+  // (HPE_UNEXPECTED_CONTENT_LENGTH); the command-line row's request needs
+  // Bun's fetch, the same swap #663's own command-line-tool.test.tsx makes.
+  subject.value.fetch = Bun.fetch as unknown as typeof fetch
+  await controllers.updateController(subject.value).check()
+  const { services, stop } = serveCommandLine()
+  cleanups.push(stop)
+  const host = document.createElement("div")
+  document.body.append(host)
+  cleanups.push(web.render(fixture.createGeneralFixture(subject.value, services), host))
+  const row = Array.from(host.querySelectorAll(".settings-row")).find((element) =>
+    element.textContent?.includes("OpenScience 2.0.127 is available"),
+  )
+  return { ...subject, host, row }
+}
+
 describe("Customize → General update row", () => {
   test("describes the same offer as the notice, for its own button", async () => {
-    const subject = platform(true)
-    // happy-dom's fetch cannot parse a response from Bun's own HTTP server
-    // (HPE_UNEXPECTED_CONTENT_LENGTH); the command-line row's request needs
-    // Bun's fetch, the same swap #663's own command-line-tool.test.tsx makes.
-    subject.value.fetch = Bun.fetch as unknown as typeof fetch
-    await controllers.updateController(subject.value).check()
-    const { services, stop } = serveCommandLine()
-    cleanups.push(stop)
-    const host = document.createElement("div")
-    document.body.append(host)
-    cleanups.push(web.render(fixture.createGeneralFixture(subject.value, services), host))
+    const { host, row } = await mountGeneral(true)
 
-    const row = Array.from(host.querySelectorAll(".settings-row")).find((element) =>
-      element.textContent?.includes("OpenScience 2.0.127 is available"),
-    )
     expect(row?.textContent).toContain(
       "OpenScience 2.0.127 is available. Download the signed update and restart when you are ready.",
     )
     // The restart is a second press here, so the row never promises one press.
     expect(row?.textContent).not.toContain("One press")
+    expect(row?.textContent).not.toContain("releases page")
     expect(buttons(host)).toContain("Download 2.0.127")
+  })
+
+  test("points at the releases page where nothing can be staged", async () => {
+    const { host, row, opened } = await mountGeneral(false)
+
+    expect(row?.textContent).toContain(
+      "OpenScience 2.0.127 is available. Get the installer from the releases page and reinstall to update.",
+    )
+    expect(row?.textContent).not.toContain("in the background")
+    expect(row?.textContent).not.toContain("restart")
+
+    const installer = Array.from(host.querySelectorAll("button")).find(
+      (button) => button.textContent === "Download installer",
+    )
+    installer?.click()
+
+    expect(opened).toEqual(["https://github.com/synthetic-sciences/OpenScience/releases"])
   })
 })

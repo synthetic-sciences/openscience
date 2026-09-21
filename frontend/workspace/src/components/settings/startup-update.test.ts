@@ -197,7 +197,7 @@ describe("startup update notice", () => {
     // can download or restart, so the copy and the action are the release page.
     const installer = updateNotice(offer, "installer")
     expect(installer?.primary?.label).toBe("Download installer")
-    expect(installer?.detail).toBe("Download in the background, then choose when to restart.")
+    expect(installer?.detail).toBe("Get the installer from the releases page and reinstall to update.")
     expect(installer?.title).toBe("OpenScience 2.0.127 is available")
   })
 
@@ -215,6 +215,9 @@ describe("startup update notice", () => {
     ).toBe("Preparing OpenScience 2.0.127. 1.4 MiB of 2.9 MiB downloaded.")
     expect(updateNoticeLine(updateNotice({ phase: "failed", version: "2.0.127" }, "download")!)).toBe(
       "OpenScience could not prepare the update.",
+    )
+    expect(updateNoticeLine(updateNotice({ phase: "idle", available: "2.0.127" }, "installer")!)).toBe(
+      "OpenScience 2.0.127 is available. Get the installer from the releases page and reinstall to update.",
     )
   })
 })
