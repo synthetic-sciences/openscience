@@ -3281,10 +3281,22 @@ export namespace Provider {
   export const NO_PROVIDER_HINT =
     "No model providers are available. Sign in to Ace, add your own API key, or connect a local/subscription model in Customize → Models."
 
-  const priority = ["claude-sonnet-4", "claude-opus-4", "gpt-5", "gemini-3-pro"]
+  const priority = ["claude-sonnet-5", "claude-sonnet-4", "claude-opus-4", "gpt-5", "gemini-3.1-pro", "gemini-3-pro"]
+
+  // A default has to run the research loop: call tools and answer in text.
+  // Image, speech, video and embedding models share their chat siblings' names
+  // ("gemini-3-pro-image-preview"), so a name match alone once made one the
+  // default for a Google key. A model that does not describe itself stays in.
+  function agentic(model: Model) {
+    const caps: Model["capabilities"] | undefined = model.capabilities
+    if (!caps) return true
+    return caps.toolcall && caps.output.text && !caps.output.image && !caps.output.audio && !caps.output.video
+  }
+
   export function sort(models: Model[]) {
     return sortBy(
       models,
+      [(model) => (agentic(model) ? 0 : 1), "asc"],
       // Higher score = sorted first. Matched models get (priority.length - index), unmatched get -1.
       [
         (model) => {

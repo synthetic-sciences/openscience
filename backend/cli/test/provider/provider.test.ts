@@ -1610,6 +1610,28 @@ test("provider.sort prioritizes preferred models", () => {
   expect(sorted[sorted.length - 1].id).not.toContain("sonnet-4")
 })
 
+test("provider.sort never leads with a model that cannot run the research loop", () => {
+  const caps = (toolcall: boolean, output: Partial<Record<"text" | "image" | "audio" | "video", boolean>>) => ({
+    toolcall,
+    output: { text: false, image: false, audio: false, video: false, pdf: false, ...output },
+  })
+  const models = [
+    { id: "gemini-3-pro-image-preview", capabilities: caps(false, { text: true, image: true }) },
+    { id: "gemini-3.1-flash-lite-image", capabilities: caps(true, { text: true, image: true }) },
+    { id: "gemini-3.1-flash-tts-preview", capabilities: caps(false, { audio: true }) },
+    { id: "gemini-embedding-2", capabilities: caps(false, { text: true }) },
+    { id: "veo-3.1-generate-preview", capabilities: caps(false, { video: true }) },
+    { id: "gemini-3.1-pro-preview", capabilities: caps(true, { text: true }) },
+    { id: "gemini-2.5-flash", capabilities: caps(true, { text: true }) },
+  ] as any[]
+
+  const sorted = Provider.sort(models).map((model) => model.id)
+  expect(sorted[0]).toBe("gemini-3.1-pro-preview")
+  expect(sorted[1]).toBe("gemini-2.5-flash")
+  // A provider with nothing agent-capable still has a first model to name.
+  expect(Provider.sort(models.slice(0, 1))[0].id).toBe("gemini-3-pro-image-preview")
+})
+
 test("multiple providers can be configured simultaneously", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {
