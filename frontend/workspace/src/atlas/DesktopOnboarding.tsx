@@ -43,8 +43,13 @@ type Wallet = {
   managedSupported: boolean
   managedUnlocked: boolean
   aceEnabled: boolean
+  aceContract?: { reloadThresholdUsd: number; reloadAmountUsd: number }
+  workspace?: { organizationId: string; personal: boolean }
   error?: string
 }
+
+/** Ace is the reload rule; a funded Wallet runs managed models without it. */
+type AceAccess = "on" | "funded" | "off"
 
 type Connection = {
   id: string
@@ -135,8 +140,13 @@ export function DesktopOnboardingController(
   const [account, setAccount] = createStore({ connected: false, pending: false, keyEntry: false, key: "" })
   const [ace, setAce] = createStore({
     status: "idle" as "idle" | "checking" | "waiting" | "on" | "unavailable",
+    // Purchased or promotional credit the Wallet can already spend, with no
+    // card or reload rule behind it.
+    funded: false,
     balance: undefined as number | null | undefined,
     note: undefined as string | undefined,
+    contract: undefined as Wallet["aceContract"],
+    workspace: undefined as Wallet["workspace"],
   })
   const [connect, setConnect] = createStore({
     open: undefined as string | undefined,
@@ -217,8 +227,8 @@ export function DesktopOnboardingController(
     })
   })
 
-  const readWallet = async (summary: boolean) => {
-    if (ace.status === "on") return true
+  const readWallet = async (summary: boolean): Promise<AceAccess> => {
+    if (ace.status === "on") return "on"
     if (ace.status === "idle") setAce("status", "checking")
     const wallet = await api<Wallet>(`/settings/wallet${summary ? "?summary=true" : ""}`, {
       signal: lifetime.signal,
@@ -230,27 +240,49 @@ export function DesktopOnboardingController(
       aceEnabled: false,
       error: reason(cause),
     }))
-    if (lifetime.signal.aborted) return false
-    if (wallet.aceEnabled) {
-      // Ace is the funding source now; the model list follows the billing mode.
+    if (lifetime.signal.aborted) return "off"
+    setAce({ contract: wallet.aceContract, workspace: wallet.workspace })
+    const access: AceAccess = wallet.aceEnabled ? "on" : wallet.managedUnlocked ? "funded" : "off"
+    if (access !== "off") {
+      // The Wallet is the funding source now; the model list follows the billing mode.
       await api("/settings/billing", { method: "PUT", body: JSON.stringify({ llm: "managed" }) }).catch(() => undefined)
-      setAce({ status: "on", balance: wallet.availableUsd ?? wallet.balanceUsd, note: undefined })
-      return true
+      setAce({ funded: true, balance: wallet.availableUsd ?? wallet.balanceUsd, note: undefined })
     }
-    if (ace.status === "checking") setAce("status", wallet.error ? "unavailable" : "idle")
-    if (wallet.error) setAce("note", wallet.error)
-    return false
+    if (access === "on") {
+      setAce("status", "on")
+      return access
+    }
+    if (ace.status === "checking") setAce("status", wallet.error && access === "off" ? "unavailable" : "idle")
+    if (wallet.error && access === "off") setAce("note", wallet.error)
+    return access
   }
 
+  // Funds and the reload rule belong to the workspace the credential is billed
+  // to; the bare /billing page is the browser account's Personal wallet.
+  const billingURL = () =>
+    ace.workspace && !ace.workspace.personal
+      ? URLS.workspaceBilling(ace.workspace.organizationId)
+      : URLS.dashboardBilling
+
+  const NOT_ON = "Ace is not on yet. Finish in your browser, then check again."
+
   const turnOnAce = () => {
-    platform.openLink(URLS.dashboardBilling)
+    platform.openLink(billingURL())
+    // A Wallet that was already funded proves nothing about the reload rule,
+    // so only a change since the click ends the wait.
+    const funded = ace.funded
     setAce({ status: "waiting", note: undefined })
     const started = Date.now()
     const poll = async () => {
       if (lifetime.signal.aborted || ace.status !== "waiting") return
-      if (await readWallet(false)) return
+      const access = await readWallet(false)
+      if (access === "on" || ace.status !== "waiting") return
+      if (access === "funded" && !funded) {
+        setAce("status", "idle")
+        return
+      }
       if (Date.now() - started > ACE_WAIT_MS) {
-        setAce({ status: "idle", note: "Ace is not on yet. Finish in your browser, then check again." })
+        setAce({ status: "idle", note: NOT_ON })
         return
       }
       aceWait = setTimeout(() => void poll(), props.acePollMs ?? ACE_POLL_MS)
@@ -261,9 +293,14 @@ export function DesktopOnboardingController(
   const checkAce = async () => {
     if (aceWait) clearTimeout(aceWait)
     setAce("status", "checking")
-    const on = await readWallet(false)
-    if (!on && !lifetime.signal.aborted)
-      setAce("note", (note) => note ?? "Ace is not on yet. Finish in your browser, then check again.")
+    const access = await readWallet(false)
+    if (access !== "on" && !lifetime.signal.aborted) setAce("note", (note) => note ?? NOT_ON)
+  }
+
+  const leaveAce = () => {
+    if (aceWait) clearTimeout(aceWait)
+    if (ace.status !== "on") setAce({ status: "idle", note: undefined })
+    remember("connect")
   }
 
   const login = async () => {
@@ -399,9 +436,15 @@ export function DesktopOnboardingController(
     }
   }
 
+  const dollars = (value: number) => (Number.isInteger(value) ? `$${value}` : money(value))
+  const reloadRule = () =>
+    ace.contract
+      ? `Ace keeps the Wallet topped up: ${dollars(ace.contract.reloadAmountUsd)} whenever it falls below ${dollars(ace.contract.reloadThresholdUsd)}.`
+      : "Ace keeps the Wallet topped up so long runs never stop for funds."
   const connectedCount = () => Object.keys(connect.connected).length
   const modelSource = () =>
     ace.status === "on" ||
+    ace.funded ||
     CONNECTIONS.some((item) => item.kind !== "credential" && item.kind !== "detect" && connect.connected[item.id])
   const errorNote = () => (
     <Show when={error()}>
@@ -530,6 +573,27 @@ export function DesktopOnboardingController(
                         <button type="button" class="desktop-onboarding__link" onClick={() => void checkAce()}>
                           Check again
                         </button>
+                        <button type="button" class="desktop-onboarding__link" onClick={leaveAce}>
+                          {ace.funded ? "Continue with your Wallet" : "Skip for now"}
+                        </button>
+                      </Match>
+                      <Match when={ace.funded}>
+                        <p class="desktop-onboarding__done" role="status" aria-live="polite">
+                          Managed models are ready
+                          {money(ace.balance) ? ` · ${money(ace.balance)} available, no card needed` : ""}
+                        </p>
+                        <Button variant="primary" size="large" onClick={leaveAce}>
+                          Continue
+                        </Button>
+                        <p class="desktop-onboarding__note">{reloadRule()}</p>
+                        <Show when={ace.note}>
+                          <p class="desktop-onboarding__note" role="status" aria-live="polite">
+                            {ace.note}
+                          </p>
+                        </Show>
+                        <button type="button" class="desktop-onboarding__link" onClick={turnOnAce}>
+                          Turn on Ace
+                        </button>
                       </Match>
                       <Match when={true}>
                         <Button variant="primary" size="large" onClick={turnOnAce}>
@@ -540,7 +604,7 @@ export function DesktopOnboardingController(
                             {ace.note}
                           </p>
                         </Show>
-                        <button type="button" class="desktop-onboarding__link" onClick={() => remember("connect")}>
+                        <button type="button" class="desktop-onboarding__link" onClick={leaveAce}>
                           Skip for now
                         </button>
                       </Match>
@@ -556,7 +620,9 @@ export function DesktopOnboardingController(
                   <p class="desktop-onboarding__body">
                     {ace.status === "on"
                       ? "Optional. Anything you add is used alongside Ace."
-                      : "Optional. Keys stay on this device."}
+                      : ace.funded
+                        ? "Optional. Anything you add is used alongside your Wallet."
+                        : "Optional. Keys stay on this device."}
                   </p>
                   <ul class="desktop-onboarding__rows" aria-label="Connections">
                     <For each={CONNECTIONS}>
@@ -661,7 +727,11 @@ export function DesktopOnboardingController(
                     <div>
                       <dt>Ace</dt>
                       <dd>
-                        {ace.status === "on" ? `On${money(ace.balance) ? ` · ${money(ace.balance)}` : ""}` : "Off"}
+                        {ace.status === "on"
+                          ? `On${money(ace.balance) ? ` · ${money(ace.balance)}` : ""}`
+                          : ace.funded
+                            ? `Off · Wallet${money(ace.balance) ? ` ${money(ace.balance)}` : ""} funds managed models`
+                            : "Off"}
                       </dd>
                     </div>
                     <div>

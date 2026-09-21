@@ -49,7 +49,7 @@ const ShowCommand = cmd({
       prompts.log.warn("Managed inference is not available for this account.")
     }
     if (mode.managed_supported && !mode.managed_unlocked) {
-      prompts.log.info("Turn on Ace in Settings to use managed models.")
+      prompts.log.info("Add funds to your Wallet or turn on Ace to use managed models.")
     }
     prompts.log.info(`Manage your purchased Wallet and Ace at ${BILLING_URL}`)
     prompts.outro("Done")

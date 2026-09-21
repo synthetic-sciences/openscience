@@ -17,6 +17,8 @@ const fixture = {
   stall: new Set<string>(),
   // Endpoints that answer 503, the way a transient outage does.
   fail: new Set<string>(),
+  // The ledger is a browser-session read; the service refuses a device key.
+  ledger: 200,
   status: 200,
   // What /api/cli/access answers: 200, or an explicit refusal (401, 403).
   access: 200,
@@ -51,7 +53,11 @@ async function answer(pathname: string): Promise<Response> {
       { status: fixture.access, headers },
     )
   }
-  if (pathname === "/api/credits/transactions") return Response.json([], { headers })
+  if (pathname === "/api/credits/transactions") {
+    return fixture.ledger === 200
+      ? Response.json([], { headers })
+      : Response.json({ detail: { code: "verified_session_required" } }, { status: fixture.ledger, headers })
+  }
   if (pathname === "/api/v1/wallet") {
     return Response.json(
       { balance_cents: fixture.wallet, purchased_cents: fixture.wallet, lifetime_spent_cents: 0 },
@@ -166,6 +172,7 @@ beforeEach(async () => {
   fixture.gate = Promise.resolve()
   fixture.stall = new Set()
   fixture.fail = new Set()
+  fixture.ledger = 200
   fixture.status = 200
   fixture.access = 200
   fixture.wallet = 1200
@@ -702,6 +709,17 @@ test("a caller joining right after the last waiter left starts its own read", as
   await until(() => count("/api/v1/auth/status") === 2, "the newcomer's status read")
   release()
   expect((await joined).credits?.balanceUsd).toBe(12)
+})
+
+test("a ledger refused to the device credential is an empty history, while an outage is still reported", async () => {
+  await OpenScience.saveSession({ api_key: "thk_fixture_ledger_refused", user_id: "user_shared" })
+  fixture.ledger = 403
+  const refused = await readWallet(false)
+  expect(refused).toMatchObject({ signedIn: true, balanceUsd: 12, transactions: [] })
+  expect(refused.error).toBeUndefined()
+  fixture.ledger = 200
+  fixture.fail = new Set(["/api/credits/transactions"])
+  expect((await readWallet(false)).error).toContain("transaction history is unavailable")
 })
 
 test("the ledger view of a legacy unscoped session learns its workspace before reading the ledger", async () => {

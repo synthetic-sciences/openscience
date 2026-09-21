@@ -1906,6 +1906,9 @@ export namespace OpenScience {
     if (!session || (snapshot && session.api_key !== snapshot.api_key)) return null
     try {
       const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/transactions`, { signal })
+      // The ledger is a browser-session read: a device credential is refused
+      // by design, which is an empty history here rather than an outage.
+      if (response.status === 403) return []
       if (!response.ok) return null
       const body = (await response.json()) as
         Array<Record<string, unknown>> | { transactions?: Array<Record<string, unknown>> }

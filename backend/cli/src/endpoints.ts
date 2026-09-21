@@ -30,3 +30,6 @@ function dashboardUrl(pathname: string, env: NodeJS.ProcessEnv = process.env): s
 
 export const MANAGED_API_BASE = managedApiBase()
 export const BILLING_URL = dashboardUrl("/billing")
+/** A team workspace's own billing page; BILLING_URL is the account's Personal wallet. */
+export const workspaceBillingUrl = (organizationId: string) =>
+  dashboardUrl(`/workspace/${encodeURIComponent(organizationId)}/billing`)

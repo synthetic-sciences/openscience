@@ -207,7 +207,7 @@ export const StatusCommand = cmd({
       prompts.log.info(`Model access: ${mode.mode === "managed" ? "Managed (Ace)" : "BYOK / Subscription"}`)
       if (mode.mode === "managed" && !mode.managed_supported) prompts.log.warn("Managed inference is unavailable.")
       if (mode.mode === "managed" && mode.managed_supported && !mode.managed_unlocked) {
-        prompts.log.warn("Ace needs to be enabled before managed inference can run.")
+        prompts.log.warn("Add funds to your Wallet or turn on Ace before managed inference can run.")
       }
     }
     if (transactions?.length) {
