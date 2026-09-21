@@ -26,6 +26,7 @@ import { MarkdownImages } from "@synsci/ui/markdown"
 import { iife } from "@synsci/util/iife"
 import type { QuestionAnswer } from "@synsci/sdk/v2"
 import { showToast } from "@synsci/ui/toast"
+import { LoadingScreen } from "@synsci/ui/atom-loader"
 import { useLanguage } from "@/context/language"
 import { uiStore } from "@/atlas/store/ui"
 import { artifactContext } from "@/artifacts/context"
@@ -134,12 +135,31 @@ export default function Layout(props: ParentProps) {
     navigate(`${projectPathname(current.segment, params.id)}${location.search}${location.hash}`, { replace: true })
   })
 
+  // A cold load names a project the catalog has not delivered yet. The wait is
+  // held on the lookups that can still name it (the bootstrap, then the alias
+  // or legacy-directory round trip), never on their result: each one settles
+  // when it fails too, so a foreign or deleted project falls through to the
+  // redirect below instead of leaving the loader up.
+  const resolving = createMemo(() => {
+    if (!params.dir || directory()) return false
+    if (!global.ready) return true
+    if (aliasID() && (alias.loading || alias.state === "unresolved")) return true
+    return Boolean(legacy()) && (legacyProject.loading || legacyProject.state === "unresolved")
+  })
+  // SyncProvider mounts nothing until the project's store leaves "loading",
+  // which a failed bootstrap does as well ("partial"). Read without starting
+  // that bootstrap: opening the project stays SyncProvider's call.
+  const loading = createMemo(() => {
+    const value = directory()
+    if (!value) return false
+    return global.child(value, { bootstrap: false, projectID: projectID() })[0].status === "loading"
+  })
+  // The recovery surface never mounts SyncProvider, so its store never loads.
+  const opening = createMemo(() => !unavailable() && (resolving() || loading()))
+
   createEffect(() => {
     if (!params.dir) return
-    if (directory()) return
-    if (!global.ready) return
-    if (aliasID() && (alias.loading || alias.state === "unresolved")) return
-    if (legacy() && (legacyProject.loading || legacyProject.state === "unresolved")) return
+    if (directory() || resolving()) return
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -159,7 +179,7 @@ export default function Layout(props: ParentProps) {
     home()
   }
 
-  return (
+  const project = (
     <Show
       when={unavailable()}
       fallback={
@@ -352,5 +372,16 @@ export default function Layout(props: ParentProps) {
     >
       {(missing) => <ProjectUnavailable directory={missing().directory} onBack={home} onRemove={remove} />}
     </Show>
+  )
+
+  // One loader beside both waits rather than a fallback inside each, so the
+  // mark does not restart when the catalog hands over to the project store.
+  return (
+    <>
+      <Show when={opening()}>
+        <LoadingScreen caption={params.id ? "Opening session" : "Opening project"} />
+      </Show>
+      {project}
+    </>
   )
 }

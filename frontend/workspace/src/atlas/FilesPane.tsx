@@ -1295,6 +1295,7 @@ export function FilesPane(
                   aria-selected={source.id === current().id}
                   aria-label={[source.name, source.detail ?? source.sub].filter(Boolean).join(". ")}
                   title={source.detail ?? source.sub}
+                  style={{ "--files-tab-chars": source.name.length }}
                   onClick={() => pickSource(source)}
                 >
                   <span aria-hidden="true">

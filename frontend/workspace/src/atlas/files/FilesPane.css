@@ -68,11 +68,13 @@
 
 .files-menu {
   /* Container-relative, not viewport-relative: the inspector can be 320px wide
-     inside a desktop viewport that is ten times larger. */
+     inside a desktop viewport that is ten times larger. A row holds a name, a
+     path and Revoke, and at a fixed 300px the path was what gave, down to its
+     last ten characters; the pane's own width is the budget instead. */
   position: absolute;
   top: 42px;
   left: 0;
-  width: min(300px, calc(100cqi - 44px), calc(100vw - 24px));
+  width: min(420px, calc(100cqi - 24px), calc(100vw - 24px));
   max-height: min(400px, calc(100vh - 96px));
   overflow-y: auto;
   overflow-x: hidden;
@@ -85,8 +87,8 @@
 }
 /* The trigger sits at the right end of the toolbar, so a menu hung from its
    left edge runs past the pane and takes every path and badge with it. When it
-   would, it hangs from the trigger's right edge instead; SourceMenu measures
-   the pane, not the window, because the pane is a column of a wider one. */
+   would, it hangs from the right edge instead; SourceMenu measures the pane,
+   not the window, because the pane is a column of a wider one. */
 .files-menu[data-align="end"] {
   left: auto;
   right: 0;
@@ -187,8 +189,13 @@
   font-family: var(--font-code);
   font-size: var(--font-size-x-small);
 }
+/* Sits under the name and path, in their column: the line the path is on is
+   the path's alone. */
 .files-menu__badge {
+  display: inline-flex;
+  align-items: center;
   min-height: 22px;
+  margin-top: 4px;
   padding: 2px 6px;
   border: 0;
   border-radius: 999px;
@@ -553,13 +560,19 @@
 }
 
 .files-browser__toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
+/* The location menu is nearly as wide as the pane, so hung from a trigger in
+   the middle of the toolbar it would leave the pane on one side or the other.
+   Here it is placed against the toolbar instead, whose edges are both inside
+   the pane; `data-align` then picks the edge nearer the trigger. */
 .files-browser__toolbar .files-source {
+  position: static;
   max-width: min(34cqi, 160px);
 }
 
@@ -619,9 +632,24 @@
   align-items: center;
 }
 
+/* A block, because a flex container clips its text without drawing the
+   ellipsis. */
 .files-workspace-switcher__tab > span:last-child {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Every connected folder draws the same link, so its name is the only thing
+   that tells it from the next one. These tabs give up width to an ellipsis
+   before the strip has to scroll, and stop while the name still reads. The
+   floor follows the name's own length, because a fixed one either clips a
+   four-letter name that had room or pads its tab wider than its text and
+   pushes the last tab out of the strip: 0.65em a character clears this face's
+   capitals, and 35px is the glyph, the gap and the padding. */
+.files-workspace-switcher__tab[data-workspace-source="connected"] {
+  flex: 0 1 auto;
+  min-width: calc(35px + min(var(--files-tab-chars, 6) * 0.65em, 3.5em));
 }
 
 .files-workspace-switcher__tab:hover:not(.is-active) {
@@ -1689,9 +1717,20 @@
     flex: none;
   }
 
-  /* Inactive locations keep their icon and tooltip; only the active one
-     spends the width on a label, so nothing is clipped mid-word. */
-  .files-workspace-switcher__tab:not(.is-active) > span:last-child {
+  /* The built-in locations each have an icon of their own, so an inactive one
+     keeps the icon and its tooltip and leaves the width to the others.
+     Connected folders share one icon: here they keep the name and drop the
+     icon, or three of them rest as three identical links. */
+  .files-workspace-switcher__tab:not(.is-active):not([data-workspace-source="connected"]) > span:last-child {
+    display: none;
+  }
+
+  .files-workspace-switcher__tab[data-workspace-source="connected"] {
+    min-width: calc(16px + min(var(--files-tab-chars, 6) * 0.65em, 3em));
+    max-width: 104px;
+  }
+
+  .files-workspace-switcher__tab[data-workspace-source="connected"] > span:first-child {
     display: none;
   }
 

@@ -33,6 +33,10 @@ const glyph = (kind: PaneSource["kind"]) => {
  * much wider window, so "still inside the window" is not the test. When the
  * menu would cross the pane's right edge it hangs from the trigger's right
  * edge instead, and every path and badge stays readable.
+ *
+ * In the Files toolbar the menu is nearly as wide as the pane, so the
+ * stylesheet places it against the toolbar rather than the trigger; the answer
+ * there names the toolbar edge the trigger is nearer.
  */
 export function menuAlignment(input: {
   trigger: { left: number; right: number }
@@ -270,8 +274,9 @@ export function SourceMenu(props: {
                             <Show when={source.sub}>
                               <span class="files-menu__sub">{source.sub}</span>
                             </Show>
-                          </span>
-                          <span class="files-menu__tail">
+                            {/* Under the name, not in the tail: beside the path
+                                the badge took the width the path needed, and the
+                                path is what tells two folders apart. */}
                             <Show when={source.readonly}>
                               <span class="files-menu__badge">Read only</span>
                             </Show>
@@ -283,6 +288,8 @@ export function SourceMenu(props: {
                                 Read & write
                               </span>
                             </Show>
+                          </span>
+                          <span class="files-menu__tail">
                             <Show when={source.live}>
                               <span class="files-menu__dot" aria-label="Reachable" />
                             </Show>

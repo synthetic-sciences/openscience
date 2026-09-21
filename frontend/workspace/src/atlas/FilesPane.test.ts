@@ -480,6 +480,16 @@ describe("files pane", () => {
 
     const tabs = [...host.querySelectorAll('[data-workspace-source="connected"]')]
     expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["one", "two", "three"])
+    // Every one of them draws the same link, so each says which folder it is
+    // without being selected: in its label, to a screen reader, and in full on
+    // hover.
+    expect(tabs.map((tab) => tab.getAttribute("aria-selected"))).toEqual(["false", "false", "false"])
+    expect(tabs.map((tab) => tab.getAttribute("aria-label"))).toEqual([
+      "one. /data/one",
+      "two. /data/two",
+      "three. /data/three",
+    ])
+    expect(tabs.map((tab) => tab.getAttribute("title"))).toEqual(["/data/one", "/data/two", "/data/three"])
     // The fourth is not lost: the overflow menu still lists every location.
     expect(host.querySelector('[data-workspace-id="fsg_3"]')).toBeNull()
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()

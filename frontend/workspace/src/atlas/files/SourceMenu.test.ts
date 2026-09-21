@@ -172,6 +172,31 @@ describe("source menu", () => {
     expect(item?.querySelector(".files-menu__badge")?.getAttribute("title")).toContain("sandboxed runtimes")
   })
 
+  // Beside the path, the badge and Revoke took the width the path needed and a
+  // folder read as its last ten characters. The access sits under the name and
+  // path instead, and the path's line carries nothing but the path.
+  test("states a folder's access under its name and path, not on the path's line", () => {
+    const writable = { ...SOURCES[2]!, id: "rw", name: "analysis-output", readonly: false }
+    const host = mount(() =>
+      subject.SourceMenu({ sources: [...SOURCES, writable], active: writable, onPick: () => {}, onRevoke: () => {} }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+
+    for (const [id, access] of [
+      ["ro", "Read only"],
+      ["rw", "Read & write"],
+    ]) {
+      const item = host.querySelector<HTMLElement>(`[data-source-item="${id}"]`)!
+      const lines = [...(item.querySelector(".files-menu__label")?.parentElement?.children ?? [])]
+      expect(lines.map((line) => line.textContent?.trim())).toEqual([
+        id === "ro" ? "pdebench" : "analysis-output",
+        "/home/keertan/data/pdebench",
+        access,
+      ])
+      expect(item.querySelector(".files-menu__tail")?.textContent).not.toContain(access)
+    }
+  })
+
   test("explains saved artifacts without pretending they are a filesystem path", () => {
     const host = mount(() => subject.SourceMenu({ sources: SOURCES, active: SOURCES[0]!, onPick: () => {} }))
     host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
@@ -325,6 +350,29 @@ describe("source menu", () => {
     await Promise.resolve()
     expect(host.querySelector("[data-source-menu]")).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  test("reaches Revoke from the keyboard, straight after the folder it belongs to", async () => {
+    const revoked: string[] = []
+    const host = mount(() =>
+      subject.SourceMenu({
+        sources: SOURCES,
+        active: SOURCES[1]!,
+        onPick: () => {},
+        onRevoke: (source) => revoked.push(source.id),
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("[data-source-button]")?.click()
+    await Promise.resolve()
+
+    const folder = host.querySelector<HTMLElement>('[data-source-item="ro"]')!
+    folder.focus()
+    folder.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }))
+
+    const revoke = host.querySelector<HTMLElement>('[data-source-revoke="ro"]')
+    expect(document.activeElement).toBe(revoke)
+    revoke?.click()
+    expect(revoked).toEqual(["ro"])
   })
 
   // #646: the trigger sits at the right end of the toolbar, so a menu hung
