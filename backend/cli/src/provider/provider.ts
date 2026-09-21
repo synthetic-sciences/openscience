@@ -3306,6 +3306,9 @@ export namespace Provider {
         "desc",
       ],
       [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
+      // A suffixed variant of another candidate ("…-preview-customtools", a
+      // dated snapshot of an alias) follows the model it is a variant of.
+      [(model) => (models.some((other) => model.id.startsWith(`${other.id}-`)) ? 1 : 0), "asc"],
       [(model) => model.id, "desc"],
     )
   }

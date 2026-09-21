@@ -1628,6 +1628,15 @@ test("provider.sort never leads with a model that cannot run the research loop",
   const sorted = Provider.sort(models).map((model) => model.id)
   expect(sorted[0]).toBe("gemini-3.1-pro-preview")
   expect(sorted[1]).toBe("gemini-2.5-flash")
+  // The model itself leads its own suffixed variants and dated snapshots.
+  const variants = [
+    { id: "gemini-3.1-pro-preview-customtools", capabilities: caps(true, { text: true }) },
+    { id: "gemini-3.1-pro-preview", capabilities: caps(true, { text: true }) },
+    { id: "claude-sonnet-4-5-20250929", capabilities: caps(true, { text: true }) },
+    { id: "claude-sonnet-4-5", capabilities: caps(true, { text: true }) },
+  ] as any[]
+  expect(Provider.sort(variants.slice(0, 2))[0].id).toBe("gemini-3.1-pro-preview")
+  expect(Provider.sort(variants.slice(2))[0].id).toBe("claude-sonnet-4-5")
   // A provider with nothing agent-capable still has a first model to name.
   expect(Provider.sort(models.slice(0, 1))[0].id).toBe("gemini-3-pro-image-preview")
 })
