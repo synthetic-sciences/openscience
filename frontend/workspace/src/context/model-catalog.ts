@@ -142,6 +142,27 @@ export function inferenceSourceLabel(source: InferenceSource | undefined, fallba
   return fallback
 }
 
+const LOCAL_RUNTIMES: ReadonlySet<string> = new Set(["ollama", "lmstudio", "llamacpp", "vllm", "jan"])
+
+/** The server withholds a provider's base URL, so the client knows a self-hosted runtime only by its id. */
+export function isLocalProvider(providerID: string): boolean {
+  return LOCAL_RUNTIMES.has(providerID) || providerID.startsWith("local-") || providerID.startsWith("ssh-")
+}
+
+export type ModelFunding = "Wallet" | "Your key" | "Subscription" | "Local"
+
+/** What a request on this exact route is charged to, in the words Model access uses. A route whose credential
+ * cannot be told apart from here (a cloud profile, an ambient gateway key) stays unlabeled rather than guessed. */
+export function modelFunding(input: Parameters<typeof inferenceSource>[0]): ModelFunding | undefined {
+  if (isLocalProvider(input.providerID)) return "Local"
+  if (input.providerID.startsWith("github-copilot")) return "Subscription"
+  const source = inferenceSource(input)
+  if (source === "managed") return "Wallet"
+  if (source === "chatgpt") return "Subscription"
+  if (source === "byok") return "Your key"
+  return undefined
+}
+
 /** Token counts read the way the header pill reads them: `272K`, `1.05M`. */
 export function modelContext(limit: number): string {
   if (limit >= 1_000_000) {
@@ -246,6 +267,35 @@ export function preservedModelRoute<T extends CatalogModel>(routes: readonly T[]
     if (sameProvider) return sameProvider
   }
   return routes.length === 1 ? routes[0] : undefined
+}
+
+const managedRoute = (route: CatalogModel) =>
+  route.provider.id === "openrouter" || route.provider.id.startsWith("synsci")
+
+/**
+ * The exact route that choosing a logical model selects. The route in use keeps its credential, then the
+ * configured default does; only then does the Model access mode pick a side, and a ChatGPT subscription comes
+ * before the group's first route. A row describes its funding from this same answer, so what it says is what a
+ * click does.
+ */
+export function chosenModelRoute<T extends CatalogModel>(input: {
+  choice: ModelRouteGroup<T>
+  current?: ModelKey
+  configured?: ModelKey
+  billing?: "managed" | "byok" | null
+}): T {
+  const routes = input.choice.routes
+  return (
+    preservedModelRoute(routes, input.current) ??
+    preservedModelRoute(routes, input.configured) ??
+    (input.billing === "managed"
+      ? routes.find(managedRoute)
+      : input.billing === "byok"
+        ? routes.find((route) => !managedRoute(route))
+        : undefined) ??
+    routes.find((route) => route.provider.id === "openai-codex") ??
+    input.choice.model
+  )
 }
 
 /**

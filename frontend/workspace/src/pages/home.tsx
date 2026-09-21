@@ -31,6 +31,7 @@ import {
   projectName,
   type ProjectRecord,
 } from "./home-projects"
+import { localPathPlatform } from "@/utils/local-path"
 import { projectHref } from "@/utils/project-route"
 import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 
@@ -175,6 +176,8 @@ export default function Home(): JSX.Element {
       <DialogCreateProject
         name={draft().name}
         sources={draft().sources}
+        // The system folder dialog opens on the server's machine, so only a local server has one to name.
+        os={platform.openDirectoryPickerDialog && server.isLocal() ? localPathPlatform(sync.data.path.home) : undefined}
         onDraft={(name) => setDraft((current) => ({ ...current, name }))}
         onChooseSources={() => void chooseProjectSources()}
         onRemoveSource={(path) =>

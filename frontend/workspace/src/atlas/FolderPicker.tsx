@@ -12,6 +12,7 @@ import {
   isLocalPathRoot,
   joinLocalPath,
   localPathBreadcrumbs,
+  localPathPlatform,
   localPathRoot,
   normalizeLocalPath,
   parentLocalPath,
@@ -208,7 +209,8 @@ export function FolderPicker(props: PickerProps): JSX.Element {
       { label: "Documents", path: joinLocalPath(h, "Documents"), icon: "file" },
       { label: "Downloads", path: joinLocalPath(h, "Downloads"), icon: "download" },
     ]
-    if (/^\/Users\/[^/]+$/i.test(h)) links.push({ label: "Applications", path: "/Applications", icon: "folder-tree" })
+    if (localPathPlatform(h) === "macos")
+      links.push({ label: "Applications", path: "/Applications", icon: "folder-tree" })
     return links
   })
 
@@ -401,7 +403,7 @@ export function FolderPicker(props: PickerProps): JSX.Element {
                       <Show when={(entries() ?? []).length === 0} fallback={<span>Nothing matches the filter.</span>}>
                         <Show
                           when={
-                            /^\/Users\/[^/]+$/i.test(home()) &&
+                            localPathPlatform(home()) === "macos" &&
                             ["Desktop", "Documents", "Downloads"].includes(basenameLocalPath(cwd()))
                           }
                           fallback={

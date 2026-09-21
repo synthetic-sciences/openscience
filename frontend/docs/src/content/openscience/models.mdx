@@ -60,7 +60,9 @@ openscience disconnect codex
 
 ## Select a model
 
-Use the conversation's model picker. For a terminal run, copy an exact identifier from `openscience models --flat`:
+Use the conversation's model picker. Each row leads with what a request on that model is charged to: **Wallet**, **Your key**, **Subscription**, or **Local**. When a model is available through more than one connection, the row names the one that choosing it selects: the credential you are already using stays in use, then your configured default, then the **Model access** mode. A connection the app cannot classify, such as a cloud profile, has no label.
+
+For a terminal run, copy an exact identifier from `openscience models --flat`:
 
 ```bash
 openscience models --flat

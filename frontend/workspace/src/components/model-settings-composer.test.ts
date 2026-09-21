@@ -8,7 +8,7 @@ const context = `
 import { createStore } from "solid-js/store"
 import { modelVariantDefault, modelVariantOptions, normalizedVariant, promptVariant } from "@/context/model-variant"
 import { modelContextOptions } from "@/context/model-context"
-export const [state, setState] = createStore({ models: [], index: 0, effort: {}, tier: {} })
+export const [state, setState] = createStore({ models: [], index: 0, effort: {}, tier: {}, billing: "managed" })
 const current = () => state.models[state.index]
 const key = () => current()?.provider.id + "/" + current()?.id
 const variants = () => Object.keys(current()?.variants ?? {})
@@ -33,7 +33,7 @@ export const useLocal = () => ({ model: {
     set: () => {},
   },
 } })
-export const useSync = () => ({ data: { config: { billing: { llm: "managed" } } } })
+export const useSync = () => ({ data: { config: { get billing() { return { llm: state.billing } } } } })
 export const events = { refresh: async () => {} }
 export const useGlobalSync = () => ({ refreshProviders: () => events.refresh() })
 export const useDialog = () => ({ show: () => {} })
@@ -71,7 +71,7 @@ const subject = (await server.ssrLoadModule(
 )) as typeof import("./model-settings-popover")
 const web = (await server.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
 const fixture = (await server.ssrLoadModule("\0composer-state")) as {
-  state: { effort: Record<string, string>; tier: Record<string, string> }
+  state: { index: number; effort: Record<string, string>; tier: Record<string, string> }
   setState: (...args: unknown[]) => void
   events: { refresh: () => Promise<void> }
 }
@@ -81,6 +81,7 @@ afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
   document.body.replaceChildren()
   fixture.events.refresh = async () => {}
+  fixture.setState("billing", "managed")
 })
 const settle = async () => {
   await Promise.resolve()
@@ -231,4 +232,79 @@ test("reviewed effort stays usable while pricing-gated Fast settings are unavail
   document.querySelector<HTMLButtonElement>('[data-model-option-id="high"]')!.click()
   expect(fixture.state.effort["openrouter/openai/gpt-5.6-sol"]).toBe("high")
   expect(chip.textContent).toContain("High")
+})
+
+const served = (input: { id: string; name: string; provider: string; label: string; source: string }) => ({
+  ...route(input.provider, []),
+  id: input.id,
+  name: input.name,
+  provider: { id: input.provider, name: input.label, source: input.source },
+})
+const funded = [
+  served({ id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "openai-codex", label: "OpenAI", source: "custom" }),
+  served({ id: "claude-opus-5", name: "Claude Opus 5", provider: "anthropic", label: "Anthropic", source: "api" }),
+  served({
+    id: "anthropic/claude-opus-5",
+    name: "Claude Opus 5",
+    provider: "openrouter",
+    label: "OpenRouter",
+    source: "managed",
+  }),
+  served({ id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", provider: "google", label: "Google", source: "env" }),
+  served({
+    id: "google/gemini-3.7-flash",
+    name: "Gemini 3.7 Flash",
+    provider: "openrouter",
+    label: "OpenRouter",
+    source: "managed",
+  }),
+  served({ id: "qwen3:32b", name: "Qwen3 32B", provider: "ollama", label: "Ollama", source: "config" }),
+]
+const byline = (selector: string) =>
+  document.querySelector(`${selector} .model-settings-model small`)?.textContent?.replace(/\s+/g, " ").trim()
+const openMenu = async (host: HTMLElement) => {
+  host.querySelector<HTMLButtonElement>("[data-model-settings-trigger]")!.click()
+  await settle()
+}
+
+test("a model served by a key and by the Wallet says which one the row selects, and selects it", async () => {
+  fixture.setState({ models: funded, index: 0, effort: {}, tier: {}, billing: "byok" })
+  const host = mount()
+  await openMenu(host)
+  const opus = '[data-model-quick][data-model-choice="anthropic/claude-opus-5"]'
+  expect(byline('[data-model-quick][aria-checked="true"]')).toBe("Subscription · OpenAI · 1.05M context")
+  expect(byline(opus)).toBe("Your key · Anthropic · 1.05M context")
+  expect(document.querySelector(opus)?.getAttribute("aria-label")).toBe("Opus 5, Anthropic, Your key")
+
+  fixture.setState("billing", "managed")
+  await settle()
+  expect(byline(opus)).toBe("Wallet · Anthropic · 1.05M context")
+  document.querySelector<HTMLButtonElement>(opus)!.click()
+  await settle()
+  expect(funded[fixture.state.index]?.provider).toEqual({ id: "openrouter", name: "OpenRouter", source: "managed" })
+})
+
+test("All models keeps a choice on the credential already in use", async () => {
+  fixture.setState({ models: funded, index: 1, effort: {}, tier: {}, billing: "managed" })
+  const host = mount()
+  await openMenu(host)
+  document.querySelector<HTMLButtonElement>('[data-model-menu-row="model"]')!.click()
+  await settle()
+  const gemini = '[data-model-catalog-item][data-model-choice="google/gemini-3-7-flash"]'
+  const local = '[data-model-catalog-item][data-model-choice="ollama/qwen3:32b"]'
+  // Opus runs on the Anthropic key, which Gemini has no route through, so the Model access mode decides.
+  expect(byline(gemini)).toBe("Wallet · Reasoning · 1.05M context · Google")
+  expect(byline(local)).toBe("Local · Reasoning · 1.05M context · Ollama")
+
+  fixture.setState("billing", "byok")
+  await settle()
+  expect(byline(gemini)).toBe("Your key · Reasoning · 1.05M context · Google")
+
+  // On the Wallet's Opus route the next choice stays on the Wallet whatever the mode says.
+  fixture.setState("index", 2)
+  await settle()
+  expect(byline(gemini)).toBe("Wallet · Reasoning · 1.05M context · Google")
+  document.querySelector<HTMLButtonElement>(gemini)!.click()
+  await settle()
+  expect(funded[fixture.state.index]?.id).toBe("google/gemini-3.7-flash")
 })

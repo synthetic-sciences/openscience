@@ -25,6 +25,7 @@ import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mj
 import { disposeRuntime } from "./runtime-disposal.mjs"
 import { healthyRuntime, pinnedVersion } from "./service-health.mjs"
 import { servicePort } from "./service-port.mjs"
+import { logsDirectory } from "./log-path.mjs"
 import { readAppearance, resolveAppearance, saveAppearance, splashQuery, sweepAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
@@ -1031,6 +1032,14 @@ app
     let splash
     try {
       app.name = "OpenScience"
+      // Before the first read of the logs path: Electron fixes its default on that read, and on macOS the
+      // default belongs to the installed app whatever `--user-data-dir` says.
+      const logs = logsDirectory({
+        packaged: app.isPackaged,
+        relocated: app.commandLine.hasSwitch("user-data-dir"),
+        userData: app.getPath("userData"),
+      })
+      if (logs) app.setAppLogsPath(logs)
       session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
         // Gate on the requesting frame, not the top-level document: a cross-origin
         // iframe inside the local workspace page must not inherit its grants.

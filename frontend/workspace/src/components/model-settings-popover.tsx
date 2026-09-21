@@ -13,6 +13,7 @@ import { useLocal } from "@/context/local"
 import { useSync } from "@/context/sync"
 import { useGlobalSync } from "@/context/global-sync"
 import {
+  chosenModelRoute,
   COMPOSER_MODEL_ROSTER,
   displayProviderForModel,
   groupModelRoutes,
@@ -20,9 +21,9 @@ import {
   logicalModelKey,
   modelContext,
   modelDisplayName,
+  modelFunding,
   modelSummary,
   parseModelRoute,
-  preservedModelRoute,
 } from "@/context/model-catalog"
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
@@ -760,23 +761,29 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
       refs.content?.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true })
     })
 
-  const selectChoice = (choice: ReturnType<typeof choices>[number]) => {
+  const chosenRoute = (choice: ReturnType<typeof choices>[number]) => {
     const selected = current()
-    const configured = parseModelRoute(sync.data.config.model)
-    const billing = sync.data.config.billing?.llm
-    const model =
-      preservedModelRoute(
-        choice.routes,
-        selected ? { providerID: selected.provider.id, modelID: selected.id } : undefined,
-      ) ??
-      preservedModelRoute(choice.routes, configured) ??
-      (billing === "managed"
-        ? choice.routes.find((route) => route.provider.id === "openrouter" || route.provider.id.startsWith("synsci"))
-        : billing === "byok"
-          ? choice.routes.find((route) => route.provider.id !== "openrouter" && !route.provider.id.startsWith("synsci"))
-          : undefined) ??
-      choice.routes.find((route) => route.provider.id === "openai-codex") ??
-      choice.model
+    return chosenModelRoute({
+      choice,
+      current: selected ? { providerID: selected.provider.id, modelID: selected.id } : undefined,
+      configured: parseModelRoute(sync.data.config.model),
+      billing: sync.data.config.billing?.llm,
+    })
+  }
+  // A logical model can be served by a key and by the Wallet at once; the row names the one a click selects.
+  const funding = (choice: ReturnType<typeof choices>[number]) => {
+    const route = chosenRoute(choice)
+    return modelFunding({
+      providerID: route.provider.id,
+      credential: route.provider.source,
+      billing: sync.data.config.billing?.llm,
+    })
+  }
+  const byline = (choice: ReturnType<typeof choices>[number], facts: string) =>
+    [funding(choice), facts].filter(Boolean).join(" · ")
+
+  const selectChoice = (choice: ReturnType<typeof choices>[number]) => {
+    const model = chosenRoute(choice)
     local.model.set({ providerID: model.provider.id, modelID: model.id }, { recent: true })
     close()
   }
@@ -943,7 +950,8 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                           data-model-routes={choice.routes.length}
                           aria-checked={selected()}
                           tabindex={quickTab() === choice.key ? 0 : -1}
-                          aria-label={`${choiceName(choice)}, ${provider().name}`}
+                          data-model-funding={funding(choice)}
+                          aria-label={[choiceName(choice), provider().name, funding(choice)].filter(Boolean).join(", ")}
                           class={row}
                           onFocus={() => setQuickFocus(choice.key)}
                           onClick={() => selectChoice(choice)}
@@ -951,7 +959,9 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                           <ModelMark id={provider().id} name={provider().name} />
                           <span class="model-settings-model">
                             <strong>{choiceName(choice)}</strong>
-                            <small>{`${provider().name} · ${modelContext(model.limit.context)} context`}</small>
+                            <small>
+                              {byline(choice, `${provider().name} · ${modelContext(model.limit.context)} context`)}
+                            </small>
                           </span>
                           <Show when={selected()}>
                             <Icon name="check" size="small" class="model-settings-check" aria-hidden="true" />
@@ -1032,9 +1042,15 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                   data-model-routes={choice.routes.length}
                                   aria-checked={selected()}
                                   tabindex={catalogTab() === choice.key ? 0 : -1}
-                                  aria-label={`${choiceName(choice)}, ${provider().name}, ${modelContext(
-                                    model.limit.context,
-                                  )} context`}
+                                  data-model-funding={funding(choice)}
+                                  aria-label={[
+                                    choiceName(choice),
+                                    provider().name,
+                                    `${modelContext(model.limit.context)} context`,
+                                    funding(choice),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(", ")}
                                   class={row}
                                   onFocus={() => setCatalogFocus(choice.key)}
                                   onClick={() => selectChoice(choice)}
@@ -1043,11 +1059,14 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
                                   <span class="model-settings-model">
                                     <strong>{choiceName(choice)}</strong>
                                     <small>
-                                      {modelSummary({
-                                        reasoning: model.capabilities.reasoning,
-                                        context: model.limit.context,
-                                        provider: provider().name,
-                                      })}
+                                      {byline(
+                                        choice,
+                                        modelSummary({
+                                          reasoning: model.capabilities.reasoning,
+                                          context: model.limit.context,
+                                          provider: provider().name,
+                                        }),
+                                      )}
                                     </small>
                                   </span>
                                   <Show when={selected()}>

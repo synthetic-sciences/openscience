@@ -6,6 +6,7 @@ import {
   isLocalPathWithin,
   joinLocalPath,
   localPathBreadcrumbs,
+  localPathPlatform,
   localPathRoot,
   normalizeLocalPath,
   parentLocalPath,
@@ -26,6 +27,17 @@ describe("local path operations", () => {
     expect(joinLocalPath("C:\\Users\\aayam", "research/data")).toBe("C:/Users/aayam/research/data")
     expect(joinLocalPath("\\\\server\\share", "team\\paper")).toBe("//server/share/team/paper")
     expect(resolveTypedLocalPath("../outside", "/home/aayam/work", "/home/aayam")).toBe("/home/aayam/work/../outside")
+  })
+
+  test("names the platform a home folder belongs to", () => {
+    expect(localPathPlatform("/Users/aayam")).toBe("macos")
+    expect(localPathPlatform("/Users/aayam/")).toBe("macos")
+    expect(localPathPlatform("C:\\Users\\aayam")).toBe("windows")
+    expect(localPathPlatform("\\\\server\\homes\\aayam")).toBe("windows")
+    expect(localPathPlatform("/home/aayam")).toBeUndefined()
+    expect(localPathPlatform("/root")).toBeUndefined()
+    expect(localPathPlatform("/Users/aayam/research")).toBeUndefined()
+    expect(localPathPlatform("")).toBeUndefined()
   })
 
   test("finds roots and never navigates above them", () => {

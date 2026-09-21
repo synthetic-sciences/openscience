@@ -23,6 +23,16 @@ export function localPathRoot(path: string) {
   return normalized.startsWith("/") ? "/" : ""
 }
 
+/** The server reports the home folder of the machine it runs on, and a native folder dialog opens on that
+ * machine rather than on the one showing the page, so the shape of that home names the platform: macOS keeps
+ * homes directly under `/Users`, Windows under a drive or a share. Anything else is left unnamed. */
+export function localPathPlatform(home: string): "macos" | "windows" | undefined {
+  const normalized = normalizeLocalPath(home)
+  if (/^\/Users\/[^/]+$/i.test(normalized)) return "macos"
+  if (drive.test(normalized) || unc.test(normalized)) return "windows"
+  return undefined
+}
+
 export function isLocalPathRoot(path: string) {
   const normalized = normalizeLocalPath(path)
   return normalized === localPathRoot(normalized)

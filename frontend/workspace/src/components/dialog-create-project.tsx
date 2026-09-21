@@ -14,6 +14,8 @@ export interface ProjectCreateInput {
 export function DialogCreateProject(props: {
   name?: string
   sources?: string[]
+  /** The platform whose native folder dialog will open; leave unset when the in-app picker is used. */
+  os?: "macos" | "windows"
   onDraft?: (name: string) => void
   onChooseSources: () => void
   onRemoveSource?: (path: string) => void
@@ -25,6 +27,13 @@ export function DialogCreateProject(props: {
     busy: false,
     error: "",
   })
+
+  // A native folder dialog belongs to one file manager; without one the in-app picker opens, which is neither.
+  const hint = () => {
+    if (props.os === "macos") return "Choose with Finder"
+    if (props.os === "windows") return "Choose with File Explorer"
+    return "Choose a folder"
+  }
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault()
@@ -105,7 +114,7 @@ export function DialogCreateProject(props: {
                   </span>
                   <span class="project-create__source-empty-copy">
                     <strong>Add source folders</strong>
-                    <span>Choose with Finder or File Explorer</span>
+                    <span>{hint()}</span>
                   </span>
                 </button>
               }

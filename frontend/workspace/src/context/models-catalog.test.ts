@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   canonicalKey,
+  chosenModelRoute,
   COMPOSER_MODEL_ROSTER,
   displayProviderForModel,
   foldedRouteMode,
@@ -11,6 +12,7 @@ import {
   isUserProviderConnection,
   modelDisplayName,
   modelContext,
+  modelFunding,
   modelRouteValue,
   modelSummary,
   logicalModelKey,
@@ -423,5 +425,62 @@ describe("frontier model canonicalization", () => {
     const pro = { id: "openai/gpt-5.6-sol-pro", provider }
     expect(preferredModels([base, pro])).toEqual([base, pro])
     expect(foldedRouteMode({ providerID: "openrouter", modelID: pro.id }, base)).toBeUndefined()
+  })
+})
+
+describe("what a model choice is charged to", () => {
+  const key = { id: "gemini-3.7-flash", provider: { id: "google" } }
+  const wallet = { id: "google/gemini-3.7-flash", provider: { id: "openrouter" } }
+  const choice = groupModelRoutes({ models: [key, wallet] })[0]!
+
+  test("one logical model keeps both its key route and its Wallet route", () => {
+    expect(choice.routes).toEqual([key, wallet])
+  })
+
+  test("the route in use keeps its credential when another model is chosen", () => {
+    const onKey = { providerID: "google", modelID: "gemini-3.1-pro-preview" }
+    const onWallet = { providerID: "openrouter", modelID: "anthropic/claude-opus-5" }
+    expect(chosenModelRoute({ choice, current: onKey, billing: "managed" })).toBe(key)
+    expect(chosenModelRoute({ choice, current: onWallet, billing: "byok" })).toBe(wallet)
+  })
+
+  test("the configured default decides before the Model access mode does", () => {
+    const current = { providerID: "anthropic", modelID: "claude-opus-5" }
+    const configured = { providerID: "openrouter", modelID: "openai/gpt-5.6-sol" }
+    expect(chosenModelRoute({ choice, current, configured, billing: "byok" })).toBe(wallet)
+  })
+
+  test("the Model access mode picks a side when nothing else does", () => {
+    const current = { providerID: "anthropic", modelID: "claude-opus-5" }
+    expect(chosenModelRoute({ choice, current, billing: "managed" })).toBe(wallet)
+    expect(chosenModelRoute({ choice, current, billing: "byok" })).toBe(key)
+    expect(chosenModelRoute({ choice, current, billing: null })).toBe(choice.model)
+  })
+
+  test("without a mode, a ChatGPT subscription comes before the first route", () => {
+    const api = { id: "gpt-5.6-sol", provider: { id: "openai" } }
+    const chatgpt = { id: "gpt-5.6-sol", provider: { id: "openai-codex" } }
+    const sol = groupModelRoutes({ models: [api, chatgpt] })[0]!
+    expect(sol.model).toBe(api)
+    expect(chosenModelRoute({ choice: sol })).toBe(chatgpt)
+    expect(chosenModelRoute({ choice: sol, billing: "byok" })).toBe(api)
+  })
+
+  test("names the Wallet, a key, a subscription and a local runtime", () => {
+    expect(modelFunding({ providerID: "openrouter", credential: "managed" })).toBe("Wallet")
+    expect(modelFunding({ providerID: "google", credential: "api" })).toBe("Your key")
+    expect(modelFunding({ providerID: "google", credential: "env" })).toBe("Your key")
+    expect(modelFunding({ providerID: "anthropic", credential: "workspace" })).toBe("Your key")
+    expect(modelFunding({ providerID: "openrouter", credential: "api" })).toBe("Your key")
+    expect(modelFunding({ providerID: "openai-codex", credential: "custom" })).toBe("Subscription")
+    expect(modelFunding({ providerID: "github-copilot", credential: "custom" })).toBe("Subscription")
+    expect(modelFunding({ providerID: "ollama", credential: "config" })).toBe("Local")
+    expect(modelFunding({ providerID: "ssh-gpu-box", credential: "config" })).toBe("Local")
+  })
+
+  test("leaves a route unlabeled when its credential cannot be told from here", () => {
+    expect(modelFunding({ providerID: "amazon-bedrock", credential: "custom" })).toBeUndefined()
+    expect(modelFunding({ providerID: "openrouter", credential: "env" })).toBeUndefined()
+    expect(modelFunding({ providerID: "openrouter", credential: "env", billing: "byok" })).toBe("Your key")
   })
 })

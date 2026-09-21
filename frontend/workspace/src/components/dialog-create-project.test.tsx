@@ -46,6 +46,7 @@ function Harness(props: {
   onCreate: (input: ProjectCreateInput) => Promise<void>
   onChooseSources: () => void
   sources?: string[]
+  os?: "macos" | "windows"
 }): JSX.Element {
   const dialog = dialogs.useDialog()
   const button = document.createElement("button")
@@ -57,6 +58,7 @@ function Harness(props: {
         onCreate: props.onCreate,
         onChooseSources: props.onChooseSources,
         sources: props.sources,
+        os: props.os,
       }),
     )
   })
@@ -115,6 +117,30 @@ describe("DialogCreateProject", () => {
     action?.click()
 
     expect(choices).toEqual(["choose"])
+  })
+
+  test("names the one file manager the system folder dialog opens", () => {
+    const hint = (os?: "macos" | "windows") => {
+      const host = mount(() =>
+        dialogs.DialogProvider({
+          get children() {
+            return Harness({ onCreate: async () => {}, onChooseSources: () => {}, os })
+          },
+        }),
+      )
+      host.querySelector<HTMLButtonElement>("button")?.click()
+      const action = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
+        button.textContent?.includes("Add source folders"),
+      )
+      const text = action?.textContent?.replace("Add source folders", "").trim()
+      cleanups.splice(0).forEach((cleanup) => cleanup())
+      document.body.replaceChildren()
+      return text
+    }
+
+    expect(hint("macos")).toBe("Choose with Finder")
+    expect(hint("windows")).toBe("Choose with File Explorer")
+    expect(hint()).toBe("Choose a folder")
   })
 
   test("creates durable read-write source connections", async () => {
