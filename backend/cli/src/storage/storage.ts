@@ -207,7 +207,14 @@ export namespace Storage {
    */
   async function publish(target: string, content: string) {
     const tmp = `${target}.${process.pid}.${randomUUID()}.tmp`
-    await Bun.write(tmp, content)
+    // Bun.write has failed on Windows with an error that carries no code, path
+    // or message ("Error at write (unknown)"), which stopped every prompt and
+    // told nobody why. The libuv path writes the same bytes and reports a real
+    // errno, so it is both the second attempt and, if it fails too, the reason.
+    await Bun.write(tmp, content).catch(async () => {
+      await fs.mkdir(path.dirname(tmp), { recursive: true })
+      await fs.writeFile(tmp, content)
+    })
     await fs.rename(tmp, target).catch(async (error) => {
       await fs.unlink(tmp).catch(() => {})
       throw error
