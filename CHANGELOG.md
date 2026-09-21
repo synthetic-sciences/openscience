@@ -110,6 +110,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   any launch given `--user-data-dir`, now keeps its logs in `logs` inside its own `userData`; the installed app
   started normally writes where it always did.
 - **The desktop app remembers what you set up in the window.** The app served its workspace on a new local port at every launch, and the window keeps the selected model, recent and pinned models, open tabs and panel layout in browser storage, which belongs to the address. Each launch was therefore a blank slate: a composer left on your own provider key reopened on the default model. The app now reuses its last port while it is free, so the window comes back as you left it; if another program has taken the port, the app moves once and remembers the new one.
+- **Deleting a saved result closes its own tab.** Switching to another saved result while a delete was still in flight closed the tab you had switched to and left the deleted result's tab open.
 - **One composer menu at a time.** Tools, the working folder chip, the model picker and the effort picker were four separate menus that each only closed themselves, so opening one left the others open on top of each other. Opening any of them now closes whatever else is open, and the working folder menu closes on a click outside it like the rest.
 - **"Updated to OpenScience X" is said once.** The desktop app replayed the
   post-update notice on every launch, because the stored update result was

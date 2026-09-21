@@ -163,12 +163,15 @@ export function StoredArtifactView(props: { artifact: StoredArtifact }): JSX.Ele
   const remove = () => {
     if (busy()) return
     setBusy(true)
+    // One view serves every saved-result tab, so `props.artifact` is whichever
+    // tab is showing by the time the request returns, not the one deleted.
+    const id = props.artifact.id
     sdk
-      .request(`/file/artifact-store/${encodeURIComponent(props.artifact.id)}`, { method: "DELETE" })
+      .request(`/file/artifact-store/${encodeURIComponent(id)}`, { method: "DELETE" })
       .then(async (response) => {
         if (!response.ok) throw new Error((await response.text()) || `Delete failed (${response.status})`)
         window.dispatchEvent(new CustomEvent("openscience:artifacts-changed"))
-        uiStore.closeWorkTab(`saved:${props.artifact.id}`)
+        uiStore.closeWorkTab(`saved:${id}`)
         toast.success("Result moved to Trash", "Recoverable from Files for 30 days.")
       })
       .catch((error) => toast.error("delete failed", error instanceof Error ? error.message : String(error)))
