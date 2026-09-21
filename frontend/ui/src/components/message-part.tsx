@@ -864,7 +864,8 @@ function KernelTool(props: ToolProps & { language: "python" | "r"; label: "Pytho
             </div>
           </div>
         </Show>
-        <details data-slot="kernel-tool-source">
+        {/* Nobody should approve code they cannot see: the source is open for as long as the request is. */}
+        <details data-slot="kernel-tool-source" open={props.locked}>
           <summary>
             <span data-slot="kernel-tool-prompt">In [{count() ?? " "}]:</span>
             <span>Code</span>

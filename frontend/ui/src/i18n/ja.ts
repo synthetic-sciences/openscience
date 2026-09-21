@@ -120,6 +120,8 @@ export const dict = {
   "ui.permission.grantRead": "{{path}} への読み取り専用アクセスを許可",
   "ui.permission.grantWrite": "{{path}} への読み書きアクセスを許可",
   "ui.permission.allowHost": "{{host}} へのネットワークアクセスを許可",
+  "ui.permission.runCode": "{{language}} コードを実行",
+  "ui.permission.runShell": "シェルコマンドを実行",
 
   "ui.message.expand": "メッセージを展開",
   "ui.message.collapse": "メッセージを折りたたむ",

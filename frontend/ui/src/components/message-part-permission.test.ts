@@ -267,8 +267,32 @@ describe("request card", () => {
       grantRead: (path: string) => `read ${path}`,
       grantWrite: (path: string) => `write ${path}`,
       allowHost: (host: string) => `host ${host}`,
+      runCode: (language: string) => `Run ${language} code`,
+      runShell: "Run a shell command",
       required: "Approval required",
     }
+    // Running code names what runs; the source itself is the tool row above the card.
+    expect(
+      describeRequest({ kernel: { language: "python", title: "Fit the survival model", lines: 22 } }, labels),
+    ).toMatchObject({
+      kind: "code",
+      title: "Run Python code",
+      subline: "Fit the survival model · 22 lines",
+    })
+    expect(describeRequest({ kernel: { language: "r", lines: 1 } }, labels)).toMatchObject({
+      title: "Run R code",
+      subline: "1 line",
+    })
+    expect(describeRequest({ shell: { command: "  ls -la data\nwc -l data/*.csv\n" } }, labels)).toMatchObject({
+      kind: "code",
+      title: "Run a shell command",
+      subline: "ls -la data … +1 line",
+    })
+    expect(describeRequest({ shell: { command: "git status" } }, labels).subline).toBe("git status")
+    // A network request a shell command raises is still about the host.
+    expect(describeRequest({ network: { host: "pypi.org" }, shell: { command: "pip download x" } }, labels).kind).toBe(
+      "network",
+    )
     expect(describeRequest({ url: " https://example.org/x " }, labels).title).toBe("https://example.org/x")
     expect(describeRequest({ query: "tabular foundation models" }, labels).title).toBe("“tabular foundation models”")
     expect(describeRequest({}, labels).title).toBe("Approval required")

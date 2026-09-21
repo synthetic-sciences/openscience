@@ -147,6 +147,8 @@ export const dict = {
   "ui.permission.grantRead": "Grant read-only access to {{path}}",
   "ui.permission.grantWrite": "Grant read & write access to {{path}}",
   "ui.permission.allowHost": "Allow network access to {{host}}",
+  "ui.permission.runCode": "Run {{language}} code",
+  "ui.permission.runShell": "Run a shell command",
   "ui.question.eyebrow": "Question",
   "ui.question.credentialHint": "Add logins under Customize → Credentials, never in the chat.",
   "ui.question.openCredentials": "Open Credentials",

@@ -700,7 +700,10 @@ async function executeR(params: RInput, ctx: Tool.Context, compatibilityNamed: b
       permission: "bash",
       patterns: ["R"],
       always: ["Rscript*"],
-      metadata: {},
+      // What the approval card says is being run; the source itself is the tool row's input.
+      metadata: {
+        kernel: { language: "r", title: params.title, lines: params.code!.split("\n").length },
+      },
     })
   }
 

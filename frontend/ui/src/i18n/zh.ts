@@ -124,6 +124,8 @@ export const dict = {
   "ui.permission.grantRead": "授予对 {{path}} 的只读访问权限",
   "ui.permission.grantWrite": "授予对 {{path}} 的读写访问权限",
   "ui.permission.allowHost": "允许网络访问 {{host}}",
+  "ui.permission.runCode": "运行 {{language}} 代码",
+  "ui.permission.runShell": "运行 shell 命令",
 
   "ui.message.expand": "展开消息",
   "ui.message.collapse": "收起消息",

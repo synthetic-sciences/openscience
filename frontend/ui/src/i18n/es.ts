@@ -120,6 +120,8 @@ export const dict = {
   "ui.permission.grantRead": "Conceder acceso de solo lectura a {{path}}",
   "ui.permission.grantWrite": "Conceder acceso de lectura y escritura a {{path}}",
   "ui.permission.allowHost": "Permitir acceso de red a {{host}}",
+  "ui.permission.runCode": "Ejecutar código {{language}}",
+  "ui.permission.runShell": "Ejecutar un comando de shell",
 
   "ui.message.expand": "Expandir mensaje",
   "ui.message.collapse": "Colapsar mensaje",

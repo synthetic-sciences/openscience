@@ -124,6 +124,8 @@ export const dict = {
   "ui.permission.grantRead": "Nur-Lese-Zugriff auf {{path}} gewähren",
   "ui.permission.grantWrite": "Lese- und Schreibzugriff auf {{path}} gewähren",
   "ui.permission.allowHost": "Netzwerkzugriff auf {{host}} erlauben",
+  "ui.permission.runCode": "{{language}}-Code ausführen",
+  "ui.permission.runShell": "Shell-Befehl ausführen",
 
   "ui.message.expand": "Nachricht erweitern",
   "ui.message.collapse": "Nachricht reduzieren",

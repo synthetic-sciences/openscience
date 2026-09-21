@@ -839,7 +839,10 @@ async function executePython(params: PythonInput, ctx: Tool.Context, compatibili
       permission: "bash",
       patterns: ["python"],
       always: ["python*"],
-      metadata: {},
+      // What the approval card says is being run; the source itself is the tool row's input.
+      metadata: {
+        kernel: { language: "python", title: params.title, lines: params.code!.split("\n").length },
+      },
     })
   }
 

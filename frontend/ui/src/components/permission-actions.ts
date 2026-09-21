@@ -25,6 +25,7 @@ export type RequestModel = {
     | "environment-mutation"
     | "study"
     | "hosted-scientific"
+    | "code"
     | "generic"
   title: string
   subline?: string
@@ -165,6 +166,8 @@ type Labels = {
   grantRead: (path: string) => string
   grantWrite: (path: string) => string
   allowHost: (host: string) => string
+  runCode: (language: string) => string
+  runShell: string
   required: string
 }
 
@@ -393,6 +396,35 @@ export function describeRequest(metadata: Metadata, labels: Labels): RequestMode
   if (typeof query === "string" && query.trim()) {
     return { kind: "search", title: `“${query.trim()}”`, rows: [], primary: once, scopes: standing() }
   }
+  // Running code is the request a person meets most, and the only one whose
+  // subject is long: the card names what runs and the tool row above, held
+  // open while the card is up, shows the source itself.
+  const kernel = metadata?.kernel
+  if (kernel?.language === "python" || kernel?.language === "r") {
+    const lines = Number.isSafeInteger(kernel.lines) && kernel.lines > 0 ? kernel.lines : undefined
+    return {
+      kind: "code",
+      title: labels.runCode(kernel.language === "r" ? "R" : "Python"),
+      subline: [kernel.title, lines ? `${lines} ${lines === 1 ? "line" : "lines"}` : undefined]
+        .filter(Boolean)
+        .join(" · "),
+      rows: [],
+      primary: once,
+      scopes: standing(),
+    }
+  }
+  const command = metadata?.shell?.command
+  if (typeof command === "string" && command.trim()) {
+    const [first = "", ...rest] = command.trim().split("\n")
+    return {
+      kind: "code",
+      title: labels.runShell,
+      subline: rest.length ? `${first} … +${rest.length} ${rest.length === 1 ? "line" : "lines"}` : first,
+      rows: [],
+      primary: once,
+      scopes: standing(),
+    }
+  }
   return { kind: "generic", title: labels.required, rows: [], primary: once, scopes: standing() }
 }
 
@@ -482,6 +514,8 @@ export function PermissionActions(props: { respond: (response: PermissionReply) 
     grantRead: (path) => i18n.t("ui.permission.grantRead", { path }),
     grantWrite: (path) => i18n.t("ui.permission.grantWrite", { path }),
     allowHost: (host) => i18n.t("ui.permission.allowHost", { host }),
+    runCode: (language) => i18n.t("ui.permission.runCode", { language }),
+    runShell: i18n.t("ui.permission.runShell"),
     required: i18n.t("ui.permission.required"),
   })
   let scopes = false
