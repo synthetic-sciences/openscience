@@ -159,6 +159,21 @@ export namespace CliShim {
     return ["fish", "zsh", "bash", "ash", "sh"].includes(shell)
   }
 
+  /** The startup file to create when the shell has none, which is every fresh
+   *  macOS account: the one a new terminal window reads. macOS terminals open
+   *  login shells, and a login bash reads ~/.bash_profile and never ~/.bashrc;
+   *  elsewhere a terminal's bash reads ~/.bashrc. It is only ever created when
+   *  no candidate exists, because a new ~/.bash_profile would stop bash from
+   *  reading an existing ~/.profile. Each is one of the shell's candidates, so
+   *  the next status finds the line there and a second install adds nothing.
+   *  ash and sh share ~/.profile with every other shell and have no file of
+   *  their own, so they keep the printed line. */
+  function fresh(o: Resolved) {
+    if (o.shell === "zsh") return path.join(o.env.ZDOTDIR || o.home, ".zshrc")
+    if (o.shell === "bash") return path.join(o.home, o.platform === "darwin" ? ".bash_profile" : ".bashrc")
+    if (o.shell === "fish") return path.join(o.home, ".config", "fish", "config.fish")
+  }
+
   async function existing(files: string[]) {
     const checks = await Promise.all(
       files.map((file) =>
@@ -270,23 +285,36 @@ export namespace CliShim {
   }
 
   /** The installer's decision, in its order: nothing to do when the directory
-   *  is already on PATH, when no startup file exists (it prints the line), or
-   *  when the line is already there; otherwise append the marker and the line
-   *  to the first startup file that exists, when it is writable. */
+   *  is already on PATH or the line is already there; otherwise append the
+   *  marker and the line to the first startup file that exists, when it is
+   *  writable. Where no startup file exists the installer prints the line for
+   *  the person at the terminal; nobody is at a terminal here, so the app
+   *  creates the shell's own file with the same marker and line. */
   async function configure(o: Resolved) {
     if (inPath(o.env.PATH, o.bin)) return
     const startup = await startupFiles(o)
-    if (startup.configured || startup.files.length === 0 || !writes(o.shell)) return
-    const file = startup.files[0]
-    const writable = await fs.access(file, fs.constants.W_OK).then(
-      () => true,
-      () => false,
-    )
-    if (!writable) return
+    if (startup.configured || !writes(o.shell)) return
+    const block = `${MARKER}\n${pathLine(o.shell, o.bin)}\n`
+    const found = startup.files.at(0)
+    if (found) {
+      const writable = await fs.access(found, fs.constants.W_OK).then(
+        () => true,
+        () => false,
+      )
+      if (!writable) return
+      await fs.appendFile(found, `\n${block}`).catch(failed(`Could not add the PATH line to ${tilde(found, o.home)}`))
+      log.info("added the command-line directory to PATH", { file: found })
+      return
+    }
+    const file = fresh(o)
+    if (!file) return
+    // Appending, not writing: a file that appeared since the check is added
+    // to rather than replaced.
     await fs
-      .appendFile(file, `\n${MARKER}\n${pathLine(o.shell, o.bin)}\n`)
-      .catch(failed(`Could not add the PATH line to ${tilde(file, o.home)}`))
-    log.info("added the command-line directory to PATH", { file })
+      .mkdir(path.dirname(file), { recursive: true })
+      .then(() => fs.appendFile(file, block))
+      .catch(failed(`Could not create ${tilde(file, o.home)}`))
+    log.info("created a startup file with the command-line directory on PATH", { file })
   }
 
   /** Create or re-point the link and add the PATH line. Rejects with

@@ -3,7 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { CliShim } from "../../src/installation/cli-shim"
-import { cleanShellConfig } from "../../src/cli/cmd/uninstall"
+import { cleanShellConfig, getShellConfigFile } from "../../src/cli/cmd/uninstall"
 import { Global } from "../../src/global"
 
 const roots: string[] = []
@@ -36,6 +36,14 @@ async function fixture(input: { shell?: string; files?: Record<string, string>; 
     link: path.join(home, ".openscience", "bin", "openscience"),
     file: (name: string) => Bun.file(path.join(home, name)).text(),
   }
+}
+
+// What `openscience uninstall` does about the PATH line: find the startup file
+// that holds it, then take the block out. Returns the file it found.
+async function uninstallPathLine(home: string, env: NodeJS.ProcessEnv | undefined) {
+  const file = await getShellConfigFile({ home, env })
+  if (file) await cleanShellConfig(file)
+  return file
 }
 
 async function bundle(root: string, folder: string) {
@@ -125,8 +133,112 @@ describe("CliShim", () => {
     expect((await CliShim.status(spelled.options)).onPath).toBe(true)
   })
 
-  test("links without a startup file and reports that PATH still needs the line", async () => {
+  test("creates the shell's startup file on an account that has none, once", async () => {
     const f = await fixture()
+    const first = await CliShim.install(f.options)
+    expect(await fs.readlink(f.link)).toBe(f.execPath)
+    expect(first).toMatchObject({ onPath: true, config: path.join(f.home, ".zshrc") })
+    expect(await f.file(".zshrc")).toBe(`# openscience\nexport PATH=${f.bin}:$PATH\n`)
+    expect((await fs.readdir(f.home)).sort()).toEqual([".openscience", ".zshrc"])
+
+    expect(await CliShim.install(f.options)).toEqual(first)
+    expect(await f.file(".zshrc")).toBe(`# openscience\nexport PATH=${f.bin}:$PATH\n`)
+
+    // `openscience uninstall` takes the block back out and leaves the file:
+    // by then it may hold lines of the person's own.
+    await fs.appendFile(path.join(f.home, ".zshrc"), "alias ll='ls -l'\n")
+    expect(await uninstallPathLine(f.home, f.options.env)).toBe(path.join(f.home, ".zshrc"))
+    expect(await f.file(".zshrc")).toBe("alias ll='ls -l'\n")
+  })
+
+  test("a startup file that held only the block is emptied, not deleted, by uninstall", async () => {
+    const f = await fixture()
+    await CliShim.install(f.options)
+    expect(await uninstallPathLine(f.home, f.options.env)).toBe(path.join(f.home, ".zshrc"))
+    expect(await f.file(".zshrc")).toBe("")
+    expect((await CliShim.status(f.options)).onPath).toBe(false)
+  })
+
+  test("creates zsh's startup file where ZDOTDIR says zsh reads it", async () => {
+    const f = await fixture()
+    const zdot = path.join(f.home, ".config", "zsh")
+    const options = { ...f.options, env: { ...f.options.env, ZDOTDIR: zdot } }
+    const status = await CliShim.install(options)
+    expect(status).toMatchObject({ onPath: true, config: path.join(zdot, ".zshrc") })
+    expect(await f.file(".config/zsh/.zshrc")).toBe(`# openscience\nexport PATH=${f.bin}:$PATH\n`)
+    expect(await fs.readdir(f.home)).not.toContain(".zshrc")
+
+    expect(await uninstallPathLine(f.home, options.env)).toBe(path.join(zdot, ".zshrc"))
+    expect(await f.file(".config/zsh/.zshrc")).toBe("")
+  })
+
+  test.each([
+    ["darwin", ".bash_profile"],
+    ["linux", ".bashrc"],
+  ] as const)("creates the file a new bash terminal reads on %s", async (platform, file) => {
+    const f = await fixture({ shell: "bash" })
+    const options = { ...f.options, platform }
+    const status = await CliShim.install(options)
+    expect(status).toMatchObject({ onPath: true, config: path.join(f.home, file) })
+    expect(await f.file(file)).toBe(`# openscience\nexport PATH=${f.bin}:$PATH\n`)
+    expect((await fs.readdir(f.home)).sort()).toEqual([".openscience", file].sort())
+
+    await CliShim.install(options)
+    expect(await f.file(file)).toBe(`# openscience\nexport PATH=${f.bin}:$PATH\n`)
+
+    expect(await uninstallPathLine(f.home, options.env)).toBe(path.join(f.home, file))
+    expect(await f.file(file)).toBe("")
+  })
+
+  test("adds to the startup file bash already has instead of creating one that would shadow it", async () => {
+    const f = await fixture({ shell: "bash", files: { ".profile": "# mine\n" } })
+    await CliShim.install(f.options)
+    expect(await f.file(".profile")).toBe(`# mine\n\n# openscience\nexport PATH=${f.bin}:$PATH\n`)
+    expect((await fs.readdir(f.home)).sort()).toEqual([".openscience", ".profile"])
+  })
+
+  test("creates fish's configuration directory along with its file", async () => {
+    const f = await fixture({ shell: "fish" })
+    const status = await CliShim.install(f.options)
+    expect(status).toMatchObject({
+      onPath: true,
+      line: `fish_add_path ${f.bin}`,
+      config: path.join(f.home, ".config", "fish", "config.fish"),
+    })
+    expect(await f.file(".config/fish/config.fish")).toBe(`# openscience\nfish_add_path ${f.bin}\n`)
+
+    await CliShim.install(f.options)
+    expect(await f.file(".config/fish/config.fish")).toBe(`# openscience\nfish_add_path ${f.bin}\n`)
+
+    // The installer and the app both spell fish's file from the home
+    // directory, so uninstall finds it there whatever XDG_CONFIG_HOME says.
+    const env = { ...f.options.env, XDG_CONFIG_HOME: path.join(f.home, "xdg") }
+    expect(await uninstallPathLine(f.home, env)).toBe(path.join(f.home, ".config", "fish", "config.fish"))
+    expect(await f.file(".config/fish/config.fish")).toBe("")
+  })
+
+  // Permission bits mean nothing on Windows, and root may write a read-only file.
+  test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "skips a startup file it may not write and reports that PATH still needs the line",
+    async () => {
+      const f = await fixture({ files: { ".zshrc": "# managed elsewhere\n" } })
+      await fs.chmod(path.join(f.home, ".zshrc"), 0o444)
+      const status = await CliShim.install(f.options)
+      expect(await fs.readlink(f.link)).toBe(f.execPath)
+      expect(status).toMatchObject({
+        exists: true,
+        current: true,
+        onPath: false,
+        line: `export PATH=${f.bin}:$PATH`,
+        config: path.join(f.home, ".zshrc"),
+      })
+      expect(await f.file(".zshrc")).toBe("# managed elsewhere\n")
+      expect((await fs.readdir(f.home)).sort()).toEqual([".openscience", ".zshrc"])
+    },
+  )
+
+  test("a shell with no startup file of its own keeps the printed line", async () => {
+    const f = await fixture({ shell: "sh" })
     const status = await CliShim.install(f.options)
     expect(await fs.readlink(f.link)).toBe(f.execPath)
     expect(status.onPath).toBe(false)

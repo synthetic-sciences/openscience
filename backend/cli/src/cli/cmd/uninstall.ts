@@ -89,7 +89,7 @@ export const UninstallCommand = cmd({
 
     await executeUninstall(method, targets)
 
-    prompts.outro("Done")
+    prompts.outro(packageStep(method)?.outro ?? "Done")
   },
 })
 
@@ -153,17 +153,46 @@ async function showRemovalSummary(targets: RemovalTargets, method: Installation.
     prompts.log.info(`  ✓ Shell PATH in ${shortenPath(targets.shellConfig)}`)
   }
 
-  if (method !== "curl" && method !== "unknown") {
-    const cmds: Record<string, string> = {
-      npm: "npm uninstall -g @synsci/openscience",
-      pnpm: "pnpm uninstall -g @synsci/openscience",
-      bun: "bun remove -g @synsci/openscience",
-      yarn: "yarn global remove @synsci/openscience",
-      choco: "choco uninstall openscience",
-      scoop: "scoop uninstall openscience",
+  const step = packageStep(method)
+  if (step) prompts.log.info(`  ${step.summary}`)
+}
+
+const PACKAGE_COMMANDS: Partial<Record<Installation.Method, string[]>> = {
+  npm: ["npm", "uninstall", "-g", "@synsci/openscience"],
+  pnpm: ["pnpm", "uninstall", "-g", "@synsci/openscience"],
+  bun: ["bun", "remove", "-g", "@synsci/openscience"],
+  yarn: ["yarn", "global", "remove", "@synsci/openscience"],
+  choco: ["choco", "uninstall", "openscience"],
+  scoop: ["scoop", "uninstall", "openscience"],
+}
+
+/**
+ * What uninstalling does about the program itself: the package manager command
+ * it runs, or, for the desktop app, nothing. A desktop copy is the app's own
+ * sidecar and cannot remove the bundle it is running from, so the summary and
+ * the outro say the app stays and how the person removes it. A curl or
+ * unrecognised install has no step here; its binary has a line of its own.
+ */
+export function packageStep(
+  method: Installation.Method,
+  platform: NodeJS.Platform = process.platform,
+): { summary: string; command?: string[]; outro?: string } | undefined {
+  if (method === "desktop") {
+    const app = platform === "darwin" ? "OpenScience.app" : "OpenScience"
+    const how =
+      platform === "darwin"
+        ? "move it to the Trash"
+        : platform === "win32"
+          ? 'remove it from "Add or remove programs" in Windows Settings'
+          : "delete the AppImage (or remove its package)"
+    return {
+      summary: `○ App: ${app} is left in place — ${how} to finish uninstalling`,
+      outro: `Done. ${app} is still installed: ${how} to finish uninstalling.`,
     }
-    prompts.log.info(`  ✓ Package: ${cmds[method] || method}`)
   }
+  const command = PACKAGE_COMMANDS[method]
+  if (!command) return
+  return { summary: `✓ Package: ${command.join(" ")}`, command }
 }
 
 async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
@@ -214,36 +243,22 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     }
   }
 
-  if (method !== "curl" && method !== "unknown") {
-    const cmds: Record<string, string[]> = {
-      npm: ["npm", "uninstall", "-g", "@synsci/openscience"],
-      pnpm: ["pnpm", "uninstall", "-g", "@synsci/openscience"],
-      bun: ["bun", "remove", "-g", "@synsci/openscience"],
-      yarn: ["yarn", "global", "remove", "@synsci/openscience"],
-      choco: ["choco", "uninstall", "openscience"],
-      scoop: ["scoop", "uninstall", "openscience"],
-    }
-
-    const cmd = cmds[method]
-    if (cmd) {
-      spinner.start(`Running ${cmd.join(" ")}...`)
-      const result =
-        method === "choco"
-          ? await $`echo Y | choco uninstall openscience -y -r`.quiet().nothrow()
-          : await $`${cmd}`.quiet().nothrow()
-      if (result.exitCode !== 0) {
-        spinner.stop(`Package manager uninstall failed: exit code ${result.exitCode}`, 1)
-        if (
-          method === "choco" &&
-          result.stdout.toString("utf8").includes("not running from an elevated command shell")
-        ) {
-          prompts.log.warn(`You may need to run '${cmd.join(" ")}' from an elevated command shell`)
-        } else {
-          prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
-        }
+  const cmd = packageStep(method)?.command
+  if (cmd) {
+    spinner.start(`Running ${cmd.join(" ")}...`)
+    const result =
+      method === "choco"
+        ? await $`echo Y | choco uninstall openscience -y -r`.quiet().nothrow()
+        : await $`${cmd}`.quiet().nothrow()
+    if (result.exitCode !== 0) {
+      spinner.stop(`Package manager uninstall failed: exit code ${result.exitCode}`, 1)
+      if (method === "choco" && result.stdout.toString("utf8").includes("not running from an elevated command shell")) {
+        prompts.log.warn(`You may need to run '${cmd.join(" ")}' from an elevated command shell`)
       } else {
-        spinner.stop("Package removed")
+        prompts.log.warn(`You may need to run manually: ${cmd.join(" ")}`)
       }
+    } else {
+      spinner.stop("Package removed")
     }
   }
 
@@ -270,14 +285,28 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
   prompts.log.success("Thank you for using OpenScience!")
 }
 
-async function getShellConfigFile(): Promise<string | null> {
-  const shell = path.basename(process.env.SHELL || "bash")
-  const home = os.homedir()
-  const xdgConfig = process.env.XDG_CONFIG_HOME || path.join(home, ".config")
+/**
+ * The startup file that holds the PATH line. The lists have to cover every
+ * file the standalone installer and the desktop app write to, or uninstalling
+ * leaves the line behind: both follow ZDOTDIR for zsh, and both spell fish's
+ * file from the home directory whatever XDG_CONFIG_HOME says.
+ */
+export async function getShellConfigFile(
+  input: { env?: NodeJS.ProcessEnv; home?: string } = {},
+): Promise<string | null> {
+  const env = input.env ?? process.env
+  // The home the command-line link resolves from, so a sandboxed home never
+  // has the real startup files cleaned on its behalf.
+  const home = input.home ?? Global.Path.home
+  const shell = path.basename(env.SHELL || "bash")
+  const xdgConfig = env.XDG_CONFIG_HOME || path.join(home, ".config")
+  const zdot = env.ZDOTDIR || home
 
   const configFiles: Record<string, string[]> = {
-    fish: [path.join(xdgConfig, "fish", "config.fish")],
+    fish: [path.join(xdgConfig, "fish", "config.fish"), path.join(home, ".config", "fish", "config.fish")],
     zsh: [
+      path.join(zdot, ".zshrc"),
+      path.join(zdot, ".zshenv"),
       path.join(home, ".zshrc"),
       path.join(home, ".zshenv"),
       path.join(xdgConfig, "zsh", ".zshrc"),
@@ -350,7 +379,9 @@ export async function cleanShellConfig(file: string) {
     filtered.pop()
   }
 
-  const output = filtered.join("\n") + "\n"
+  // A file that held nothing but the block stays, empty. It is the person's
+  // startup file even when the desktop app created it, and not ours to delete.
+  const output = filtered.length === 0 ? "" : filtered.join("\n") + "\n"
   await Bun.write(file, output)
 }
 
