@@ -55,6 +55,8 @@ function fixture(
     funded?: boolean
     fundedAfterPolls?: number
     organization?: string
+    /** What the runtime already reaches, as `GET /provider` reports it. */
+    providers?: Array<{ id: string; source: string }>
     login?: () => Response | Promise<Response>
     session?: () => Response | Promise<Response>
     preferences?: () => Response | Promise<Response>
@@ -131,6 +133,10 @@ function fixture(
         state.billing = (await request.json()).llm
         return Response.json({ llm: state.billing })
       }
+      if (route === "GET /provider") {
+        const providers = options.providers ?? []
+        return Response.json({ all: providers, default: {}, connected: providers.map((item) => item.id) })
+      }
       if (route === "POST /provider/openai-codex/oauth/authorize") {
         return Response.json({ url: "https://auth.example/codex", method: "auto" })
       }
@@ -143,7 +149,7 @@ function fixture(
         if (body.key === "bad")
           return Response.json({ error: "That key was rejected by the provider." }, { status: 400 })
         state.keys.push(url.pathname.split("/")[2]!)
-        return Response.json({ ok: true })
+        return Response.json({ configured: true, verified: body.key !== "unreachable" })
       }
       if (request.method === "PUT" && url.pathname.startsWith("/settings/credentials/")) {
         state.credentials.push(url.pathname.split("/").at(-1)!)
@@ -389,6 +395,58 @@ test("connections: a saved provider key clears the warning, a rejected key shows
   expect(app.state.keys).toEqual(["anthropic"])
   expect(view.host.textContent).not.toContain("No model connected yet")
   expect(view.host.querySelector('[role="alert"]')).toBeNull()
+})
+
+test("connections: a Google key the provider could not be reached for is saved and says it was not checked", async () => {
+  const app = fixture({ connected: true, step: "connect" })
+  const view = app.mount()
+  await until(() => heading(view.host) === "Connect your models")
+  const google = Array.from(view.host.querySelectorAll("li")).find((row) => row.textContent?.includes("Google"))!
+  button(google, "Add key").click()
+  await until(() => google.querySelector("input") !== null)
+  expect(google.querySelector("input")?.placeholder).toBe("AIza…")
+  setInput(google, "unreachable")
+  button(google, "Save").click()
+  await until(() => google.textContent?.includes("Key saved · could not be checked") === true)
+  expect(app.state.keys).toEqual(["google"])
+  expect(view.host.textContent).not.toContain("No model connected yet")
+  expect(view.host.querySelector('[role="alert"]')).toBeNull()
+})
+
+test("connections: a provider the runtime already reaches counts as a model source and shows as connected", async () => {
+  const app = fixture({
+    connected: true,
+    step: "connect",
+    providers: [
+      { id: "google", source: "env" },
+      { id: "deepseek", source: "env" },
+    ],
+  })
+  const view = app.mount()
+  await until(() => heading(view.host) === "Connect your models")
+  const row = (name: string) =>
+    Array.from(view.host.querySelectorAll("li")).find((item) => item.textContent?.includes(name))!
+  await until(() => row("Google").textContent?.includes("Connected") === true)
+  expect(row("Google").querySelector("button")).toBeNull()
+  expect(button(row("Anthropic"), "Add key").disabled).toBe(false)
+  expect(view.host.textContent).not.toContain("No model connected yet")
+  button(view.host, "Continue").click()
+  await until(() => heading(view.host) === "You're set")
+  expect(view.host.querySelector("dl")?.textContent).toContain("Google")
+})
+
+test("connections: the managed route alone is not a model of your own", async () => {
+  const app = fixture({ connected: true, step: "connect", providers: [{ id: "openrouter", source: "managed" }] })
+  const view = app.mount()
+  await until(() => heading(view.host) === "Connect your models")
+  await until(() => app.requests.includes("GET /provider"))
+  // Nothing on screen changes when the list is ignored, so give the answer time to land.
+  await Bun.sleep(50)
+  const openrouter = Array.from(view.host.querySelectorAll("li")).find((row) =>
+    row.textContent?.includes("OpenRouter"),
+  )!
+  expect(button(openrouter, "Add key").disabled).toBe(false)
+  expect(view.host.textContent).toContain("No model connected yet")
 })
 
 test("connections: ChatGPT connects through the OAuth routes, Modal detection reports its error inline", async () => {

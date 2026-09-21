@@ -48,6 +48,12 @@ type Wallet = {
   error?: string
 }
 
+/** The part of `GET /provider` this step reads. */
+type Providers = {
+  all: Array<{ id: string; source?: string }>
+  connected: string[]
+}
+
 /** Ace is the reload rule; a funded Wallet runs managed models without it. */
 type AceAccess = "on" | "funded" | "off"
 
@@ -64,6 +70,7 @@ const CONNECTIONS: Connection[] = [
   { id: "anthropic", logo: "anthropic", name: "Anthropic", kind: "key", placeholder: "sk-ant-…" },
   { id: "openai", logo: "openai", name: "OpenAI", kind: "key", placeholder: "sk-…" },
   { id: "openrouter", logo: "openrouter", name: "OpenRouter", kind: "key", placeholder: "sk-or-…" },
+  { id: "google", logo: "google", name: "Google", kind: "key", placeholder: "AIza…" },
   { id: "firecrawl", logo: "firecrawl", name: "Firecrawl", kind: "credential", placeholder: "fc-…" },
   { id: "modal", logo: "modal", name: "Modal", kind: "detect" },
 ]
@@ -153,6 +160,9 @@ export function DesktopOnboardingController(
     busy: undefined as string | undefined,
     drafts: {} as Record<string, string>,
     connected: {} as Record<string, string>,
+    // Providers the runtime already reaches without this step: environment
+    // keys, keys stored earlier, local endpoints.
+    runtime: [] as string[],
   })
   const lifetime = new AbortController()
   let errorElement: HTMLParagraphElement | undefined
@@ -226,6 +236,22 @@ export function DesktopOnboardingController(
       if (step() === "ace" || ace.status === "idle") void readWallet(true)
     })
   })
+
+  createEffect(() => {
+    if (!ready() || complete() || step() !== "connect") return
+    void readProviders()
+  })
+
+  const readProviders = async () => {
+    const list = await api<Providers>("/provider", { signal: lifetime.signal }).catch(() => undefined)
+    if (!list || lifetime.signal.aborted) return
+    // The managed route is what Ace pays for; the Ace step already answers for it.
+    const managed = new Set(list.all.filter((item) => item.source === "managed").map((item) => item.id))
+    setConnect(
+      "runtime",
+      list.connected.filter((id) => !managed.has(id)),
+    )
+  }
 
   const readWallet = async (summary: boolean): Promise<AceAccess> => {
     if (ace.status === "on") return "on"
@@ -411,12 +437,12 @@ export function DesktopOnboardingController(
     return run(item.id, async () => {
       // The local server owns the snapshot and compensation so a previous key
       // never has to cross back through the browser to be restored.
-      await api(`/auth/${encodeURIComponent(item.id)}/onboarding`, {
+      const result = await api<{ verified?: boolean }>(`/auth/${encodeURIComponent(item.id)}/onboarding`, {
         method: "PUT",
         body: JSON.stringify({ type: "api", key: draft }),
         signal: lifetime.signal,
       })
-      return "Key saved"
+      return result.verified === false ? "Key saved · could not be checked" : "Key saved"
     })
   }
 
@@ -441,11 +467,14 @@ export function DesktopOnboardingController(
     ace.contract
       ? `Ace keeps the Wallet topped up: ${dollars(ace.contract.reloadAmountUsd)} whenever it falls below ${dollars(ace.contract.reloadThresholdUsd)}.`
       : "Ace keeps the Wallet topped up so long runs never stop for funds."
-  const connectedCount = () => Object.keys(connect.connected).length
+  const model = (item: Connection) => item.kind === "oauth" || item.kind === "key"
+  const status = (item: Connection) =>
+    connect.connected[item.id] ?? (model(item) && connect.runtime.includes(item.id) ? "Connected" : undefined)
   const modelSource = () =>
     ace.status === "on" ||
     ace.funded ||
-    CONNECTIONS.some((item) => item.kind !== "credential" && item.kind !== "detect" && connect.connected[item.id])
+    connect.runtime.length > 0 ||
+    CONNECTIONS.some((item) => model(item) && connect.connected[item.id])
   const errorNote = () => (
     <Show when={error()}>
       <p ref={errorElement} class="desktop-onboarding__error" role="alert" tabindex="-1">
@@ -628,7 +657,7 @@ export function DesktopOnboardingController(
                     <For each={CONNECTIONS}>
                       {(item) => {
                         const open = () => connect.open === item.id
-                        const done = () => connect.connected[item.id]
+                        const done = () => status(item)
                         const busy = () => connect.busy === item.id
                         const expandable = () => item.kind === "key" || item.kind === "credential"
                         return (
@@ -737,11 +766,9 @@ export function DesktopOnboardingController(
                     <div>
                       <dt>Connected</dt>
                       <dd>
-                        {connectedCount()
-                          ? CONNECTIONS.filter((item) => connect.connected[item.id])
-                              .map((item) => item.name)
-                              .join(", ")
-                          : "Nothing yet"}
+                        {CONNECTIONS.filter(status)
+                          .map((item) => item.name)
+                          .join(", ") || "Nothing yet"}
                       </dd>
                     </div>
                   </dl>

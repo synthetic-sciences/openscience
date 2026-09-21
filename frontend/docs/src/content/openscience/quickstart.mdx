@@ -38,8 +38,12 @@ the workspace. Every install sees the setup once.
    team wallet. OpenScience notices when Ace is on and continues. **Skip for
    now** keeps your own keys as the model source.
 3. **Connect your own models** (optional). Connect a ChatGPT / Codex
-   subscription, add Anthropic, OpenAI, OpenRouter, or Firecrawl keys, or detect a
-   Modal compute profile. Keys are stored in an owner-only file on this device.
+   subscription, add Anthropic, OpenAI, OpenRouter, Google, or Firecrawl keys, or
+   detect a Modal compute profile. A provider key is checked with its provider
+   before it is saved: a key the provider refuses is not stored, and a provider
+   that cannot be reached saves the key and says it could not be checked. A
+   provider OpenScience already reaches, such as a key in your environment, shows
+   as connected. Keys are stored in an owner-only file on this device.
 4. **Done.** **Open workspace** shows the Projects page. Select **New project**,
    open a folder or start blank, and send your first message.
 

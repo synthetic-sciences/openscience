@@ -2496,7 +2496,7 @@ export class Auth extends HeyApiClient {
   /**
    * Configure an onboarding provider credential
    *
-   * Atomically save one provider key and select BYOK model access.
+   * Check the key with its provider, then atomically save it and select BYOK model access. A key the provider refuses is not saved; an unreachable provider does not block the save.
    */
   public onboarding<ThrowOnError extends boolean = false>(
     parameters: {

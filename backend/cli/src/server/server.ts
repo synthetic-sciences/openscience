@@ -13,6 +13,7 @@ import { FolderResolveRoutes } from "./routes/folder-resolve"
 import { RepoRoutes } from "./routes/repo"
 import z from "zod"
 import { Provider } from "../provider/provider"
+import { KeyCheck } from "../provider/key-check"
 import { NamedError } from "@synsci/util/error"
 import { LSP } from "../lsp"
 import { Format } from "../format"
@@ -292,6 +293,7 @@ export namespace Server {
             readCredential: (providerID) => Auth.get(providerID),
             saveCredential: (providerID, auth) => Auth.set(providerID, auth),
             removeCredential: (providerID) => Auth.remove(providerID),
+            verifyKey: (providerID, key) => KeyCheck.verify({ providerID, key, config: () => Config.getGlobal() }),
             readBillingMode: async () => (await Config.getGlobal()).billing?.llm ?? null,
             selectByok: async () => {
               await Config.updateGlobal({ billing: { llm: "byok" } }, { preserveInstances: true })

@@ -7,6 +7,7 @@ import { UI } from "./ui"
 import { Auth } from "../auth"
 import { Config } from "../config/config"
 import { Provider } from "../provider/provider"
+import { KeyCheck } from "../provider/key-check"
 import { Sandbox } from "../sandbox/sandbox"
 import { Global } from "../global"
 import { runCodexAuthFlow } from "./cmd/auth"
@@ -47,6 +48,7 @@ const KEY_PROVIDERS = [
   { id: "anthropic", label: "Anthropic", placeholder: "sk-ant-…" },
   { id: "openai", label: "OpenAI", placeholder: "sk-…" },
   { id: "openrouter", label: "OpenRouter", placeholder: "sk-or-…" },
+  { id: "google", label: "Google", placeholder: "AIza…" },
 ] as const
 
 type Outcome = "completed" | "cancelled"
@@ -192,6 +194,20 @@ export namespace Onboarding {
     return funded
   }
 
+  /**
+   * Providers the runtime can already reach: stored keys, environment keys,
+   * local endpoints. The managed route is left out because Ace answers for it.
+   */
+  export async function modelProviders(directory = process.cwd()): Promise<string[]> {
+    return Instance.provide({
+      directory,
+      fn: async () =>
+        Object.values(await Provider.list())
+          .filter((provider) => provider.source !== "managed")
+          .map((provider) => provider.id),
+    }).catch(() => [])
+  }
+
   /** Step 3: optional connections, repeated until the person continues. */
   async function connections(aceOn: boolean): Promise<void> {
     prompts.log.step("Connect your own models · optional")
@@ -200,12 +216,14 @@ export namespace Onboarding {
         ? "Anything you connect here is used alongside Ace."
         : "Bring a ChatGPT subscription, provider keys, or a local model. You can also do this later in Customize → Models.",
     )
-    const connected = new Set<string>()
+    const connected = new Set(await modelProviders())
     while (true) {
+      // Firecrawl is a search key; on its own it leaves the agent without a model.
+      const model = aceOn || [...connected].some((id) => id !== "firecrawl")
       const action = await prompts.select({
         message: "Add a connection",
         options: [
-          { value: "continue", label: connected.size ? "Continue" : aceOn ? "Continue" : "Continue without a model" },
+          { value: "continue", label: model ? "Continue" : "Continue without a model" },
           {
             value: "openai-codex",
             label: "ChatGPT / Codex",
@@ -253,6 +271,17 @@ export namespace Onboarding {
     const key = value.trim()
     if (!key) return false
     if (provider) {
+      const spinner = prompts.spinner()
+      spinner.start(`Checking the key with ${provider.label}…`)
+      const outcome = await KeyCheck.verify({ providerID: provider.id, key, config: currentConfig })
+      const note: Record<KeyCheck.Outcome, string> = {
+        accepted: `${provider.label} accepted the key.`,
+        rejected: `${KeyCheck.rejection(provider.id)} Nothing was saved.`,
+        unreachable: `${provider.label} did not answer, so the key could not be checked.`,
+        skipped: `${provider.label} is set to a custom endpoint, so the key was not checked.`,
+      }
+      spinner.stop(note[outcome], outcome === "rejected" ? 1 : 0)
+      if (outcome === "rejected") return false
       await Auth.set(provider.id, { type: "api", key })
       prompts.log.success(`${provider.label} key saved to this device.`)
       return true

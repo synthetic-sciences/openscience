@@ -10051,6 +10051,12 @@ export type AuthOnboardingData = {
 
 export type AuthOnboardingErrors = {
   /**
+   * The provider refused the key; nothing was saved
+   */
+  400: {
+    error: string
+  }
+  /**
    * Configuration failed and compensation was attempted
    */
   500: {
@@ -10066,6 +10072,10 @@ export type AuthOnboardingResponses = {
    */
   200: {
     configured: true
+    /**
+     * true: the provider accepted the key; false: it could not be reached; absent: no check applies
+     */
+    verified?: boolean
   }
 }
 
