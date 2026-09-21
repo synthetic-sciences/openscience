@@ -3,7 +3,6 @@ import { execFile, spawn } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:http"
-import net from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
@@ -25,6 +24,7 @@ import {
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
 import { healthyRuntime, pinnedVersion } from "./service-health.mjs"
+import { servicePort } from "./service-port.mjs"
 import { readAppearance, resolveAppearance, saveAppearance, splashQuery, sweepAppearance } from "./appearance.mjs"
 
 const execute = promisify(execFile)
@@ -190,19 +190,6 @@ function binary() {
     "bin",
     `openscience${suffix}`,
   )
-}
-
-async function port() {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.unref()
-    server.on("error", reject)
-    server.listen(0, "127.0.0.1", () => {
-      const result = server.address()
-      const selected = typeof result === "object" && result ? result.port : 0
-      server.close(() => resolve(selected))
-    })
-  })
 }
 
 // The sidecar listens well under a second after spawn. Probe again quickly
@@ -411,7 +398,7 @@ async function acknowledgeUpdateFailure(error, safeToTerminate = false) {
 async function start() {
   const executable = binary()
   if (!existsSync(executable)) throw new Error(`OpenScience runtime is missing: ${executable}`)
-  const selected = await port()
+  const selected = await servicePort(path.join(app.getPath("userData"), "service-port.json"))
   const workspace = path.join(app.getPath("userData"), "workspace")
   const logs = app.getPath("logs")
   const output = path.join(logs, "openscience-sidecar.log")
