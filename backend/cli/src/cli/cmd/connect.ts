@@ -35,7 +35,7 @@ async function withBrowser() {
     onApprovalUrl(url) {
       prompts.log.info("Opening your browser to approve this device...")
       prompts.log.message(url)
-      openUrl(url)
+      void openUrl(url)
     },
   })
     .then(() => {

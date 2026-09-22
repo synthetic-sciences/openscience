@@ -68,7 +68,7 @@ const TopupCommand = cmd({
     )
     prompts.log.info(aceActivationCopy())
     prompts.log.info("Provider accounts and local models never draw down your Wallet.")
-    openUrl(BILLING_URL)
+    void openUrl(BILLING_URL)
     prompts.outro("Done")
   },
 })

@@ -288,7 +288,7 @@ export const AccountRoutes = lazy(() =>
         try {
           await OpenScience.browserLogin({
             onApprovalUrl: (url) => {
-              openUrl(url)
+              void openUrl(url)
               OpenScience.announceLogin(url)
             },
           })

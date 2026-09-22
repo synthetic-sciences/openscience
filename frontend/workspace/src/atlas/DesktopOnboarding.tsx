@@ -17,11 +17,13 @@ import { TextField } from "@synsci/ui/text-field"
 import { ProviderIcon } from "@synsci/ui/provider-icon"
 import { ProviderLogo } from "@/components/settings/ProviderLogo"
 import { settingsApi } from "@/components/settings/api"
+import { LOGIN_APPROVAL_EVENT, LoginApproval } from "@/components/settings/LoginApproval"
 import { ACCOUNT_DEADLINE_MS, withAccountDeadline } from "@/components/settings/account-deadline"
 import { URLS } from "@/config/urls"
 import { usePlatform } from "@/context/platform"
 import type { Platform } from "@/context/platform"
 import { useServer } from "@/context/server"
+import { createOpenScienceClient } from "@synsci/sdk/v2/client"
 import "./DesktopOnboarding.css"
 
 /** The setup revision every install sees once. Mirrors ONBOARDING_VERSION on the server. */
@@ -118,6 +120,22 @@ function DesktopOnboardingLoading() {
       </div>
     </main>
   )
+}
+
+/**
+ * Relay the sign-in page the server tried to open (its `account.login` event)
+ * to the window, as the workspace's global sync does once it is mounted. Setup
+ * runs before that subscription exists, so it listens on its own for as long
+ * as a browser sign-in is pending; the stream ends with the signal.
+ */
+async function approvalPage(base: string, fetchFn: typeof fetch, signal: AbortSignal) {
+  const client = createOpenScienceClient({ baseUrl: base, fetch: fetchFn, signal })
+  const events = await client.global.event()
+  for await (const event of events.stream) {
+    if (signal.aborted) return
+    if (event.payload.type !== "account.login") continue
+    window.dispatchEvent(new CustomEvent(LOGIN_APPROVAL_EVENT, { detail: event.payload.properties.approval_url }))
+  }
 }
 
 type ServerProjects = ReturnType<typeof useServer>["projects"]
@@ -334,6 +352,11 @@ export function DesktopOnboardingController(
     setAccount("pending", true)
     setError(undefined)
     let expired = false
+    // The workspace's own event subscription mounts after setup, so setup
+    // listens for the approval page itself while the sign-in is pending and
+    // the line under the button offers it in case no browser appeared.
+    const watch = new AbortController()
+    void approvalPage(server.url, fetcher(), AbortSignal.any([watch.signal, lifetime.signal])).catch(() => undefined)
     try {
       const result = await withAccountDeadline(async (deadline) => {
         // The helper aborts its signal on every outcome; only an abort that
@@ -355,6 +378,7 @@ export function DesktopOnboardingController(
         setError(expired ? "Sign-in did not complete in time. Try again." : reason(cause))
       }
     } finally {
+      watch.abort()
       if (!lifetime.signal.aborted) setAccount("pending", false)
     }
   }
@@ -526,6 +550,12 @@ export function DesktopOnboardingController(
                               Finish signing in in your browser. This window continues on its own.
                             </p>
                           </Show>
+                          <LoginApproval
+                            active={account.pending}
+                            class="desktop-onboarding__note"
+                            linkClass="desktop-onboarding__link"
+                            openLink={(url) => platform.openLink(url)}
+                          />
                           <button
                             type="button"
                             class="desktop-onboarding__link"

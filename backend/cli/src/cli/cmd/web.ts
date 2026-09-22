@@ -86,7 +86,7 @@ export const WebCommand = cmd({
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
       UI.empty()
       UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server that is already running.")
-      openUrl(target)
+      void openUrl(target)
       await announceFdaIfNeeded()
       return
     }
@@ -102,7 +102,7 @@ export const WebCommand = cmd({
         UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
         UI.empty()
         UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server started by the other launch.")
-        openUrl(target)
+        void openUrl(target)
         await announceFdaIfNeeded()
         return
       }
@@ -121,7 +121,7 @@ export const WebCommand = cmd({
       )
     } else {
       UI.println(UI.Style.TEXT_DIM, "  Opening your browser… if it doesn't open, visit the URL above.")
-      if (process.env.OPENSCIENCE_RESTARTED !== "1") openUrl(target)
+      if (process.env.OPENSCIENCE_RESTARTED !== "1") void openUrl(target)
     }
 
     // macOS-only: warn when the host explicitly denies protected-folder

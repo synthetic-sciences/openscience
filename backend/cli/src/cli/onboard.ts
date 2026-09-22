@@ -175,7 +175,7 @@ export namespace Onboarding {
       current?.workspace && !current.workspace.personal
         ? workspaceBillingUrl(current.workspace.organizationId)
         : BILLING_URL
-    openUrl(url)
+    void openUrl(url)
     prompts.log.info(`Finish in your browser: ${url}`)
     const spinner = prompts.spinner()
     spinner.start("Waiting for Ace…")

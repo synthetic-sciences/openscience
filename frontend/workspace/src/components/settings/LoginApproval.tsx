@@ -1,7 +1,8 @@
 import { Show, createEffect, createSignal, onCleanup, type Component } from "solid-js"
 import { showToast } from "@synsci/ui/toast"
 
-const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
+/** Window event carrying the sign-in page the server tried to open. */
+export const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
 
 /**
  * The sign-in page the server tried to open, offered as a link while a
@@ -9,7 +10,13 @@ const LOGIN_APPROVAL_EVENT = "openscience:login-approval"
  * container, a desktop without a default handler) this is the only way to
  * finish signing in before the server gives up.
  */
-export const LoginApproval: Component<{ active: boolean; openLink: (url: string) => void }> = (props) => {
+export const LoginApproval: Component<{
+  active: boolean
+  openLink: (url: string) => void
+  /** Classes for the line and its links; the settings panels' by default. */
+  class?: string
+  linkClass?: string
+}> = (props) => {
   const [url, setUrl] = createSignal<string>()
 
   const onApproval = (event: Event) => {
@@ -33,13 +40,17 @@ export const LoginApproval: Component<{ active: boolean; openLink: (url: string)
   return (
     <Show when={props.active && url()}>
       {(value) => (
-        <p class="text-12-regular text-text-weak" data-login-approval>
+        <p class={props.class ?? "text-12-regular text-text-weak"} data-login-approval>
           Browser didn't open?{" "}
-          <button type="button" class="settings-inline-link" onClick={() => props.openLink(value())}>
+          <button
+            type="button"
+            class={props.linkClass ?? "settings-inline-link"}
+            onClick={() => props.openLink(value())}
+          >
             Open the sign-in page
           </button>
           {" · "}
-          <button type="button" class="settings-inline-link" onClick={() => void copy(value())}>
+          <button type="button" class={props.linkClass ?? "settings-inline-link"} onClick={() => void copy(value())}>
             Copy link
           </button>
         </p>

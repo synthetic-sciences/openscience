@@ -58,6 +58,8 @@ function fixture(
     /** What the runtime already reaches, as `GET /provider` reports it. */
     providers?: Array<{ id: string; source: string }>
     login?: () => Response | Promise<Response>
+    /** The sign-in page the server announces on its event stream. */
+    approval?: string
     session?: () => Response | Promise<Response>
     preferences?: () => Response | Promise<Response>
   } = {},
@@ -93,6 +95,21 @@ function fixture(
         if (typeof patch.desktop_onboarding_version === "number") state.version = patch.desktop_onboarding_version
         if (typeof patch.desktop_onboarding_step === "string") state.step = patch.desktop_onboarding_step
         return Response.json({ desktop_onboarding_version: state.version, desktop_onboarding_step: state.step })
+      }
+      if (route === "GET /global/event") {
+        const encoder = new TextEncoder()
+        const frame = (payload: unknown) =>
+          encoder.encode(`data: ${JSON.stringify({ directory: "global", payload })}\n\n`)
+        // Stays open until the client lets go, like the server's stream.
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(frame({ type: "server.connected", properties: {} }))
+            if (options.approval) {
+              controller.enqueue(frame({ type: "account.login", properties: { approval_url: options.approval } }))
+            }
+          },
+        })
+        return new Response(stream, { headers: { "content-type": "text/event-stream" } })
       }
       if (route === "GET /account/session") {
         return options.session?.() ?? Response.json({ session: state.connected })
@@ -265,6 +282,26 @@ test("browser sign-in waits for workspace approval, then advances to Ace", async
   await until(() => app.state.step === "ace")
   expect(document.activeElement).toBe(view.host.querySelector("h1"))
   expect(view.host.textContent).toContain("Firecrawl")
+})
+
+test("browser sign-in offers the approval page as a link in case no browser appeared", async () => {
+  let release: (() => void) | undefined
+  const approval = "https://auth.example/cli/approve?state=abc&redirect_uri=http%3A%2F%2F127.0.0.1%3A5123%2Fcallback"
+  const app = fixture({
+    approval,
+    login: () => new Promise((resolve) => (release = () => resolve(Response.json({ ok: true })))),
+  })
+  const view = app.mount()
+  await until(() => heading(view.host) === "Welcome to OpenScience")
+  expect(view.host.textContent).not.toContain("Browser didn't open?")
+  button(view.host, "Continue with Synthetic Sciences").click()
+  await until(() => view.host.textContent?.includes("Browser didn't open?") === true)
+  button(view.host, "Open the sign-in page").click()
+  expect(app.opened).toEqual([approval])
+  await until(() => typeof release === "function")
+  release!()
+  await until(() => heading(view.host) === "Turn on Ace")
+  expect(view.host.textContent).not.toContain("Browser didn't open?")
 })
 
 test("a sign-in key is an alternative to the browser, and a bad key stays on the step", async () => {
