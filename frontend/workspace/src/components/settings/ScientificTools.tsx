@@ -6,7 +6,9 @@ import { EmptyState, PanelBody, PanelHeader, PanelScroll, RowCopy, Section } fro
 import { useSettingsNav } from "./nav"
 import {
   actionableScientificCapabilities,
+  capabilityNote,
   capabilityState,
+  hostedOnly,
   scientificCapabilityTarget,
   type ScientificCapabilityRecord,
   type ScientificToolsResponse,
@@ -64,6 +66,19 @@ export default function ScientificTools() {
       return target === "nvidia" || target === "modal"
     }),
   )
+  // Packaged tools this device cannot install, listed here because Modal is
+  // their only route; the header says so before the rows repeat it.
+  const modalOnly = createMemo(() => hosted().filter(hostedOnly).length)
+  const hostedDescription = () =>
+    [
+      `${hosted().length} hosted tools.`,
+      modalOnly() > 0
+        ? `${modalOnly()} have no packaged environment for this device and run on Modal once Compute is connected.`
+        : "",
+      "NVIDIA tools share one API key in Credentials; runs use your NVIDIA account, not your Ace balance.",
+    ]
+      .filter(Boolean)
+      .join(" ")
 
   return (
     <PanelScroll>
@@ -135,11 +150,7 @@ export default function ScientificTools() {
               </Show>
 
               <Show when={hosted().length > 0}>
-                <Section
-                  id="scientific-tools-connected"
-                  title="Connected science"
-                  description={`${hosted().length} hosted tools. NVIDIA tools share one API key in Credentials; runs use your NVIDIA account, not your Ace balance.`}
-                >
+                <Section id="scientific-tools-connected" title="Connected science" description={hostedDescription()}>
                   <div class="settings-card scientific-tools-list" role="list">
                     <For each={hosted()}>
                       {(record) => {
@@ -183,9 +194,10 @@ function CapabilityRow(props: {
     if (props.active) return "Installing…"
     if (status().action === "setup") return status().tone === "warning" ? "Repair" : "Install"
     if (status().action === "credentials") return status().tone === "warning" ? "Review" : "Connect"
-    if (status().action === "compute") return "Configure"
+    if (status().action === "compute") return status().tone === "warning" ? "Review" : "Connect Modal"
     return undefined
   }
+  const note = () => capabilityNote(props.record)
   return (
     <article class="settings-row settings-row--grammar scientific-tool-row" data-target={target()} role="listitem">
       <span class="settings-row-logo">
@@ -195,7 +207,8 @@ function CapabilityRow(props: {
         title={props.record.name}
         description={
           <>
-            {categoryLabel(props.record.category)} · {props.record.summary}{" "}
+            {categoryLabel(props.record.category)} · {props.record.summary}
+            <Show when={note()}>{(text) => <> {text()}</>}</Show>{" "}
             <button
               type="button"
               class="settings-inline-link"

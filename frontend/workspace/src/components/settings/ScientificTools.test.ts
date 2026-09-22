@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import {
   actionableScientificCapabilities,
+  capabilityNote,
   capabilityState,
+  hostedOnly,
   scientificCapabilityTarget,
   type ScientificCapabilityRecord,
 } from "./scientific-tools-state"
@@ -78,6 +80,35 @@ describe("scientific tools settings state", () => {
       label: "Needs attention",
       action: "setup",
     })
+  })
+
+  test("a packaged tool this device cannot install is hosted only, not a tool awaiting setup", () => {
+    // Windows and Intel Macs: the pack declares a local target, the doctor
+    // finds no release-locked environment for the device, Modal is the route.
+    const windows = item({
+      id: "biopython",
+      name: "Biopython",
+      current_availability: { local: "unavailable", hosted: "setup_needed" },
+    })
+    expect(scientificCapabilityTarget(windows)).toBe("modal")
+    expect(hostedOnly(windows)).toBe(true)
+    expect(capabilityState(windows)).toMatchObject({ label: "Hosted only", tone: "neutral", action: "compute" })
+    expect(capabilityNote(windows)).toContain("No packaged local environment for this device")
+    // Stored Modal credentials are a connection, not a verified run.
+    expect(
+      capabilityState({ ...windows, current_availability: { local: "unavailable", hosted: "configured" } }),
+    ).toMatchObject({ label: "Connected", tone: "neutral", action: undefined })
+    // A runtime that never had a local target is an ordinary hosted setup.
+    const modalOnly = item({
+      runtime: { ...item().runtime!, targets: ["modal"] },
+      current_availability: { local: "not_applicable", hosted: "setup_needed" },
+    })
+    expect(hostedOnly(modalOnly)).toBe(false)
+    expect(capabilityNote(modalOnly)).toBeUndefined()
+    expect(capabilityState(modalOnly)).toMatchObject({ label: "Setup needed", action: "compute" })
+    // A device with the pack keeps its local row and no note.
+    expect(hostedOnly(item())).toBe(false)
+    expect(capabilityNote(item())).toBeUndefined()
   })
 
   test("distinguishes an NVIDIA credential connection from verified runtime readiness", () => {

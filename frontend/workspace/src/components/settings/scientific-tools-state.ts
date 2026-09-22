@@ -95,25 +95,40 @@ export function actionableScientificCapabilities(records: ScientificCapabilityRe
   return records.filter((record) => scientificCapabilityTarget(record) !== undefined)
 }
 
+/**
+ * A packaged tool that declares a local runtime but cannot install it here.
+ * The doctor reports `unavailable` for a declared local target only when this
+ * device has no release-locked environment (Windows and Intel Macs today), so
+ * the tool's only route is its hosted one. A package the person installed into
+ * the project's own Python is a different thing and does not change this.
+ */
+export function hostedOnly(record: ScientificCapabilityRecord) {
+  return Boolean(record.runtime?.targets?.includes("local") && record.current_availability.local === "unavailable")
+}
+
+/** The sentence a row adds to its description when its local route is missing. */
+export function capabilityNote(record: ScientificCapabilityRecord) {
+  if (hostedOnly(record))
+    return "No packaged local environment for this device; runs on Modal once Compute is connected."
+  return undefined
+}
+
 export function capabilityState(record: ScientificCapabilityRecord) {
   const target = scientificCapabilityTarget(record)
   if (!target) return { label: "Unavailable", tone: "danger" as const, action: undefined }
   const availability = target === "local" ? record.current_availability.local : record.current_availability.hosted
-  if (availability === "degraded")
-    return {
-      label: "Needs attention",
-      tone: "warning" as const,
-      action:
-        target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const),
-    }
-  if (availability === "configured" && target === "nvidia")
+  const action =
+    target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const)
+  if (availability === "degraded") return { label: "Needs attention", tone: "warning" as const, action }
+  // Stored service credentials prove a connection, not a verified run; only a
+  // local environment that inspected clean is ready.
+  if (availability === "configured" && target !== "local")
     return { label: "Connected", tone: "neutral" as const, action: undefined }
   if (availability === "ready" || availability === "configured")
     return { label: "Ready", tone: "success" as const, action: undefined }
   return {
-    label: target === "local" ? "Not installed" : "Setup needed",
+    label: target === "local" ? "Not installed" : hostedOnly(record) ? "Hosted only" : "Setup needed",
     tone: "neutral" as const,
-    action:
-      target === "local" ? ("setup" as const) : target === "nvidia" ? ("credentials" as const) : ("compute" as const),
+    action,
   }
 }

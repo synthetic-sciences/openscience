@@ -17,7 +17,9 @@ For everyday file operations, search, Python, R, and jobs, use the [built-in too
 | --- | --- |
 | Ready | Start with a small, known input. |
 | Connected | Confirm the account and any service charges before use. |
-| Not installed / Setup needed | Follow the setup or connection action. |
+| Not installed | Install the packaged local environment; the local tools share it. |
+| Setup needed | Connect the service the tool runs on: an NVIDIA key in Credentials, or Modal in Compute. |
+| Hosted only | This device has no packaged local environment for the tool. It runs on Modal once Compute is connected. |
 | Needs attention | Open the reported problem and resolve it before retrying. |
 | Unavailable | Use another supported tool or resolve the missing prerequisite. |
 
@@ -26,6 +28,8 @@ Availability can differ across machines, operating systems, and accounts. An exp
 ## Local scientific workflows
 
 Supported setup paths include common numerical, plotting, machine-learning, sequence-analysis, and cheminformatics tools such as SciPy, Matplotlib, scikit-learn, Biopython, and RDKit.
+
+The packaged local environment is released for Apple silicon Macs and for Linux on x64 and arm64. On Windows and on Intel Macs the same tools are listed under **Connected science** as **Hosted only** and run on Modal instead. A package installed into the project's own Python environment is separate from the packaged tool runtime and does not change the row.
 
 ```text
 Check whether RDKit is ready. If it is, calculate molecular weights for
