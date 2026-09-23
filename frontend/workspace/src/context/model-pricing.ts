@@ -7,7 +7,7 @@ type Rates = {
 
 type ModelPricing = {
   upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
-  hosting_provider?: "azure" | "gemini" | "openrouter"
+  hosting_provider?: "azure" | "openai" | "gemini" | "xai" | "bedrock" | "openrouter"
   /** The only markup on an Ace turn, stated by the account's catalog; the public 5.5% otherwise. */
   funding_fee_bps?: number
   audited_at?: string
@@ -213,6 +213,8 @@ export function pricingUpstream(pricing: ModelPricing | undefined): string | und
     meta: "Meta",
     openrouter: "OpenRouter",
     azure: "Azure OpenAI",
+    openai: "OpenAI",
+    bedrock: "Amazon Bedrock",
   }
   const provider = pricing?.hosting_provider ?? pricing?.upstream_provider
   return typeof provider === "string" ? names[provider] : undefined
