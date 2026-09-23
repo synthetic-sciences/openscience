@@ -92,7 +92,7 @@ test("Ace preserves reviewed fallback models but requires approval for new bound
         // documents are cleared on the Ace route even for multimodal models.
         expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(false)
         expect(provider.models["google/gemini-3.7-flash"].capabilities.input.image).toBe(true)
-        for (const id of ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra", "openai/gpt-5.6-luna"]) {
+        for (const id of ["openai/gpt-6-sol", "openai/gpt-6-luna"]) {
           expect(Object.keys(provider.models[id].variants ?? {})).toEqual([
             "none",
             "low",

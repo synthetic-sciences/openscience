@@ -2480,7 +2480,7 @@ export type Model = {
   }
   pricing?: {
     upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
-    hosting_provider?: "azure" | "gemini" | "openrouter"
+    hosting_provider?: "azure" | "openai" | "gemini" | "xai" | "bedrock" | "openrouter"
     funding_fee_bps?: number
     audited_at?: string
     source_url?: string

@@ -19,7 +19,7 @@ const Entry = z.object({
   id: z.string(),
   available: z.boolean().optional(),
   upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
-  hosting_provider: z.enum(["azure", "gemini", "openrouter"]).optional(),
+  hosting_provider: z.enum(["azure", "openai", "gemini", "xai", "bedrock", "openrouter"]).optional(),
   context_length: Tokens,
   max_output_tokens: Tokens.optional(),
   context_options: z.array(Tokens).max(8).optional(),
@@ -37,6 +37,7 @@ const Entry = z.object({
   fast_mode_details: z
     .object({
       available: z.boolean(),
+      hosting_provider: z.enum(["azure", "openai", "gemini", "xai", "bedrock", "openrouter"]).optional(),
       transport: z
         .union([z.object({ service_tier: z.literal("priority") }), z.object({ speed: z.literal("fast") })])
         .optional(),
@@ -115,10 +116,15 @@ export namespace ManagedPricing {
       const fast = model.fast_mode_details
       const transport = fast?.transport
       const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
+      // Priority is served by OpenRouter's reviewed endpoints, OpenAI's own API
+      // beside an Azure-hosted standard tier, or xAI's priority processing.
+      // Gemini and Bedrock hosts have no such tier, so their models never
+      // gain the body flag whatever the catalog says.
+      const fastHost = fast?.hosting_provider ?? model.hosting_provider ?? "openrouter"
       const body: Record<string, string> | undefined =
         model.upstream_provider === "openrouter" &&
-        (!model.hosting_provider || model.hosting_provider === "openrouter") &&
-        /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id) &&
+        ["openrouter", "azure", "openai", "xai"].includes(fastHost) &&
+        /^(?:openai\/gpt-6-(?:astra|sol|luna)|x-ai\/grok-4\.7)$/.test(model.id) &&
         transport &&
         "service_tier" in transport
           ? { service_tier: "priority" }

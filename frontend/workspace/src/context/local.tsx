@@ -149,10 +149,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         // as interchangeable. The active access contract decides which route
         // is eligible; Automatic still prefers the user's ChatGPT connection.
         const connected = new Map(providers.connected().map((provider) => [provider.id, provider]))
+        // GPT-6 Sol on the public API or Ace; the ChatGPT catalog still tops
+        // out at GPT-5.6 Sol.
         const candidates = [
-          { providerID: "openai", modelID: "gpt-5.6-sol" },
+          { providerID: "openai", modelID: "gpt-6-sol" },
           { providerID: "openai-codex", modelID: "gpt-5.6-sol" },
-          { providerID: "openrouter", modelID: "openai/gpt-5.6-sol" },
+          { providerID: "openrouter", modelID: "openai/gpt-6-sol" },
         ].flatMap((route): ModelAccessRoute[] => {
           const provider = connected.get(route.providerID)
           if (!provider?.models[route.modelID]) return []

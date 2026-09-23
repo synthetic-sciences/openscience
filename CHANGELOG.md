@@ -15,6 +15,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Ace's roster moves to the September models.** GPT-6 Sol and GPT-6 Luna replace GPT-5.6 Sol, Terra and Luna; Claude Opus 5.5 replaces Opus 5; Grok 4.7 replaces Grok 4.6; DeepSeek V4.1 Flash replaces V4 Flash (V4 Pro stays); and Xiaomi's MiMo V2.6 Pro joins. The GPT-6 family runs on Azure with Fast mode served by OpenAI's own priority processing, Opus 5.5 runs on Amazon Bedrock and Grok 4.7 on xAI, each at that host's published rates plus the funding fee, and the model menu names the host. A conversation on a retired model keeps working until you pick another; the gateway no longer offers the retired ones.
 - **The update notice offers only what this build can do.** Off macOS, and in an unpackaged build, there is no in-app download, so the launch notice no longer promises a one-press **Download and restart** it cannot honour. It says the release is available and offers **Download installer**, which opens the release page; the macOS app keeps the one press. Customize → General says the same thing as the notice, in its own words for its own button.
 - **The folder picker works on Windows.** Drive letters, UNC shares and backslashes are understood everywhere the
   picker touches a path: the breadcrumbs, the parent-folder button, the typed path field, recents, and the label for

@@ -4,7 +4,7 @@ import { ProviderTransform } from "../../src/provider/transform"
 import type { Provider } from "../../src/provider/provider"
 
 const entry = {
-  id: "anthropic/claude-opus-5",
+  id: "anthropic/claude-opus-5.5",
   context_length: 1_000_000,
   max_output_tokens: 128_000,
   upstream_provider: "anthropic",
@@ -68,7 +68,7 @@ test("explicit availability survives missing prices and conflicting rows fail cl
         { id: entry.id, available: true },
         { id: "openai/gpt-6-astra", available: true },
         { id: "unreviewed/model", available: true },
-        { id: "openai/gpt-5.6-sol" },
+        { id: "openai/gpt-6-sol" },
       ],
     }),
   ).toEqual({ [entry.id]: false, "openai/gpt-6-astra": true })
@@ -91,28 +91,65 @@ test("long-context prices retain inclusive provider thresholds", () => {
   expect(parsed[entry.id]?.cost.tiers?.[0]?.threshold).toBe(200_000)
 })
 
-test("Azure hosting preserves the managed route and cannot inherit OpenRouter Fast", () => {
-  const parsed = ManagedPricing.parse({
+test("hosted routes keep the managed transport and Fast follows the catalog's fast host", () => {
+  const hosted = (hosting_provider: string, fast?: Record<string, unknown>) =>
+    ManagedPricing.parse({
+      models: [
+        {
+          ...entry,
+          id: "openai/gpt-6-sol",
+          upstream_provider: "openrouter",
+          hosting_provider,
+          pricing: { tiers: [{ input: 2.11, output: 10.55, cache_read: 0.211 }] },
+          ...(fast
+            ? {
+                fast_mode: true,
+                fast_mode_details: {
+                  available: true,
+                  transport: { service_tier: "priority" },
+                  pricing: { verified: true, tiers: [{ input: 4.22, output: 21.1 }] },
+                  ...fast,
+                },
+              }
+            : {}),
+        },
+      ],
+    })["openai/gpt-6-sol"]!
+  // Azure alone has no priority tier.
+  const azure = hosted("azure")
+  expect(azure.pricing.hosting_provider).toBe("azure")
+  expect(azure.pricing.upstream_provider).toBe("openrouter")
+  expect(azure.cost.input).toBe(2.11)
+  expect(azure.modes).toEqual({})
+  // OpenAI's own priority processing beside an Azure-hosted standard tier.
+  expect(hosted("azure", { hosting_provider: "openai" }).modes.fast).toEqual({
+    cost: { input: 4.22, output: 21.1, cache: { read: 0, write: 0 }, tiers: [] },
+    provider: { body: { service_tier: "priority" } },
+  })
+  // A Gemini or Bedrock host can never carry the priority flag, whatever the catalog says.
+  for (const host of ["gemini", "bedrock"]) expect(hosted(host, {}).modes).toEqual({})
+  const grok = ManagedPricing.parse({
     models: [
       {
         ...entry,
-        id: "openai/gpt-5.6-sol",
+        id: "x-ai/grok-4.7",
         upstream_provider: "openrouter",
-        hosting_provider: "azure",
-        pricing: { tiers: [{ input: 4.22, output: 21.1, cache_read: 0.422 }] },
+        hosting_provider: "xai",
+        context_length: 500_000,
+        pricing: { tiers: [{ input: 2.11, output: 6.33, cache_read: 0.5275 }] },
         fast_mode: true,
         fast_mode_details: {
           available: true,
+          hosting_provider: "xai",
           transport: { service_tier: "priority" },
-          pricing: { verified: true, tiers: [{ input: 8, output: 40 }] },
+          pricing: { verified: true, tiers: [{ input: 4.22, output: 12.66, cache_read: 1.055 }] },
         },
       },
     ],
-  })["openai/gpt-5.6-sol"]!
-  expect(parsed.pricing.hosting_provider).toBe("azure")
-  expect(parsed.pricing.upstream_provider).toBe("openrouter")
-  expect(parsed.cost.input).toBe(4.22)
-  expect(parsed.modes).toEqual({})
+  })["x-ai/grok-4.7"]!
+  expect(grok.pricing.hosting_provider).toBe("xai")
+  expect(grok.modes.fast?.provider.body).toEqual({ service_tier: "priority" })
+  expect(grok.modes.fast?.cost?.input).toBe(4.22)
 })
 
 test("managed controls cannot import native-provider Fast transports into OpenRouter", () => {
@@ -120,7 +157,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
     models: [
       {
         ...entry,
-        id: "x-ai/grok-4.6",
+        id: "x-ai/grok-4.7",
         upstream_provider: "xai",
         context_length: 500_000,
         context_options: [200_000, 500_000, 1_000_000],
@@ -133,7 +170,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
         },
       },
     ],
-  })["x-ai/grok-4.6"]!
+  })["x-ai/grok-4.7"]!
   expect(parsed.contextOptions).toEqual([200_000, 500_000])
   expect(parsed.reasoningOptions).toEqual([
     { type: "effort", values: ["low", "medium", "high", "xhigh"], default: "high" },
@@ -144,7 +181,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
     models: [
       {
         ...entry,
-        id: "openai/gpt-5.6-sol",
+        id: "openai/gpt-6-sol",
         upstream_provider: "openrouter",
         fast_mode: true,
         fast_mode_details: {
@@ -154,7 +191,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
         },
       },
     ],
-  })["openai/gpt-5.6-sol"]!
+  })["openai/gpt-6-sol"]!
   expect(openrouter.modes.fast).toEqual({
     cost: { input: 4, output: 12, cache: { read: 1, write: 0 }, tiers: [] },
     provider: { body: { service_tier: "priority" } },
@@ -359,7 +396,7 @@ test("managed availability controls selection independently of pricing and canno
         models: [
           { ...entry, id, upstream_provider: "openrouter", available: allowed },
           // No prices: an explicit disabled established route must still be removed.
-          { id: "openai/gpt-5.6-terra", available: false },
+          { id: "openai/gpt-6-luna", available: false },
         ],
       },
       {
@@ -396,9 +433,9 @@ test("managed availability controls selection independently of pricing and canno
           throw new Error("Managed catalog did not publish the expected availability")
         }
         expect((await Provider.list()).openrouter.models[id]).toBeUndefined()
-        const disabled = await waitFor((models) => !models["openai/gpt-5.6-terra"])
+        const disabled = await waitFor((models) => !models["openai/gpt-6-luna"])
         expect(disabled[id]).toBeUndefined()
-        expect(disabled["openai/gpt-5.6-sol"]).toBeDefined()
+        expect(disabled["openai/gpt-6-sol"]).toBeDefined()
         expect(disabled["openai/gpt-6-astra"]).toBeDefined()
         await expect(Provider.getModel("openrouter", id)).rejects.toThrow()
         allowed = true

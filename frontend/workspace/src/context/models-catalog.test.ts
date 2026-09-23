@@ -252,16 +252,16 @@ describe("frontier model canonicalization", () => {
 
   test("uses the requested composer roster and normalizes GLM provider aliases", () => {
     expect(COMPOSER_MODEL_ROSTER.map((model) => model.label)).toEqual([
-      "5.6 Sol",
+      "6 Sol",
       "6 Astra",
-      "5.6 Terra",
-      "Opus 5",
+      "6 Luna",
+      "Opus 5.5",
       "Fable 5.1",
       "Kimi K3",
       "GLM 5.3",
-      "DeepSeek V4 Flash",
+      "DeepSeek V4.1 Flash",
       "Fable 5",
-      "Grok 4.6",
+      "Grok 4.7",
     ])
     for (const providerID of ["zai", "opencode-go", "zai-coding-plan", "zhipuai-coding-plan"]) {
       expect(canonicalKey(providerID, "glm-5.3")).toBe("zai/glm-5-3")

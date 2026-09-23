@@ -1871,7 +1871,7 @@ export namespace Provider {
       pricing: z
         .object({
           upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
-          hosting_provider: z.enum(["azure", "gemini", "openrouter"]).optional(),
+          hosting_provider: z.enum(["azure", "openai", "gemini", "xai", "bedrock", "openrouter"]).optional(),
           funding_fee_bps: z.number().optional(),
           audited_at: z.string().optional(),
           source_url: z.string().optional(),
@@ -2008,7 +2008,7 @@ export namespace Provider {
         .filter(([key, mode]) => {
           if (!mode) return false
           if (key === "pro" && /(^|\/)gpt-/.test(modelID)) return false
-          if (providerID === "xai" && key === "fast") return /^grok-4[.-]6\b/.test(modelID)
+          if (providerID === "xai" && key === "fast") return /^grok-4[.-][67]\b/.test(modelID)
           if (providerID !== "anthropic" || key !== "fast") return true
           const id = modelID.toLowerCase().replaceAll(".", "-")
           return id.startsWith("claude-opus-5") || id.startsWith("claude-opus-4-8")
@@ -2068,16 +2068,19 @@ export namespace Provider {
     // Priority is a paid service tier, not throughput sorting. Only advertise
     // audited routes: an arbitrary OR model has no guaranteed Fast endpoint.
     const openrouter: NonNullable<Model["modes"]> =
-      provider.id === "openrouter" && /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-astra)$/.test(model.id)
+      provider.id === "openrouter" &&
+      /^openai\/(?:gpt-5\.6-(?:sol|terra|luna)|gpt-6-(?:astra|sol|luna))$/.test(model.id)
         ? { fast: priority() }
         : {}
     const xai: NonNullable<Model["modes"]> =
-      provider.id === "xai" && /^grok-4[.-]6\b/.test(model.id) ? { fast: priority() } : {}
-    // OpenAI prices priority processing for GPT-6 Astra ($20/$100 per 1M) but
-    // models.dev's snapshot carries no fast mode for it, so the direct route
-    // lost the tier the Ace route offers for the same model.
+      provider.id === "xai" && /^grok-4[.-][67]\b/.test(model.id) ? { fast: priority() } : {}
+    // OpenAI prices priority processing for the GPT-6 family (2x every token
+    // class) but models.dev's snapshot can lag a launch, so the direct route
+    // would lose the tier the Ace route offers for the same model.
     const openai: NonNullable<Model["modes"]> =
-      provider.id === "openai" && /^gpt-6-astra$/.test(model.id) && !direct.fast ? { fast: priority() } : {}
+      provider.id === "openai" && /^gpt-6-(?:astra|sol|luna)$/.test(model.id) && !direct.fast
+        ? { fast: priority() }
+        : {}
     const result = provider.id === "openrouter" ? openrouter : { ...direct, ...xai, ...openai }
     if (Object.keys(result).length === 0) return undefined
     return result

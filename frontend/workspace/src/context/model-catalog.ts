@@ -36,16 +36,16 @@ const GLM_PROVIDER_ALIASES = new Set(["zai", "opencode-go", "zai-coding-plan", "
 /** Ordered product roster for the composer. Missing entries are presentation-
  * only placeholders; this list never fabricates a callable provider route. */
 export const COMPOSER_MODEL_ROSTER = [
-  { key: "openai/gpt-5-6-sol", label: "5.6 Sol", provider: "openai" },
+  { key: "openai/gpt-6-sol", label: "6 Sol", provider: "openai" },
   { key: "openai/gpt-6-astra", label: "6 Astra", provider: "openai" },
-  { key: "openai/gpt-5-6-terra", label: "5.6 Terra", provider: "openai" },
-  { key: "anthropic/claude-opus-5", label: "Opus 5", provider: "anthropic" },
+  { key: "openai/gpt-6-luna", label: "6 Luna", provider: "openai" },
+  { key: "anthropic/claude-opus-5-5", label: "Opus 5.5", provider: "anthropic" },
   { key: "anthropic/claude-fable-5-1", label: "Fable 5.1", provider: "anthropic" },
   { key: "moonshotai/kimi-k3", label: "Kimi K3", provider: "moonshotai" },
   { key: "zai/glm-5-3", label: "GLM 5.3", provider: "zai" },
-  { key: "deepseek/deepseek-v4-flash", label: "DeepSeek V4 Flash", provider: "deepseek" },
+  { key: "deepseek/deepseek-v4-1-flash", label: "DeepSeek V4.1 Flash", provider: "deepseek" },
   { key: "anthropic/claude-fable-5", label: "Fable 5", provider: "anthropic" },
-  { key: "xai/grok-4-6", label: "Grok 4.6", provider: "xai" },
+  { key: "xai/grok-4-7", label: "Grok 4.7", provider: "xai" },
 ] as const
 
 // Manage Models remains the one-time place for changing composer visibility.
@@ -53,6 +53,10 @@ export const COMPOSER_MODEL_ROSTER = [
 // above only controls ordering and passive unavailable placeholders.
 export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "openai/gpt-6-astra",
+  "openai/gpt-6-sol",
+  "openai/gpt-6-sol-pro",
+  "openai/gpt-6-luna",
+  "openai/gpt-6-luna-pro",
   "openai/gpt-5-6-sol",
   "openai/gpt-5-6-sol-pro",
   "openai/gpt-5-6-terra",
@@ -66,6 +70,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "openai-codex/gpt-5-6-terra",
   "xai/grok-4-5",
   "xai/grok-4-6",
+  "xai/grok-4-7",
   "xai/grok-4-20-multi-agent",
   "meta/muse-spark-1-1",
   "meta/muse-spark-1-2",
@@ -74,6 +79,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "openai/gpt-5-5-mini",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-opus-5",
+  "anthropic/claude-opus-5-5",
   "anthropic/claude-fable-5",
   "anthropic/claude-fable-5-1",
   "anthropic/claude-haiku-4-5",
@@ -90,8 +96,10 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "nvidia/nemotron-3-ultra-550b-a55b",
   "moonshotai/kimi-k2-7-code",
   "moonshotai/kimi-k3",
+  "xiaomi/mimo-v2-6-pro",
   "deepseek/deepseek-v4-pro",
   "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-v4-1-flash",
 ])
 
 function openrouterModelAlias(providerID: string, modelID: string): ModelKey | undefined {
@@ -212,12 +220,23 @@ export const isFrontier = (model: ModelKey) =>
   FRONTIER_MODELS.has(canonicalKey(model.providerID, model.modelID)) ||
   FRONTIER_MODELS.has(logicalModelKey(model.providerID, model.modelID))
 
+/** Short labels the composer used for models it no longer pins. A connected
+ * key can still expose these routes, and a returning user should recognise
+ * them by the name they had. */
+const RETIRED_LABELS: Record<string, string> = {
+  "openai/gpt-5-6-sol": "5.6 Sol",
+  "openai/gpt-5-6-terra": "5.6 Terra",
+  "anthropic/claude-opus-5": "Opus 5",
+  "deepseek/deepseek-v4-flash": "DeepSeek V4 Flash",
+  "xai/grok-4-6": "Grok 4.6",
+}
+
 /** Display name for catalog aliases; exact provider/model ids are untouched. */
 export function modelDisplayName(name: string, providerID: string, modelID: string): string {
   const key = logicalModelKey(providerID, modelID)
   const roster = COMPOSER_MODEL_ROSTER.find((model) => model.key === key)
   if (roster) return roster.label
-  return name
+  return RETIRED_LABELS[key] ?? name
 }
 
 export type CatalogModel = {

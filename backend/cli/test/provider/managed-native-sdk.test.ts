@@ -26,7 +26,7 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
   context_length: MANAGED_MODEL_DETAILS[id].context,
   max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
   pricing: { tiers: [{ input: 2, output: 6 }] },
-  ...(id === "openai/gpt-5.6-sol"
+  ...(id === "openai/gpt-6-sol"
     ? {
         fast_mode: true,
         fast_mode_details: {
@@ -49,7 +49,7 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
   ...(id === "anthropic/claude-haiku-4.5"
     ? { capabilities: { reasoning_efforts: [], thinking_budgets: [0, 4096, 8192, 16384, 32768] } }
     : {}),
-  ...(id === "x-ai/grok-4.6"
+  ...(id === "x-ai/grok-4.7"
     ? {
         capabilities: {
           reasoning_efforts: ["low", "medium", "high", "xhigh"],
@@ -77,7 +77,7 @@ async function gateway(request: Request) {
       {
         id: "chat_fixture",
         created: 1,
-        model: "grok-4.6",
+        model: "grok-4.7",
         choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
         usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
       },
@@ -170,11 +170,11 @@ test("Ace keeps every explicitly approved curated model on the scoped OpenRouter
           expect(calls.at(-1)?.body.model).toBe(id)
         }
         expect(provider.models["anthropic/claude-fable-5"].modes).toEqual({})
-        expect(provider.models["x-ai/grok-4.6"].modes).toEqual({})
+        expect(provider.models["x-ai/grok-4.7"].modes).toEqual({})
 
-        const grok = provider.models["x-ai/grok-4.6"]
+        const grok = provider.models["x-ai/grok-4.7"]
         expect(grok.api).toMatchObject({
-          id: "x-ai/grok-4.6",
+          id: "x-ai/grok-4.7",
           npm: "@openrouter/ai-sdk-provider",
         })
         expect(grok.api.url).toEndWith("/api/llm/proxy/openrouter/v1")
@@ -208,7 +208,7 @@ test("Ace keeps every explicitly approved curated model on the scoped OpenRouter
         expect(calls.at(-2)?.body.reasoning).toEqual({ enabled: false })
         expect(calls.at(-1)?.body.reasoning).toEqual({ max_tokens: 4096 })
 
-        const sol = provider.models["openai/gpt-5.6-sol"]
+        const sol = provider.models["openai/gpt-6-sol"]
         expect(sol.modes?.fast).toBeDefined()
         const fast = ProviderTransform.tier(sol, "fast").options
         const result = await generateText({

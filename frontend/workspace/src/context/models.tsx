@@ -16,8 +16,8 @@ import {
 export { canonicalKey, FRONTIER_MODELS, type ModelKey } from "./model-catalog"
 
 export const RECOMMENDED_MODELS: ModelKey[] = [
-  { providerID: "openai", modelID: "gpt-5.6-sol" },
-  { providerID: "anthropic", modelID: "claude-opus-5" },
+  { providerID: "openai", modelID: "gpt-6-sol" },
+  { providerID: "anthropic", modelID: "claude-opus-5.5" },
   { providerID: "moonshotai", modelID: "kimi-k3" },
 ]
 

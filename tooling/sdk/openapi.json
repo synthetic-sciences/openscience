@@ -62292,7 +62292,10 @@
                 "type": "string",
                 "enum": [
                   "azure",
+                  "openai",
                   "gemini",
+                  "xai",
+                  "bedrock",
                   "openrouter"
                 ]
               },

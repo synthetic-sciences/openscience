@@ -1,26 +1,26 @@
 /** Reviewed Ace roster shipped with the client. No dashboard sync is required. */
 export const MANAGED_OPENROUTER_MODELS = Object.freeze([
   "openai/gpt-6-astra",
-  "openai/gpt-5.6-sol",
-  "openai/gpt-5.6-terra",
-  "openai/gpt-5.6-luna",
-  "anthropic/claude-opus-5",
+  "openai/gpt-6-sol",
+  "openai/gpt-6-luna",
+  "anthropic/claude-opus-5.5",
   "anthropic/claude-fable-5",
   "anthropic/claude-fable-5.1",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-haiku-4.5",
   "google/gemini-3.1-pro-preview",
   "google/gemini-3.7-flash",
-  "x-ai/grok-4.6",
+  "x-ai/grok-4.7",
   "z-ai/glm-5.3",
   "z-ai/glm-5.3-flash",
   "deepseek/deepseek-v4-pro",
-  "deepseek/deepseek-v4-flash",
+  "deepseek/deepseek-v4.1-flash",
   "qwen/qwen3.8-max",
   "qwen/qwen3.8-flash",
   "moonshotai/kimi-k3",
   "moonshotai/kimi-k2.7-code",
   "minimax/minimax-m3",
+  "xiaomi/mimo-v2.6-pro",
   "meta/muse-spark-1.2",
   "nvidia/nemotron-3-ultra-550b-a55b",
 ] as const)
@@ -41,7 +41,7 @@ type ManagedModel = {
 
 // Verified against https://openrouter.ai/api/v1/models and the per-model
 // endpoints (https://openrouter.ai/api/v1/models/{id}/endpoints, which report
-// max_prompt_tokens) on 2026-09-07.
+// max_prompt_tokens) on 2026-09-23.
 // Runtime metadata supplies prices for the actual upstream route; this fallback
 // only keeps model identity and token budgeting usable when models.dev lags.
 export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[number], ManagedModel> = {
@@ -54,9 +54,10 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     temperature: false,
     efforts: ["low", "medium", "high", "xhigh", "max"],
   },
-  // Every OpenAI-hosted GPT-5.6 endpoint reports max_prompt_tokens 922000.
-  "openai/gpt-5.6-sol": {
-    name: "GPT-5.6 Sol",
+  // Every OpenAI-hosted GPT-6 endpoint reports max_prompt_tokens 922000.
+  // Sol and Luna accept `none`; Astra does not.
+  "openai/gpt-6-sol": {
+    name: "GPT-6 Sol",
     context: 1_050_000,
     maxInput: 922_000,
     output: 128_000,
@@ -65,8 +66,8 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     efforts: ["none", "low", "medium", "high", "xhigh", "max"],
     defaultEffort: "medium",
   },
-  "openai/gpt-5.6-terra": {
-    name: "GPT-5.6 Terra",
+  "openai/gpt-6-luna": {
+    name: "GPT-6 Luna",
     context: 1_050_000,
     maxInput: 922_000,
     output: 128_000,
@@ -75,22 +76,14 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     efforts: ["none", "low", "medium", "high", "xhigh", "max"],
     defaultEffort: "medium",
   },
-  "openai/gpt-5.6-luna": {
-    name: "GPT-5.6 Luna",
-    context: 1_050_000,
-    maxInput: 922_000,
-    output: 128_000,
-    input: ["text", "image", "pdf"],
-    temperature: false,
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
-    defaultEffort: "medium",
-  },
-  "anthropic/claude-opus-5": {
-    name: "Claude Opus 5",
+  "anthropic/claude-opus-5.5": {
+    name: "Claude Opus 5.5",
     context: 1_000_000,
     output: 128_000,
     input: ["text", "image", "pdf"],
     temperature: false,
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+    defaultEffort: "high",
   },
   "anthropic/claude-fable-5": {
     name: "Claude Fable 5",
@@ -137,7 +130,14 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     input: ["text", "image", "video", "audio", "pdf"],
     temperature: false,
   },
-  "x-ai/grok-4.6": { name: "Grok 4.6", context: 500_000, output: 450_000, input: ["text", "image", "pdf"] },
+  "x-ai/grok-4.7": {
+    name: "Grok 4.7",
+    context: 500_000,
+    output: 450_000,
+    input: ["text", "image", "pdf"],
+    efforts: ["low", "medium", "high", "xhigh"],
+    defaultEffort: "high",
+  },
   "z-ai/glm-5.3": { name: "GLM 5.3", context: 1_310_720, output: 131_072, input: ["text"] },
   "z-ai/glm-5.3-flash": {
     name: "GLM 5.3 Flash",
@@ -146,7 +146,12 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     input: ["text", "image", "video"],
   },
   "deepseek/deepseek-v4-pro": { name: "DeepSeek V4 Pro", context: 1_048_576, output: 384_000, input: ["text"] },
-  "deepseek/deepseek-v4-flash": { name: "DeepSeek V4 Flash", context: 1_048_576, output: 384_000, input: ["text"] },
+  "deepseek/deepseek-v4.1-flash": {
+    name: "DeepSeek V4.1 Flash",
+    context: 1_048_576,
+    output: 384_000,
+    input: ["text", "image"],
+  },
   "qwen/qwen3.8-max": { name: "Qwen 3.8 Max", context: 1_000_000, output: 131_072, input: ["text", "image", "video"] },
   // Official Flash-Next production API: https://qwen.ai/blog?id=qwen3.8-flash-next
   "qwen/qwen3.8-flash": {
@@ -158,6 +163,12 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
   "moonshotai/kimi-k3": { name: "Kimi K3", context: 1_048_576, output: 943_718, input: ["text", "image", "video"] },
   "moonshotai/kimi-k2.7-code": { name: "Kimi K2.7 Code", context: 262_144, output: 235_929, input: ["text", "image"] },
   "minimax/minimax-m3": { name: "MiniMax M3", context: 1_048_576, output: 512_000, input: ["text", "image", "video"] },
+  "xiaomi/mimo-v2.6-pro": {
+    name: "MiMo V2.6 Pro",
+    context: 1_048_576,
+    output: 131_072,
+    input: ["text", "image", "video", "audio"],
+  },
   "meta/muse-spark-1.2": {
     name: "Muse Spark 1.2",
     context: 1_048_576,
