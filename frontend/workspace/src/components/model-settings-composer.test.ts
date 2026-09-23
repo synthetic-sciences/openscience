@@ -242,10 +242,10 @@ const served = (input: { id: string; name: string; provider: string; label: stri
 })
 const funded = [
   served({ id: "gpt-5.6-sol", name: "GPT-5.6 Sol", provider: "openai-codex", label: "OpenAI", source: "custom" }),
-  served({ id: "claude-opus-5", name: "Claude Opus 5", provider: "anthropic", label: "Anthropic", source: "api" }),
+  served({ id: "claude-opus-5.5", name: "Claude Opus 5.5", provider: "anthropic", label: "Anthropic", source: "api" }),
   served({
-    id: "anthropic/claude-opus-5",
-    name: "Claude Opus 5",
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
     provider: "openrouter",
     label: "OpenRouter",
     source: "managed",
@@ -271,10 +271,10 @@ test("a model served by a key and by the Wallet says which one the row selects, 
   fixture.setState({ models: funded, index: 0, effort: {}, tier: {}, billing: "byok" })
   const host = mount()
   await openMenu(host)
-  const opus = '[data-model-quick][data-model-choice="anthropic/claude-opus-5"]'
+  const opus = '[data-model-quick][data-model-choice="anthropic/claude-opus-5-5"]'
   expect(byline('[data-model-quick][aria-checked="true"]')).toBe("Subscription · OpenAI · 1.05M context")
   expect(byline(opus)).toBe("Your key · Anthropic · 1.05M context")
-  expect(document.querySelector(opus)?.getAttribute("aria-label")).toBe("Opus 5, Anthropic, Your key")
+  expect(document.querySelector(opus)?.getAttribute("aria-label")).toBe("Opus 5.5, Anthropic, Your key")
 
   fixture.setState("billing", "managed")
   await settle()
