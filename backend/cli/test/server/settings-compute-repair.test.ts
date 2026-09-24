@@ -8,13 +8,13 @@ import { ComputeSettingsRoutes } from "../../src/server/routes/settings/compute"
 test("a starter that cannot be set up answers 409 with the interpreter's own reason", async () => {
   const reason =
     "r starter environment failed its import probe: Error in library(tidyverse) : there is no package called 'tidyverse'"
-  const bootstrap = spyOn(ManagedEnvironments, "bootstrap").mockRejectedValue(new Error(reason))
+  const repair = spyOn(ManagedEnvironments, "repair").mockRejectedValue(new Error(reason))
   try {
     const response = await ComputeSettingsRoutes().request("/environments/repair", { method: "POST" })
     expect(response.status).toBe(409)
     expect(await response.json()).toEqual({ error: "environment_setup_failed", message: reason })
-    expect(bootstrap).toHaveBeenCalledTimes(1)
+    expect(repair).toHaveBeenCalledTimes(1)
   } finally {
-    bootstrap.mockRestore()
+    repair.mockRestore()
   }
 })

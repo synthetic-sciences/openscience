@@ -257,7 +257,7 @@ export namespace DataRootBarrier {
         await handle.writeFile(JSON.stringify({ ...operationOwner, token, created: Date.now() }))
         await handle.sync()
         await handle.close()
-        await fs.rename(temporary, marker)
+        await AtomicRename.replace(temporary, marker)
       } catch (error) {
         await handle.close().catch(() => undefined)
         await fs.rm(temporary, { force: true }).catch(() => undefined)

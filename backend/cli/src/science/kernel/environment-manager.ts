@@ -6,6 +6,7 @@ import {
   type CoreScienceCondaPlatform,
 } from "@/science/capability/conda-locks"
 import { FileLease } from "@/util/file-lease"
+import { AtomicRename } from "@/util/atomic-rename"
 import { Log } from "@/util/log"
 import { BlobReader, BlobWriter, ZipReader } from "@zip.js/zip.js"
 import crypto from "node:crypto"
@@ -250,7 +251,7 @@ async function writeJson(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.${crypto.randomUUID()}.tmp`
   await fs.mkdir(path.dirname(file), { recursive: true })
   await Bun.write(temporary, JSON.stringify(value, null, 2), { mode: 0o600 })
-  await fs.rename(temporary, file).catch(async (error) => {
+  await AtomicRename.replace(temporary, file).catch(async (error) => {
     await fs.rm(temporary, { force: true }).catch(() => undefined)
     throw error
   })
@@ -477,7 +478,7 @@ async function ensureCondaArchives(digest: string, selected: CoreScienceCondaPla
         if ((await lockedFileSha256(temporary)) !== artifact.digest) {
           throw new Error(`Locked Conda archive ${artifact.name} failed its sha256 checksum`)
         }
-        await fs.rename(temporary, target)
+        await AtomicRename.replace(temporary, target)
       } finally {
         await fs.rm(temporary, { force: true }).catch(() => undefined)
       }
@@ -548,11 +549,18 @@ async function ensureWheelArchives(
     const previous = `${destination}.${crypto.randomUUID()}.previous`
     await fs.mkdir(path.dirname(destination), { recursive: true })
     const hadPrevious = !!(await fs.stat(destination).catch(() => undefined))
-    if (hadPrevious) await fs.rename(destination, previous)
+    if (hadPrevious) await AtomicRename.replace(destination, previous)
     try {
-      await fs.rename(staging, destination)
+      await AtomicRename.replace(staging, destination)
     } catch (error) {
-      if (hadPrevious) await fs.rename(previous, destination).catch(() => undefined)
+      if (hadPrevious) {
+        await AtomicRename.replace(previous, destination).catch((restoreError) => {
+          throw new AggregateError(
+            [error, restoreError],
+            `Wheel archive replacement failed: ${failureText(error)}. Restore failed: ${failureText(restoreError)}. Previous verified archives remain at ${previous}`,
+          )
+        })
+      }
       throw error
     }
     if (hadPrevious) await fs.rm(previous, { recursive: true, force: true }).catch(() => undefined)
@@ -600,18 +608,18 @@ async function installMicromamba() {
     await fs.copyFile(source, replacement)
     if (process.platform !== "win32") await fs.chmod(replacement, 0o755)
     const hadPrevious = !!(await fs.stat(micromamba()).catch(() => undefined))
-    if (hadPrevious) await fs.rename(micromamba(), previous)
+    if (hadPrevious) await AtomicRename.replace(micromamba(), previous)
     try {
-      await fs.rename(replacement, micromamba())
+      await AtomicRename.replace(replacement, micromamba())
     } catch (error) {
       if (hadPrevious) {
         try {
-          await fs.rename(previous, micromamba())
+          await AtomicRename.replace(previous, micromamba())
         } catch (restoreError) {
           preservePrevious = true
           throw new AggregateError(
             [error, restoreError],
-            `Micromamba replacement failed and the previous verified binary remains at ${previous}`,
+            `Micromamba replacement failed: ${failureText(error)}. Restore failed: ${failureText(restoreError)}. Previous verified binary remains at ${previous}`,
           )
         }
       }
@@ -656,9 +664,12 @@ async function probe(language: ManagedEnvironmentLanguage, prefix = environmentP
   )
 }
 
+function failureText(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function failureReason(error: unknown) {
-  const text = error instanceof Error ? error.message : String(error)
-  return text
+  return failureText(error)
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
@@ -1252,7 +1263,7 @@ async function cleanupGenerated(prefix: string, ownership: Ownership) {
     await fs.mkdir(path.dirname(target), { recursive: true })
     try {
       await Bun.write(temporary, file.content, { mode: 0o600 })
-      await fs.rename(temporary, target)
+      await AtomicRename.replace(temporary, target)
     } finally {
       await fs.rm(temporary, { force: true }).catch(() => undefined)
     }
@@ -1357,7 +1368,7 @@ async function replaceEnvironment(target: string, create: () => Promise<void>) {
   const hadPrevious = !!(await fs.stat(target).catch(() => undefined))
   if (hadPrevious) {
     await fs.mkdir(rollbackRoot(), { recursive: true })
-    await fs.rename(target, previous)
+    await AtomicRename.replace(target, previous)
   }
   try {
     // Conda environments contain absolute prefixes (including Mach-O dylib
@@ -1366,7 +1377,14 @@ async function replaceEnvironment(target: string, create: () => Promise<void>) {
     await create()
   } catch (error) {
     await fs.rm(target, { recursive: true, force: true }).catch(() => undefined)
-    if (hadPrevious) await fs.rename(previous, target).catch(() => undefined)
+    if (hadPrevious) {
+      await AtomicRename.replace(previous, target).catch((restoreError) => {
+        throw new AggregateError(
+          [error, restoreError],
+          `Managed environment replacement failed: ${failureText(error)}. Restore failed: ${failureText(restoreError)}. Previous environment remains at ${previous}`,
+        )
+      })
+    }
     throw error
   }
   if (hadPrevious) {
@@ -1644,7 +1662,8 @@ async function ensureTaskEnvironment(name: string, spec: ManagedTaskSpec, select
 }
 
 const micromambaSetup: { value?: Promise<void> } = {}
-const starterSetup: Partial<Record<ManagedEnvironmentLanguage, Promise<void>>> = {}
+const starterSetup: Partial<Record<ManagedEnvironmentLanguage, { promise: Promise<void>; ready: boolean }>> = {}
+const starterLease = (language: ManagedEnvironmentLanguage) => path.join(root(), `starter-${language}.lock`)
 
 async function ensureMicromamba() {
   if (await installedMicromambaIsLocked()) return
@@ -1667,13 +1686,15 @@ async function ensureMicromamba() {
   }
 }
 
-async function ensureLanguage(language: ManagedEnvironmentLanguage) {
+async function ensureLanguage(language: ManagedEnvironmentLanguage, refresh = false) {
   const existing = starterSetup[language]
-  if (existing) return existing
+  // Explicit Repair checks a completed setup again; a concurrent caller joins
+  // the active check rather than starting another writer for the same prefix.
+  if (existing && (!refresh || !existing.ready)) return existing.promise
   const current = (async () => {
     await fs.mkdir(root(), { recursive: true })
     await ensureMicromamba()
-    await using lease = await FileLease.acquire(path.join(root(), `starter-${language}.lock`), 45 * 60 * 1000)
+    await using lease = await FileLease.acquire(starterLease(language), 45 * 60 * 1000)
     try {
       await ensureStarter(language)
       await state({ status: "ready", phase: `ready:${language}`, error: undefined })
@@ -1683,11 +1704,13 @@ async function ensureLanguage(language: ManagedEnvironmentLanguage) {
       throw error
     }
   })()
-  starterSetup[language] = current
+  const setup = { promise: current, ready: false }
+  starterSetup[language] = setup
   try {
     await current
+    setup.ready = true
   } catch (error) {
-    if (starterSetup[language] === current) delete starterSetup[language]
+    if (starterSetup[language] === setup) delete starterSetup[language]
     throw error
   }
 }
@@ -1699,32 +1722,65 @@ export namespace ManagedEnvironments {
   export const launch = condaLaunch
 
   export async function bootstrap() {
+    await setup(false)
+  }
+
+  /** Explicit repair rechecks cached starters while ordinary execution keeps
+   * its successful setup cache and joins any repair already in progress. */
+  export async function repair() {
+    await setup(true)
+  }
+
+  async function setup(refresh: boolean) {
     if (process.env.OPENSCIENCE_SKIP_ENVIRONMENT_BOOTSTRAP === "1") return
     if (process.env.OPENSCIENCE_TEST_HOME && process.env.OPENSCIENCE_TEST_MANAGED_ENVIRONMENTS !== "1") return
-    await ensureLanguage("python")
-    await ensureLanguage("r")
+    await ensureLanguage("python", refresh)
+    await ensureLanguage("r", refresh)
     await state({ status: "ready", phase: "ready", error: undefined })
   }
 
   export async function status() {
     const current = await state()
-    const environments = await Promise.all(
+    const snapshots = await Promise.all(
       (["python", "r"] as const).map(async (language) => {
+        // A Windows interpreter can hold DLLs open for the entire import probe.
+        // Share the repair lease, but never make a settings read wait for setup.
+        await using lease = await FileLease.acquire(starterLease(language), 0).catch((error: unknown) => {
+          if (
+            error instanceof Error &&
+            error.message.startsWith("Timed out waiting for another OpenScience process to release ")
+          )
+            return undefined
+          throw error
+        })
+        const base = {
+          language,
+          path: environmentPath(language),
+          packages: [...STARTERS[language].packages],
+        }
+        if (!lease) return { busy: true, environment: { ...base, ready: false, manifest: null } }
         const manifest = Manifest.safeParse(
           await Bun.file(manifestPath(language))
             .json()
             .catch(() => undefined),
         )
         return {
-          language,
-          ready: (await probe(language)).ok,
-          path: environmentPath(language),
-          packages: [...STARTERS[language].packages],
-          manifest: manifest.success ? manifest.data : null,
+          busy: false,
+          environment: {
+            ...base,
+            ready: (await probe(language)).ok,
+            manifest: manifest.success ? manifest.data : null,
+          },
         }
       }),
     )
-    return { ...current, environments }
+    return {
+      ...current,
+      ...(snapshots.some((item) => item.busy)
+        ? { status: "installing" as const, phase: "checking_environments", error: undefined }
+        : {}),
+      environments: snapshots.map((item) => item.environment),
+    }
   }
 
   /** Create a machine-wide named Python environment only after the caller has

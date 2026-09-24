@@ -207,6 +207,12 @@ fs.chmodSync(binary, 0o755)
 }
 
 type Mode =
+  | "status-before-repair"
+  | "repair-before-status"
+  | "state-sharing"
+  | "state-locked"
+  | "repair-cached"
+  | "repair-rollback"
   | "runtime"
   | "bootstrap"
   | "task"
@@ -321,6 +327,98 @@ test("starter repair solves directly at the durable Conda prefix", async () => {
     expect(probes).toContain(
       "R_LIBS_USER= R_LIBS_SITE= CONDA_PREFIX=" + (await fs.realpath(path.join(current.conda, "envs", "r"))),
     )
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("healthy starter metadata retries transient Windows sharing failures without removing committed state", async () => {
+  const current = await profile()
+  try {
+    const result = JSON.parse((await run("state-sharing", current.env)).trim())
+    expect(result.error).toBeNull()
+    expect(result.attempts).toBe(4)
+    expect(result.staged).toHaveLength(1)
+    expect(result.intact).toBe(true)
+    expect(result.committed).toMatchObject({ status: "ready", phase: "ready" })
+    expect(result.sibling).toBe("another writer")
+    expect(result.leftovers).toEqual(["state.json.other-writer.tmp"])
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("persistent starter metadata locks preserve ready state and clean only the failed writer's temp", async () => {
+  const current = await profile()
+  try {
+    const result = JSON.parse((await run("state-locked", current.env)).trim())
+    expect(result.error).toContain("injected EPERM")
+    expect(result.elapsed).toBeGreaterThanOrEqual(1_900)
+    expect(result.elapsed).toBeLessThan(6_000)
+    expect(result.attempts).toBeGreaterThan(3)
+    expect(result.staged).toHaveLength(1)
+    expect(result.intact).toBe(true)
+    expect(result.preserved).toBe(true)
+    expect(result.committed).toMatchObject({ status: "ready", phase: "ready" })
+    expect(result.sibling).toBe("another writer")
+    expect(result.leftovers).toEqual(["state.json.other-writer.tmp"])
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("explicit repair rechecks cached starters and concurrent repairs share one replacement", async () => {
+  const current = await profile()
+  try {
+    expect(JSON.parse((await run("repair-cached", current.env)).trim())).toEqual({
+      cached: true,
+      repaired: true,
+      installs: 1,
+      probes: 1,
+      runtimeCached: true,
+    })
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("failed starter rollback retains the previous environment and reports both failures and its path", async () => {
+  const current = await profile()
+  try {
+    const result = JSON.parse((await run("repair-rollback", current.env)).trim())
+    expect(result.error).toContain("unable to load shared object stringi.dll")
+    expect(result.error).toContain("injected EIO restoring")
+    expect(result.previous).toHaveLength(1)
+    expect(result.error).toContain(result.previous[0])
+    expect(result.preserved).toBe("keep installed package")
+    expect(result.targetExists).toBe(false)
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("a status R probe holds the repair lease until its interpreter exits", async () => {
+  const current = await profile()
+  try {
+    expect(JSON.parse((await run("status-before-repair", current.env)).trim())).toEqual({
+      held: true,
+      calls: 1,
+      unchanged: true,
+    })
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("status skips an R starter being repaired instead of launching a competing interpreter", async () => {
+  const current = await profile()
+  try {
+    const result = JSON.parse((await run("repair-before-status", current.env)).trim())
+    expect(result.returned).toBe(true)
+    expect(result.status).toBe("installing")
+    expect(result.phase).toBe("checking_environments")
+    expect(result.r).toMatchObject({ language: "r", ready: false, manifest: null })
+    expect(result.calls).toBe(1)
   } finally {
     await current.dispose()
   }

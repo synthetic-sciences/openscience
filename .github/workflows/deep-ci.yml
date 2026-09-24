@@ -160,6 +160,7 @@ jobs:
               bun test --timeout 15000
               test/global/data-dir.test.ts
               test/process/windows-job.test.ts
+              test/util/atomic-rename.test.ts
               test/compute/local-python-runtime.test.ts
               test/compute/jobs-persistence.test.ts
               test/global/data-root.test.ts

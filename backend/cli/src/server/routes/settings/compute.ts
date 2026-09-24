@@ -1142,7 +1142,7 @@ export const ComputeSettingsRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const failure = await ManagedEnvironments.bootstrap().then(
+        const failure = await ManagedEnvironments.repair().then(
           () => undefined,
           (error: unknown) => (error instanceof Error ? error.message : String(error)),
         )

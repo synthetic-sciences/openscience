@@ -97,6 +97,12 @@ Open **Customize → Tools** and **Customize → Compute**. Complete the relevan
 
 A skill's presence does not mean its dependencies are installed. A saved service key does not mean your account has access to every model or resource. Preserve the reported error and job identifier instead of repeatedly starting the same job.
 
+## Python or R repair reports a Windows file lock
+
+Update OpenScience, then retry **Set up or repair** in **Customize → Compute**. Repair rechecks both starters, and setup waits briefly for temporary Windows file locks to clear. A starter can show **Ready** while saving the setup status fails: the label reflects whether its interpreter runs.
+
+If `EPERM`, `EACCES`, or `EBUSY` persists, finish running Python or R work, close other OpenScience instances, and reopen the app before retrying. Keep the existing data folder. Add the full error text, including both rename paths, your Windows and OpenScience versions, and whether Python or R execution also fails to [issue #714](https://github.com/synthetic-sciences/openscience/issues/714).
+
 ## A connector will not connect
 
 In **Customize → Connectors**, check whether it is saved but off, awaiting authorization, or reporting an error.

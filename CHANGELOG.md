@@ -105,6 +105,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **Windows environment repair tolerates temporary file locks.** Python and R setup retries sharing violations while committing setup files, without deleting the last committed copy. **Set up or repair** also checks the starters again after a previous successful setup, so an environment that broke later is repaired instead of reporting cached success (#714).
+
 - **Extra folder read access keeps running work alive.** Adding read access no longer cancels commands, kernels or compute jobs when another project instance or the background permission watcher observes it. Revocations, replaced access and changes that can move the working folder still stop affected work.
 
 - **Windows edits retain exact file identities.** A file replaced while an edit awaits approval is rejected even when its contents match and its large Windows file ID would round to the same number.

@@ -6,6 +6,7 @@ import { DataRoot } from "@/global/data-root"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 import { WindowsJunction } from "@/global/windows-junction"
 import { ProcessIdentity } from "@/process/process-identity"
+import { AtomicRename } from "@/util/atomic-rename"
 
 const roots: string[] = []
 
@@ -539,6 +540,121 @@ describe("managed data root", () => {
       await Promise.resolve(parent[Symbol.asyncDispose]()).catch(() => undefined)
       const exclusive = await switching?.catch(() => undefined)
       await exclusive?.[Symbol.asyncDispose]()
+    }
+  })
+
+  test("retries initial Windows marker publication without exposing a partial record", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const managed = await DataRoot.ensure(config, path.join(base, "data"), false)
+    using configuration = DataRootBarrier.configure({ root: managed.path, config })
+    const rename = fs.rename.bind(fs)
+    const replace = AtomicRename.replace
+    using policy = spyOn(AtomicRename, "replace").mockImplementation((source, destination) =>
+      replace(source, destination, true),
+    )
+    const sources: string[] = []
+    const codes = ["EPERM", "EACCES", "EBUSY"]
+    using failures = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!String(source).endsWith(".pending")) return rename(source, destination)
+      sources.push(String(source))
+      expect(await operationMarkers(config)).toEqual([])
+      expect(JSON.parse(await fs.readFile(source, "utf8"))).toMatchObject({ pid: process.pid })
+      const code = codes[sources.length - 1]
+      if (code) throw Object.assign(new Error(`injected ${code}`), { code })
+      return rename(source, destination)
+    })
+    const operation = await DataRootBarrier.enter(managed.path, 5_000)
+    try {
+      expect(sources).toHaveLength(4)
+      expect(new Set(sources).size).toBe(1)
+      expect(await operationMarkers(config)).toHaveLength(1)
+      expect((await fs.readdir(config)).filter((entry) => entry.endsWith(".pending"))).toEqual([])
+    } finally {
+      await operation[Symbol.asyncDispose]()
+    }
+    expect(await operationMarkers(config)).toEqual([])
+  })
+
+  test("failed initial Windows marker publication cleans only its own unpublished record", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const managed = await DataRoot.ensure(config, path.join(base, "data"), false)
+    using configuration = DataRootBarrier.configure({ root: managed.path, config })
+    const sibling = path.join(config, ".data-root-operation-unrelated.pending")
+    await fs.writeFile(sibling, "unrelated\n")
+    const rename = fs.rename.bind(fs)
+    const replace = AtomicRename.replace
+    using policy = spyOn(AtomicRename, "replace").mockImplementation((source, destination) =>
+      replace(source, destination, true),
+    )
+    const sources: string[] = []
+    const failure = Object.assign(new Error("injected persistent EPERM"), { code: "EPERM" })
+    using failures = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!String(source).endsWith(".pending")) return rename(source, destination)
+      sources.push(String(source))
+      expect(await operationMarkers(config)).toEqual([])
+      throw failure
+    })
+    const started = performance.now()
+    await expect(DataRootBarrier.enter(managed.path, 5_000)).rejects.toBe(failure)
+    expect(performance.now() - started).toBeGreaterThanOrEqual(1_900)
+    expect(performance.now() - started).toBeLessThan(6_000)
+    expect(sources.length).toBeGreaterThan(3)
+    expect(new Set(sources).size).toBe(1)
+    expect(await operationMarkers(config)).toEqual([])
+    expect((await fs.readdir(config)).filter((entry) => entry.endsWith(".pending"))).toEqual([path.basename(sibling)])
+    expect(await fs.readFile(sibling, "utf8")).toBe("unrelated\n")
+    await using exclusive = await DataRootBarrier.exclusive(1_000)
+    void exclusive
+  })
+
+  test("initial Windows publication retries still respect a relocation admitted before the marker", async () => {
+    const base = await root()
+    const config = path.join(base, "config")
+    const managed = await DataRoot.ensure(config, path.join(base, "data"), false)
+    using configuration = DataRootBarrier.configure({ root: managed.path, config })
+    const rename = fs.rename.bind(fs)
+    const replace = AtomicRename.replace
+    using policy = spyOn(AtomicRename, "replace").mockImplementation((source, destination) =>
+      replace(source, destination, true),
+    )
+    const attempted = Promise.withResolvers<void>()
+    const published = Promise.withResolvers<void>()
+    let blocked = true
+    let entered = false
+    using failures = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+      if (!String(source).endsWith(".pending")) return rename(source, destination)
+      attempted.resolve()
+      if (blocked) throw Object.assign(new Error("injected scanner lock"), { code: "EPERM" })
+      await rename(source, destination)
+      published.resolve()
+    })
+    const pending = DataRootBarrier.enter(managed.path, 5_000).then((operation) => {
+      entered = true
+      return operation
+    })
+    let exclusive: AsyncDisposable | undefined
+    try {
+      await attempted.promise
+      exclusive = await DataRootBarrier.exclusive(5_000)
+      blocked = false
+      await published.promise
+      await Bun.sleep(50)
+      expect(entered).toBe(false)
+      expect(await operationMarkers(config)).toEqual([])
+      await exclusive[Symbol.asyncDispose]()
+      exclusive = undefined
+      const operation = await pending
+      expect(entered).toBe(true)
+      expect(await operationMarkers(config)).toHaveLength(1)
+      await operation[Symbol.asyncDispose]()
+      expect(await operationMarkers(config)).toEqual([])
+    } finally {
+      blocked = false
+      await exclusive?.[Symbol.asyncDispose]()
+      const operation = await pending.catch(() => undefined)
+      await operation?.[Symbol.asyncDispose]()
     }
   })
 

@@ -7,6 +7,9 @@ import {
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Log } from "../../src/util/log"
+import { AtomicRename } from "../../src/util/atomic-rename"
+import { spyOn } from "bun:test"
+import { FileLease } from "../../src/util/file-lease"
 
 await Log.init({ print: false, dev: true })
 
@@ -54,7 +57,162 @@ const attestationLines = async () =>
     .split("\n")
     .filter(Boolean)
 
-if (process.argv[2] === "runtime") {
+if (process.argv[2] === "status-before-repair" || process.argv[2] === "repair-before-status") {
+  await ManagedEnvironments.bootstrap()
+  const conda = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda")
+  const prefix = path.join(conda, "envs", "r")
+  const binary = path.join(prefix, "bin", "Rscript")
+  const started = path.join(conda, "probe-started")
+  const release = path.join(conda, "probe-release")
+  const calls = path.join(conda, "probe-calls")
+  const script = `#!/bin/sh\necho probe >> "${calls}"\nif mkdir "${started}" 2>/dev/null; then\nwhile [ ! -f "${release}" ]; do sleep 0.01; done\nfi\nexit 1\n`
+  await fs.writeFile(binary, script)
+  const wait = async () => {
+    for (let attempt = 0; attempt < 500; attempt++) {
+      if (await fs.stat(started).catch(() => undefined)) return
+      await Bun.sleep(10)
+    }
+    throw new Error("The controlled R probe did not start")
+  }
+  const count = async () => (await fs.readFile(calls, "utf8")).trim().split("\n").length
+  if (process.argv[2] === "status-before-repair") {
+    const status = ManagedEnvironments.status()
+    await wait()
+    const acquire = FileLease.acquire
+    const requested = Promise.withResolvers<void>()
+    using attempt = spyOn(FileLease, "acquire").mockImplementation((file, timeout, signal) => {
+      if (file === path.join(conda, "starter-r.lock") && (timeout ?? 0) > 0) requested.resolve()
+      return acquire(file, timeout, signal)
+    })
+    const held = await acquire(path.join(conda, "starter-r.lock"), 0).then(
+      async (lease) => {
+        await lease[Symbol.asyncDispose]()
+        return false
+      },
+      (error: unknown) =>
+        error instanceof Error &&
+        error.message.startsWith("Timed out waiting for another OpenScience process to release "),
+    )
+    const repair = ManagedEnvironments.repair()
+    try {
+      await requested.promise
+      console.log(
+        JSON.stringify({ held, calls: await count(), unchanged: (await fs.readFile(binary, "utf8")) === script }),
+      )
+    } finally {
+      await fs.writeFile(release, "release")
+      await Promise.all([status, repair])
+    }
+  } else {
+    const repair = ManagedEnvironments.repair()
+    await wait()
+    const status = ManagedEnvironments.status()
+    try {
+      const result = await Promise.race([status, Bun.sleep(1_000).then(() => undefined)])
+      console.log(
+        JSON.stringify({
+          returned: !!result,
+          status: result?.status,
+          phase: result?.phase,
+          r: result?.environments.find((item) => item.language === "r"),
+          calls: await count(),
+        }),
+      )
+    } finally {
+      await fs.writeFile(release, "release")
+      await Promise.all([status, repair])
+    }
+  }
+} else if (process.argv[2] === "state-sharing" || process.argv[2] === "state-locked") {
+  await ManagedEnvironments.bootstrap()
+  const state = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda", "state.json")
+  const original = await fs.readFile(state, "utf8")
+  const sibling = `${state}.other-writer.tmp`
+  await fs.writeFile(sibling, "another writer")
+  const rename = fs.rename.bind(fs)
+  const replace = AtomicRename.replace
+  const staged: string[] = []
+  let intact = true
+  using policy = spyOn(AtomicRename, "replace").mockImplementation((source, destination) =>
+    replace(source, destination, true),
+  )
+  using failures = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+    if (String(destination) !== state) return rename(source, destination)
+    staged.push(String(source))
+    intact &&= (await fs.readFile(destination, "utf8")) === original
+    const code = process.argv[2] === "state-locked" ? "EPERM" : ["EPERM", "EACCES", "EBUSY"][staged.length - 1]
+    if (code) throw Object.assign(new Error(`injected ${code}: ${state}`), { code })
+    return rename(source, destination)
+  })
+  const started = performance.now()
+  const error = await ManagedEnvironments.bootstrap().then(
+    () => null,
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  )
+  console.log(
+    JSON.stringify({
+      error,
+      elapsed: performance.now() - started,
+      attempts: staged.length,
+      staged: [...new Set(staged)],
+      intact,
+      preserved: (await fs.readFile(state, "utf8")) === original,
+      committed: JSON.parse(await fs.readFile(state, "utf8")),
+      sibling: await fs.readFile(sibling, "utf8"),
+      leftovers: (await fs.readdir(path.dirname(state))).filter((name) => name.startsWith("state.json.")),
+    }),
+  )
+} else if (process.argv[2] === "repair-cached") {
+  await ManagedEnvironments.bootstrap()
+  const prefix = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda", "envs", "r")
+  const binary = path.join(prefix, "bin", "Rscript")
+  const original = await fs.readFile(binary, "utf8")
+  await fs.writeFile(binary, "#!/bin/sh\nexit 1\n")
+  const before = await fs.readFile(process.env.OPENSCIENCE_R_PROBE_LOG!, "utf8")
+  await ManagedEnvironments.runtime("r")
+  const cached = (await fs.readFile(process.env.OPENSCIENCE_R_PROBE_LOG!, "utf8")) === before
+  const installs = (await fs.readFile(process.env.OPENSCIENCE_PREFIX_LOG!, "utf8")).trim().split("\n").length
+  await Promise.all([ManagedEnvironments.repair(), ManagedEnvironments.repair(), ManagedEnvironments.repair()])
+  const repaired = (await fs.readFile(binary, "utf8")) === original
+  const after = await fs.readFile(process.env.OPENSCIENCE_R_PROBE_LOG!, "utf8")
+  await ManagedEnvironments.runtime("r")
+  console.log(
+    JSON.stringify({
+      cached,
+      repaired,
+      installs: (await fs.readFile(process.env.OPENSCIENCE_PREFIX_LOG!, "utf8")).trim().split("\n").length - installs,
+      probes: after.trim().split("\n").length - before.trim().split("\n").length,
+      runtimeCached: (await fs.readFile(process.env.OPENSCIENCE_R_PROBE_LOG!, "utf8")) === after,
+    }),
+  )
+} else if (process.argv[2] === "repair-rollback") {
+  await ManagedEnvironments.bootstrap()
+  const conda = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda")
+  const prefix = path.join(conda, "envs", "r")
+  await fs.writeFile(path.join(prefix, "bin", "Rscript"), "#!/bin/sh\nexit 1\n")
+  await fs.writeFile(path.join(prefix, "user-package.txt"), "keep installed package")
+  process.env.OPENSCIENCE_TEST_R_PROBE_FAILS = "1"
+  const rename = fs.rename.bind(fs)
+  using failures = spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+    if (String(source).startsWith(path.join(conda, ".rollback")) && String(destination) === prefix) {
+      throw Object.assign(new Error(`injected EIO restoring ${source} to ${destination}`), { code: "EIO" })
+    }
+    return rename(source, destination)
+  })
+  const error = await ManagedEnvironments.repair().then(
+    () => null,
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  )
+  const previous = (await fs.readdir(path.join(conda, ".rollback"))).map((name) => path.join(conda, ".rollback", name))
+  console.log(
+    JSON.stringify({
+      error,
+      previous,
+      preserved: await fs.readFile(path.join(previous[0]!, "user-package.txt"), "utf8"),
+      targetExists: await Bun.file(path.join(prefix, "bin", "Rscript")).exists(),
+    }),
+  )
+} else if (process.argv[2] === "runtime") {
   await ManagedEnvironments.runtime("python")
   await ManagedEnvironments.runtime("python")
   console.log("runtime-ok")
