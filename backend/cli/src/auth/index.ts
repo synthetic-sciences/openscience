@@ -33,6 +33,7 @@ export namespace Auth {
       enterpriseUrl: z.string().optional(),
     })
     .meta({ ref: "OAuth" })
+  export type Oauth = z.infer<typeof Oauth>
 
   export const Api = z
     .object({
@@ -156,6 +157,35 @@ export namespace Auth {
         throw cause
       }
     })
+  }
+
+  /** Persist a trusted OAuth refresh response only while its source pair is
+   * still current. Interactive sign-in must use set, even for the same account. */
+  export async function renew(key: string, previous: Oauth, info: Oauth): Promise<boolean> {
+    const next = Oauth.parse(info)
+    if (
+      (previous.accountId !== undefined && previous.accountId !== next.accountId) ||
+      previous.enterpriseUrl !== next.enterpriseUrl
+    ) {
+      throw new Error("OAuth refresh changed the connected account; reconnect the provider.")
+    }
+    const result = await CredentialLifecycle.update(async () => {
+      const current = Oauth.safeParse((await JsonStore.read(filepath))[key])
+      if (
+        !current.success ||
+        current.data.refresh !== previous.refresh ||
+        current.data.access !== previous.access ||
+        current.data.expires !== previous.expires ||
+        current.data.accountId !== previous.accountId ||
+        current.data.enterpriseUrl !== previous.enterpriseUrl
+      )
+        return
+      return {
+        reason: `provider-auth.renew:${key}`,
+        action: () => JsonStore.update(filepath, (data) => ({ ...data, [key]: next })),
+      }
+    })
+    return result.applied
   }
 
   export async function remove(key: string) {

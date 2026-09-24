@@ -16,7 +16,7 @@ export type TraceRow =
   /** A message the harness wrote into the turn (a worker's result, a
    * deliverables check, a budget reminder), shown as one grey line so the
    * reader sees why the agent went on after it had answered. */
-  | { kind: "note"; entry: ResearchTraceEntry; text: string }
+  | { kind: "note"; entry: ResearchTraceEntry; text: string; details?: boolean }
   | { kind: "agent"; entry: ResearchTraceEntry }
   | { kind: "tool"; entry: ResearchTraceEntry }
   | { kind: "explored"; entries: ResearchTraceEntry[]; files: number; sources: number; commands: number }
@@ -108,7 +108,8 @@ export function buildTraceRows(entries: ResearchTraceEntry[]): TraceRow[] {
     const part = entry.part
     if (part.type === "text" && part.synthetic) {
       const text = part.text.replace(/<\/?system-reminder[^>]*>/g, "").trim()
-      if (text && !COMPACTION_CONTINUATION.test(text)) rows.push({ kind: "note", entry, text })
+      if (text && !COMPACTION_CONTINUATION.test(text))
+        rows.push({ kind: "note", entry, text, details: /^Tools (?:added|removed):/.test(text) })
       return
     }
     // An automatic compaction inside the turn: the reader sees where the
@@ -212,7 +213,9 @@ export function collapsedTraceRows(
   const stopped = !state.working && !state.settled
   return rows.filter((row) => {
     if (row.kind === "text") return !row.narration
-    if (row.kind === "note") return !state.settled
+    // Tool availability is context for the model, not a progress update or a
+    // request for the reader. Keep it available in the expanded activity trace.
+    if (row.kind === "note") return !state.settled && !row.details
     if (row.kind === "tool" || row.kind === "agent") {
       if (stopped && row.entry.message.id === state.final)
         return !collapsibleTracePart(row.entry.part, state.pendingRequestCallID, state.pendingChildRequest)

@@ -168,7 +168,7 @@ function isGeneratedTool(part: PartType | undefined): part is ToolPart {
  * A burst of one shows its part directly; the header appears once a second
  * call joins, without remounting the first. */
 function TraceGroupRow(props: {
-  kind: "explored" | "edited" | "thought"
+  kind: "explored" | "edited" | "thought" | "notice"
   label: string
   live?: boolean
   working?: boolean
@@ -372,6 +372,12 @@ function AssistantTrace(props: {
               }
               if (kind === "note") {
                 const value = () => current() as Extract<TraceRow, { kind: "note" }>
+                if (untrack(value).details)
+                  return (
+                    <TraceGroupRow kind="notice" label="Tool availability">
+                      <div data-slot="trace-note-text">{value().text}</div>
+                    </TraceGroupRow>
+                  )
                 return (
                   <div data-slot="trace-entry" data-note="true">
                     <div data-component="trace-row" data-slot="trace-note" title={value().text}>
@@ -604,6 +610,14 @@ export function SessionTurn(
   const error = createMemo(() => assistantMessages().find((m) => m.error)?.error)
 
   const hasSteps = createMemo(() => {
+    if (
+      carriers().some((message) =>
+        (data.store.part[message.id] ?? emptyParts).some(
+          (part) => (part.type === "text" && part.synthetic && !!part.text.trim()) || part.type === "compaction",
+        ),
+      )
+    )
+      return true
     for (const m of assistantMessages()) {
       const msgParts = data.store.part[m.id]
       if (!msgParts) continue

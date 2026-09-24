@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { spawn } from "node:child_process"
 import { CredentialProcessLedger } from "../../src/credentials/process-ledger"
+import { CredentialLifecycle } from "../../src/credentials/lifecycle"
+import { Auth } from "../../src/auth"
 import { CredentialRevocation } from "../../src/credentials/revocation"
 import { CredentialTeardown } from "../../src/credentials/teardown"
 import { WindowsJobLauncher } from "../../src/process/windows-job-launcher"
@@ -103,6 +105,34 @@ async function instance(directory: string, disposed: string[]) {
 }
 
 describe("CredentialTeardown.apply", () => {
+  test("OAuth renewal preserves a real command and instance, then logout stops both", async () => {
+    const provider = `oauth-${crypto.randomUUID()}`
+    const auth: Auth.Oauth = { type: "oauth", access: "old", refresh: "old", expires: 1, accountId: "account" }
+    await Auth.set(provider, auth)
+    const command = await launch("oauth_renewal")
+    await using tmp = await tmpdir()
+    const disposed: string[] = []
+    await instance(tmp.path, disposed)
+    const off = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    try {
+      expect(
+        await Auth.renew(provider, auth, { ...auth, access: "fresh", refresh: "fresh", expires: Date.now() + 60_000 }),
+      ).toBe(true)
+      expect(command.state.exited).toBe(false)
+      expect(command.state.reason).toBeUndefined()
+      expect(CommandRuntime.list("project_oauth_renewal", "session_oauth_renewal")).toHaveLength(1)
+      expect(disposed).toEqual([])
+      await Auth.remove(provider)
+      expect(await settle(command.state)).toBe(true)
+      expect(disposed).toEqual([tmp.path])
+    } finally {
+      off()
+      await CommandRuntime.stopAll().catch(() => undefined)
+      await Auth.remove(provider)
+      await Instance.provide({ directory: tmp.path, fn: () => Instance.dispose() })
+    }
+  })
+
   for (const reason of ["account.replace", "settings-credential.set:github"]) {
     test(`${reason} disposes live instances and stops commands spawned without the overlay`, async () => {
       const label = reason.replace(/[^a-z0-9]+/gi, "_")

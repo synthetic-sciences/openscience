@@ -41,6 +41,28 @@ function reasoning(id: string, start: number, end?: number): Part {
 const entries = (parts: Part[]) => parts.map((part) => ({ message, part }))
 
 describe("collapsed trace rows", () => {
+  test("tool availability is internal detail in live, stopped, and completed turns", () => {
+    const parts: Part[] = [
+      {
+        ...text("added", "Tools added: edit, write.\nUse only the currently advertised tool definitions."),
+        synthetic: true,
+      } as Part,
+      { ...text("removed", "Tools removed: bash."), synthetic: true } as Part,
+      text("answer", "The file is ready."),
+    ]
+    const rows = buildTraceRows(entries(parts))
+    expect(rows.filter((row) => row.kind === "note" && row.details)).toHaveLength(2)
+    for (const state of [
+      { working: true, settled: false },
+      { working: false, settled: false },
+      { working: false, settled: true },
+    ]) {
+      expect(collapsedTraceRows(rows, state).map((row) => row.kind)).toEqual(["text"])
+    }
+    // A person discussing the same words is still ordinary conversation.
+    expect(buildTraceRows(entries([text("typed", "Tools added: edit, write.")]))[0].kind).toBe("text")
+  })
+
   const earlier = { ...message, id: "msg_earlier" } as AssistantMessage
   const final = { ...message, id: "msg_final" } as AssistantMessage
   const failed = (id: string, owner: AssistantMessage) => ({

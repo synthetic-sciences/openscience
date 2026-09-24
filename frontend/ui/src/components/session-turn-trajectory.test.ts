@@ -2135,6 +2135,48 @@ describe("trace control", () => {
     expect(button.textContent).toMatch(/^Worked for \d/)
   })
 
+  test.each(["busy", "idle"])("tool availability stays behind activity disclosures while %s", async (status) => {
+    const notice = "Tools added: edit, write."
+    const carrier: UserMessage = {
+      ...user,
+      id: "msg_0003",
+      internal: { type: "continuation", kind: "harness", epoch: user.id, transaction: "msg_0003", text: notice },
+    }
+    const message: AssistantMessage = {
+      ...assistant(status === "busy" ? undefined : 9_000),
+      id: "msg_0004",
+      parentID: carrier.id,
+    }
+    const store: Store = {
+      ...empty(),
+      message: { [sessionID]: [user, carrier, message] },
+      part: {
+        [user.id]: [],
+        [carrier.id]: [
+          { id: "prt_notice", sessionID, messageID: carrier.id, type: "text", text: notice, synthetic: true },
+        ],
+        [message.id]: [
+          { id: "prt_answer", sessionID, messageID: message.id, type: "text", text: "Preparing the paper." },
+        ],
+      },
+      session_status: { [sessionID]: status === "busy" ? { type: "busy" } : { type: "idle" } },
+    }
+    const host = mount(() => turn.SessionTurn({ sessionID, messageID: user.id, lastUserMessageID: user.id }), store)
+    const button = toggle(host)
+    if (button.getAttribute("aria-expanded") === "true") button.click()
+    await ready(() => button.getAttribute("aria-expanded") === "false")
+    expect(host.textContent).not.toContain(notice)
+    button.click()
+    await ready(() => host.querySelector('[data-kind="notice"] button') !== null)
+    const detail = host.querySelector<HTMLButtonElement>('[data-kind="notice"] button')!
+    expect(detail.textContent).toContain("Tool availability")
+    expect(detail.getAttribute("aria-expanded")).toBe("false")
+    expect(host.querySelector('[data-slot="trace-note"]')).toBeNull()
+    detail.click()
+    await ready(() => detail.getAttribute("aria-expanded") === "true")
+    expect(host.querySelector('[data-kind="notice"] [data-slot="trace-note-text"]')?.textContent).toBe(notice)
+  })
+
   test("a background worker's completion keeps the turn open: its replies join the same trace and total time", async () => {
     // The turn dispatched a worker, said something, then the worker's result
     // arrived as a runtime-written user message and drew two more steps.

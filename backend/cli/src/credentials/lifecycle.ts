@@ -32,6 +32,9 @@ export namespace CredentialLifecycle {
   const mutationLeaseTimeout = 30_000
 
   type Phase = "updating" | "ready"
+  function renewal(reason: string): boolean {
+    return reason === "workspace-sync.renew" || reason.startsWith("provider-auth.renew:")
+  }
   interface Revision {
     version: 1
     token: string
@@ -225,7 +228,7 @@ export namespace CredentialLifecycle {
       // Only a verified renewal in an already-reconciled authority generation
       // may preserve children. A fresh process, an older writer, or a reader
       // that missed an intervening revocation must still fail closed.
-      if (revision.reason !== "workspace-sync.renew" || !revision.revocation || revoked !== revision.revocation)
+      if (!renewal(revision.reason) || !revision.revocation || revoked !== revision.revocation)
         await run(revokers, current.revokers, event)
       seen = revision.token
       revoked = revision.revocation ?? revision.token
@@ -342,7 +345,7 @@ export namespace CredentialLifecycle {
           return
         }
         const token = crypto.randomUUID()
-        const previous = change.reason === "workspace-sync.renew" ? await read() : undefined
+        const previous = renewal(change.reason) ? await read() : undefined
         const base = {
           version: 1 as const,
           token,
@@ -405,8 +408,8 @@ export namespace CredentialLifecycle {
 
   /** Classify a snapshot and prepare its write under the same credential
    * lease. An absent change means stale identity; absent reason means only
-   * grant metadata changed. workspace-sync.renew is reserved for the strict
-   * same-authority GitHub receipt check in WorkspaceCredentials. */
+   * grant metadata changed. Renewal reasons are reserved for verified
+   * same-authority updates in WorkspaceCredentials and Auth.renew. */
   export async function update<T>(prepare: () => Promise<Change<T> | undefined>) {
     return runMutation(prepare)
   }
