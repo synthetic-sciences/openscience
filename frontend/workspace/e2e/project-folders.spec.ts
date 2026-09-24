@@ -22,6 +22,10 @@ test("project folders work before a conversation and settings change real access
   const sdk = createSdk(project.worktree)
   const errors: string[] = []
   page.on("pageerror", (error) => errors.push(error.message))
+  // Exercise the browser picker without opening an OS dialog on the test host.
+  await page.route("**/api/resolve-folder/dialog?*", (route) =>
+    route.fulfill({ status: 501, contentType: "application/json", body: JSON.stringify({ unsupported: true }) }),
+  )
   try {
     await page.goto(`/${project.id}/session/new`)
     await expect(page.locator(promptSelector)).toBeVisible()
@@ -48,11 +52,15 @@ test("project folders work before a conversation and settings change real access
     await page.reload()
     await expect(page.locator(promptSelector)).toBeVisible()
     await expect(view).toContainText("Saved in Delphi")
+    await view.getByRole("tab", { name: "Edit", exact: true }).click()
+    await editor.press("ControlOrMeta+A")
+    await editor.pressSequentially("Draft preserved through access changes")
     const settings = await openSettings(page)
     await settings.getByRole("button", { name: "Workspaces", exact: true }).click()
     await expect(settings.getByLabel("Project workspace", { exact: true })).toHaveValue(project.id)
     await expect(settings.getByText(primary, { exact: true })).toBeVisible()
     await settings.getByRole("button", { name: "Browse…", exact: true }).click()
+    await expect(page.locator(".folder-picker-dialog")).toBeVisible()
     const picker = page.getByRole("dialog", { name: "Connect a folder", exact: true })
     await picker.getByLabel("Go to path", { exact: true }).fill(extra)
     await picker.getByRole("button", { name: "Go", exact: true }).click()
@@ -97,6 +105,9 @@ test("project folders work before a conversation and settings change real access
     await reopened.getByRole("button", { name: "Close", exact: true }).click()
     await expect(page.getByRole("dialog", { name: "Settings", includeHidden: true })).toHaveCount(0)
     await expect(view.getByRole("tab", { name: "Edit", exact: true })).toBeVisible()
+    await view.getByRole("tab", { name: "Edit", exact: true }).click()
+    await expect(editor).toContainText("Draft preserved through access changes")
+    expect(await readFile(path.join(primary, "notes.txt"), "utf8")).toBe("Saved in Delphi")
     await expect(fileTab(page, "notes.txt")).toHaveAttribute("aria-selected", "true")
     expect(await readFile(path.join(extra, "reference.csv"), "utf8")).toBe("value\n42\n")
     expect(errors).toEqual([])

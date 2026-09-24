@@ -113,7 +113,9 @@ function init() {
         setClosing = setClosingSignal
         return (
           <Kobalte
-            modal
+            // Only the top dialog owns focus and hides the page. An underlying
+            // modal would hide a stacked picker's asynchronously mounted content.
+            modal={active()?.id === id}
             open={!closing()}
             onOpenChange={(open: boolean) => {
               if (open) return

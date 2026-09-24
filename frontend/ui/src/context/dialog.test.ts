@@ -10,7 +10,11 @@ class Observer {
   unobserve() {}
   disconnect() {}
 }
-Object.assign(globalThis, { ResizeObserver: globalThis.ResizeObserver ?? Observer })
+const originalCustomEvent = globalThis.CustomEvent
+Object.assign(globalThis, {
+  ResizeObserver: globalThis.ResizeObserver ?? Observer,
+  CustomEvent: window.CustomEvent,
+})
 
 const vite = await createServer({
   root: fileURLToPath(new URL("../../../workspace", import.meta.url)),
@@ -30,7 +34,10 @@ const fixture = (await vite.ssrLoadModule(
 const cleanups: Array<() => void> = []
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms))
 
-afterAll(() => vite.close())
+afterAll(async () => {
+  await vite.close()
+  globalThis.CustomEvent = originalCustomEvent
+})
 afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
   document.body.replaceChildren()
@@ -47,6 +54,30 @@ const panels = () =>
   [...document.querySelectorAll<HTMLElement>("[data-dialog-panel]")].map((el) => el.dataset.dialogPanel)
 
 describe("dialog stacking", () => {
+  test("a stacked dialog that loads asynchronously stays accessible and restores its parent", async () => {
+    let dialog!: DialogHandle
+    mount(fixture.createDialogFixture((handle) => (dialog = handle)))
+    dialog.show(fixture.accessible("settings", Promise.resolve(true)))
+    await settle(20)
+    const settings = document.querySelector<HTMLElement>('[role="dialog"][aria-label="settings"]')!
+    expect(settings.closest('[aria-hidden="true"]')).toBeNull()
+
+    const ready = Promise.withResolvers<boolean>()
+    dialog.show(fixture.accessible("picker", ready.promise), { stack: true })
+    await settle(20)
+    ready.resolve(true)
+    await settle(20)
+    const picker = document.querySelector<HTMLElement>('[role="dialog"][aria-label="picker"]')!
+    expect(picker).not.toBeNull()
+    expect(picker.closest('[aria-hidden="true"]')).toBeNull()
+    expect(settings.closest('[aria-hidden="true"]')).not.toBeNull()
+
+    dialog.close()
+    await settle(150)
+    expect(settings.isConnected).toBe(true)
+    expect(settings.closest('[aria-hidden="true"]')).toBeNull()
+  })
+
   test("a stacked dialog returns to the one underneath when it closes", async () => {
     let dialog!: DialogHandle
     mount(fixture.createDialogFixture((handle) => (dialog = handle)))
