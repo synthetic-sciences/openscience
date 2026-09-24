@@ -1,4 +1,5 @@
 import { expect, test, spyOn } from "bun:test"
+import z from "zod"
 import { GlobalBus } from "../../src/bus/global"
 import { ProviderTransform } from "../../src/provider/transform"
 import type { Provider } from "../../src/provider/provider"
@@ -21,6 +22,7 @@ async function gateway(request: Request) {
   requests++
   const organization = request.headers.get("X-Organization-ID")
   expect(request.headers.get("authorization")).toBe(`Bearer osk_fixture_${organization}`)
+  expect(request.headers.get("OpenScience-Catalog-Version")).toBe("2")
   expect(new URL(request.url).pathname).toBe("/api/cli/model-catalog")
   if (organization === "org_a")
     await new Promise<void>((resolve) => {
@@ -28,7 +30,7 @@ async function gateway(request: Request) {
       received?.()
     })
   return Response.json(
-    { models: [entry] },
+    { models: [{ ...entry, hosting_provider: "anthropic" }] },
     {
       headers: {
         "OpenScience-Funding-Protocol": "1",
@@ -60,6 +62,64 @@ test("pricing ingestion copies only reviewed non-executable metadata", () => {
   expect(ManagedPricing.parse({ models: [{ ...entry, id: "unreviewed/model" }] })).toEqual({})
   expect(ManagedPricing.parse({ models: [{ ...entry, available: false }] })).toEqual({})
   expect(ManagedPricing.parse({ models: [{ ...entry, pricing: { tiers: [{ input: -1, output: 25 }] } }] })).toEqual({})
+})
+
+test("native prices remain readable by the released catalog schema when optional new hosts are omitted", () => {
+  // v2.0.133 validates these provider-bearing fields before accepting a price
+  // row. Both host positions are optional, but neither enum knows Anthropic.
+  const host = z.enum(["azure", "openai", "gemini", "xai", "bedrock", "openrouter"])
+  const rate = z.number().finite().nonnegative().max(100_000)
+  const tier = z.object({
+    input: rate,
+    output: rate,
+    cache_read: rate.optional(),
+    cache_write: rate.optional(),
+  })
+  const legacy = z.object({
+    id: z.string(),
+    upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
+    hosting_provider: host.optional(),
+    context_length: z.number().int().positive().max(20_000_000),
+    fast_mode_details: z.object({ available: z.boolean(), hosting_provider: host.optional() }).optional(),
+    pricing: z.object({
+      tiers: z.array(tier).min(1).max(8),
+      source_url: z.url().max(2048).optional(),
+      funding_fee_bps: z.number().int().min(0).max(10_000).optional(),
+    }),
+  })
+  const native = {
+    ...entry,
+    upstream_provider: "openrouter",
+    hosting_provider: "anthropic",
+    pricing: {
+      ...entry.pricing,
+      tiers: [{ input: 4.22, output: 21.1, cache_read: 0.211, cache_write: 5.275 }],
+      billing_basis: "anthropic_token_usage",
+      funding_fee_bps: 550,
+    },
+  }
+  expect(legacy.safeParse(native).success).toBe(false)
+  const compatible = { ...native, hosting_provider: undefined }
+  expect(legacy.parse(compatible).pricing).toEqual({
+    tiers: native.pricing.tiers,
+    source_url: native.pricing.source_url,
+    funding_fee_bps: 550,
+  })
+  expect(
+    legacy.safeParse({
+      ...compatible,
+      fast_mode_details: { available: false, hosting_provider: "anthropic" },
+    }).success,
+  ).toBe(false)
+  expect(legacy.safeParse({ ...compatible, fast_mode_details: { available: false } }).success).toBe(true)
+  const modern = ManagedPricing.parse({ models: [native] })[entry.id]!
+  const old = ManagedPricing.parse({ models: [compatible] })[entry.id]!
+  expect(old.cost).toEqual(modern.cost)
+  expect(old.pricing).toEqual({ ...modern.pricing, hosting_provider: undefined })
+  expect(modern.pricing.hosting_provider).toBe("anthropic")
+  expect(old.cost.input).toBe(4.22)
+  expect(old.pricing.source_url).toBe(native.pricing.source_url)
+  expect(old.pricing.funding_fee_bps).toBe(550)
 })
 
 test("explicit availability survives missing prices and conflicting rows fail closed", () => {
@@ -285,6 +345,7 @@ test("pricing cache is nonblocking, deduplicated, and partitioned by immutable w
     release?.()
     await published
     expect((await ManagedPricing.current())[entry.id]?.pricing.upstream_provider).toBe("anthropic")
+    expect((await ManagedPricing.current())[entry.id]?.pricing.hosting_provider).toBe("anthropic")
     expect(requests).toBe(1)
     await OpenScience.saveSession(session("org_b"))
     expect(await ManagedPricing.current()).toEqual({})

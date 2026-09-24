@@ -219,7 +219,11 @@ export namespace ManagedPricing {
       // Device keys deliberately cannot read the browser administration API.
       const endpoint = `${managedApiBase()}/api/cli/model-catalog?provider=openrouter`
       const response = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${selected.api_key}`, ...OpenScience.fundingHeaders(selected) },
+        headers: {
+          Authorization: `Bearer ${selected.api_key}`,
+          ...OpenScience.fundingHeaders(selected),
+          "OpenScience-Catalog-Version": "2",
+        },
         signal: controller.signal,
         redirect: "error",
       })
