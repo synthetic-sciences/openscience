@@ -92,6 +92,9 @@ export function modelPricing(input: {
         cache_write: input.fast.cache.write,
       }
     : undefined
+  const fastTiers = (input.fast?.tiers ?? [])
+    .map((tier) => ({ ...tier, cache_read: tier.cache.read, cache_write: tier.cache.write }))
+    .filter((tier) => valid(tier) && Number.isFinite(tier.threshold) && tier.threshold > 0)
   return {
     note:
       input.access === "managed"
@@ -101,7 +104,12 @@ export function modelPricing(input: {
       ...rateLines(rates),
       ...stepped.flatMap((tier) => rateLines(tier, `Over ${tier.threshold.toLocaleString()} input · `)),
       ...(legacy && valid(legacy) ? rateLines(legacy, "200,000+ input · ") : []),
-      ...(fast && valid(fast) && !(fast.input === 0 && fast.output === 0) ? rateLines(fast, "Fast · ") : []),
+      ...(fast && valid(fast) && !(fast.input === 0 && fast.output === 0)
+        ? [
+            ...rateLines(fast, "Fast · "),
+            ...fastTiers.flatMap((tier) => rateLines(tier, `Fast · Over ${tier.threshold.toLocaleString()} input · `)),
+          ]
+        : []),
     ],
   }
 }

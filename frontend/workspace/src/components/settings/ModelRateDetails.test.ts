@@ -41,7 +41,12 @@ test("Ace rates keep exact Wallet amounts while hiding routing hosts and fee per
       pricing: { upstream_provider: "openrouter", hosting_provider, funding_fee_bps: 550 },
       cost,
       limit: { context: 1_050_000, output: 128_000 },
-      fast: { input: 10.55, output: 63.3, cache: { read: 1.055, write: 13.1875 } },
+      fast: {
+        input: 10.55,
+        output: 63.3,
+        cache: { read: 1.055, write: 13.1875 },
+        tiers: [{ threshold: 272_000, input: 21.1, output: 94.95, cache: { read: 2.11, write: 26.375 } }],
+      },
     })
     expect(host.querySelector("strong")?.textContent).toBe("Ace")
     expect(host.textContent).not.toMatch(/Azure|Anthropic|Gemini|OpenRouter|provider|fee|%/i)
@@ -54,6 +59,8 @@ test("Ace rates keep exact Wallet amounts while hiding routing hosts and fee per
     expect(rows).toContainEqual(["Cached input", "$0.5275"])
     expect(rows).toContainEqual(["Fast · Input", "$10.55"])
     expect(rows).toContainEqual(["Fast · Output", "$63.30"])
+    expect(rows).toContainEqual(["Fast · Over 272,000 input · Input", "$21.10"])
+    expect(rows).toContainEqual(["Fast · Over 272,000 input · Output", "$94.95"])
     expect(host.querySelector("p")?.textContent).toBe("USD per 1M tokens · Wallet rates.")
   }
 })
