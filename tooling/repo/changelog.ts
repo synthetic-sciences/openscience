@@ -3,8 +3,8 @@
 import { $ } from "bun"
 import { parseArgs } from "util"
 
-const team = ["ishaan1124", "openscience", "openscience-agent[bot]", "actions-user"]
-const teamAuthors = new Set([...team, "Ishaan Gangwani"].map((author) => author.toLowerCase()))
+const team = ["ishaan1124", "aayambansal", "openscience", "openscience-agent[bot]", "actions-user"]
+const teamAuthors = new Set([...team, "Ishaan Gangwani", "Aayam Bansal"].map((author) => author.toLowerCase()))
 const stableTag = /^v(\d+)\.(\d+)\.(\d+)$/
 const internalCommit = /^(?:ignore|test|chore|ci|release)(?:\([^)]*\))?!?:/i
 const conventionalPrefix = /^(?:feat|fix|refactor|docs|perf|build|style)(?:\([^)]*\))?!?:\s*/i
