@@ -161,15 +161,13 @@ test("the composer's Fast toggle shows its price consequence from the route's ca
   const rate = () =>
     [text("[data-model-rate] .model-settings-heading"), text("[data-model-rate] .model-settings-rate-value")].join(" ")
   expect(document.querySelector("[data-model-fast-rate]")).toBeNull()
-  expect(rate()).toBe("Rate $5.00 in · $30.00 out /1M tokens")
+  expect(rate()).toBe("Rate $5.275 in · $31.65 out /1M tokens")
   document.querySelector<HTMLInputElement>("[data-model-fast-toggle] input")!.click()
   await settle()
   expect(fixture.state.tier["openrouter/openai/gpt-5.6-sol"]).toBe("fast")
-  expect(rate()).toBe("Rate $10.00 in · $60.00 out /1M tokens")
+  expect(rate()).toBe("Rate $10.55 in · $63.30 out /1M tokens")
   expect(document.querySelector("[data-model-rate-basis]")).toBeNull()
-  expect(document.querySelector("[data-model-rate]")?.getAttribute("title")).toBe(
-    "Provider price · Ace adds the 5.5% funding fee at billing",
-  )
+  expect(document.querySelector("[data-model-rate]")?.getAttribute("title")).toBe("Wallet rates")
 })
 
 test("a provider metadata refresh restores options without replacing the chosen model", async () => {

@@ -95,7 +95,7 @@ export function modelPricing(input: {
   return {
     note:
       input.access === "managed"
-        ? `USD per 1M tokens · Wallet rates; provider price plus the ${fundingFeePercent(input.pricing)}% funding fee, no other markup.`
+        ? "USD per 1M tokens · Wallet rates."
         : "USD per 1M tokens · catalog estimate; billed by your provider.",
     lines: [
       ...rateLines(rates),
@@ -171,38 +171,17 @@ export function routeRates(input: {
   }
 }
 
-/** Currency for a per-1M-token rate: whole cents, a third decimal only for
- * rates under ten cents ($0.075), never a stray half-cent ($15.825). */
-export const tokenRate = {
-  format(value: number) {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: value < 0.1 ? 3 : 2,
-    }).format(value)
-  },
-}
+/** Keep fractional-cent Wallet rates consistent with Rates and limits. */
+export const tokenRate = dollars
 
 /** `$2.00 in · $10.00 out`, the shape every rate in the popover takes. */
 export function rateLine(cost: { input: number; output: number }) {
   return `${tokenRate.format(cost.input)} in · ${tokenRate.format(cost.output)} out`
 }
 
-/** Wallet rates arrive with the funding fee folded in ($2.11 for a $2.00
- * model). The popover shows the provider's price and names the fee once in
- * the tooltip, so the numbers match what the catalog and the provider quote. */
-export function providerRate(cost: Cost, rates: RouteRates): Cost {
-  if (rates.basis !== "wallet") return cost
-  const factor = 1 + (rates.feePercent ?? fundingFeePercent(undefined)) / 100
-  return { input: cost.input / factor, output: cost.output / factor }
-}
-
 /** Where the numbers come from, in a few words. */
 export function rateBasis(rates: RouteRates) {
-  return rates.basis === "wallet"
-    ? `Provider price · Ace adds the ${rates.feePercent ?? fundingFeePercent(undefined)}% funding fee at billing`
-    : "Catalog estimate · billed by your provider"
+  return rates.basis === "wallet" ? "Wallet rates" : "Catalog estimate · billed by your provider"
 }
 
 export function pricingUpstream(pricing: ModelPricing | undefined): string | undefined {

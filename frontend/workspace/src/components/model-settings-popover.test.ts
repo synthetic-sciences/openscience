@@ -370,15 +370,13 @@ describe("reasoning effort and Fast mode", () => {
     )
     expect(capped.querySelector("table")).toBeNull()
     // One rate line says what the selections cost; the multiplier, the
-    // "no step" reassurance and the fee basis are not on the surface. The
+    // "no step" reassurance and the pricing basis are not on the surface. The
     // basis stays reachable as the rate row's tooltip.
     expect(capped.querySelector("[data-model-fast-rate]")).toBeNull()
     expect(capped.querySelector("[data-model-context-rate]")).toBeNull()
     expect(capped.querySelector("[data-model-rate-basis]")).toBeNull()
-    expect(rate(capped)).toBe("Rate $2.00 in · $12.00 out /1M tokens")
-    expect(capped.querySelector("[data-model-rate]")?.getAttribute("title")).toBe(
-      "Provider price · Ace adds the 5.5% funding fee at billing",
-    )
+    expect(rate(capped)).toBe("Rate $2.11 in · $12.66 out /1M tokens")
+    expect(capped.querySelector("[data-model-rate]")?.getAttribute("title")).toBe("Wallet rates")
     // A 272K cap never reaches the step, so nothing about it is shown.
     expect(capped.querySelector("[data-model-rate-step]")).toBeNull()
 
@@ -398,13 +396,13 @@ describe("reasoning effort and Fast mode", () => {
     // long prompt pays appears beneath it, also at the Fast rate.
     expect(full.querySelector("[data-model-fast-rate]")).toBeNull()
     expect(full.querySelector("[data-model-context-rate]")).toBeNull()
-    expect(rate(full)).toBe("Rate $4.00 in · $24.00 out /1M tokens")
+    expect(rate(full)).toBe("Rate $4.22 in · $25.32 out /1M tokens")
     expect(
       [
         text(full, "[data-model-rate-step] .model-settings-heading"),
         text(full, "[data-model-rate-step] .model-settings-rate-value"),
       ].join(" "),
-    ).toBe("Past 272K $8.00 in · $36.00 out /1M tokens")
+    ).toBe("Past 272K $8.44 in · $37.98 out /1M tokens")
 
     // A provider route reports a catalog estimate and no fee.
     const byok = mount(() =>

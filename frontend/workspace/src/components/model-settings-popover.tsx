@@ -28,7 +28,7 @@ import {
 import { DialogSettings } from "./dialog-settings"
 import { modelGroup, modelGroupLabel, modelGroupLabelRank } from "./model-groups"
 import { exactRouteFastMode, type FastMode } from "./model-fast"
-import { providerRate, rateBasis, rateLine, routeRates, type RouteRates } from "@/context/model-pricing"
+import { rateBasis, rateLine, routeRates, type RouteRates } from "@/context/model-pricing"
 import { modelControl } from "./model-presentation"
 import { composerOverlays, registerOverlay } from "./overlay-group"
 import { curateQuickModelRows, curateQuickModels } from "./model-quick"
@@ -388,10 +388,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
           </section>
         )}
       </Show>
-      {/* One line says what the selections above cost. The pricing basis
-          (Wallet rate with its fee, or a catalog estimate) is in the tooltip
-          rather than on the surface; a step past the cheaper context tier is
-          the one addition, shown only when the chosen window can reach it. */}
+      {/* The selected Wallet or provider rate follows Fast and context choices. */}
       <Show when={props.rates}>
         {(rates) => {
           const effective = () => (props.fast?.active && rates().fast ? rates().fast! : rates().standard)
@@ -400,7 +397,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
               <div class="model-settings-rate" data-model-rate title={rateBasis(rates())}>
                 <span class="model-settings-heading">Rate</span>
                 <span class="model-settings-rate-value">
-                  {rateLine(providerRate(effective(), rates()))}
+                  {rateLine(effective())}
                   <span class="model-settings-unit"> /1M tokens</span>
                 </span>
               </div>
@@ -409,9 +406,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
                   <div class="model-settings-rate model-settings-rate--step" data-model-rate-step>
                     <span class="model-settings-heading">Past {modelContext(tier().threshold)}</span>
                     <span class="model-settings-rate-value">
-                      {rateLine(
-                        providerRate(props.fast?.active && tier().fast ? tier().fast! : tier().standard, rates()),
-                      )}
+                      {rateLine(props.fast?.active && tier().fast ? tier().fast! : tier().standard)}
                       <span class="model-settings-unit"> /1M tokens</span>
                     </span>
                   </div>

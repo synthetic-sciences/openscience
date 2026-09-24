@@ -18,7 +18,7 @@ import {
   modelSummary,
 } from "@/context/model-catalog"
 import { resolveModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
-import { modelPricing, pricingUpstream } from "@/context/model-pricing"
+import { ModelRateDetails } from "./ModelRateDetails"
 import { CodexConnection } from "./CodexConnection"
 import { ProviderKeys } from "./ProviderKeys"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
@@ -440,41 +440,17 @@ export default function Models() {
                                   <details class="models-rate-details text-12-regular text-text-weak">
                                     <summary>Rates and limits</summary>
                                     <For each={model.routes}>
-                                      {(route) => {
-                                        const pricing = () =>
-                                          modelPricing({
-                                            access: route.routeAccess,
-                                            pricing: route.source.pricing,
-                                            cost: route.source.cost,
-                                            fast: route.source.modes?.fast?.cost,
-                                          })
-                                        return (
-                                          <div class="models-rate-route">
-                                            <strong class="text-12-medium text-text-base">
-                                              {route.access} · {pricingUpstream(route.source.pricing) ?? route.provider}
-                                            </strong>
-                                            <dl>
-                                              <div>
-                                                <dt>Context</dt>
-                                                <dd>{route.source.limit.context.toLocaleString()} tokens</dd>
-                                              </div>
-                                              <div>
-                                                <dt>Max output</dt>
-                                                <dd>{route.source.limit.output.toLocaleString()} tokens</dd>
-                                              </div>
-                                              <For each={pricing().lines}>
-                                                {(line) => (
-                                                  <div>
-                                                    <dt>{line.label}</dt>
-                                                    <dd>{line.value}</dd>
-                                                  </div>
-                                                )}
-                                              </For>
-                                            </dl>
-                                            <p>{pricing().note}</p>
-                                          </div>
-                                        )
-                                      }}
+                                      {(route) => (
+                                        <ModelRateDetails
+                                          access={route.routeAccess}
+                                          label={route.access}
+                                          provider={route.provider}
+                                          limit={route.source.limit}
+                                          pricing={route.source.pricing}
+                                          cost={route.source.cost}
+                                          fast={route.source.modes?.fast?.cost}
+                                        />
+                                      )}
                                     </For>
                                   </details>
                                 </div>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fastRateLabel, fundingFeePercent, modelPricing, pricingUpstream } from "./model-pricing"
+import { fastRateLabel, fundingFeePercent, modelPricing, pricingUpstream, rateLine } from "./model-pricing"
 
 const cost = { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } }
 
@@ -36,18 +36,18 @@ describe("route-aware model pricing", () => {
     expect(result.lines[2]).toEqual({ label: "Over 272,000 input · Input", value: "$4.00" })
   })
 
-  test("states the funding fee as the only markup, from the account's catalog when it has one", () => {
+  test("shows Wallet rates without exposing routing or fee percentages", () => {
     const managed = modelPricing({ access: "managed", cost, pricing: { upstream_provider: "openrouter" } })
-    expect(managed.note).toBe(
-      "USD per 1M tokens · Wallet rates; provider price plus the 5.5% funding fee, no other markup.",
-    )
+    expect(managed.note).toBe("USD per 1M tokens · Wallet rates.")
     expect(managed.note).not.toContain("credit")
     const stated = modelPricing({
       access: "managed",
       cost,
       pricing: { upstream_provider: "openrouter", funding_fee_bps: 700 },
     })
-    expect(stated.note).toContain("plus the 7% funding fee")
+    expect(stated.note).toBe(managed.note)
+    expect(stated.note).not.toMatch(/provider|fee|%/i)
+    expect(rateLine({ input: 5.275, output: 31.65 })).toBe("$5.275 in · $31.65 out")
     expect(fundingFeePercent(undefined)).toBe(5.5)
     expect(fundingFeePercent({ upstream_provider: "openrouter", funding_fee_bps: 0 })).toBe(0)
     expect(modelPricing({ access: "byok", cost }).note).not.toContain("funding fee")
