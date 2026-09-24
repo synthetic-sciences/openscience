@@ -23,6 +23,7 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
         : id.startsWith("meta/")
           ? "meta"
           : "openrouter",
+  ...(id.startsWith("anthropic/") ? { hosting_provider: "anthropic" } : {}),
   context_length: MANAGED_MODEL_DETAILS[id].context,
   max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
   pricing: { tiers: [{ input: 2, output: 6 }] },
@@ -36,7 +37,7 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
         },
       }
     : {}),
-  ...(id === "anthropic/claude-fable-5"
+  ...(id === "anthropic/claude-fable-5.1"
     ? {
         fast_mode: true,
         fast_mode_details: {
@@ -89,7 +90,7 @@ async function gateway(request: Request) {
         id: "msg_fixture",
         type: "message",
         role: "assistant",
-        model: "claude-fable-5",
+        model: "claude-fable-5-1",
         content: [{ type: "text", text: "ok" }],
         stop_reason: "end_turn",
         stop_sequence: null,
@@ -169,7 +170,7 @@ test("Ace keeps every explicitly approved curated model on the scoped OpenRouter
           expect(calls.at(-1)?.url).toBe("/api/llm/proxy/openrouter/v1/chat/completions")
           expect(calls.at(-1)?.body.model).toBe(id)
         }
-        expect(provider.models["anthropic/claude-fable-5"].modes).toEqual({})
+        expect(provider.models["anthropic/claude-fable-5.1"].modes).toEqual({})
         expect(provider.models["x-ai/grok-4.7"].modes).toEqual({})
 
         const grok = provider.models["x-ai/grok-4.7"]

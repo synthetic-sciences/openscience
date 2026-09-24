@@ -36,7 +36,6 @@ describe("curated composer models", () => {
       "moonshotai/kimi-k3",
       "zai/glm-5-3",
       "deepseek/deepseek-v4-1-flash",
-      "anthropic/claude-fable-5",
       "xai/grok-4-7",
       "google/gemini-3-6-flash",
     ])
@@ -49,7 +48,6 @@ describe("curated composer models", () => {
       "choice",
       "unavailable",
       "choice",
-      "unavailable",
       "unavailable",
       "choice",
     ])

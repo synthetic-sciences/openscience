@@ -7,7 +7,7 @@ type Rates = {
 
 type ModelPricing = {
   upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
-  hosting_provider?: "azure" | "openai" | "gemini" | "xai" | "bedrock" | "openrouter"
+  hosting_provider?: "azure" | "openai" | "anthropic" | "gemini" | "xai" | "bedrock" | "openrouter"
   /** The only markup on an Ace turn, stated by the account's catalog; the public 5.5% otherwise. */
   funding_fee_bps?: number
   audited_at?: string

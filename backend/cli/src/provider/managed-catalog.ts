@@ -4,12 +4,11 @@ export const MANAGED_OPENROUTER_MODELS = Object.freeze([
   "openai/gpt-6-sol",
   "openai/gpt-6-luna",
   "anthropic/claude-opus-5.5",
-  "anthropic/claude-fable-5",
   "anthropic/claude-fable-5.1",
   "anthropic/claude-sonnet-5",
   "anthropic/claude-haiku-4.5",
   "google/gemini-3.1-pro-preview",
-  "google/gemini-3.7-flash",
+  "google/gemini-3.8-flash",
   "x-ai/grok-4.7",
   "z-ai/glm-5.3",
   "z-ai/glm-5.3-flash",
@@ -21,7 +20,7 @@ export const MANAGED_OPENROUTER_MODELS = Object.freeze([
   "moonshotai/kimi-k2.7-code",
   "minimax/minimax-m3",
   "xiaomi/mimo-v2.6-pro",
-  "meta/muse-spark-1.2",
+  "meta/muse-spark-1.3",
   "nvidia/nemotron-3-ultra-550b-a55b",
 ] as const)
 
@@ -41,7 +40,7 @@ type ManagedModel = {
 
 // Verified against https://openrouter.ai/api/v1/models and the per-model
 // endpoints (https://openrouter.ai/api/v1/models/{id}/endpoints, which report
-// max_prompt_tokens) on 2026-09-23.
+// max_prompt_tokens) on 2026-09-24.
 // Runtime metadata supplies prices for the actual upstream route; this fallback
 // only keeps model identity and token budgeting usable when models.dev lags.
 export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[number], ManagedModel> = {
@@ -85,13 +84,6 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     efforts: ["low", "medium", "high", "xhigh", "max"],
     defaultEffort: "high",
   },
-  "anthropic/claude-fable-5": {
-    name: "Claude Fable 5",
-    context: 1_000_000,
-    output: 128_000,
-    input: ["text", "image", "pdf"],
-    temperature: false,
-  },
   "anthropic/claude-fable-5.1": {
     name: "Claude Fable 5.1",
     context: 1_000_000,
@@ -100,8 +92,8 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     temperature: false,
     efforts: ["low", "medium", "high", "xhigh", "max"],
     defaultEffort: "high",
-    // OpenRouter's bound-thinking replay must be approved by the gateway before
-    // this new route is offered. Missing metadata is not approval.
+    // The gateway must confirm its native Anthropic route can preserve bound
+    // thinking replay. Missing metadata is not approval.
     requiresApproval: true,
   },
   "anthropic/claude-sonnet-5": {
@@ -123,12 +115,13 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     output: 65_536,
     input: ["text", "image", "video", "audio", "pdf"],
   },
-  "google/gemini-3.7-flash": {
-    name: "Gemini 3.7 Flash",
+  "google/gemini-3.8-flash": {
+    name: "Gemini 3.8 Flash",
     context: 1_048_576,
     output: 65_536,
     input: ["text", "image", "video", "audio", "pdf"],
     temperature: false,
+    efforts: ["low", "medium", "high"],
   },
   "x-ai/grok-4.7": {
     name: "Grok 4.7",
@@ -169,8 +162,8 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     output: 131_072,
     input: ["text", "image", "video", "audio"],
   },
-  "meta/muse-spark-1.2": {
-    name: "Muse Spark 1.2",
+  "meta/muse-spark-1.3": {
+    name: "Muse Spark 1.3",
     context: 1_048_576,
     output: 943_718,
     input: ["text", "image", "video", "audio", "pdf"],

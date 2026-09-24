@@ -44,7 +44,6 @@ export const COMPOSER_MODEL_ROSTER = [
   { key: "moonshotai/kimi-k3", label: "Kimi K3", provider: "moonshotai" },
   { key: "zai/glm-5-3", label: "GLM 5.3", provider: "zai" },
   { key: "deepseek/deepseek-v4-1-flash", label: "DeepSeek V4.1 Flash", provider: "deepseek" },
-  { key: "anthropic/claude-fable-5", label: "Fable 5", provider: "anthropic" },
   { key: "xai/grok-4-7", label: "Grok 4.7", provider: "xai" },
 ] as const
 
@@ -74,6 +73,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "xai/grok-4-20-multi-agent",
   "meta/muse-spark-1-1",
   "meta/muse-spark-1-2",
+  "meta/muse-spark-1-3",
   "openai/gpt-5-5",
   "openai/gpt-5-5-pro",
   "openai/gpt-5-5-mini",
@@ -86,6 +86,7 @@ export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
   "anthropic/claude-opus-4-8",
   "google/gemini-3-6-flash",
   "google/gemini-3-7-flash",
+  "google/gemini-3-8-flash",
   "google/gemini-3-1-pro-preview",
   "zai/glm-5-2",
   "zai/glm-5-3",
@@ -227,6 +228,7 @@ const RETIRED_LABELS: Record<string, string> = {
   "openai/gpt-5-6-sol": "5.6 Sol",
   "openai/gpt-5-6-terra": "5.6 Terra",
   "anthropic/claude-opus-5": "Opus 5",
+  "anthropic/claude-fable-5": "Fable 5",
   "deepseek/deepseek-v4-flash": "DeepSeek V4 Flash",
   "xai/grok-4-6": "Grok 4.6",
 }

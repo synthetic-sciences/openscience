@@ -76,8 +76,12 @@ test("Ace preserves reviewed fallback models but requires approval for new bound
         expect(provider.source).toBe("managed")
         const available = MANAGED_OPENROUTER_MODELS.filter((id) => !MANAGED_MODEL_DETAILS[id].requiresApproval)
         expect(Object.keys(provider.models).sort()).toEqual([...available].sort())
-        expect(Object.keys(provider.models)).toHaveLength(22)
+        expect(Object.keys(provider.models)).toHaveLength(21)
         expect(provider.models["anthropic/claude-fable-5.1"]).toBeUndefined()
+        expect(provider.models["anthropic/claude-fable-5"]).toBeUndefined()
+        await expect(Provider.getModel("openrouter", "google/gemini-3.7-flash")).rejects.toThrow()
+        await expect(Provider.getModel("openrouter", "meta/muse-spark-1.2")).rejects.toThrow()
+        await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).rejects.toThrow()
         for (const id of available) {
           const model = provider.models[id]
           const reviewed = MANAGED_MODEL_DETAILS[id]
@@ -90,8 +94,8 @@ test("Ace preserves reviewed fallback models but requires approval for new bound
         expect(provider.models["nvidia/nemotron-3-ultra-550b-a55b"].capabilities.input.image).toBe(false)
         // The managed envelope accepts text and images only; audio, video and
         // documents are cleared on the Ace route even for multimodal models.
-        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.video).toBe(false)
-        expect(provider.models["google/gemini-3.7-flash"].capabilities.input.image).toBe(true)
+        expect(provider.models["google/gemini-3.8-flash"].capabilities.input.video).toBe(false)
+        expect(provider.models["google/gemini-3.8-flash"].capabilities.input.image).toBe(true)
         for (const id of ["openai/gpt-6-sol", "openai/gpt-6-luna"]) {
           expect(Object.keys(provider.models[id].variants ?? {})).toEqual([
             "none",

@@ -148,8 +148,8 @@ describe("frontier model canonicalization", () => {
 
   test("the current Ace families have provider identities and visible frontier defaults", () => {
     const ids = [
-      "google/gemini-3.7-flash",
-      "meta/muse-spark-1.2",
+      "google/gemini-3.8-flash",
+      "meta/muse-spark-1.3",
       "qwen/qwen3.8-max",
       "qwen/qwen3.8-flash",
       "minimax/minimax-m3",
@@ -260,7 +260,6 @@ describe("frontier model canonicalization", () => {
       "Kimi K3",
       "GLM 5.3",
       "DeepSeek V4.1 Flash",
-      "Fable 5",
       "Grok 4.7",
     ])
     for (const providerID of ["zai", "opencode-go", "zai-coding-plan", "zhipuai-coding-plan"]) {

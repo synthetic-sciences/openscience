@@ -45,6 +45,7 @@ test("pricing ingestion copies only reviewed non-executable metadata", () => {
     models: [
       {
         ...entry,
+        hosting_provider: "anthropic",
         api: { url: "https://untrusted.example", npm: "untrusted-package" },
         options: { apiKey: "never-import-this" },
         headers: { Authorization: "never-import-this" },
@@ -53,6 +54,7 @@ test("pricing ingestion copies only reviewed non-executable metadata", () => {
   })
   expect(parsed[entry.id]?.cost).toEqual({ input: 5, output: 25, cache: { read: 0.5, write: 6.25 }, tiers: [] })
   expect(parsed[entry.id]?.limit).toEqual({ context: 1_000_000, output: 128_000 })
+  expect(parsed[entry.id]?.pricing.hosting_provider).toBe("anthropic")
   expect(JSON.stringify(parsed)).not.toContain("untrusted")
   expect(JSON.stringify(parsed)).not.toContain("never-import")
   expect(ManagedPricing.parse({ models: [{ ...entry, id: "unreviewed/model" }] })).toEqual({})
@@ -126,8 +128,8 @@ test("hosted routes keep the managed transport and Fast follows the catalog's fa
     cost: { input: 4.22, output: 21.1, cache: { read: 0, write: 0 }, tiers: [] },
     provider: { body: { service_tier: "priority" } },
   })
-  // A Gemini or Bedrock host can never carry the priority flag, whatever the catalog says.
-  for (const host of ["gemini", "bedrock"]) expect(hosted(host, {}).modes).toEqual({})
+  // These hosts have no supported Ace priority transport, whatever the catalog says.
+  for (const host of ["anthropic", "gemini", "bedrock"]) expect(hosted(host, {}).modes).toEqual({})
   const grok = ManagedPricing.parse({
     models: [
       {
@@ -394,7 +396,7 @@ test("managed availability controls selection independently of pricing and canno
     return Response.json(
       {
         models: [
-          { ...entry, id, upstream_provider: "openrouter", available: allowed },
+          { ...entry, id, upstream_provider: "openrouter", hosting_provider: "anthropic", available: allowed },
           // No prices: an explicit disabled established route must still be removed.
           { id: "openai/gpt-6-luna", available: false },
         ],
@@ -442,6 +444,8 @@ test("managed availability controls selection independently of pricing and canno
         clock += 61_000
         await waitFor((models) => !!models[id])
         expect((await Provider.getModel("openrouter", id)).name).toBe("Configured Fable")
+        await expect(Provider.getModel("openrouter", "anthropic/claude-fable-5")).rejects.toThrow()
+        expect((await Provider.getModel("openrouter", id)).pricing?.hosting_provider).toBe("anthropic")
         allowed = false
         clock += 61_000
         await waitFor((models) => !models[id])

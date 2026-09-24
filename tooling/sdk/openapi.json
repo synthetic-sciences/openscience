@@ -62922,6 +62922,7 @@
                 "enum": [
                   "azure",
                   "openai",
+                  "anthropic",
                   "gemini",
                   "xai",
                   "bedrock",

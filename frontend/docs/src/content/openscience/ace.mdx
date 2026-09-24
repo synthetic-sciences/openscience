@@ -6,18 +6,25 @@ description: "Set up managed access, choose a funding workspace, and manage your
 Ace provides managed models and research search through one purchased Wallet. You do not need separate model-provider keys to use it.
 
 Ace's GPT-6 Astra, Sol, and Luna run on Azure OpenAI Global Standard, and
-their Fast mode runs on OpenAI's own priority processing. Claude Opus 5.5 runs
-on Amazon Bedrock and Grok 4.7 on xAI, each at that provider's published
-token rates. Your model selections and Ace sign-in stay the same. Charges use
-the host's token rates, including cached input and long-context tiers, plus
-the existing funding fee. Graph search embeddings also run on Azure. Gemini
-3.1 Pro and 3.7 Flash use Google's Gemini API, as does Nano Banana Pro image
-generation; choose a `.png` output path for generated images. Fast mode is
-offered where the host has a priority tier (the GPT-6 family and Grok 4.7),
-not on Gemini or Bedrock. Other managed models continue through OpenRouter;
-your own provider-key and ChatGPT connections remain separate. Each model's
-row in the model menu names its host, and **Customize → Models → Rates and
-limits** shows the current rates before you start work.
+their Fast mode runs on OpenAI's own priority processing. Claude Opus 5.5,
+Fable 5.1, Sonnet 5, and Haiku 4.5 use Anthropic's API directly. Gemini 3.1
+Pro Preview and 3.8 Flash use Google's Gemini API, as does Nano Banana Pro
+image generation; choose a `.png` output path for generated images. Graph
+search embeddings run on Azure. Grok 4.7 and the other managed models,
+including Muse Spark 1.3, continue through OpenRouter.
+
+Charges use the serving provider's token rates, including cached input and
+long-context tiers, plus the existing funding fee. Each model's row in the
+model menu names its host, and **Customize → Models → Rates and limits**
+shows the current rates before you start work. Fast mode is available for
+the GPT-6 family through OpenAI priority processing; Gemini and Claude have
+no Ace Fast mode. Your own provider-key and ChatGPT connections remain
+separate.
+
+The current Ace roster replaces Fable 5 with Fable 5.1, Gemini 3.7 Flash with
+3.8 Flash, and Muse Spark 1.2 with 1.3. Existing conversations keep their
+saved model identity; choose a current model if an earlier one is no longer
+available. A provider key can still expose earlier models independently.
 
 Your research project is where you work with conversations and files. Your **funding workspace** is the account workspace that pays for Ace usage. Check both when working across personal and team projects.
 
