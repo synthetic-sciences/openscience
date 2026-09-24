@@ -207,6 +207,7 @@ fs.chmodSync(binary, 0o755)
 }
 
 type Mode =
+  | "status-corruption"
   | "status-before-repair"
   | "repair-before-status"
   | "state-sharing"
@@ -377,6 +378,29 @@ test("explicit repair rechecks cached starters and concurrent repairs share one 
       probes: 1,
       runtimeCached: true,
     })
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("a broken formerly ready starter exposes repair without changing the persisted setup status", async () => {
+  const current = await profile()
+  try {
+    const result = JSON.parse((await run("status-corruption", current.env)).trim())
+    expect(result.failed).toMatchObject({
+      status: "failed",
+      phase: "failed:r",
+      error: "r starter environment failed its import probe: R package tidyverse is missing",
+    })
+    expect(result.failed.environments).toContainEqual(expect.objectContaining({ language: "r", ready: false }))
+    expect(result.preserved).toBe(true)
+    expect(result.recorded).toMatchObject({
+      status: "failed",
+      phase: "failed:r",
+      error: "Previous environment remains in rollback after restore failed",
+    })
+    expect(result.repaired).toMatchObject({ status: "ready", phase: "ready" })
+    expect(result.repaired.environments).toContainEqual(expect.objectContaining({ language: "r", ready: true }))
   } finally {
     await current.dispose()
   }

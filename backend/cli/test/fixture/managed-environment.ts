@@ -57,7 +57,31 @@ const attestationLines = async () =>
     .split("\n")
     .filter(Boolean)
 
-if (process.argv[2] === "status-before-repair" || process.argv[2] === "repair-before-status") {
+if (process.argv[2] === "status-corruption") {
+  await ManagedEnvironments.bootstrap()
+  const conda = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda")
+  const state = path.join(conda, "state.json")
+  const original = await fs.readFile(state, "utf8")
+  await fs.writeFile(
+    path.join(conda, "envs", "r", "bin", "Rscript"),
+    "#!/bin/sh\necho 'R package tidyverse is missing' >&2\nexit 1\n",
+  )
+  const failed = await ManagedEnvironments.status()
+  const preserved = (await fs.readFile(state, "utf8")) === original
+  await fs.writeFile(
+    state,
+    JSON.stringify({
+      ...JSON.parse(original),
+      status: "failed",
+      phase: "failed:r",
+      error: "Previous environment remains in rollback after restore failed",
+    }),
+  )
+  const recorded = await ManagedEnvironments.status()
+  await ManagedEnvironments.repair()
+  const repaired = await ManagedEnvironments.status()
+  console.log(JSON.stringify({ failed, preserved, recorded, repaired }))
+} else if (process.argv[2] === "status-before-repair" || process.argv[2] === "repair-before-status") {
   await ManagedEnvironments.bootstrap()
   const conda = path.join(process.env.OPENSCIENCE_DATA_DIR!, "conda")
   const prefix = path.join(conda, "envs", "r")

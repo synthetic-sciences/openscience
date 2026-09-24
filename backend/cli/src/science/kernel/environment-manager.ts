@@ -1758,27 +1758,36 @@ export namespace ManagedEnvironments {
           path: environmentPath(language),
           packages: [...STARTERS[language].packages],
         }
-        if (!lease) return { busy: true, environment: { ...base, ready: false, manifest: null } }
+        if (!lease) return { busy: true, failure: undefined, environment: { ...base, ready: false, manifest: null } }
         const manifest = Manifest.safeParse(
           await Bun.file(manifestPath(language))
             .json()
             .catch(() => undefined),
         )
+        const checked = await probe(language)
         return {
           busy: false,
+          failure: checked.ok ? undefined : checked.reason,
           environment: {
             ...base,
-            ready: (await probe(language)).ok,
+            ready: checked.ok,
             manifest: manifest.success ? manifest.data : null,
           },
         }
       }),
     )
+    const failed = snapshots.find((item) => item.failure !== undefined)
     return {
       ...current,
       ...(snapshots.some((item) => item.busy)
         ? { status: "installing" as const, phase: "checking_environments", error: undefined }
-        : {}),
+        : current.status === "ready" && failed
+          ? {
+              status: "failed" as const,
+              phase: `failed:${failed.environment.language}`,
+              error: `${failed.environment.language} starter environment failed its import probe: ${failed.failure}`,
+            }
+          : {}),
       environments: snapshots.map((item) => item.environment),
     }
   }
