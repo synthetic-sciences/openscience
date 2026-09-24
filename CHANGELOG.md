@@ -105,6 +105,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **Windows edits retain exact file identities.** A file replaced while an edit awaits approval is rejected even when its contents match and its large Windows file ID would round to the same number.
+
 - **Claude keeps distinct reasoning blocks intact between tool calls.** Multiple signed thinking blocks in a streamed answer retain their own text and signatures, so a tool continuation can replay them correctly.
 
 - **Smaller macOS update downloads.** Updates reuse unchanged chunks from the last verified download, including when skipping releases. The existing Download, verification, restart, and rollback flow stays the same. Missing or damaged caches and unsupported partial downloads fall back to the full app automatically; the first update establishes the cache. Release builds generate and test the download metadata automatically.

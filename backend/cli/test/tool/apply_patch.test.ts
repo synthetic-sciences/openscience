@@ -514,6 +514,57 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
+  test("refuses distinct uint64 file IDs that round to the same Number", async () => {
+    await using fixture = await tmpdir()
+    const target = path.join(fixture.path, "identity.txt")
+    await fs.writeFile(target, "approved\n")
+    const first = (1n << 64n) - 2n
+    const second = first + 1n
+    expect(Number(first)).toBe(Number(second))
+    let replaced = false
+    const original = fs.open.bind(fs)
+    // The host cannot allocate chosen inode numbers. Substitute only its stat
+    // metadata; approval, file replacement, reads and patch execution stay real.
+    const open = spyOn(fs, "open").mockImplementation(async (file, flags, mode) => {
+      const handle = await original(file, flags, mode)
+      if (String(file) !== target) return handle
+      const stat = handle.stat.bind(handle)
+      Object.defineProperty(handle, "stat", {
+        value: async (options?: { bigint?: boolean }) => {
+          const current = options?.bigint ? await stat({ bigint: true }) : await stat()
+          const ino = replaced ? second : first
+          return Object.assign(current, { ino: options?.bigint ? ino : Number(ino) })
+        },
+      })
+      return handle
+    })
+    try {
+      await Instance.provide({
+        directory: fixture.path,
+        fn: async () => {
+          await expect(
+            execute(
+              { patchText: "*** Begin Patch\n*** Update File: identity.txt\n@@\n-approved\n+agent\n*** End Patch" },
+              {
+                ...baseCtx,
+                ask: async () => {
+                  const replacement = path.join(fixture.path, "replacement.txt")
+                  await fs.writeFile(replacement, "approved\n")
+                  await fs.rename(replacement, target)
+                  replaced = true
+                },
+              },
+            ),
+          ).rejects.toThrow("identity changed after approval")
+          expect(await fs.readFile(target, "utf8")).toBe("approved\n")
+          expect((await fs.readdir(fixture.path)).filter((name) => name.startsWith(".openscience-"))).toEqual([])
+        },
+      })
+    } finally {
+      open.mockRestore()
+    }
+  })
+
   test("rejects update when target file is missing", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()

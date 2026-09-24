@@ -23,6 +23,7 @@ import { SessionFilesystem } from "@/session/filesystem"
 import { AuthoritySignal } from "@/project/authority-signal"
 import { SafeDirectoryIO } from "../file/safe-directory-io"
 import { SafeFileIO } from "../file/safe-io"
+import { FileIdentity } from "../file/identity"
 import { Log } from "../util/log"
 
 const atomicExchange = process.platform === "darwin" || process.platform === "linux"
@@ -34,8 +35,8 @@ const PatchParams = z.object({
 type ApprovedFile = {
   bytes: Buffer
   content: string
-  dev: number
-  ino: number
+  dev: FileIdentity.Value
+  ino: FileIdentity.Value
   mode: number
 }
 
@@ -62,11 +63,11 @@ async function revalidate(change: FileChange, target = false) {
 }
 
 async function readApprovedFile(filepath: string): Promise<ApprovedFile> {
-  const requested = await fs.lstat(filepath)
+  const requested = await FileIdentity.lstat(filepath)
   if (requested.isSymbolicLink()) throw new Error(`Refusing to edit a symbolic link: ${filepath}`)
   const handle = await fs.open(filepath, FS.O_RDONLY | FS.O_NOFOLLOW)
   try {
-    const stat = await handle.stat()
+    const stat = await FileIdentity.stat(handle)
     if (!stat.isFile()) throw new Error(`Only regular files can be edited: ${filepath}`)
     const bytes = await handle.readFile()
     return {
@@ -164,7 +165,7 @@ async function assertApprovedFile(filepath: string, approved: ApprovedFile) {
   const current = await readApprovedFile(filepath).catch((error) => {
     throw new Error(`Refusing to edit ${filepath}: the file changed after approval: ${error}`)
   })
-  if (current.dev !== approved.dev || current.ino !== approved.ino) {
+  if (!FileIdentity.same(current, approved)) {
     throw new Error(`Refusing to edit ${filepath}: the file identity changed after approval`)
   }
   if (!current.bytes.equals(approved.bytes)) {
