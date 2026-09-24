@@ -467,7 +467,11 @@ describe("chat project preview resolution", () => {
         { path, sessionID: "session-a", projectPreview: "true" },
       ])
       expect(resolutions).toEqual([
-        { path: absolute ? path : "COST_MODEL.md", sessionID: "session-a", projectPreview: "true" },
+        {
+          path: absolute ? path : "COST_MODEL.md",
+          sessionID: "session-a",
+          ...(absolute ? { projectPreview: "true" } : {}),
+        },
       ])
       expect(button(host, "Save changes")).toBeNull()
       expect(button(host, "Edit")).toBeNull()
@@ -476,6 +480,36 @@ describe("chat project preview resolution", () => {
       expect(button(host, "Download file")).not.toBeNull()
     })
   }
+
+  test("a relative conversation link can resolve a connected file after the managed project denies the guessed path", async () => {
+    const reads: Read[] = []
+    const sdk = setup(
+      async (input) => {
+        reads.push(input)
+        if (input.path === "report.md") throw new Error("File not found")
+        if (input.path === "/project/report.md") throw denied(input.path)
+        return { content: "# Connected report", mimeType: "text/markdown", writable: false }
+      },
+      async (query) =>
+        query.projectPreview
+          ? json({ path: null, scope: null })
+          : json({ path: "/connected/draft/report.md", writable: false, scope: "session" }),
+    )
+    const { host } = mount(() =>
+      subject.FileView({
+        path: "report.md",
+        directory: "/project",
+        scope: "auto",
+        sessionID: "session-a",
+        services: sdk,
+      }),
+    )
+    await settle()
+    await settle()
+    expect(host.querySelector('[aria-label="report.md preview"]')).not.toBeNull()
+    expect(reads.at(-1)).toEqual({ path: "/connected/draft/report.md", sessionID: "session-a" })
+    expect(button(host, "Edit")).toBeNull()
+  })
 
   test("never retries generic 403 or outside-project denial under project authority", async () => {
     for (const [path, error] of [

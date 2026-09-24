@@ -1179,7 +1179,7 @@ export namespace File {
    * relative link to Instance.directory alone cannot open those source files.
    *
    * Absolute receipts never fall back to a different file. Relative paths are
-   * checked directly; a bare filename gets a bounded recursive lookup.
+   * checked directly, then a shortened path gets a bounded recursive lookup.
    * Relative lookups fail closed when multiple authorized
    * files match, and the eventual read still re-authorizes the returned path so
    * revocation wins between resolution and I/O.
@@ -1235,28 +1235,38 @@ export namespace File {
         await add(path.resolve(root.path, ...requested.split("/")), root.path)
         if (matches.size > 1) return
       }
-      return matches.size === 1 ? matches.values().next().value : undefined
+      if (matches.size === 1) return matches.values().next().value
     }
 
     let scanned = 0
     let complete = true
-    for (const root of roots) {
-      if (root.type === "file") {
-        if (path.basename(root.path) === requested) await add(root.path, root.path)
-        if (matches.size > 1) return
-        continue
-      }
-      for await (const file of Ripgrep.files({ cwd: root.path })) {
-        scanned += 1
-        if (scanned > referenceScanLimit) {
-          complete = false
-          break
+    const signal = AbortSignal.timeout(30_000)
+    const glob = `**/${requested.replace(/([*?\[\]{}\\])/g, "\\$1")}`
+    try {
+      for (const root of roots) {
+        if (root.type === "file") {
+          if (path.basename(root.path) === requested) await add(root.path, root.path)
+          if (matches.size > 1) return
+          continue
         }
-        if (path.basename(file) !== requested) continue
-        await add(path.resolve(root.path, file), root.path)
-        if (matches.size > 1) return
+        // File links may name ignored outputs. Filter inside rg so unrelated
+        // dependency trees cannot exhaust the candidate budget first.
+        for await (const file of Ripgrep.files({ cwd: root.path, noIgnore: true, glob: [glob], signal })) {
+          scanned += 1
+          if (scanned > referenceScanLimit) {
+            complete = false
+            break
+          }
+          const relative = file.split(path.sep).join("/")
+          if (relative !== requested && !relative.endsWith(`/${requested}`)) continue
+          await add(path.resolve(root.path, file), root.path)
+          if (matches.size > 1) return
+        }
+        if (!complete) break
       }
-      if (!complete) break
+    } catch (error) {
+      if (signal.aborted) return
+      throw error
     }
     return complete && matches.size === 1 ? matches.values().next().value : undefined
   }

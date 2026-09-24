@@ -104,6 +104,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **Conversation file links reach connected folders.** Relative links no longer get stuck checking only a managed project's empty storage directory. Shortened filenames and nested paths also resolve inside ignored output folders, while ambiguous names, revoked access, and missing absolute paths remain protected.
 - **Generated images still open after their files move.** The image card's **Open image** button now opens the original attachment, just like its thumbnail, instead of failing on a renamed or removed workspace path. Images without an inline attachment continue to open from disk.
 - **Closing a workspace releases its open dialogs.** Dialog cleanup now removes the modal's focus and accessibility handlers so content does not remain hidden from assistive technology after the dialog's view is removed.
 - **Tool availability notices stay inside activity details.** Internal lines such as “Tools added: edit, write” no longer appear alongside the answer when the turn's activity is collapsed, including while work is running or interrupted.

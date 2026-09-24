@@ -4,6 +4,68 @@ import path from "node:path"
 import { test, expect } from "./fixtures"
 import { createSdk, fileTab, openFileRow, openSettings, promptSelector } from "./utils"
 
+test("conversation links open ignored outputs in a connected project folder", async ({ page }, info) => {
+  test.skip(process.env.OPENSCIENCE_E2E_FAKE_MODEL !== "1", "requires the isolated deterministic model")
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "openscience-chat-files-e2e-")))
+  await mkdir(path.join(root, "draft", "figs"), { recursive: true })
+  await writeFile(path.join(root, ".ignore"), "draft/\n")
+  await writeFile(path.join(root, "draft", "report.txt"), "Connected report contents")
+  await writeFile(
+    path.join(root, "draft", "figs", "diagram.svg"),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="8"><rect width="12" height="8" fill="blue"/></svg>',
+  )
+  const project = (
+    await createSdk().global.project.create({
+      name: "Conversation file links",
+      sources: [{ path: root, access: "read" }],
+    })
+  ).data!
+  const sdk = createSdk(project.worktree)
+  const session = (await sdk.session.create({ title: "Connected file links" })).data!
+  try {
+    const reply = (
+      await sdk.session.prompt({
+        sessionID: session.id,
+        model: { providerID: "e2e", modelID: "echo" },
+        parts: [{ type: "text", text: "File links fixture" }],
+      })
+    ).data!
+    const text = reply.parts.find((part) => part.type === "text")!
+    expect(text.type).toBe("text")
+    const edited = await sdk.part.update({
+      sessionID: session.id,
+      messageID: reply.info.id,
+      partID: text.id,
+      part: {
+        ...text,
+        type: "text",
+        text: "[Full report](draft/report.txt) · [Short report](report.txt) · [Diagram](figs/diagram.svg)",
+      },
+    })
+    expect(edited.error).toBeUndefined()
+    await page.goto(`/${project.id}/session/${session.id}`)
+    const view = page.locator('[data-component="file-view"]:visible')
+    for (const name of ["Full report", "Short report"]) {
+      await page.getByRole("link", { name, exact: true }).click()
+      await expect(view).toContainText("Connected report contents")
+      await expect(view.getByRole("tab", { name: "Edit", exact: true })).toHaveCount(0)
+    }
+    await page.getByRole("link", { name: "Diagram", exact: true }).click()
+    const image = view.getByRole("img", { name: "diagram.svg", exact: true })
+    await expect(image).toBeVisible()
+    await expect
+      .poll(() => image.evaluate((node: HTMLImageElement) => [node.naturalWidth, node.naturalHeight]))
+      .toEqual([12, 8])
+    await page.screenshot({ path: info.outputPath("connected-conversation-image.png") })
+  } finally {
+    await sdk.session.delete({ sessionID: session.id })
+    for (const grant of (await sdk.project.filesystem.list()).data?.grants ?? []) {
+      if (!grant.time.revoked) await sdk.project.filesystem.revoke({ grantID: grant.id })
+    }
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test("project folders work before a conversation and settings change real access", async ({ page }, info) => {
   test.setTimeout(120_000)
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "openscience-folders-e2e-")))

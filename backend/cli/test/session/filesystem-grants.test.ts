@@ -1159,6 +1159,45 @@ describe("session filesystem grants", () => {
 })
 
 describe("file access uses session grants", () => {
+  test("resolves shortened conversation links inside ignored connected folders without confusing duplicates", async () => {
+    await using source = await tmpdir({
+      git: true,
+      init: async (directory) => {
+        await Bun.write(path.join(directory, ".gitignore"), "draft/\nsecond/\n")
+        await Bun.write(path.join(directory, "draft", "figs", "overview.png"), "image fixture")
+        await Bun.write(path.join(directory, "draft", "paper.tex"), "paper fixture")
+        await Bun.write(path.join(directory, "draft", "paper[final].tex"), "literal filename fixture")
+      },
+    })
+    await using project = await tmpdir()
+    await withSession(project.path, async (session) => {
+      const grant = await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: source.path,
+        access: "read",
+        scope: "project",
+      })
+      for (const reference of ["paper.tex", "figs/overview.png", "draft/figs/overview.png"]) {
+        const resolved = await File.resolveReference(reference, { sessionID: session.id })
+        expect(resolved).toBe(
+          path.join(source.path, "draft", reference === "paper.tex" ? reference : "figs/overview.png"),
+        )
+        expect((await File.read(resolved!, { sessionID: session.id })).writable).toBe(false)
+      }
+      expect(await File.resolveReference("paper[final].tex", { sessionID: session.id })).toBe(
+        path.join(source.path, "draft", "paper[final].tex"),
+      )
+      await Bun.write(path.join(source.path, "second", "figs", "overview.png"), "second image")
+      expect(await File.resolveReference("figs/overview.png", { sessionID: session.id })).toBeUndefined()
+      expect(await File.resolveReference("../paper.tex", { sessionID: session.id })).toBeUndefined()
+      expect(
+        await File.resolveReference(path.join(source.path, "absent", "paper.tex"), { sessionID: session.id }),
+      ).toBeUndefined()
+      await SessionFilesystem.revoke(session.id, grant.id)
+      expect(await File.resolveReference("paper.tex", { sessionID: session.id })).toBeUndefined()
+    })
+  })
+
   test("resolves exact canonical output receipts without crossing session authority", async () => {
     await using external = await tmpdir({ init: (directory) => Bun.write(path.join(directory, "secret.json"), "{}") })
     await using tmp = await tmpdir()

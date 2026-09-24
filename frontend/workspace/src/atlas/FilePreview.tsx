@@ -328,6 +328,9 @@ export function FileView(props: {
           (isMissingFileError(result.error) || (result.denied && projectContains(dir, path)))
         ) {
           const originalError = result.error
+          // A project path guessed from a relative chat link is not the
+          // requested location. Let the broker check connected roots too.
+          const projectOnly = result.denied && /^(?:\/|[A-Za-z]:[\\/])/.test(reference)
           void sdk
             .request(
               "/file/resolve",
@@ -335,7 +338,7 @@ export function FileView(props: {
               {
                 path: reference,
                 sessionID: session,
-                ...(result.denied ? { projectPreview: "true" } : {}),
+                ...(projectOnly ? { projectPreview: "true" } : {}),
               },
             )
             .then(async (response) => {
@@ -346,7 +349,7 @@ export function FileView(props: {
               if (
                 typeof resolved.path === "string" &&
                 resolved.path &&
-                (!result.denied || resolved.scope === "project")
+                (!projectOnly || resolved.scope === "project")
               ) {
                 batch(() => {
                   if (typeof resolved.writable === "boolean") setResolvedWritable(resolved.writable)
