@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, type Component } from "solid-js"
+import { For, Show, createMemo, createResource, onCleanup, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Icon } from "@synsci/ui/icon"
 import type { OpenScienceClient } from "@synsci/sdk/v2/client"
@@ -28,6 +28,7 @@ export const WorkingFolderChip: Component<{
   pending: WorkingRootChoice
   onPending: (choice: WorkingRootChoice) => void
   disabled?: boolean
+  watch?: (refresh: () => void) => () => void
 }> = (props) => {
   const [choice, setChoice] = createStore({ open: false, busy: false, error: "" })
   let details: HTMLDetailsElement | undefined
@@ -56,13 +57,18 @@ export const WorkingFolderChip: Component<{
           pinned: snapshot.workingRoot,
         }
       }
-      const grants = await props.client.project.workingRoots().then((x) => x.data ?? [])
+      const snapshot = await props.client.project.filesystem.list().then((x) => x.data)
+      const grants = (snapshot?.grants ?? []).filter(
+        (grant) => grant.access === "write" && !grant.time.revoked && !grant.time.consumed,
+      )
       const roots = grants.map((grant): Root => ({ path: grant.path, name: basename(grant.path) }))
-      const automatic = roots[0]?.path
+      const automatic = snapshot?.workingRoot === "scratch" ? undefined : snapshot?.toolDirectory
       const current = props.pending === "scratch" ? undefined : (props.pending ?? automatic)
       return { roots, scratch: undefined, current, pinned: props.pending }
     },
   )
+  const watch = props.watch?.(() => void actions.refetch())
+  if (watch) onCleanup(watch)
 
   const roots = () => state.latest?.roots ?? []
   const current = () => state.latest?.current

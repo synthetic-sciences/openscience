@@ -56,6 +56,7 @@ export function SourceMenu(props: {
   active: PaneSource
   onPick: (source: PaneSource) => void
   onAdd?: () => void
+  onManage?: () => void
   onRevoke?: (source: PaneSource) => void
   /** Use a stable label such as “More” when primary locations are separate tabs. */
   triggerLabel?: string
@@ -343,6 +344,23 @@ export function SourceMenu(props: {
                   <span class="files-menu__label">Add folder…</span>
                 </span>
                 <span class="files-menu__tail" />
+              </button>
+            </Show>
+            <Show when={props.onManage}>
+              <button
+                type="button"
+                class="files-menu__item"
+                role="menuitem"
+                tabindex="-1"
+                onClick={() => {
+                  close(true)
+                  props.onManage?.()
+                }}
+              >
+                <span class="files-menu__glyph" aria-hidden="true">
+                  <IconFolderAdd size={16} strokeWidth={1.5} />
+                </span>
+                <span class="files-menu__label">Manage workspace folders…</span>
               </button>
             </Show>
           </div>

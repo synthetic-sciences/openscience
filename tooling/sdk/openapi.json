@@ -24633,6 +24633,620 @@
         ]
       }
     },
+    "/project/current/filesystem": {
+      "get": {
+        "operationId": "project.filesystem.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Inspect project folders before or during a conversation",
+        "responses": {
+          "200": {
+            "description": "Project folder access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^fsg_.*"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "const": "project"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "workspace",
+                              "project",
+                              "skill",
+                              "permission",
+                              "api",
+                              "tool",
+                              "handoff",
+                              "parent"
+                            ]
+                          },
+                          "time": {
+                            "type": "object",
+                            "properties": {
+                              "created": {
+                                "type": "number"
+                              },
+                              "consumed": {
+                                "type": "number"
+                              },
+                              "revoked": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "created"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "path",
+                          "access",
+                          "scope",
+                          "source",
+                          "time"
+                        ]
+                      }
+                    },
+                    "workingRoot": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "scratch"
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      ]
+                    },
+                    "directory": {
+                      "type": "string"
+                    },
+                    "toolDirectory": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "type": "object",
+                      "properties": {
+                        "broker": {
+                          "type": "string",
+                          "const": "enforced"
+                        },
+                        "processWrite": {
+                          "type": "string",
+                          "const": "grant_only"
+                        },
+                        "processRead": {
+                          "type": "string",
+                          "enum": [
+                            "grant_only",
+                            "policy_only"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "broker",
+                        "processWrite",
+                        "processRead"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "projectID",
+                    "grants",
+                    "directory",
+                    "enforcement"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.filesystem.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "project.filesystem.connect",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Connect a project folder or replace its access level",
+        "responses": {
+          "200": {
+            "description": "Connected folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^fsg_.*"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "write"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "once",
+                        "session",
+                        "project",
+                        "installation"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "workspace",
+                        "project",
+                        "skill",
+                        "permission",
+                        "api",
+                        "tool",
+                        "handoff",
+                        "parent"
+                      ]
+                    },
+                    "time": {
+                      "type": "object",
+                      "properties": {
+                        "created": {
+                          "type": "number"
+                        },
+                        "consumed": {
+                          "type": "number"
+                        },
+                        "revoked": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "created"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "path",
+                    "access",
+                    "scope",
+                    "source",
+                    "time"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "access": {
+                    "type": "string",
+                    "enum": [
+                      "read",
+                      "write"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "access"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.filesystem.connect({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/project/current/filesystem/{grantID}": {
+      "delete": {
+        "operationId": "project.filesystem.revoke",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "grantID",
+            "schema": {
+              "type": "string",
+              "pattern": "^fsg_.*"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Disconnect a project folder without deleting files",
+        "responses": {
+          "200": {
+            "description": "Revoked folder access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "pattern": "^fsg_.*"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "access": {
+                      "type": "string",
+                      "enum": [
+                        "read",
+                        "write"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "once",
+                        "session",
+                        "project",
+                        "installation"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "workspace",
+                        "project",
+                        "skill",
+                        "permission",
+                        "api",
+                        "tool",
+                        "handoff",
+                        "parent"
+                      ]
+                    },
+                    "time": {
+                      "type": "object",
+                      "properties": {
+                        "created": {
+                          "type": "number"
+                        },
+                        "consumed": {
+                          "type": "number"
+                        },
+                        "revoked": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "created"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "path",
+                    "access",
+                    "scope",
+                    "source",
+                    "time"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.filesystem.revoke({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/project/current/working-root": {
+      "put": {
+        "operationId": "project.filesystem.workingRoot",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Choose the default working folder for this project",
+        "responses": {
+          "200": {
+            "description": "Updated project folders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "const": 1
+                    },
+                    "revision": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "projectID": {
+                      "type": "string"
+                    },
+                    "grants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^fsg_.*"
+                          },
+                          "path": {
+                            "type": "string"
+                          },
+                          "access": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "write"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "const": "project"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "workspace",
+                              "project",
+                              "skill",
+                              "permission",
+                              "api",
+                              "tool",
+                              "handoff",
+                              "parent"
+                            ]
+                          },
+                          "time": {
+                            "type": "object",
+                            "properties": {
+                              "created": {
+                                "type": "number"
+                              },
+                              "consumed": {
+                                "type": "number"
+                              },
+                              "revoked": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "created"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "path",
+                          "access",
+                          "scope",
+                          "source",
+                          "time"
+                        ]
+                      }
+                    },
+                    "workingRoot": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "scratch"
+                        },
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      ]
+                    },
+                    "directory": {
+                      "type": "string"
+                    },
+                    "toolDirectory": {
+                      "type": "string"
+                    },
+                    "enforcement": {
+                      "type": "object",
+                      "properties": {
+                        "broker": {
+                          "type": "string",
+                          "const": "enforced"
+                        },
+                        "processWrite": {
+                          "type": "string",
+                          "const": "grant_only"
+                        },
+                        "processRead": {
+                          "type": "string",
+                          "enum": [
+                            "grant_only",
+                            "policy_only"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "broker",
+                        "processWrite",
+                        "processRead"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "revision",
+                    "projectID",
+                    "grants",
+                    "directory",
+                    "enforcement"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "workingRoot": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "scratch"
+                          },
+                          {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "workingRoot"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.project.filesystem.workingRoot({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/project/current/working-roots": {
       "get": {
         "operationId": "project.workingRoots",
@@ -34828,8 +35442,7 @@
                 },
                 "required": [
                   "path",
-                  "content",
-                  "sessionID"
+                  "content"
                 ]
               }
             }
@@ -35349,8 +35962,7 @@
                   }
                 },
                 "required": [
-                  "path",
-                  "sessionID"
+                  "path"
                 ]
               }
             }
@@ -35564,10 +36176,7 @@
                     "type": "string",
                     "pattern": "^ses.*"
                   }
-                },
-                "required": [
-                  "sessionID"
-                ]
+                }
               }
             }
           }
@@ -35777,10 +36386,7 @@
                     "type": "string",
                     "pattern": "^ses.*"
                   }
-                },
-                "required": [
-                  "sessionID"
-                ]
+                }
               }
             }
           }
@@ -35863,8 +36469,7 @@
                 },
                 "required": [
                   "from",
-                  "to",
-                  "sessionID"
+                  "to"
                 ]
               }
             }
@@ -63612,6 +64217,9 @@
           "revision": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
+          },
+          "writable": {
+            "type": "boolean"
           }
         },
         "required": [

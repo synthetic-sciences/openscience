@@ -1834,7 +1834,7 @@ describe("files pane", () => {
         session: SESSION,
         directory: DIRECTORY,
         request: async (path, init) => {
-          if (path === `/session/${SESSION}/filesystem` && init?.method === "POST") {
+          if (path === "/project/current/filesystem" && init?.method === "POST") {
             posted.push(JSON.parse(String(init.body)))
             store.granted = true
             return listing([])
@@ -1873,7 +1873,7 @@ describe("files pane", () => {
     form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     await settle()
 
-    expect(posted).toEqual([{ path: "/home/keertan/data/pdebench", access: "write", scope: "project" }])
+    expect(posted).toEqual([{ path: "/home/keertan/data/pdebench", access: "write" }])
     expect(host.querySelector("[data-connect-scope]")).toBeNull()
     expect(host.querySelector(".files-connect")).toBeNull()
 
@@ -1907,9 +1907,8 @@ describe("files pane", () => {
     expect(host.querySelector(".files-notice")).toBeNull()
   })
 
-  test("says why a folder cannot be connected before a session exists, instead of doing nothing", async () => {
-    // The landing route (/:dir/session) reaches this pane with a project but no
-    // session id, and a grant is minted against a session.
+  test("connects a project folder before a session exists", async () => {
+    // The project owns the folder connection before its first conversation.
     const posted: string[] = []
     const host = mount(() =>
       subject.FilesPane({
@@ -1930,18 +1929,16 @@ describe("files pane", () => {
     input.dispatchEvent(new Event("input", { bubbles: true }))
 
     const submit = host.querySelector<HTMLButtonElement>("[data-connect-submit]")!
-    expect(submit.disabled).toBe(true)
-    expect(host.querySelector("[data-connect-blocked]")?.textContent).toContain("has not started yet")
+    expect(submit.disabled).toBe(false)
+    expect(host.querySelector("[data-connect-blocked]")).toBeNull()
 
-    // Enter in the path field submits past the disabled button — the reason
-    // must reach the user there too.
     host
       .querySelector<HTMLFormElement>(".files-connect")!
       .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     await settle()
 
-    expect(posted).toEqual([])
-    expect(host.querySelector(".files-notice")?.textContent).toContain("has not started yet")
+    expect(posted).toEqual(["/project/current/filesystem"])
+    expect(host.querySelector(".files-connect")).toBeNull()
   })
 
   test("delegates local files to the inspector's single work-tab owner", async () => {
@@ -2073,7 +2070,7 @@ describe("files pane", () => {
         session: SESSION,
         directory: DIRECTORY,
         request: async (path, init) => {
-          if (path === `/session/${SESSION}/filesystem` && init?.method === "POST") {
+          if (path === "/project/current/filesystem" && init?.method === "POST") {
             store.granted = true
             return listing([])
           }

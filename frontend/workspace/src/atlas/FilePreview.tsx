@@ -299,6 +299,16 @@ export function FileView(props: {
         return
       }
       if (result.error) {
+        if (result.denied) {
+          setResolvedWritable(false)
+          if (retained) {
+            setView(
+              "saveError",
+              "Access to this file changed. Your draft is preserved; reconnect the folder to continue.",
+            )
+            return
+          }
+        }
         const fallback = missingFileFallback({
           requested: props.scope ?? "project",
           resolved: resolvedScope(),
@@ -357,6 +367,7 @@ export function FileView(props: {
         return
       }
       const data = result.data ?? {}
+      if (typeof data.writable === "boolean") setResolvedWritable(data.writable)
       readRetry.count = 0
       const text = data.encoding === "base64" ? "" : (data.content ?? "")
       const recovered = recoverFileDraftState(
@@ -388,6 +399,17 @@ export function FileView(props: {
     if (readRetryTimer) clearTimeout(readRetryTimer)
     request.dispose()
   })
+
+  const changed = production?.event.on("session.filesystem.changed", (event) => {
+    if (event.properties.grant.scope === "project" || event.properties.sessionID === activeSessionID()) {
+      setView("refresh", (value) => value + 1)
+    }
+  })
+  if (changed) onCleanup(changed)
+  const updated = production?.event.on("file.watcher.updated", (event) => {
+    if (event.properties.file === requestPath()) setView("refresh", (value) => value + 1)
+  })
+  if (updated) onCleanup(updated)
 
   const data = () => view.data
   const writable = () =>
@@ -651,10 +673,6 @@ export function FileView(props: {
       return
     }
     const session = activeSessionID()
-    if (!session) {
-      toast.error("save unavailable", "Start a research session before changing workspace files.")
-      return
-    }
     const location = owner()
     const owns = () => mounted && owner() === location
     const path = requestPath()

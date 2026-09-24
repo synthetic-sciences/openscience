@@ -4,6 +4,7 @@ import { SETTINGS_PANELS, SETTINGS_PANEL_IDS, SETTINGS_SECTIONS } from "./regist
 const root = new URL("./", import.meta.url)
 const modules: Record<(typeof SETTINGS_PANEL_IDS)[number], string> = {
   general: "General",
+  workspaces: "Workspaces",
   ace: "Ace",
   models: "Models",
   "local-models": "LocalModels",
@@ -34,6 +35,7 @@ describe("settings registry source contract", () => {
   test("keeps every destination visible in the grouped rail", () => {
     expect(SETTINGS_PANELS.map((panel) => panel.title)).toEqual([
       "General",
+      "Workspaces",
       "Ace",
       "Models",
       "Local models",

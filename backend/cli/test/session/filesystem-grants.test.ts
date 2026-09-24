@@ -1421,7 +1421,7 @@ describe("file access uses session grants", () => {
     })
   })
 
-  test("HTTP writes require a session and the wrong session cannot read or write a grant", async () => {
+  test("HTTP writes cannot use another session’s private grant, including without a session", async () => {
     await using external = await tmpdir({
       init: (dir) => Bun.write(path.join(dir, "data.txt"), "external"),
     })
@@ -1458,7 +1458,7 @@ describe("file access uses session grants", () => {
             }),
           })
 
-        expect((await write()).status).toBe(400)
+        expect((await write()).status).toBe(403)
         expect((await write(other.id)).status).toBe(403)
         expect((await fetch(`${url("/file/content")}&sessionID=${encodeURIComponent(other.id)}`)).status).toBe(403)
         expect((await write(owner.id)).status).toBe(200)

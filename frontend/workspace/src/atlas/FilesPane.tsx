@@ -60,6 +60,7 @@ import "@/atlas/files/FilesPane.css"
 import { NativeDirectoryPickerUnavailable } from "@/utils/native-picker"
 import { confirmDialog, promptDialog } from "@/atlas/dialogs"
 import { createFileRequestOwner, isFileRequestCancellation } from "@/atlas/file-viewer"
+import { DialogSettings } from "@/components/dialog-settings"
 
 export type Transport = (path: string, init?: RequestInit, query?: Record<string, string>) => Promise<Response>
 
@@ -202,7 +203,11 @@ export function fileListQuery(kind: PaneSource["kind"], target: string, session?
 // parseFilesystemSnapshot guard rather than imported. Folding the trio into
 // file-sources.ts is the obvious follow-up.
 async function readAccess(transport: Transport, identity: FilesystemIdentity): Promise<FilesystemSnapshot> {
-  const value = await transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem`).then(json)
+  const value = await transport(
+    identity.sessionID
+      ? `/session/${encodeURIComponent(identity.sessionID)}/filesystem`
+      : "/project/current/filesystem",
+  ).then(json)
   const snapshot = parseFilesystemSnapshot(value, identity)
   if (snapshot) return snapshot
   throw new Error("Filesystem access belongs to another session or project.")
@@ -227,10 +232,10 @@ const accessNote = (access: FilesystemAccess) => {
 }
 
 async function grantAccess(transport: Transport, identity: FilesystemIdentity, input: ConnectInput) {
-  return transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem`, {
+  return transport("/project/current/filesystem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ path: input.path, access: input.access }),
   }).then(json)
 }
 
@@ -238,7 +243,10 @@ async function grantAccess(transport: Transport, identity: FilesystemIdentity, i
  * that mounted it, so this is the end of that folder's authority, not just of
  * this pane's view of it. */
 async function revokeAccess(transport: Transport, identity: FilesystemIdentity, grantID: string) {
-  return transport(`/session/${encodeURIComponent(identity.sessionID)}/filesystem/${encodeURIComponent(grantID)}`, {
+  const route = identity.sessionID
+    ? `/session/${encodeURIComponent(identity.sessionID)}/filesystem`
+    : "/project/current/filesystem"
+  return transport(`${route}/${encodeURIComponent(grantID)}`, {
     method: "DELETE",
   }).then(json)
 }
@@ -402,7 +410,7 @@ export function FilesPane(
    */
   const routeIdentity = (): FilesystemIdentity | undefined => {
     const session = routeSessionID()
-    if (!session || !projectRoot()) return
+    if (!projectRoot()) return
     return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
   const routeScope = createMemo(() =>
@@ -449,7 +457,7 @@ export function FilesPane(
     })
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
-    if (!session || !projectRoot()) return
+    if (!projectRoot()) return
     return { sessionID: session, projectID: sdk?.projectID, directory: projectRoot() }
   }
   const scope = createMemo(() =>
@@ -458,13 +466,7 @@ export function FilesPane(
   let mounted = true
   onCleanup(() => (mounted = false))
 
-  // A grant is minted against a session, and the landing route (/:dir/session)
-  // reaches this pane before one exists. The connect form is still worth
-  // opening there — it says what it needs — but the button that cannot work
-  // must say so rather than swallow the click.
   const blocked = () => {
-    if (!sessionID())
-      return "Send a message first: a folder is connected to a session, and this one has not started yet."
     if (!projectRoot()) return "Open a project first: a folder is connected to the project you are working in."
     return ""
   }
@@ -491,10 +493,12 @@ export function FilesPane(
   const deletedData = () => (deleted.latest?.scope === scope() ? deleted.latest : undefined)
 
   const filesystemChanged = sdk?.event.on("session.filesystem.changed", (event) => {
-    if (event.properties.sessionID !== sessionID()) return
+    if (event.properties.sessionID !== sessionID() && event.properties.grant.scope !== "project") return
     void refetchSnapshot()
   })
   if (filesystemChanged) onCleanup(filesystemChanged)
+  const projectChanged = sdk?.event.on("project.updated", () => void refetchSnapshot())
+  if (projectChanged) onCleanup(projectChanged)
   // Whether Modal is offered at all. Asking costs a settings read, so it waits
   // until someone opens the picker looking for a source; the Volumes themselves
   // are not listed until that source is actually entered.
@@ -1052,7 +1056,7 @@ export function FilesPane(
       !busy() &&
       !entries.loading &&
       !listingError() &&
-      sessionID() &&
+      projectRoot() &&
       !current().readonly &&
       (kind === "project" || kind === "session" || kind === "connected"),
     )
@@ -1072,7 +1076,6 @@ export function FilesPane(
         setError("A file name cannot contain a path separator.")
         return
       }
-      if (!session) return setError("Start a session before renaming workspace files.")
       const target = [parent, next].filter(Boolean).join("/")
       return mutate(
         ticket,
@@ -1103,7 +1106,6 @@ export function FilesPane(
     const target = filePath(row)
     const submit = async () => {
       if (!owns(ticket) || !mutable()) return
-      if (!session) return setError("Start a session before changing workspace files.")
       return mutate(
         ticket,
         () =>
@@ -1235,7 +1237,7 @@ export function FilesPane(
 
   const restoreFile = (file: TrashedFile) => {
     const session = sessionID()
-    if (!session || !fileTrash().includes(file)) return
+    if (!projectRoot() || !fileTrash().includes(file)) return
     void mutate(
       operation(),
       () =>
@@ -1255,7 +1257,6 @@ export function FilesPane(
     const session = sessionID()
     const submit = async () => {
       if (!owns(ticket)) return
-      if (!session) return setError("Start a session before changing workspace files.")
       return mutate(
         ticket,
         () =>
@@ -1327,6 +1328,7 @@ export function FilesPane(
             }}
             onPick={pickSource}
             onRevoke={revokeSource}
+            onManage={dialog ? () => dialog.show(() => <DialogSettings initial="workspaces" />) : undefined}
             onAdd={() => setConnect({ open: true, path: "", access: "read", scope: "project" })}
           />
 
@@ -1436,7 +1438,7 @@ export function FilesPane(
           <div class="files-connect__heading">
             <span>
               <strong>Connect a folder</strong>
-              <small>Add another location to this session.</small>
+              <small>Available to every conversation in this project.</small>
             </span>
             <button
               type="button"

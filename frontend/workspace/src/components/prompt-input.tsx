@@ -3196,6 +3196,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 </ComposerTools>
                 <WorkingFolderChip
                   client={sdk.client}
+                  watch={(refresh) => {
+                    const filesystem = sdk.event.on("session.filesystem.changed", () => refresh())
+                    const project = sdk.event.on("project.updated", () => refresh())
+                    return () => {
+                      filesystem()
+                      project()
+                    }
+                  }}
                   sessionID={params.id && params.id !== "new" ? params.id : undefined}
                   pending={pendingWorkingRoot()}
                   onPending={setPendingWorkingRoot}

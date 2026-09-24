@@ -225,6 +225,13 @@ import type {
   ProjectCurrentResponses,
   ProjectExecutionErrors,
   ProjectExecutionResponses,
+  ProjectFilesystemConnectErrors,
+  ProjectFilesystemConnectResponses,
+  ProjectFilesystemListResponses,
+  ProjectFilesystemRevokeErrors,
+  ProjectFilesystemRevokeResponses,
+  ProjectFilesystemWorkingRootErrors,
+  ProjectFilesystemWorkingRootResponses,
   ProjectListResponses,
   ProjectTrustGetErrors,
   ProjectTrustGetResponses,
@@ -2585,6 +2592,133 @@ export class Auth extends HeyApiClient {
   }
 }
 
+export class Filesystem extends HeyApiClient {
+  /**
+   * Inspect project folders before or during a conversation
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).get<ProjectFilesystemListResponses, unknown, ThrowOnError>({
+      url: "/project/current/filesystem",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Connect a project folder or replace its access level
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      path: string
+      access: "read" | "write"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "path" },
+            { in: "body", key: "access" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ProjectFilesystemConnectResponses,
+      ProjectFilesystemConnectErrors,
+      ThrowOnError
+    >({
+      url: "/project/current/filesystem",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Disconnect a project folder without deleting files
+   */
+  public revoke<ThrowOnError extends boolean = false>(
+    parameters: {
+      grantID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "grantID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      ProjectFilesystemRevokeResponses,
+      ProjectFilesystemRevokeErrors,
+      ThrowOnError
+    >({
+      url: "/project/current/filesystem/{grantID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Choose the default working folder for this project
+   */
+  public workingRoot<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workingRoot: "scratch" | string | null
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "workingRoot" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      ProjectFilesystemWorkingRootResponses,
+      ProjectFilesystemWorkingRootErrors,
+      ThrowOnError
+    >({
+      url: "/project/current/working-root",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Trust extends HeyApiClient {
   /**
    * Inspect project trust
@@ -2889,6 +3023,11 @@ export class Project2 extends HeyApiClient {
         ...params.headers,
       },
     })
+  }
+
+  private _filesystem?: Filesystem
+  get filesystem(): Filesystem {
+    return (this._filesystem ??= new Filesystem({ client: this.client }))
   }
 
   private _trust?: Trust
@@ -3374,7 +3513,7 @@ export class Experimental extends HeyApiClient {
   }
 }
 
-export class Filesystem extends HeyApiClient {
+export class Filesystem2 extends HeyApiClient {
   /**
    * List filesystem grants
    *
@@ -4406,9 +4545,9 @@ export class Session extends HeyApiClient {
     })
   }
 
-  private _filesystem?: Filesystem
-  get filesystem(): Filesystem {
-    return (this._filesystem ??= new Filesystem({ client: this.client }))
+  private _filesystem?: Filesystem2
+  get filesystem(): Filesystem2 {
+    return (this._filesystem ??= new Filesystem2({ client: this.client }))
   }
 }
 
@@ -5814,7 +5953,7 @@ export class Trash extends HeyApiClient {
     parameters: {
       directory?: string
       path: string
-      sessionID: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5851,7 +5990,7 @@ export class Trash extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      sessionID: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -5888,7 +6027,7 @@ export class Trash extends HeyApiClient {
     parameters: {
       id: string
       directory?: string
-      sessionID: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -6643,7 +6782,7 @@ export class File_ extends HeyApiClient {
       directory?: string
       path: string
       content: string
-      sessionID: string
+      sessionID?: string
       expectedRevision?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -6722,7 +6861,7 @@ export class File_ extends HeyApiClient {
       directory?: string
       from: string
       to: string
-      sessionID: string
+      sessionID?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {

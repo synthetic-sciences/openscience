@@ -328,7 +328,7 @@ export const FileRoutes = lazy(() =>
         z.object({
           path: z.string(),
           content: z.string(),
-          sessionID: Identifier.schema("session"),
+          sessionID: Identifier.schema("session").optional(),
           expectedRevision: File.Revision.optional(),
         }),
       ),
@@ -376,13 +376,13 @@ export const FileRoutes = lazy(() =>
         "json",
         z.object({
           path: z.string().min(1),
-          sessionID: Identifier.schema("session"),
+          sessionID: Identifier.schema("session").optional(),
         }),
       ),
       async (c) => {
         const body = c.req.valid("json")
         const authorized = await SessionFilesystem.authorize({
-          sessionID: body.sessionID,
+          sessionID: body.sessionID ?? SessionFilesystem.projectActor(),
           path: body.path,
           access: "write",
         })
@@ -390,13 +390,13 @@ export const FileRoutes = lazy(() =>
           throw new HTTPException(409, { message: "The workspace root cannot be moved to trash" })
         }
         const authorization = await SessionFilesystem.bindAuthorization({
-          sessionID: body.sessionID,
+          sessionID: body.sessionID ?? SessionFilesystem.projectActor(),
           access: "write",
           authorized,
         })
         const record = await FileTrash.trash({
           projectID: Instance.project.id,
-          sessionID: body.sessionID,
+          sessionID: body.sessionID ?? SessionFilesystem.projectActor(),
           path: authorized.path,
           requestedPath: body.path,
           root: authorized.grant.path,
@@ -423,11 +423,11 @@ export const FileRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ id: z.string().startsWith("ftr_") })),
-      validator("json", z.object({ sessionID: Identifier.schema("session") })),
+      validator("json", z.object({ sessionID: Identifier.schema("session").optional() })),
       async (c) => {
         const result = await FileTrash.restore({
           projectID: Instance.project.id,
-          sessionID: c.req.valid("json").sessionID,
+          sessionID: c.req.valid("json").sessionID ?? SessionFilesystem.projectActor(),
           id: c.req.valid("param").id,
         })
         if (!result) return c.json({ error: "Recoverable file not found" }, 404)
@@ -449,11 +449,11 @@ export const FileRoutes = lazy(() =>
         },
       }),
       validator("param", z.object({ id: z.string().startsWith("ftr_") })),
-      validator("json", z.object({ sessionID: Identifier.schema("session") })),
+      validator("json", z.object({ sessionID: Identifier.schema("session").optional() })),
       async (c) => {
         const result = await FileTrash.purge({
           projectID: Instance.project.id,
-          sessionID: c.req.valid("json").sessionID,
+          sessionID: c.req.valid("json").sessionID ?? SessionFilesystem.projectActor(),
           id: c.req.valid("param").id,
         })
         if (!result) return c.json({ error: "Recoverable file not found" }, 404)
@@ -479,10 +479,13 @@ export const FileRoutes = lazy(() =>
         z.object({
           from: z.string().min(1),
           to: z.string().min(1),
-          sessionID: Identifier.schema("session"),
+          sessionID: Identifier.schema("session").optional(),
         }),
       ),
-      async (c) => c.json(await File.rename(c.req.valid("json"))),
+      async (c) => {
+        const input = c.req.valid("json")
+        return c.json(await File.rename({ ...input, sessionID: input.sessionID ?? SessionFilesystem.projectActor() }))
+      },
     )
     .get(
       "/file/inspect",

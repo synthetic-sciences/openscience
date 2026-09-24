@@ -73,6 +73,72 @@ export const ProjectRoutes = lazy(() =>
       },
     )
     .get(
+      "/current/filesystem",
+      describeRoute({
+        summary: "Inspect project folders before or during a conversation",
+        operationId: "project.filesystem.list",
+        responses: {
+          200: {
+            description: "Project folder access",
+            content: { "application/json": { schema: resolver(SessionFilesystem.ProjectSnapshot) } },
+          },
+        },
+      }),
+      async (c) => {
+        const snapshot = await SessionFilesystem.projectSnapshot()
+        void SessionFilesystem.watchProject(snapshot).catch(() => {})
+        return c.json(snapshot)
+      },
+    )
+    .post(
+      "/current/filesystem",
+      describeRoute({
+        summary: "Connect a project folder or replace its access level",
+        operationId: "project.filesystem.connect",
+        responses: {
+          200: {
+            description: "Connected folder",
+            content: { "application/json": { schema: resolver(SessionFilesystem.Grant) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ path: z.string().trim().min(1), access: SessionFilesystem.Access }).strict()),
+      async (c) => c.json(await SessionFilesystem.connectProject(c.req.valid("json"))),
+    )
+    .delete(
+      "/current/filesystem/:grantID",
+      describeRoute({
+        summary: "Disconnect a project folder without deleting files",
+        operationId: "project.filesystem.revoke",
+        responses: {
+          200: {
+            description: "Revoked folder access",
+            content: { "application/json": { schema: resolver(SessionFilesystem.Grant) } },
+          },
+          ...errors(404),
+        },
+      }),
+      validator("param", z.object({ grantID: z.string().startsWith("fsg_") })),
+      async (c) => c.json(await SessionFilesystem.revokeProject(c.req.valid("param").grantID)),
+    )
+    .put(
+      "/current/working-root",
+      describeRoute({
+        summary: "Choose the default working folder for this project",
+        operationId: "project.filesystem.workingRoot",
+        responses: {
+          200: {
+            description: "Updated project folders",
+            content: { "application/json": { schema: resolver(SessionFilesystem.ProjectSnapshot) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ workingRoot: SessionFilesystem.WorkingRoot.nullable() }).strict()),
+      async (c) => c.json(await SessionFilesystem.setProjectWorkingRoot(c.req.valid("json").workingRoot)),
+    )
+    .get(
       "/current/working-roots",
       describeRoute({
         summary: "List the project's connected read/write folders",

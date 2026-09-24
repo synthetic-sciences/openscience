@@ -260,7 +260,7 @@ export namespace FileTrash {
       state.released = true
       SessionFilesystem.releaseAuthorization(authorization)
     }
-    if (!input.sessionID.startsWith("ses_")) {
+    if (!input.sessionID.startsWith("ses_") && input.sessionID !== SessionFilesystem.projectActor()) {
       if (process.env.OPENSCIENCE_TEST_HOME) return { ownership: "none", [Symbol.dispose]() {} }
       release(input.authorization)
       throw new SessionFilesystem.DeniedError({ sessionID: input.sessionID, path: input.path, access: "write" })
@@ -291,6 +291,7 @@ export namespace FileTrash {
     }).catch(async (error) => {
       if (
         input.projectInternal &&
+        input.sessionID !== SessionFilesystem.projectActor() &&
         SessionFilesystem.DeniedError.isInstance(error) &&
         (await SessionFilesystem.allowsLegacyProjectWrite(input))
       )

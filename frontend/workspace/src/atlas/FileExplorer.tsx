@@ -1,4 +1,4 @@
-import { createMemo, createResource, Match, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createResource, createEffect, onCleanup, Match, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { Button } from "@synsci/ui/button"
@@ -37,7 +37,8 @@ const errorMessage = (value: unknown) => {
   return String(value || "Request failed")
 }
 
-const sessionUrl = (sessionID: string) => `/session/${encodeURIComponent(sessionID)}/filesystem`
+const sessionUrl = (sessionID?: string) =>
+  sessionID ? `/session/${encodeURIComponent(sessionID)}/filesystem` : "/project/current/filesystem"
 
 async function json(response: Response) {
   if (response.ok) return response.json() as Promise<unknown>
@@ -53,10 +54,10 @@ async function readAccess(request: ProjectRequest, identity: FilesystemIdentity)
 }
 
 async function grantAccess(request: ProjectRequest, identity: FilesystemIdentity, input: ConnectInput) {
-  return request(sessionUrl(identity.sessionID), {
+  return request("/project/current/filesystem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ path: input.path, access: input.access }),
   }).then(json)
 }
 
@@ -68,22 +69,31 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
     access: "read" as FilesystemAccess,
     busy: false,
     error: undefined as string | undefined,
+    opened: "",
   })
   const projectRoot = () =>
     props.file.directory || sdk.directory || sync.data.path.directory || sync.project?.worktree || ""
   const sessionID = () => props.file.sessionID ?? (params.id && params.id !== "new" ? params.id : undefined)
   const identity = (): FilesystemIdentity | undefined => {
     const session = sessionID()
-    if (!session || !projectRoot()) return
+    if (!projectRoot()) return
     return { sessionID: session, projectID: sdk.projectID, directory: projectRoot() }
   }
   const [snapshot, { refetch }] = createResource(identity, (current) => readAccess(sdk.request, current))
+  const changed = sdk.event.on("session.filesystem.changed", (event) => {
+    if (event.properties.grant.scope === "project" || event.properties.sessionID === sessionID()) void refetch()
+  })
+  onCleanup(changed)
   const grant = createMemo(() => {
     const current = identity()
     if (!current) return
     // Resources retain their previous value during navigation. That value is
     // usable only for the exact project and originating session of this tab.
     return findFilesystemGrant(parseFilesystemSnapshot(snapshot.latest, current), props.file.path, "read")
+  })
+  const location = () => JSON.stringify([sdk.url, sdk.projectID, projectRoot(), sessionID(), props.file.path])
+  createEffect(() => {
+    if (grant()) setState("opened", location())
   })
   const request = () => {
     const current = identity()
@@ -101,18 +111,16 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
 
   return (
     <Switch>
-      <Match when={grant()}>
-        {(current) => (
-          <FileView
-            directory={projectRoot()}
-            path={props.file.path}
-            sessionID={sessionID()}
-            subtitle={`Connected folder · ${fileSourceName(current().path)}`}
-            active={props.active}
-            writable={current().access === "write"}
-            onClose={props.onClose}
-          />
-        )}
+      <Match when={grant() || state.opened === location()}>
+        <FileView
+          directory={projectRoot()}
+          path={props.file.path}
+          sessionID={sessionID()}
+          subtitle={`Connected folder · ${fileSourceName(grant()?.path ?? requestedFolder(props.file.path))}`}
+          active={props.active}
+          writable={grant()?.access === "write"}
+          onClose={props.onClose}
+        />
       </Match>
       <Match when={!grant()}>
         <div class="external-file-access" role="region" aria-label="File access required">
@@ -128,10 +136,10 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
               </p>
             </div>
             <Show
-              when={sessionID()}
+              when={identity()}
               fallback={
                 <p class="external-file-access__notice" role="status">
-                  Start a research session before connecting an external folder.
+                  Open a project before connecting an external folder.
                 </p>
               }
             >
@@ -165,7 +173,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
               <Button type="button" variant="ghost" size="large" onClick={props.onClose}>
                 Back to files
               </Button>
-              <Show when={sessionID()}>
+              <Show when={identity()}>
                 <Button type="button" variant="primary" size="large" onClick={request} disabled={state.busy}>
                   {state.busy ? "Connecting…" : "Connect folder"}
                 </Button>

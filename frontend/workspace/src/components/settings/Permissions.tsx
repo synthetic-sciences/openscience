@@ -20,6 +20,7 @@ import { resolveProjectRoute } from "@/utils/project-route"
 import { PermissionToolDefaults } from "../settings-permissions"
 import { PanelBody, PanelHeader, PanelScroll, Section, steady } from "./_shared"
 import { UsageLogging } from "./UsageLogging"
+import { useSettingsNav } from "./nav"
 import "./preference-panels.css"
 
 interface StandingApproval {
@@ -76,6 +77,7 @@ const Permissions: Component = () => {
   const sdk = useGlobalSDK()
   const globalSync = useGlobalSync()
   const dialog = useDialog()
+  const navigate = useSettingsNav()
   const [busy, setBusy] = createSignal(false)
   const [showAllDefaults, setShowAllDefaults] = createSignal(false)
 
@@ -111,11 +113,13 @@ const Permissions: Component = () => {
       () => {
         const value = route()
         const sessionID = params.id
-        if (!value || !sessionID || sessionID === "new") return
-        return { sessionID, directory: value.directory }
+        if (!value) return
+        return { sessionID: sessionID && sessionID !== "new" ? sessionID : undefined, directory: value.directory }
       },
       async (input) => {
-        const response = await sdk.client.session.filesystem.list(input)
+        const response = input.sessionID
+          ? await sdk.client.session.filesystem.list({ ...input, sessionID: input.sessionID })
+          : await sdk.client.project.filesystem.list({ directory: input.directory })
         return (response.data?.grants ?? []).filter(
           (grant): grant is FolderGrant =>
             (grant.source === "permission" || grant.source === "api") && !grant.time.consumed && !grant.time.revoked,
@@ -142,8 +146,8 @@ const Permissions: Component = () => {
 
   const revokeFolder = async (grant: FolderGrant) => {
     const value = route()
-    const sessionID = params.id
-    if (!value || !sessionID || busy()) return
+    const sessionID = params.id ?? ""
+    if (!value || busy() || (grant.scope !== "project" && (!sessionID || sessionID === "new"))) return
     const confirmed = await confirmDialog(dialog, {
       title: `Revoke access to ${grant.path}?`,
       message: "OpenScience will stop affected kernels so the folder cannot remain mounted with stale access.",
@@ -152,8 +156,11 @@ const Permissions: Component = () => {
     })
     if (!confirmed) return
     setBusy(true)
-    await sdk.client.session.filesystem
-      .revoke({ sessionID, grantID: grant.id, directory: value.directory })
+    await (
+      grant.scope === "project"
+        ? sdk.client.project.filesystem.revoke({ grantID: grant.id, directory: value.directory })
+        : sdk.client.session.filesystem.revoke({ sessionID, grantID: grant.id, directory: value.directory })
+    )
       .then(() => folderControls.refetch())
       .catch((error) =>
         showToast({
@@ -262,10 +269,10 @@ const Permissions: Component = () => {
             </Section>
           </Show>
 
-          <Show when={route() && params.id && params.id !== "new"}>
+          <Show when={route()}>
             <Section
               title="Connected folders"
-              description="Review durable read-only and read-write access from the active research session."
+              description="Review folder access for this project. Add folders, change access, and choose where work happens in Workspaces."
             >
               <div class="settings-card settings-preferences-card">
                 <Show
@@ -296,7 +303,7 @@ const Permissions: Component = () => {
                       when={(folders() ?? []).length > 0}
                       fallback={
                         <p class="settings-card-empty" role="status">
-                          No connected folders in this session.
+                          No connected folders in this project.
                         </p>
                       }
                     >
@@ -329,6 +336,9 @@ const Permissions: Component = () => {
                   </Show>
                 </Show>
               </div>
+              <Button variant="secondary" onClick={() => navigate("workspaces")}>
+                Manage workspace folders
+              </Button>
             </Section>
           </Show>
 

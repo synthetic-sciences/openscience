@@ -3,6 +3,7 @@ import { openSettings } from "./utils"
 
 const panels = [
   "General",
+  "Workspaces",
   "Ace",
   "Models",
   "Local models",

@@ -30,6 +30,7 @@ export type SettingsSection = "inference" | "capabilities" | "runtime" | "app"
 // removed, or left without the shared layout audit silently.
 export const SETTINGS_PANEL_IDS = [
   "general",
+  "workspaces",
   "ace",
   "models",
   "local-models",
@@ -70,6 +71,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "sliders",
     section: "app",
     component: lazy(() => import("./General")),
+  },
+  {
+    id: "workspaces",
+    title: "Workspaces",
+    icon: "folder",
+    section: "app",
+    component: lazy(() => import("./Workspaces")),
   },
   {
     id: "ace",

@@ -18,7 +18,7 @@ export interface FilesystemGrant {
 export interface FilesystemSnapshot {
   version: 1
   revision: number
-  sessionID: string
+  sessionID?: string
   projectID: string
   directory: string
   grants: FilesystemGrant[]
@@ -26,6 +26,7 @@ export interface FilesystemSnapshot {
    * this conversation, the one the server chose for it, or the session's own
    * scratch directory. Absent from servers older than the field. */
   toolDirectory?: string
+  workingRoot?: string
   enforcement: {
     broker: "enforced"
     processWrite: "grant_only"
@@ -34,7 +35,7 @@ export interface FilesystemSnapshot {
 }
 
 export interface FilesystemIdentity {
-  sessionID: string
+  sessionID?: string
   projectID?: string
   directory: string
 }
@@ -150,10 +151,11 @@ export function parseFilesystemSnapshot(value: unknown, identity: FilesystemIden
   return {
     version: 1,
     revision: root.revision,
-    sessionID: root.sessionID,
+    sessionID: typeof root.sessionID === "string" ? root.sessionID : undefined,
     projectID: root.projectID,
     directory: normalizeFilePath(root.directory),
     grants,
+    ...(typeof root.workingRoot === "string" ? { workingRoot: root.workingRoot } : {}),
     ...(root.toolDirectory ? { toolDirectory: normalizeFilePath(root.toolDirectory) } : {}),
     enforcement: {
       broker: "enforced",
@@ -219,7 +221,7 @@ function workingRootCandidates(snapshot?: FilesystemSnapshot) {
  * Older servers send no answer; only then is it recomputed.
  */
 export function workingFilesystemRoot(snapshot?: FilesystemSnapshot) {
-  return snapshot?.toolDirectory ?? workingRootCandidates(snapshot)[0]?.path
+  return snapshot?.toolDirectory ?? (snapshot?.workingRoot ? undefined : workingRootCandidates(snapshot)[0]?.path)
 }
 
 export function sessionFilesystemRoot(snapshot?: FilesystemSnapshot) {

@@ -21,6 +21,19 @@ paths and suggest the first task. Ask before editing original inputs.
 
 The source-folder form supports up to ten selected folders. Connected folders are working material, so choose deliberately and keep backups of original inputs.
 
+## Manage workspace folders
+
+Open **Customize → Workspaces** and select the project. Its folders are available immediately, including before its first conversation. You can also reach these settings from **Files → More → Manage workspace folders**.
+
+- **Connect folder** adds an existing folder by path or through **Browse**.
+- **Read only** lets OpenScience inspect files; **Read & write** also allows edits.
+- **Use by default** selects the project's working folder. The composer can override it for one conversation, including choosing temporary **Scratch**.
+- **Disconnect** removes this project's access without moving or deleting files. Affected running tools stop so they cannot retain the old access.
+
+Changes apply to existing and future conversations in that project. A conversation's explicit working-folder choice takes priority. If that chosen folder loses write access, the conversation falls back to scratch rather than silently choosing another folder.
+
+For related work, OpenScience uses the connected working folder and preserves its existing layout. An empty folder is ready for new work. A task clearly unrelated to the contents of a nonempty folder uses scratch unless you explicitly specify where it should work.
+
 ## Open an existing folder from the CLI
 
 ```bash

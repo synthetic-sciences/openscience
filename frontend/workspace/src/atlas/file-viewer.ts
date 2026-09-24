@@ -15,6 +15,7 @@ export type FileKind =
   | "binary"
 
 export interface FileData {
+  writable?: boolean
   content?: string
   encoding?: string
   mimeType?: string

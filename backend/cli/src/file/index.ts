@@ -113,6 +113,7 @@ export namespace File {
       size: z.number().optional(),
       truncated: z.boolean().optional(),
       revision: Revision.optional(),
+      writable: z.boolean().optional(),
     })
     .meta({
       ref: "FileContent",
@@ -292,7 +293,16 @@ export namespace File {
       throw new HTTPException(403, { message: "Recovery data is protected" })
     }
     if (canonical && (await Instance.containsCanonicalPath(canonical))) return canonical
-    throw new HTTPException(403, { message: "Access denied: path escapes project directory" })
+    return SessionFilesystem.authorizeProject(full, access)
+      .then((result) => result.path)
+      .catch((error) => {
+        if (SessionFilesystem.DeniedError.isInstance(error)) {
+          throw new HTTPException(403, {
+            message: "Access denied: path escapes project directory and connected folders",
+          })
+        }
+        throw error
+      })
   }
 
   async function operate<T>(
@@ -307,8 +317,8 @@ export namespace File {
       await hooks.value?.afterReadAuthorization?.(target)
       return AuthoritySignal.exclusive(async () => action(await ProjectPreview.authorize(target, options.sessionID)))
     }
-    if (!options?.sessionID) return action(await contained(file, access))
-    const sessionID = options.sessionID
+    if (!options?.sessionID) await contained(file, access)
+    const sessionID = options?.sessionID ?? SessionFilesystem.projectActor()
     const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access })
     if (FileTrash.protectedPath(authorized.path)) {
       throw new HTTPException(403, { message: "Recovery data is protected" })
@@ -332,19 +342,8 @@ export namespace File {
   }
 
   export async function authority(file: string, options: AccessOptions): Promise<Authority> {
-    if (!options.sessionID) {
-      const source = await contained(file, "read")
-      const root = Filesystem.contains(Instance.directory, source) ? Instance.directory : Instance.worktree
-      return {
-        root,
-        source,
-        scan: true,
-        read: (target) => contained(target, "read"),
-        write: (target) => contained(target, "write"),
-        [Symbol.dispose]() {},
-      }
-    }
-    const sessionID = options.sessionID
+    if (!options.sessionID) await contained(file, "read")
+    const sessionID = options.sessionID ?? SessionFilesystem.projectActor()
     const result = await SessionFilesystem.authorize({
       sessionID,
       path: file,
@@ -565,7 +564,17 @@ export namespace File {
   }
 
   export async function read(file: string, options?: AccessOptions): Promise<Content> {
-    return operate(file, "read", options, (full) => readPath(file, full))
+    return operate(file, "read", options, async (full) => ({
+      ...(await readPath(file, full)),
+      writable: options?.projectPreview
+        ? false
+        : options?.sessionID
+          ? await SessionFilesystem.allows({ sessionID: options.sessionID, path: full, access: "write" })
+          : await contained(full, "write").then(
+              () => true,
+              () => false,
+            ),
+    }))
   }
 
   export async function inspect(file: string, options?: AccessOptions): Promise<ScienceFile.Inspection> {
@@ -615,14 +624,15 @@ export namespace File {
         })
       })
     }
-    if (!options?.sessionID) return open(await contained(file, "read"))
-    const sessionID = options.sessionID
+    if (!options?.sessionID) await contained(file, "read")
+    const sessionID = options?.sessionID ?? SessionFilesystem.projectActor()
     // A file under Project files is the project's own durable material. Tools
     // treat the directory as internal, so a session that wrote a report there
     // must be able to read it back through this path too (artifact saves,
     // receipts, previews) even though no session grant names the directory.
     const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access: "read" }).catch(
       async (error: unknown) => {
+        if (!options?.sessionID) throw error
         if (!SessionFilesystem.DeniedError.isInstance(error)) throw error
         const preview = await ProjectPreview.resolve(file, sessionID).catch(() => undefined)
         if (!preview) throw error
@@ -848,8 +858,8 @@ export namespace File {
       return { full, exists: !!approved, changed, content: await readPath(file, full) }
     }
     const result = await (async () => {
-      if (!options?.sessionID) return mutate(await contained(file, "write"))
-      const sessionID = options.sessionID
+      if (!options?.sessionID) await contained(file, "write")
+      const sessionID = options?.sessionID ?? SessionFilesystem.projectActor()
       const authorized = await SessionFilesystem.authorize({ sessionID, path: file, access: "write" })
       if (FileTrash.protectedPath(authorized.path)) {
         throw new HTTPException(403, { message: "Recovery data is protected" })
@@ -1028,58 +1038,59 @@ export namespace File {
       ignored = ig.ignores.bind(ig)
     }
     const root = options?.sessionID ? await SessionFilesystem.workspace(options.sessionID) : Instance.directory
-    const resolved = await contained(dir || root, "read", options)
-    const local = Filesystem.contains(root, resolved)
+    return operate(dir || root, "read", options, async (resolved) => {
+      const local = Filesystem.contains(root, resolved)
 
-    const nodes: Node[] = []
-    const entries: fs.Dirent[] = await fs.promises
-      .readdir(resolved, { withFileTypes: true })
-      .catch((err: NodeJS.ErrnoException) => {
-        // Surface permission errors as 403 with a TCC-aware message so the
-        // SPA can show "grant Full Disk Access" instead of "0 entries".
-        // macOS blocks Desktop/Documents/Downloads listings for any process
-        // that doesn't have FDA, and node returns EACCES/EPERM in that case.
-        if (err?.code === "EACCES" || err?.code === "EPERM") {
-          const macHint =
-            process.platform === "darwin"
-              ? " — grant Full Disk Access to the openscience binary in System Settings → Privacy & Security"
-              : ""
-          throw new HTTPException(403, {
-            message: `permission denied reading ${resolved}${macHint}`,
-          })
-        }
-        if (err?.code === "ENOENT") {
-          throw new HTTPException(404, { message: `path not found: ${resolved}` })
-        }
-        // Unknown error: log and degrade to empty so the request still
-        // completes — preserves the prior behaviour for benign cases.
-        log.warn("file.list readdir failed", { resolved, error: String(err?.message ?? err) })
-        return [] as fs.Dirent[]
-      })
-    for (const entry of entries) {
-      if (exclude.includes(entry.name)) continue
-      const fullPath = path.join(resolved, entry.name)
-      const relativePath = path.relative(root, fullPath)
-      const nodePath = local ? relativePath : fullPath
-      const type = entry.isDirectory() ? "directory" : "file"
-      // Stat each entry for the file-explorer size / modified columns. Failures
-      // (broken symlink, races) degrade to undefined rather than dropping the row.
-      const stat = await fs.promises.stat(fullPath).catch(() => undefined)
-      nodes.push({
-        name: entry.name,
-        path: nodePath,
-        absolute: fullPath,
-        type,
-        ignored: local ? ignored(type === "directory" ? relativePath + "/" : relativePath) : false,
-        size: stat && type === "file" ? stat.size : undefined,
-        mtime: stat ? Math.round(stat.mtimeMs) : undefined,
-      })
-    }
-    return nodes.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1
+      const nodes: Node[] = []
+      const entries: fs.Dirent[] = await fs.promises
+        .readdir(resolved, { withFileTypes: true })
+        .catch((err: NodeJS.ErrnoException) => {
+          // Surface permission errors as 403 with a TCC-aware message so the
+          // SPA can show "grant Full Disk Access" instead of "0 entries".
+          // macOS blocks Desktop/Documents/Downloads listings for any process
+          // that doesn't have FDA, and node returns EACCES/EPERM in that case.
+          if (err?.code === "EACCES" || err?.code === "EPERM") {
+            const macHint =
+              process.platform === "darwin"
+                ? " — grant Full Disk Access to the openscience binary in System Settings → Privacy & Security"
+                : ""
+            throw new HTTPException(403, {
+              message: `permission denied reading ${resolved}${macHint}`,
+            })
+          }
+          if (err?.code === "ENOENT") {
+            throw new HTTPException(404, { message: `path not found: ${resolved}` })
+          }
+          // Unknown error: log and degrade to empty so the request still
+          // completes — preserves the prior behaviour for benign cases.
+          log.warn("file.list readdir failed", { resolved, error: String(err?.message ?? err) })
+          return [] as fs.Dirent[]
+        })
+      for (const entry of entries) {
+        if (exclude.includes(entry.name)) continue
+        const fullPath = path.join(resolved, entry.name)
+        const relativePath = path.relative(root, fullPath)
+        const nodePath = local ? relativePath : fullPath
+        const type = entry.isDirectory() ? "directory" : "file"
+        // Stat each entry for the file-explorer size / modified columns. Failures
+        // (broken symlink, races) degrade to undefined rather than dropping the row.
+        const stat = await fs.promises.stat(fullPath).catch(() => undefined)
+        nodes.push({
+          name: entry.name,
+          path: nodePath,
+          absolute: fullPath,
+          type,
+          ignored: local ? ignored(type === "directory" ? relativePath + "/" : relativePath) : false,
+          size: stat && type === "file" ? stat.size : undefined,
+          mtime: stat ? Math.round(stat.mtimeMs) : undefined,
+        })
       }
-      return a.name.localeCompare(b.name)
+      return nodes.sort((a, b) => {
+        if (a.type !== b.type) {
+          return a.type === "directory" ? -1 : 1
+        }
+        return a.name.localeCompare(b.name)
+      })
     })
   }
 

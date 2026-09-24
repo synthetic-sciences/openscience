@@ -1,0 +1,115 @@
+.workspace-project,
+.workspace-folders__path,
+.workspace-folders__default {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--text-base);
+  font-size: 13px;
+  min-width: 0;
+}
+.workspace-project {
+  margin-bottom: 24px;
+}
+.workspace-project select,
+.workspace-folders select,
+.workspace-folders input {
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text-strong);
+  background: var(--surface-raised-base);
+  font: inherit;
+}
+.workspace-project select:focus-visible,
+.workspace-folders select:focus-visible,
+.workspace-folders input:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 2px;
+}
+.workspace-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.workspace-folders__list {
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.workspace-folders__item {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+}
+.workspace-folders__item + .workspace-folders__item {
+  border-top: 1px solid var(--border-base);
+}
+.workspace-folders__item > svg {
+  margin-top: 3px;
+  color: var(--text-weak);
+}
+.workspace-folders__copy {
+  flex: 1;
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.workspace-folders__copy strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+.workspace-folders__copy span {
+  font-size: 12px;
+  color: var(--text-weak);
+  overflow-wrap: anywhere;
+}
+.workspace-folders__copy small {
+  font-size: 12px;
+  color: var(--text-base);
+}
+.workspace-folders__actions,
+.workspace-folders__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.workspace-folders__actions {
+  margin-left: auto;
+}
+.workspace-folders__add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.workspace-folders__path input {
+  width: 100%;
+}
+.workspace-folders__controls {
+  justify-content: flex-end;
+}
+.workspace-folders__controls select {
+  margin-right: auto;
+}
+.workspace-folders__hint,
+.workspace-folders__empty {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-weak);
+}
+.workspace-folders__empty {
+  padding: 16px;
+}
+.workspace-folders__error {
+  color: var(--text-critical-base);
+  font-size: 13px;
+}

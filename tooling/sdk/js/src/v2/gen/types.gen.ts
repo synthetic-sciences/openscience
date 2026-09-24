@@ -2819,6 +2819,7 @@ export type FileContent = {
   size?: number
   truncated?: boolean
   revision?: string
+  writable?: boolean
 }
 
 export type File = {
@@ -10187,6 +10188,185 @@ export type ProjectCurrentResponses = {
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
 
+export type ProjectFilesystemListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/project/current/filesystem"
+}
+
+export type ProjectFilesystemListResponses = {
+  /**
+   * Project folder access
+   */
+  200: {
+    version: 1
+    revision: number
+    projectID: string
+    grants: Array<{
+      id: string
+      path: string
+      access: "read" | "write"
+      scope: "project"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
+      time: {
+        created: number
+        consumed?: number
+        revoked?: number
+      }
+    }>
+    workingRoot?: "scratch" | string
+    directory: string
+    toolDirectory?: string
+    enforcement: {
+      broker: "enforced"
+      processWrite: "grant_only"
+      processRead: "grant_only" | "policy_only"
+    }
+  }
+}
+
+export type ProjectFilesystemListResponse = ProjectFilesystemListResponses[keyof ProjectFilesystemListResponses]
+
+export type ProjectFilesystemConnectData = {
+  body?: {
+    path: string
+    access: "read" | "write"
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/project/current/filesystem"
+}
+
+export type ProjectFilesystemConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectFilesystemConnectError = ProjectFilesystemConnectErrors[keyof ProjectFilesystemConnectErrors]
+
+export type ProjectFilesystemConnectResponses = {
+  /**
+   * Connected folder
+   */
+  200: {
+    id: string
+    path: string
+    access: "read" | "write"
+    scope: "once" | "session" | "project" | "installation"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
+    time: {
+      created: number
+      consumed?: number
+      revoked?: number
+    }
+  }
+}
+
+export type ProjectFilesystemConnectResponse =
+  ProjectFilesystemConnectResponses[keyof ProjectFilesystemConnectResponses]
+
+export type ProjectFilesystemRevokeData = {
+  body?: never
+  path: {
+    grantID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/project/current/filesystem/{grantID}"
+}
+
+export type ProjectFilesystemRevokeErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ProjectFilesystemRevokeError = ProjectFilesystemRevokeErrors[keyof ProjectFilesystemRevokeErrors]
+
+export type ProjectFilesystemRevokeResponses = {
+  /**
+   * Revoked folder access
+   */
+  200: {
+    id: string
+    path: string
+    access: "read" | "write"
+    scope: "once" | "session" | "project" | "installation"
+    source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
+    time: {
+      created: number
+      consumed?: number
+      revoked?: number
+    }
+  }
+}
+
+export type ProjectFilesystemRevokeResponse = ProjectFilesystemRevokeResponses[keyof ProjectFilesystemRevokeResponses]
+
+export type ProjectFilesystemWorkingRootData = {
+  body?: {
+    workingRoot: "scratch" | string | null
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/project/current/working-root"
+}
+
+export type ProjectFilesystemWorkingRootErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectFilesystemWorkingRootError =
+  ProjectFilesystemWorkingRootErrors[keyof ProjectFilesystemWorkingRootErrors]
+
+export type ProjectFilesystemWorkingRootResponses = {
+  /**
+   * Updated project folders
+   */
+  200: {
+    version: 1
+    revision: number
+    projectID: string
+    grants: Array<{
+      id: string
+      path: string
+      access: "read" | "write"
+      scope: "project"
+      source: "workspace" | "project" | "skill" | "permission" | "api" | "tool" | "handoff" | "parent"
+      time: {
+        created: number
+        consumed?: number
+        revoked?: number
+      }
+    }>
+    workingRoot?: "scratch" | string
+    directory: string
+    toolDirectory?: string
+    enforcement: {
+      broker: "enforced"
+      processWrite: "grant_only"
+      processRead: "grant_only" | "policy_only"
+    }
+  }
+}
+
+export type ProjectFilesystemWorkingRootResponse =
+  ProjectFilesystemWorkingRootResponses[keyof ProjectFilesystemWorkingRootResponses]
+
 export type ProjectWorkingRootsData = {
   body?: never
   path?: never
@@ -13847,7 +14027,7 @@ export type FileWriteData = {
   body?: {
     path: string
     content: string
-    sessionID: string
+    sessionID?: string
     expectedRevision?: string
   }
   path?: never
@@ -13961,7 +14141,7 @@ export type FileTrashListResponse = FileTrashListResponses[keyof FileTrashListRe
 export type FileTrashCreateData = {
   body?: {
     path: string
-    sessionID: string
+    sessionID?: string
   }
   path?: never
   query?: {
@@ -14013,7 +14193,7 @@ export type FileTrashCreateResponse = FileTrashCreateResponses[keyof FileTrashCr
 
 export type FileTrashRestoreData = {
   body?: {
-    sessionID: string
+    sessionID?: string
   }
   path: {
     id: string
@@ -14071,7 +14251,7 @@ export type FileTrashRestoreResponse = FileTrashRestoreResponses[keyof FileTrash
 
 export type FileTrashPurgeData = {
   body?: {
-    sessionID: string
+    sessionID?: string
   }
   path: {
     id: string
@@ -14127,7 +14307,7 @@ export type FileRenameData = {
   body?: {
     from: string
     to: string
-    sessionID: string
+    sessionID?: string
   }
   path?: never
   query?: {
