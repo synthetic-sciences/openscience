@@ -32,7 +32,8 @@ async function until(check: () => boolean) {
   expect(check()).toBe(true)
 }
 
-test("a failed folder save remains visible and retry updates the actual working location", async () => {
+test.each([0, 2000])("a failed folder save remains visible and retry handles a %i ms refresh", async (delay) => {
+  const refreshed = Promise.withResolvers<void>()
   const state = { fail: true, current: "/research/RINR", writes: 0 }
   const snapshot = () => ({
     workspace: { scratchRoot: "/scratch" },
@@ -43,10 +44,14 @@ test("a failed folder save remains visible and retry updates the actual working 
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
-      if (request.method === "GET") return Response.json(snapshot())
+      if (request.method === "GET") {
+        const current = snapshot()
+        if (current.toolDirectory === "/scratch") await Bun.sleep(delay)
+        return Response.json(current)
+      }
       state.writes++
-      if (state.fail) return Response.json({ error: "save failed" }, { status: 503 })
       expect(await request.json()).toEqual({ workingRoot: "scratch" })
+      if (state.fail) return Response.json({ error: "save failed" }, { status: 503 })
       state.current = "/scratch"
       return Response.json(snapshot())
     },
@@ -58,7 +63,24 @@ test("a failed folder save remains visible and retry updates the actual working 
     web.render(
       () =>
         subject.WorkingFolderChip({
-          client: createOpenScienceClient({ baseUrl: server.url.origin, fetch: Bun.fetch }),
+          client: createOpenScienceClient({
+            baseUrl: server.url.origin,
+            fetch: Object.assign(
+              async (input: RequestInfo | URL, init?: RequestInit) => {
+                const response = await Bun.fetch(input, init)
+                const body: { toolDirectory?: string } = await response.clone().json()
+                if (
+                  typeof input === "object" &&
+                  "method" in input &&
+                  input.method === "GET" &&
+                  body.toolDirectory === "/scratch"
+                )
+                  refreshed.resolve()
+                return response
+              },
+              { preconnect: Bun.fetch.preconnect },
+            ),
+          }),
           sessionID: "ses_fixture",
           pending: undefined,
           onPending() {},
@@ -78,6 +100,9 @@ test("a failed folder save remains visible and retry updates the actual working 
 
   state.fail = false
   scratch.click()
+  // The SDK performs a second HTTP read after saving. Wait for its bytes before
+  // polling the DOM so a slow CI response does not consume the render deadline.
+  await refreshed.promise
   await until(() => host.querySelector("summary")?.textContent?.includes("Scratch") ?? false)
   expect(host.querySelector('[role="alert"]')).toBeNull()
   expect(details.open).toBe(false)
