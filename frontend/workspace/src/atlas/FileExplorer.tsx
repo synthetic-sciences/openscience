@@ -53,7 +53,7 @@ async function readAccess(request: ProjectRequest, identity: FilesystemIdentity)
   throw new Error("Filesystem access belongs to another session or project.")
 }
 
-async function grantAccess(request: ProjectRequest, identity: FilesystemIdentity, input: ConnectInput) {
+async function grantAccess(request: ProjectRequest, input: ConnectInput) {
   return request("/project/current/filesystem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,7 +99,7 @@ export function ExternalFileAccess(props: { file: ContextFile; active: boolean; 
     const current = identity()
     if (!current || state.busy) return
     setState({ busy: true, error: undefined })
-    grantAccess(sdk.request, current, {
+    grantAccess(sdk.request, {
       path: requestedFolder(props.file.path),
       access: state.access,
       scope: "project",

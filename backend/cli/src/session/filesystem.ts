@@ -423,7 +423,9 @@ export namespace SessionFilesystem {
   export async function connectProject(input: { path: string; access: Access }) {
     const root = await folderPath(input.path)
     return AuthoritySignal.exclusive(async () => {
-      await project(`project:${Instance.project.id}`)
+      const current = await project(projectActor())
+      const matches = current.grants.filter((item) => !item.time.revoked && item.path === root)
+      if (matches.length === 1 && matches[0].access === input.access) return matches[0]
       const grant: Grant & { scope: "project" } = {
         id: `fsg_${crypto.randomUUID()}`,
         path: root,
@@ -435,11 +437,6 @@ export namespace SessionFilesystem {
       const record = await Storage.update<ProjectState>(projectKey(), (draft) => {
         assertProject(`project:${Instance.project.id}`, ProjectState.parse(draft))
         const matches = draft.grants.filter((item) => !item.time.revoked && item.path === root)
-        if (matches.length === 1 && matches[0].access === input.access) {
-          grant.id = matches[0].id
-          grant.time = matches[0].time
-          return
-        }
         for (const item of matches) item.time.revoked = Date.now()
         draft.grants.push(grant)
         draft.revision++
@@ -470,6 +467,7 @@ export namespace SessionFilesystem {
     return AuthoritySignal.exclusive(async () => {
       const current = await project(`project:${Instance.project.id}`)
       const next = value === null || value === "scratch" ? value : await canonical(value)
+      if (next === (current.workingRoot ?? null)) return projectSnapshot()
       if (next && next !== "scratch" && !workingRootCandidates(current).some((grant) => grant.path === next)) {
         throw new InvalidPathError({ path: next, message: "The working folder must have Read & write access." })
       }

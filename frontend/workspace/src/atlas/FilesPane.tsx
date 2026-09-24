@@ -196,12 +196,6 @@ export function fileListQuery(kind: PaneSource["kind"], target: string, session?
   }
 }
 
-// FileExplorer.tsx:57-77 keeps equivalent readAccess/grantAccess/revokeAccess
-// helpers, but they are private, unexported, and typed against ProjectRequest
-// (which carries a .url this pane's injected transport does not). They are
-// reimplemented here against the same endpoints and the same
-// parseFilesystemSnapshot guard rather than imported. Folding the trio into
-// file-sources.ts is the obvious follow-up.
 async function readAccess(transport: Transport, identity: FilesystemIdentity): Promise<FilesystemSnapshot> {
   const value = await transport(
     identity.sessionID
@@ -231,7 +225,7 @@ const accessNote = (access: FilesystemAccess) => {
   return "Approved tools and sandboxed runtimes can read and write files in this folder."
 }
 
-async function grantAccess(transport: Transport, identity: FilesystemIdentity, input: ConnectInput) {
+async function grantAccess(transport: Transport, input: ConnectInput) {
   return transport("/project/current/filesystem", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -374,9 +368,7 @@ export function FilesPane(
   // itself rather than swallowing whatever throws: in production `standalone`
   // is always false, so a missing provider is a real wiring bug and throws
   // loudly instead of quietly degrading into a fake "could not be read".
-  // `session` and `directory` complete that seam: with no router or SDK there
-  // is no session id or project root to read, and without both the grant
-  // snapshot never loads. Production passes neither.
+  // `session` and `directory` supply the route identity in isolated tests.
   const standalone = Boolean(props.request)
   const sdk = standalone ? undefined : useSDK()
   const sync = standalone ? undefined : useSync()
@@ -1181,7 +1173,7 @@ export function FilesPane(
     const input = { path, access: connect.access, scope: connect.scope }
     void mutate(
       ticket,
-      () => grantAccess(transport, current, input),
+      () => grantAccess(transport, input),
       async () => {
         await refetchSnapshot()
         if (owns(ticket)) {

@@ -43,20 +43,24 @@ export function WorkspaceFolders(props: {
   const watch = props.watch?.(() => void actions.refetch())
   if (watch) onCleanup(watch)
   const folders = () => snapshot.latest?.grants.filter((grant) => !grant.time.revoked && !grant.time.consumed) ?? []
+  const unavailable = () => {
+    const root = snapshot.latest?.workingRoot
+    return root && root !== "scratch" && !folders().some((folder) => folder.path === root && folder.access === "write")
+      ? root
+      : undefined
+  }
   const mutate = async (action: () => Promise<unknown>) => {
     if (state.busy) return
     set({ busy: true, error: "" })
     await action()
-      .then(
-        async () => {
-          if (lifetime.signal.aborted) return
-          set("path", "")
-          await actions.refetch()
-        },
-        (error) => {
-          if (!lifetime.signal.aborted) set("error", error instanceof Error ? error.message : String(error))
-        },
-      )
+      .then(async () => {
+        if (lifetime.signal.aborted) return
+        set("path", "")
+        await actions.refetch()
+      })
+      .catch((error) => {
+        if (!lifetime.signal.aborted) set("error", error instanceof Error ? error.message : String(error))
+      })
       .finally(() => {
         if (!lifetime.signal.aborted) set("busy", false)
       })
@@ -203,7 +207,7 @@ export function WorkspaceFolders(props: {
               </Button>
             </div>
           </form>
-          <Show when={folders().some((folder) => folder.access === "write")}>
+          <Show when={folders().some((folder) => folder.access === "write") || snapshot.latest?.workingRoot}>
             <label class="workspace-folders__default">
               <span>Default location for new conversations</span>
               <select
@@ -213,6 +217,13 @@ export function WorkspaceFolders(props: {
                 onChange={(event) => void working(event.currentTarget.value || null)}
               >
                 <option value="">Automatic</option>
+                <Show when={unavailable()}>
+                  {(root) => (
+                    <option value={root()} disabled>
+                      Previous folder unavailable — using scratch
+                    </option>
+                  )}
+                </Show>
                 <For each={folders().filter((folder) => folder.access === "write")}>
                   {(folder) => (
                     <option value={folder.path}>
@@ -273,7 +284,7 @@ const Workspaces: Component = () => {
             onSelect={(value) => resolve(Array.isArray(value) ? value[0] : (value ?? undefined))}
           />
         ),
-        () => resolve(undefined),
+        { onClose: () => resolve(undefined), stack: true },
       ),
     )
   }
