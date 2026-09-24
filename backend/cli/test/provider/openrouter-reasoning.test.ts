@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { generateText, streamText } from "ai"
+import { generateText, stepCountIs, streamText, tool } from "ai"
+import z from "zod"
 
 const encrypted = { type: "reasoning.encrypted", data: "opaque-local-fixture", index: 0 }
 const text = "A provider sentence.  \n"
@@ -123,3 +124,89 @@ for (const mode of ["stream", "buffered"] as const) {
     })
   })
 }
+
+test.each([
+  { name: "native block IDs and indices", second: { id: "anthropic:msg_fixture:2", index: 2 } },
+  { name: "distinct IDs at the same index", second: { id: "anthropic:msg_fixture:2", index: 0 } },
+  { name: "distinct indices without IDs", second: { index: 2 } },
+])("OpenRouter replays separate signed thinking blocks with $name", async ({ second }) => {
+  const first = { ...(second.id ? { id: "anthropic:msg_fixture:0" } : {}), index: 0 }
+  const details = [first, second].map((identity, index) => ({
+    type: "reasoning.text",
+    format: "anthropic-claude-v1",
+    ...identity,
+    text: index === 0 ? "First thought.  \n" : "Second thought.  \n",
+    signature: index === 0 ? "offline-first-signature" : "offline-second-signature",
+  }))
+  const deltas = details.flatMap(({ text, signature, ...identity }) => [
+    { reasoning_details: [{ ...identity, text: text.slice(0, 6) }] },
+    { reasoning_details: [{ ...identity, text: text.slice(6) }] },
+    { reasoning_details: [{ ...identity, signature }] },
+    { content: "Progress. " },
+  ])
+  const requests: Array<{ messages: Array<{ role: string; reasoning_details?: Array<Record<string, unknown>> }> }> = []
+  const provider = createOpenRouter({
+    apiKey: "offline-fixture",
+    fetch: Object.assign(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push(JSON.parse(String(init?.body)))
+        const first = requests.length === 1
+        const chunks = first
+          ? [
+              ...deltas,
+              {
+                tool_calls: [
+                  { index: 0, id: "call_fixture", type: "function", function: { name: "check", arguments: "" } },
+                ],
+              },
+              { tool_calls: [{ index: 0, function: { arguments: "{}" } }] },
+              {},
+            ]
+          : [{ content: "Answer." }, {}]
+        return new Response(
+          chunks
+            .map((delta, index) => {
+              const chunk = {
+                id: first ? "msg_fixture" : "msg_continuation",
+                object: "chat.completion.chunk",
+                created: 1,
+                model: "anthropic/claude-sonnet-5",
+                choices: [
+                  {
+                    index: 0,
+                    delta,
+                    finish_reason: index === chunks.length - 1 ? (first ? "tool_calls" : "stop") : null,
+                  },
+                ],
+              }
+              return `data: ${JSON.stringify(chunk)}\n\n`
+            })
+            .join("") + "data: [DONE]\n\n",
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+      {
+        preconnect() {
+          throw new Error("Offline fixture must not open a connection")
+        },
+      },
+    ),
+  })
+  const result = streamText({
+    model: provider.chat("anthropic/claude-sonnet-5"),
+    prompt: "Read the offline fixture.",
+    tools: { check: tool({ inputSchema: z.object({}), execute: async () => "checked" }) },
+    stopWhen: stepCountIs(2),
+    maxRetries: 0,
+    abortSignal: AbortSignal.timeout(2_000),
+  })
+
+  expect(await result.text).toBe("Answer.")
+  const metadata: unknown = (await result.steps)[0].providerMetadata?.openrouter?.reasoning_details
+  expect(metadata).toEqual(details)
+  expect(requests).toHaveLength(2)
+  const replay = requests[1].messages.find((message) => message.role === "assistant")?.reasoning_details
+  // Atlas replays the signed records carried by tool calls; incomplete display
+  // deltas have no signature and cannot replace either authenticated block.
+  expect(replay?.filter((detail) => typeof detail.signature === "string")).toEqual(details)
+})
