@@ -290,13 +290,111 @@ async function run(command: string[], options: { cwd?: string; timeout?: number;
   throw new Error((stderr || stdout || `Command failed with exit ${exit}`).trim().slice(-4_000))
 }
 
+/**
+ * Where an interpreter lives inside a Conda prefix and what it needs on PATH.
+ *
+ * Unix layouts keep executables and shared libraries under `bin` and `lib`,
+ * so the binary's directory is enough. Windows layouts scatter them:
+ * `python.exe` at the prefix root, R under `lib\R\bin\x64`, launchers under
+ * `Scripts`, and the DLLs those interpreters and their packages load under
+ * `Library\bin` and `Library\mingw-w64\bin`. `conda activate` prepends all of
+ * those; a process started without activation must do the same, or the first
+ * C-backed package tidyverse attaches (stringi, xml2, openssl) fails to load.
+ * R's own launcher in `Scripts` adds only the MinGW and MSYS2 directories, and
+ * skips even those when another environment's copies are already on PATH,
+ * which is how a machine with Anaconda ends up loading a foreign C++ runtime
+ * and crashing in ucrtbase.dll (#704). `candidates` are tried in order; the
+ * real x64 binary derives R_HOME from its own location and is preferred.
+ */
+export type CondaLaunch = {
+  candidates: string[]
+  paths: string[]
+  env: Record<string, string>
+  delimiter: string
+}
+
+function condaLaunch(
+  language: ManagedEnvironmentLanguage,
+  prefix: string,
+  platform: NodeJS.Platform = process.platform,
+): CondaLaunch {
+  if (platform !== "win32") {
+    const bin = path.posix.join(prefix, "bin")
+    return {
+      candidates: [path.posix.join(bin, language === "python" ? "python" : "Rscript")],
+      paths: [bin],
+      env: { CONDA_PREFIX: prefix },
+      delimiter: ":",
+    }
+  }
+  const p = path.win32
+  const home = p.join(prefix, "lib", "R")
+  return {
+    candidates:
+      language === "python"
+        ? [p.join(prefix, "python.exe")]
+        : [
+            p.join(home, "bin", "x64", "Rscript.exe"),
+            p.join(home, "bin", "Rscript.exe"),
+            p.join(prefix, "Scripts", "Rscript.exe"),
+          ],
+    paths: [
+      ...(language === "r" ? [p.join(home, "bin", "x64")] : []),
+      prefix,
+      p.join(prefix, "Library", "mingw-w64", "bin"),
+      p.join(prefix, "Library", "usr", "bin"),
+      p.join(prefix, "Library", "bin"),
+      p.join(prefix, "Scripts"),
+      p.join(prefix, "bin"),
+    ],
+    env: { CONDA_PREFIX: prefix, ...(language === "r" ? { R_HOME: home } : {}) },
+    delimiter: ";",
+  }
+}
+
+/** The PATH a launched interpreter sees: its prefix directories, then the inherited one. */
+function launchPath(launch: CondaLaunch, base: NodeJS.ProcessEnv = process.env) {
+  return [...launch.paths, inheritedPath(base)].filter(Boolean).join(launch.delimiter)
+}
+
+/** The inherited PATH under whichever spelling the platform handed us. */
+function inheritedPath(base: NodeJS.ProcessEnv) {
+  for (const [key, value] of Object.entries(base)) {
+    if (key.toUpperCase() === "PATH" && value) return value
+  }
+  return undefined
+}
+
+/**
+ * `base` with the launch applied. PATH is set under that one spelling and any
+ * other spelling is dropped: Windows reads `Path` and `PATH` as one variable,
+ * and a block naming both leaves the child to pick.
+ */
+function launchEnv(launch: CondaLaunch, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [key, value] of Object.entries(base)) {
+    if (key.toUpperCase() !== "PATH") env[key] = value
+  }
+  return { ...env, ...launch.env, PATH: launchPath(launch, base) }
+}
+
+async function firstExecutable(candidates: readonly string[]) {
+  for (const candidate of candidates) {
+    if (await executable(candidate)) return candidate
+  }
+  return undefined
+}
+
+/** The prefix a Python binary belongs to: beside it on Windows, above `bin` elsewhere. */
+function pythonPrefix(binary: string) {
+  return process.platform === "win32" ? path.dirname(binary) : path.dirname(path.dirname(binary))
+}
+
 function isolatedPythonEnvironment(binary: string) {
-  const env = { ...process.env }
+  const env = launchEnv(condaLaunch("python", pythonPrefix(binary)))
   for (const name of Object.keys(env)) {
     if (name.startsWith("PYTHON") || name.startsWith("PIP_") || name === "VIRTUAL_ENV") delete env[name]
   }
-  env.CONDA_PREFIX = path.dirname(path.dirname(binary))
-  env.PATH = [path.dirname(binary), process.env.PATH].filter(Boolean).join(path.delimiter)
   env.PIP_CONFIG_FILE = process.platform === "win32" ? "NUL" : "/dev/null"
   env.PIP_DISABLE_PIP_VERSION_CHECK = "1"
   env.PIP_NO_INPUT = "1"
@@ -305,7 +403,7 @@ function isolatedPythonEnvironment(binary: string) {
 }
 
 function isolatedPipCommand(binary: string, python: string, args: readonly string[]) {
-  const prefix = path.dirname(path.dirname(binary))
+  const prefix = pythonPrefix(binary)
   const minor = python.split(".").slice(0, 2).join(".")
   const paths = [
     path.join(prefix, "lib", `python${minor}`),
@@ -532,17 +630,41 @@ async function installMicromamba() {
   }
 }
 
-async function probe(language: ManagedEnvironmentLanguage, prefix = environmentPath(language)) {
-  const binary =
-    language === "python"
-      ? path.join(prefix, process.platform === "win32" ? "python.exe" : "bin/python")
-      : path.join(prefix, process.platform === "win32" ? "Scripts/Rscript.exe" : "bin/Rscript")
-  if (!(await executable(binary))) return false
-  const command = language === "python" ? [binary, "-I", "-c", STARTERS.python.probe] : [binary, "-e", STARTERS.r.probe]
-  return run(command, { timeout: 30_000 }).then(
-    () => true,
-    () => false,
+type Probe = { ok: true } | { ok: false; reason: string }
+
+/** Whether the starter's interpreter can load the packages it was built with.
+ * A failure carries the interpreter's own last lines, since "failed its import
+ * probe" alone told nobody that a DLL was missing or a package absent. */
+async function probe(language: ManagedEnvironmentLanguage, prefix = environmentPath(language)): Promise<Probe> {
+  const launch = condaLaunch(language, prefix)
+  const binary = await firstExecutable(launch.candidates)
+  if (!binary)
+    return { ok: false, reason: `no ${language === "python" ? "python" : "Rscript"} at ${launch.candidates[0]}` }
+  const command =
+    language === "python" ? [binary, "-I", "-c", STARTERS.python.probe] : [binary, "--vanilla", "-e", STARTERS.r.probe]
+  const env: NodeJS.ProcessEnv = {
+    ...launchEnv(launch),
+    // The probe answers for the environment's own library, never for a
+    // personal library another R on the machine wrote for the same version.
+    ...(language === "r" ? { R_LIBS_USER: "", R_LIBS_SITE: "" } : {}),
+  }
+  // tidyverse attaches a dozen packages, and Windows scans each freshly
+  // written DLL on first load; that can take well over thirty seconds.
+  return run(command, { timeout: language === "r" ? 120_000 : 30_000, env }).then(
+    () => ({ ok: true }) as const,
+    (error) => ({ ok: false, reason: failureReason(error) }) as const,
   )
+}
+
+function failureReason(error: unknown) {
+  const text = error instanceof Error ? error.message : String(error)
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-6)
+    .join(" ")
+    .slice(-600)
 }
 
 type OwnedFile = {
@@ -1255,7 +1377,7 @@ async function replaceEnvironment(target: string, create: () => Promise<void>) {
 }
 
 async function ensureStarter(language: ManagedEnvironmentLanguage) {
-  if (await probe(language)) {
+  if ((await probe(language)).ok) {
     if (language === "python") await addToStarter(environmentPath(language))
     return
   }
@@ -1265,7 +1387,10 @@ async function ensureStarter(language: ManagedEnvironmentLanguage) {
   const channels = spec.channels.flatMap((channel) => ["-c", channel])
   await replaceEnvironment(target, async () => {
     await run([await installMicromamba(), "--no-rc", "create", "-y", "-p", target, ...channels, ...spec.packages])
-    if (!(await probe(language, target))) throw new Error(`${language} starter environment failed its import probe`)
+    const verified = await probe(language, target)
+    if (!verified.ok) {
+      throw new Error(`${language} starter environment failed its import probe: ${verified.reason}`)
+    }
     const now = new Date().toISOString()
     const digest = crypto
       .createHash("sha256")
@@ -1296,7 +1421,7 @@ async function addToStarter(target: string) {
     .then((value) => Manifest.parse(value))
     .catch(() => undefined)
   if (!manifest || manifest.kind !== "starter") return
-  const binary = path.join(target, process.platform === "win32" ? "python.exe" : "bin/python")
+  const binary = condaLaunch("python", target).candidates[0]!
   for (const addition of STARTERS.python.additions) {
     if (addition.packages.every((name) => manifest.packages.includes(name))) continue
     const present = await run([binary, "-I", "-c", addition.probe], { timeout: 30_000 }).then(
@@ -1365,7 +1490,7 @@ const sameManifest = (left: z.infer<typeof Manifest>, right: z.infer<typeof Mani
 
 async function ensureTaskEnvironment(name: string, spec: ManagedTaskSpec, selected?: CoreScienceCondaPlatform) {
   const target = environmentPath(name)
-  const binary = path.join(target, process.platform === "win32" ? "python.exe" : "bin/python")
+  const binary = condaLaunch("python", target).candidates[0]!
   const digest = taskDigest(spec)
   const lock = selected ? spec.conda_locks?.[selected] : undefined
   const lockSha = lock ? new Bun.CryptoHasher("sha256").update(lock).digest("hex") : undefined
@@ -1570,6 +1695,8 @@ async function ensureLanguage(language: ManagedEnvironmentLanguage) {
 export namespace ManagedEnvironments {
   export const pythonPackages = [...STARTERS.python.packages]
   export const rPackages = [...STARTERS.r.packages]
+  /** The launch contract for a prefix; exported so the Windows layout is testable anywhere. */
+  export const launch = condaLaunch
 
   export async function bootstrap() {
     if (process.env.OPENSCIENCE_SKIP_ENVIRONMENT_BOOTSTRAP === "1") return
@@ -1590,7 +1717,7 @@ export namespace ManagedEnvironments {
         )
         return {
           language,
-          ready: await probe(language),
+          ready: (await probe(language)).ok,
           path: environmentPath(language),
           packages: [...STARTERS[language].packages],
           manifest: manifest.success ? manifest.data : null,
@@ -1642,7 +1769,7 @@ export namespace ManagedEnvironments {
   ) {
     const parsed = TaskName.parse(name)
     const target = environmentPath(parsed)
-    const binary = path.join(target, process.platform === "win32" ? "python.exe" : "bin/python")
+    const binary = condaLaunch("python", target).candidates[0]!
     const selected = expected.conda_lock ? condaLockPlatform() : undefined
     const manifest = Manifest.safeParse(
       await Bun.file(path.join(target, ".openscience-environment.json"))
@@ -1753,32 +1880,26 @@ export namespace ManagedEnvironments {
     }
     if (environment === language) await ensureLanguage(language)
     const prefix = environmentPath(environment)
-    let binary =
-      language === "python"
-        ? path.join(prefix, process.platform === "win32" ? "python.exe" : "bin/python")
-        : path.join(prefix, process.platform === "win32" ? "Scripts/Rscript.exe" : "bin/Rscript")
-    if (environment === language && !(await executable(binary))) {
+    const launch = condaLaunch(language, prefix)
+    let binary = await firstExecutable(launch.candidates)
+    if (environment === language && !binary) {
       delete starterSetup[language]
       await ensureLanguage(language)
-      binary =
-        language === "python"
-          ? path.join(prefix, process.platform === "win32" ? "python.exe" : "bin/python")
-          : path.join(prefix, process.platform === "win32" ? "Scripts/Rscript.exe" : "bin/Rscript")
+      binary = await firstExecutable(launch.candidates)
     }
-    if (!(await executable(binary))) {
+    if (!binary) {
       throw new Error(
         environment === language
           ? `Managed ${language} environment '${environment}' is unavailable. Open Settings → Compute to repair it.`
           : `Task environment '${environment}' is unavailable. Ask OpenScience to install its initial packages before using it.`,
       )
     }
-    const bin = path.dirname(binary)
     return {
       binary,
       environmentName: environment,
       env: {
-        CONDA_PREFIX: prefix,
-        PATH: [bin, process.env.PATH].filter(Boolean).join(path.delimiter),
+        ...launch.env,
+        PATH: launchPath(launch),
         MAMBA_ROOT_PREFIX: root(),
         ...(await trust(prefix)),
       },

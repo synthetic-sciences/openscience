@@ -338,6 +338,7 @@ import type {
   SettingsCliInstallErrors,
   SettingsCliInstallResponses,
   SettingsCliStatusResponses,
+  SettingsComputeEnvironmentsRepairErrors,
   SettingsComputeEnvironmentsRepairResponses,
   SettingsComputeGetResponses,
   SettingsComputeJobsCancelErrors,
@@ -1063,10 +1064,11 @@ export class Environments extends HeyApiClient {
    * Install or repair managed Python and R starter environments
    */
   public repair<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
-    return (options?.client ?? this.client).post<SettingsComputeEnvironmentsRepairResponses, unknown, ThrowOnError>({
-      url: "/settings/compute/environments/repair",
-      ...options,
-    })
+    return (options?.client ?? this.client).post<
+      SettingsComputeEnvironmentsRepairResponses,
+      SettingsComputeEnvironmentsRepairErrors,
+      ThrowOnError
+    >({ url: "/settings/compute/environments/repair", ...options })
   }
 }
 

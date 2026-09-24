@@ -21,6 +21,7 @@ async function profile() {
   const conda = path.join(data, "conda")
   const pythonLog = path.join(root, "python-probes.log")
   const rLog = path.join(root, "r-probes.log")
+  const rArgsLog = path.join(root, "r-probe-args.log")
   const prefixLog = path.join(root, "prefixes.log")
   const argsLog = path.join(root, "micromamba-args.log")
   const lockLog = path.join(root, "selected-conda-lock.txt")
@@ -43,6 +44,7 @@ async function profile() {
     XDG_STATE_HOME: path.join(root, "state"),
     OPENSCIENCE_PYTHON_PROBE_LOG: pythonLog,
     OPENSCIENCE_R_PROBE_LOG: rLog,
+    OPENSCIENCE_R_PROBE_ARGS_LOG: rArgsLog,
     OPENSCIENCE_PREFIX_LOG: prefixLog,
     OPENSCIENCE_MICROMAMBA_ARGS_LOG: argsLog,
     OPENSCIENCE_CONDA_LOCK_LOG: lockLog,
@@ -100,7 +102,10 @@ fs.mkdirSync(path.join(prefix, "lib"), { recursive: true })
 fs.writeFileSync(path.join(prefix, "lib", "fake-module.py"), "locked\\n")
 lockedFiles.push(path.join("lib", "fake-module.py"))
 const output = language === "r"
-  ? "echo ok"
+  ? "echo \\"args=$*\\" >> \\"$OPENSCIENCE_R_PROBE_ARGS_LOG\\"\\necho \\"R_LIBS_USER=$\{R_LIBS_USER-unset} R_LIBS_SITE=$\{R_LIBS_SITE-unset} CONDA_PREFIX=$CONDA_PREFIX\\" >> \\"$OPENSCIENCE_R_PROBE_ARGS_LOG\\"\\n" +
+    (process.env.OPENSCIENCE_TEST_R_PROBE_FAILS === "1"
+      ? "echo 'Error: package or namespace load failed for tidyverse in dyn.load(file, DLLpath = DLLpath, ...):' >&2\\necho ' unable to load shared object stringi.dll: LoadLibrary failure: The specified module could not be found.' >&2\\nexit 1"
+      : "echo ok")
   : "case \\\"$*\\\" in *importlib.metadata*) if grep -qx locked \\\"$(dirname \\\"$0\\\")/../lib/fake-module.py\\\"; then printf '%s\\\\n' \\\"$OPENSCIENCE_FAKE_PYTHON_ATTESTATION\\\"; else printf '%s\\\\n' \\\"$OPENSCIENCE_FAKE_PYTHON_ATTESTATION\\\" | sed 's/\\\"integrity\\\":true/\\\"integrity\\\":false/'; fi ;; *) echo ok ;; esac"
 fs.writeFileSync(binary, "#!/bin/sh\\necho task-probe >> \\\"" + log + "\\\"\\necho python >> \\\"$OPENSCIENCE_TEST_ATTESTATION_LOG\\\"\\nif [ -n \\\"$PYTHONPATH$PYTHONHOME\\\" ] || [ -f \\\"$(dirname \\\"$0\\\")/../lib/python3.12/site-packages/inject.pth\\\" ]; then printf executed > \\\"$OPENSCIENCE_UNSAFE_STARTUP_MARKER\\\"; fi\\n" + output + "\\n")
 fs.chmodSync(binary, 0o755)
@@ -187,6 +192,7 @@ fs.chmodSync(binary, 0o755)
     conda,
     pythonLog,
     rLog,
+    rArgsLog,
     prefixLog,
     argsLog,
     lockLog,
@@ -308,6 +314,34 @@ test("starter repair solves directly at the durable Conda prefix", async () => {
     })
     expect(await r.exited).toBe(0)
     expect(await fs.readdir(path.join(current.conda, ".rollback"))).toEqual([])
+    // The probe ran the starter's own library, not a personal one another R
+    // on the machine wrote for the same version (#704).
+    const probes = await Bun.file(current.rArgsLog).text()
+    expect(probes).toContain("args=--vanilla -e ")
+    expect(probes).toContain(
+      "R_LIBS_USER= R_LIBS_SITE= CONDA_PREFIX=" + (await fs.realpath(path.join(current.conda, "envs", "r"))),
+    )
+  } finally {
+    await current.dispose()
+  }
+})
+
+test("a starter whose probe fails names the interpreter's reason and keeps no half-built prefix", async () => {
+  const current = await profile()
+  try {
+    const result = await invoke("bootstrap", { ...current.env, OPENSCIENCE_TEST_R_PROBE_FAILS: "1" })
+    expect(result.exit).not.toBe(0)
+    expect(result.stdout).not.toContain("bootstrap-ok")
+    expect(result.stderr).toContain("r starter environment failed its import probe: ")
+    expect(result.stderr).toContain("unable to load shared object stringi.dll")
+    // The Compute card reads this record, so the person sees the R error and
+    // not a bare "failed its import probe".
+    const state = await Bun.file(path.join(current.conda, "state.json")).json()
+    expect(state.status).toBe("failed")
+    expect(state.phase).toBe("failed:r")
+    expect(state.error).toContain("unable to load shared object stringi.dll")
+    await expect(fs.access(path.join(current.conda, "envs", "r"))).rejects.toThrow()
+    expect(await Bun.file(path.join(current.conda, "envs", "python", "bin", "python")).exists()).toBe(true)
   } finally {
     await current.dispose()
   }

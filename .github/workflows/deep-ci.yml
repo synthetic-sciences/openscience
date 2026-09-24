@@ -153,6 +153,7 @@ jobs:
               test/tool/apply_patch.test.ts
               test/tool/apply_patch-receipts.test.ts
               test/lsp/status.test.ts
+              test/science/kernel/environment-launch.test.ts
           - name: Windows
             runner: windows-latest
             command: >-
@@ -170,6 +171,7 @@ jobs:
               test/tool/apply_patch.test.ts
               test/tool/apply_patch-receipts.test.ts
               test/lsp/status.test.ts
+              test/science/kernel/environment-launch.test.ts
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:

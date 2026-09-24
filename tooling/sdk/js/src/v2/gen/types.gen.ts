@@ -3920,6 +3920,19 @@ export type SettingsComputeEnvironmentsRepairData = {
   url: "/settings/compute/environments/repair"
 }
 
+export type SettingsComputeEnvironmentsRepairErrors = {
+  /**
+   * A starter could not be set up; the message is the interpreter's own error
+   */
+  409: {
+    error: "environment_setup_failed"
+    message: string
+  }
+}
+
+export type SettingsComputeEnvironmentsRepairError =
+  SettingsComputeEnvironmentsRepairErrors[keyof SettingsComputeEnvironmentsRepairErrors]
+
 export type SettingsComputeEnvironmentsRepairResponses = {
   /**
    * Updated

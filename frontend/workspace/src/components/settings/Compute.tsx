@@ -414,8 +414,10 @@ const Compute: Component = () => {
 
   const repairEnvironments = async () => {
     setBusy("environments:repair", true)
-    const next = await call<Info>("/environments/repair", { method: "POST" }).catch((error) => {
+    const next = await call<Info>("/environments/repair", { method: "POST" }).catch(async (error) => {
       showToast({ title: "Environment setup failed", description: message(error) })
+      // The card reads the recorded failure; refresh so it names the reason.
+      await control.refetch()
       return undefined
     })
     setBusy("environments:repair", false)

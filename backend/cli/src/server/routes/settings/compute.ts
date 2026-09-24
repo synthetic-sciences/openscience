@@ -28,6 +28,10 @@ import { resolveCredentialFields } from "./credentials"
 import { CredentialLifecycle } from "../../../credentials/lifecycle"
 import { TrustedExecutable } from "../../../process/trusted-executable"
 
+/** A starter that could not be set up. The message is the interpreter's own
+ * last lines, so the person sees what failed rather than a generic 500. */
+const EnvironmentSetupFailure = z.object({ error: z.literal("environment_setup_failed"), message: z.string() }).strict()
+
 const Directory = z.object({
   directory: z.string().trim().min(1).optional(),
 })
@@ -1131,10 +1135,20 @@ export const ComputeSettingsRoutes = lazy(() =>
         operationId: "settings.compute.environments.repair",
         responses: {
           200: { description: "Updated", content: { "application/json": { schema: resolver(ComputeSettings.Info) } } },
+          409: {
+            description: "A starter could not be set up; the message is the interpreter's own error",
+            content: { "application/json": { schema: resolver(EnvironmentSetupFailure) } },
+          },
         },
       }),
       async (c) => {
-        await ManagedEnvironments.bootstrap()
+        const failure = await ManagedEnvironments.bootstrap().then(
+          () => undefined,
+          (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        )
+        if (failure !== undefined) {
+          return c.json(EnvironmentSetupFailure.parse({ error: "environment_setup_failed", message: failure }), 409)
+        }
         return c.json(await ComputeSettings.get())
       },
     )

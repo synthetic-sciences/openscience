@@ -11,6 +11,8 @@ Open **Customize → Compute** and check **Python starter** and **R starter**. F
 
 The Python starter includes NumPy, pandas, SciPy, Matplotlib, Seaborn, and Pillow. The R starter includes tidyverse, ggplot2, and jsonlite. Additional scientific packages have separate setup requirements; use [Tools](/openscience/scientific-tools) to check them.
 
+Each starter is checked by importing its packages before it is used. A starter that fails that check is removed rather than kept half-built, and the Compute panel shows the interpreter's own error, such as a package that would not load. The starters run from their own Conda layout without activation: on Windows, OpenScience puts the environment's `Library\bin`, MinGW and `Scripts` directories on `PATH` itself and runs R with `--vanilla` and an empty `R_LIBS_USER`, so another Anaconda or R installation on the machine cannot shadow the starter's libraries.
+
 ```text
 Check that the Python analysis environment can import pandas and
 Matplotlib. Read the first rows of data/samples.csv and report its columns
