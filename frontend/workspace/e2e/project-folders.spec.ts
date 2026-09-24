@@ -77,6 +77,7 @@ test("project folders work before a conversation and settings change real access
       )
       .toBe(2)
     await settings.getByLabel(`Access to ${primary}`, { exact: true }).selectOption("read")
+    await expect(settings.getByLabel(`Access to ${primary}`, { exact: true })).toBeEnabled()
     await expect
       .poll(async () => (await sdk.file.read({ path: path.join(primary, "notes.txt") })).data?.writable)
       .toBe(false)
