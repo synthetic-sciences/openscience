@@ -126,7 +126,9 @@ packages report the new version and expected dist-tags. Confirm that the GitHub
 release is not a draft, the tag targets the release commit, and the assets include the
 11 platform archives, `checksums.txt`, `desktop-checksums.txt`, two macOS DMGs,
 two architecture-specific macOS updater ZIPs, one Windows EXE, and two Linux
-AppImages: 20 release assets in total. Inspect the publish run for launcher
+AppImages, and two macOS ZIP block maps: 22 release assets in total. The block maps are generated automatically from the final ZIPs and included in the desktop checksum manifest. Each native macOS updater job reconstructs the new ZIP from a previous signed release, verifies its exact digest, checks corrupt-cache fallback, and archives transferred-byte measurements before the normal activation/rollback gate.
+
+Inspect the publish run for launcher
 warnings. Windows signing, macOS signing, notarization, immutable
 asset verification, and both native updater lifecycles are fatal gates. Publishing the `synsci` launcher is required in
 both test and production releases; a launcher failure leaves the GitHub release

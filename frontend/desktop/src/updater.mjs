@@ -20,6 +20,7 @@ import path from "node:path"
 import { Readable } from "node:stream"
 import { pipeline } from "node:stream/promises"
 import { promisify } from "node:util"
+import { blockmapLimit, cacheArchive, downloadChanges } from "./update-download.mjs"
 
 const execute = promisify(execFile)
 const exec = (file, args, options = {}) =>
@@ -84,12 +85,22 @@ export async function release(version, options = {}) {
     throw new Error(`${name} has an invalid release size`)
   }
   if (!URL.canParse(found.browser_download_url ?? "")) throw new Error(`${name} has no valid download URL`)
+  const map = data.assets?.find((item) => item.name === `${name}.blockmap`)
+  const blockmap =
+    /^sha256:[0-9a-f]{64}$/.test(map?.digest ?? "") &&
+    Number.isSafeInteger(map?.size) &&
+    map.size > 0 &&
+    map.size <= blockmapLimit &&
+    URL.canParse(map?.browser_download_url ?? "")
+      ? { url: map.browser_download_url, digest: map.digest.slice(7), size: map.size }
+      : undefined
   return {
     version,
     name,
     url: found.browser_download_url,
     digest: found.digest.slice("sha256:".length),
     size: found.size,
+    ...(blockmap ? { blockmap } : {}),
   }
 }
 
@@ -208,13 +219,18 @@ export async function stage(version, options = {}) {
   const root = await mkdtemp(path.join(options.cache, "pending-"))
   const prepare = async () => {
     const archive = path.join(root, info.name)
-    await download(info.url, archive, {
-      fetch: options.fetch,
-      version,
-      signal: options.signal,
-      onProgress: options.onProgress,
-      expectedSize: info.size,
+    const transfer = await downloadChanges(info, archive, {
+      ...options,
+      resolveRelease: (version) => release(version, options),
     })
+    if (transfer.method === "full")
+      await download(info.url, archive, {
+        fetch: options.fetch,
+        version,
+        signal: options.signal,
+        onProgress: options.onProgress,
+        expectedSize: info.size,
+      })
     options.onProgress?.({ phase: "verifying", transferred: undefined, total: undefined })
     const digest = await checksum(archive)
     if (digest !== info.digest) throw new Error(`OpenScience update digest mismatch for ${info.name}`)
@@ -233,6 +249,9 @@ export async function stage(version, options = {}) {
       current: options.current,
       signal: options.signal,
     })
+    // Keep only verified archive bytes. Cache failure must never prevent a valid update.
+    await cacheArchive(info, archive, transfer.blockmap, options.cache).catch(() => undefined)
+    options.onTransfer?.({ method: transfer.method, bytes: transfer.bytes ?? info.size, size: info.size })
     const manifest = {
       schema: 1,
       status: "ready",

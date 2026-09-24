@@ -201,7 +201,6 @@ test("stable publication waits for both native updater lifecycle canaries", asyn
   expect(updater).toContain("runner: macos-15\n            arch: arm64\n            machine: arm64")
   expect(updater).toContain("runner: macos-15-intel\n            arch: x64\n            machine: x86_64")
   expect(updater).toContain("needs: [version, build-desktop-mac]")
-  expect(updater).toContain('install: "false"')
   expect(updater).toContain("Resolve an immutable previous signed stable install")
   expect(updater).toContain("Stable publication fails closed until a signed baseline is available.")
   expect(updater).toContain("bun frontend/desktop/script/update-lifecycle-canary.mjs")
@@ -275,7 +274,7 @@ test("publication freezes the complete immutable release asset set", async () =>
   ]) {
     expect(workflow).toContain(asset)
   }
-  expect(workflow).toContain('== "20"')
+  expect(workflow).toContain('== "22"')
   expect(workflow).toContain("desktop-checksums.txt")
   expect(workflow).toContain("checksums.txt")
 })

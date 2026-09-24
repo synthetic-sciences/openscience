@@ -474,12 +474,12 @@ jobs:
             arch: arm64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-arm64/bin/openscience
             asset: OpenScience-mac-arm64.dmg
-            assets: OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip
+            assets: OpenScience-mac-arm64.dmg OpenScience-mac-arm64.zip OpenScience-mac-arm64.zip.blockmap
           - runner: macos-15-intel
             arch: x64
             sidecar: backend/cli/dist/@synsci/openscience-darwin-x64/bin/openscience
             asset: OpenScience-mac-x64.dmg
-            assets: OpenScience-mac-x64.dmg OpenScience-mac-x64.zip
+            assets: OpenScience-mac-x64.dmg OpenScience-mac-x64.zip OpenScience-mac-x64.zip.blockmap
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     permissions:
@@ -690,6 +690,12 @@ jobs:
           xcrun stapler staple "$OPENSCIENCE_DMG"
           xcrun stapler validate "$OPENSCIENCE_DMG"
           spctl -a -t open --context context:primary-signature -vv "$OPENSCIENCE_DMG"
+      - name: Generate differential download metadata
+        if: steps.existing.outputs.found != 'true'
+        shell: bash
+        env:
+          OPENSCIENCE_ARCH: ${{ matrix.arch }}
+        run: bun frontend/desktop/script/update-blockmap.mjs "frontend/desktop/dist/OpenScience-mac-$OPENSCIENCE_ARCH.zip"
       - name: Upload immutable desktop assets
         if: steps.existing.outputs.found != 'true'
         shell: bash
@@ -955,10 +961,8 @@ jobs:
           ref: ${{ needs.version.outputs.source }}
           persist-credentials: false
 
-      # The updater scripts import only node builtins; no workspace install.
+      # Includes the pinned block-map generator and differential planner.
       - uses: ./.github/actions/setup-bun
-        with:
-          install: "false"
 
       - name: Require native updater architecture
         shell: bash
@@ -984,10 +988,10 @@ jobs:
           OPENSCIENCE_ZIP: ${{ matrix.zip }}
         run: |
           set -euo pipefail
-          gh release download "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$OPENSCIENCE_DMG" --pattern "$OPENSCIENCE_ZIP"
+          gh release download "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$OPENSCIENCE_DMG" --pattern "$OPENSCIENCE_ZIP" --pattern "$OPENSCIENCE_ZIP.blockmap"
           assets="$(gh release view "$OPENSCIENCE_TAG" --repo "$GITHUB_REPOSITORY" --json assets)"
           source_label="${OPENSCIENCE_ARTIFACT_SOURCE:0:16}"
-          for name in "$OPENSCIENCE_DMG" "$OPENSCIENCE_ZIP"; do
+          for name in "$OPENSCIENCE_DMG" "$OPENSCIENCE_ZIP" "$OPENSCIENCE_ZIP.blockmap"; do
             asset="$(jq -c --arg name "$name" '.assets[] | select(.name == $name)' <<<"$assets")"
             [[ -n "$asset" && "$(jq -r .state <<<"$asset")" == "uploaded" ]] || {
               echo "::error::$name is not a complete release asset"
@@ -1125,6 +1129,16 @@ jobs:
             exit 1
           fi
 
+      - name: Verify differential download against the previous signed release
+        shell: bash
+        env:
+          OPENSCIENCE_PREVIOUS_ZIP: ${{ steps.previous.outputs.zip }}
+          OPENSCIENCE_ZIP: ${{ matrix.zip }}
+        run: bun frontend/desktop/script/update-download-canary.mjs "$OPENSCIENCE_PREVIOUS_ZIP" "$OPENSCIENCE_ZIP" differential-download.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: differential-download-${{ matrix.arch }}
+          path: differential-download.json
       - name: Exercise packaged handoff, activation, health, cleanup, and rollback
         shell: bash
         env:
@@ -1204,8 +1218,10 @@ jobs:
           desktop=(
             OpenScience-mac-arm64.dmg
             OpenScience-mac-arm64.zip
+            OpenScience-mac-arm64.zip.blockmap
             OpenScience-mac-x64.dmg
             OpenScience-mac-x64.zip
+            OpenScience-mac-x64.zip.blockmap
             OpenScience-windows-x64.exe
             OpenScience-linux-x64.AppImage
             OpenScience-linux-arm64.AppImage
@@ -1257,7 +1273,7 @@ jobs:
           printf '%s\n' checksums.txt "${desktop[@]}" desktop-checksums.txt >> "$expected"
           sort -u -o "$expected" "$expected"
           jq -r '.assets[].name' <<<"$assets" | sort -u > "$actual"
-          [[ "$(wc -l < "$expected" | tr -d ' ')" == "20" ]]
+          [[ "$(wc -l < "$expected" | tr -d ' ')" == "22" ]]
           diff -u "$expected" "$actual"
           jq -e 'all(.assets[]; .state == "uploaded" and (.size | type == "number" and . > 0) and (.digest | test("^sha256:[0-9a-f]{64}$")))' <<<"$assets" >/dev/null
           while read -r digest name; do

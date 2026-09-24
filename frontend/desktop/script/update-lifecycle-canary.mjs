@@ -117,6 +117,9 @@ async function driver(configFile) {
       currentVersion: config.previousVersion,
       trusted: true,
     })
+    // The previous updater did not retain download bytes. Exercise the new
+    // packaged app rescuing them before that legacy helper erases its staging root.
+    if (config.rescueLegacy) await rm(path.join(config.cache, "download-cache"), { recursive: true, force: true })
     const prepared = await apply(update, {
       current: config.target,
       trusted: true,
@@ -180,7 +183,7 @@ async function transactionResidue(info) {
     if (!(await missing(info[key]))) retained.push(`${key}: ${info[key]}`)
   }
   const cache = path.dirname(info.health)
-  const allowed = new Set(["last-result.json", "update.log"])
+  const allowed = new Set(["last-result.json", "update.log", "download-cache"])
   const entries = await readdir(cache).catch((error) => {
     if (error?.code === "ENOENT") return []
     throw error
@@ -416,7 +419,7 @@ export async function stopSuccessfulApp(health, operations = {}) {
 }
 
 async function clearSettledCache(cache) {
-  const allowed = new Set(["last-result.json", "update.log"])
+  const allowed = new Set(["last-result.json", "update.log", "download-cache"])
   const entries = await readdir(cache).catch((error) => {
     if (error?.code === "ENOENT") return []
     throw error
@@ -425,7 +428,7 @@ async function clearSettledCache(cache) {
   if (unexpected.length) {
     throw new Error(`Updater lifecycle cache retained unexpected entries: ${unexpected.join(", ")}`)
   }
-  for (const entry of entries) await rm(path.join(cache, entry), { force: true })
+  for (const entry of entries) await rm(path.join(cache, entry), { force: true, recursive: entry === "download-cache" })
 }
 
 async function copyPrevious(previous, target) {
@@ -510,6 +513,7 @@ async function main() {
 
     await copyPrevious(previous, target)
     const success = await runTransaction({
+      rescueLegacy: true,
       archive,
       arch,
       cache,
@@ -531,6 +535,9 @@ async function main() {
     }
     await settleTransaction(success.info, { status: "succeeded", version })
     await stopSuccessfulApp(success.result.health)
+    if ((await checksum(path.join(cache, "download-cache", "archive.zip"))) !== (await checksum(archive))) {
+      throw new Error("The first upgraded app did not retain its exact ZIP for the next differential download")
+    }
     const installedTrust = await verify(target, version, { trusted: true, current: target })
     if (installedTrust?.team !== team) throw new Error("Activated update does not belong to the configured Apple team")
 

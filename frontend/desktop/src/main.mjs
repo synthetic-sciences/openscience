@@ -22,6 +22,7 @@ import {
   verify as verifyUpdate,
 } from "./updater.mjs"
 import { acknowledgedStartupResult, startupUpdateState } from "./update-state.mjs"
+import { seedArchive } from "./update-download.mjs"
 import { disposeRuntime } from "./runtime-disposal.mjs"
 import { healthyRuntime, pinnedVersion } from "./service-health.mjs"
 import { servicePort } from "./service-port.mjs"
@@ -369,6 +370,12 @@ async function acknowledgeUpdateHealth() {
   // Publishing terminal health first lets the helper clean its journal while
   // this main is still reconciling the same transaction.
   await reconcileCurrentUpdate(true)
+  // Older helpers erase their ZIP after health succeeds. Retain it locally first,
+  // so this first upgrade already supplies the next differential baseline.
+  if (state.updateCache)
+    await seedArchive(state.updateCache, validateUpdateHealthRequest(), `OpenScience-mac-${process.arch}.zip`).catch(
+      () => undefined,
+    )
   const request = await writeUpdateHealth({
     healthy: true,
     pid: process.pid,

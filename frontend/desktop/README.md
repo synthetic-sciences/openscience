@@ -4,7 +4,7 @@ The desktop shell starts the bundled OpenScience runtime on a random loopback po
 
 Release builds produce:
 
-- macOS `.dmg` installers and `.zip` self-update payloads (Apple Silicon and Intel)
+- macOS `.dmg` installers, `.zip` self-update payloads, and `.zip.blockmap` download metadata (Apple Silicon and Intel)
 - Windows NSIS `.exe`
 - Linux `.AppImage`
 
@@ -32,4 +32,8 @@ macOS signing uses `CSC_LINK` and `CSC_KEY_PASSWORD`; notarization additionally 
 
 Windows production packaging runs on Windows and uses Microsoft Artifact Signing with a validated Public Trust certificate profile. Set `WINDOWS_SIGNING_ENDPOINT`, `WINDOWS_SIGNING_ACCOUNT`, `WINDOWS_SIGNING_PROFILE`, and `WINDOWS_SIGNING_PUBLISHER` (the exact certificate common name). Authenticate with Azure CLI before packaging; GitHub Actions uses OIDC, without a client secret or exportable signing key. Electron Builder signs the copied sidecar, app executables, native libraries, NSIS uninstaller, and installer. The release workflow verifies Authenticode trust, publisher, and timestamps on the installer and bundled PE files before upload, and rechecks downloaded installers when resuming a release. While the Artifact Signing values are not configured in the repository, stable releases publish the Windows installer unsigned and the workflow says so in a warning. See [release setup](../../docs/notes/release-process.md#windows-signing-setup).
 
-Only a notarized Developer ID build participates in desktop self-update. It downloads the exact architecture-specific ZIP from a published, non-prerelease GitHub release; verifies GitHub's SHA-256 digest, app identity, version, notarization, and publisher continuity; then uses the bundled signed sidecar for an atomic handoff. Stable publication keeps one packaged updater smoke on the release path; the full Apple Silicon and Intel lifecycle/rollback matrix remains available in deep CI. Ad-hoc-signed development builds remain useful for local packaging checks, but are never published as stable updater payloads and cannot self-update.
+Only a notarized Developer ID build participates in desktop self-update. It downloads the exact architecture-specific ZIP from a published, non-prerelease GitHub release; verifies GitHub's SHA-256 digest, app identity, version, notarization, and publisher continuity; then uses the bundled signed sidecar for an atomic handoff. Stable publication requires both Apple Silicon and Intel download, activation, health, cleanup, and rollback checks. Ad-hoc-signed development builds remain useful for local packaging checks, but are never published as stable updater payloads and cannot self-update.
+
+The macOS updater retains one verified ZIP and its block map under `updates/download-cache`. Later downloads reuse matching chunks and fetch changed byte ranges from GitHub, including when versions are skipped. A missing, damaged, or incompatible cache/map or an unsupported range response uses the full ZIP automatically. Cancellation never starts a fallback download. The reconstructed ZIP must match the complete published SHA-256 before the existing app signature, publisher, activation, and rollback checks run. Cache retention is best-effort and does not prevent installation. The first update carrying this downloader uses the full ZIP to establish its baseline.
+
+`electron-updater` is pinned for its download-plan API only; installation continues through OpenScience's signed helper. `script/update-blockmap.mjs` uses the pinned Electron Builder generator. Production generates both architecture maps, binds them to release checksums, and runs `script/update-download-canary.mjs` against the previous signed release automatically.
