@@ -35,7 +35,7 @@ test.each(["expiry", "401"])(
   async (trigger) => {
     await Auth.set("openai-codex", { ...original, expires: trigger === "expiry" ? 1 : Date.now() + 3_600_000 })
     await using directory = await tmpdir({ git: true })
-    const revoke = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    const revoke = CredentialLifecycle.onRevoke((event) => CredentialTeardown.apply(event))
     try {
       await Instance.provide({
         directory: directory.path,
@@ -174,7 +174,7 @@ test("a newly connected account does not join the previous account's refresh", a
   }
 })
 
-test.each([200, 400])("a newer persisted pair wins over a late HTTP %s refresh response", async (status) => {
+test.each([200, 400])("a newer persisted pair wins over a late HTTP %i refresh response", async (status) => {
   await Auth.set("openai-codex", original)
   const started = Promise.withResolvers<void>()
   const complete = Promise.withResolvers<Response>()

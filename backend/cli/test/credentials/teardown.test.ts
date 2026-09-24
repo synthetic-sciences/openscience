@@ -113,7 +113,7 @@ describe("CredentialTeardown.apply", () => {
     await using tmp = await tmpdir()
     const disposed: string[] = []
     await instance(tmp.path, disposed)
-    const off = CredentialLifecycle.onRevoke(CredentialTeardown.apply)
+    const off = CredentialLifecycle.onRevoke((event) => CredentialTeardown.apply(event))
     try {
       expect(
         await Auth.renew(provider, auth, { ...auth, access: "fresh", refresh: "fresh", expires: Date.now() + 60_000 }),
