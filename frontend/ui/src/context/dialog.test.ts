@@ -54,6 +54,26 @@ const panels = () =>
   [...document.querySelectorAll<HTMLElement>("[data-dialog-panel]")].map((el) => el.dataset.dialogPanel)
 
 describe("dialog stacking", () => {
+  test("unmounting with an open dialog restores the page and releases its accessibility observer", async () => {
+    const outside = document.createElement("button")
+    document.body.append(outside)
+    let dialog!: DialogHandle
+    mount(fixture.createDialogFixture((handle) => (dialog = handle)))
+    dialog.show(fixture.accessible("preview", Promise.resolve(true)))
+    await settle(20)
+    expect(outside.hasAttribute("aria-hidden")).toBe(true)
+
+    cleanups.pop()!()
+    await settle()
+    expect(document.querySelector('[role="dialog"]')).toBeNull()
+    expect(outside.hasAttribute("aria-hidden")).toBe(false)
+
+    const next = document.createElement("button")
+    document.body.append(next)
+    await settle()
+    expect(next.hasAttribute("aria-hidden")).toBe(false)
+  })
+
   test("a stacked dialog that loads asynchronously stays accessible and restores its parent", async () => {
     let dialog!: DialogHandle
     mount(fixture.createDialogFixture((handle) => (dialog = handle)))

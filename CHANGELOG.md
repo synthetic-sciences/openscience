@@ -105,6 +105,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ### Fixed
 
 - **Generated images still open after their files move.** The image card's **Open image** button now opens the original attachment, just like its thumbnail, instead of failing on a renamed or removed workspace path. Images without an inline attachment continue to open from disk.
+- **Closing a workspace releases its open dialogs.** Dialog cleanup now removes the modal's focus and accessibility handlers so content does not remain hidden from assistive technology after the dialog's view is removed.
 - **Tool availability notices stay inside activity details.** Internal lines such as “Tools added: edit, write” no longer appear alongside the answer when the turn's activity is collapsed, including while work is running or interrupted.
 - **Codex token renewal keeps work running.** Refreshing ChatGPT access no longer interrupts active conversations, commands, or compute jobs. Concurrent refreshes share the renewed credentials, and a late refresh cannot undo logout or overwrite a newly connected account.
 
