@@ -14,6 +14,7 @@ import { Markdown } from "@synsci/ui/markdown"
 import type { AssistantMessage, Message, Part, UserMessage } from "@synsci/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { contextWindow } from "@/pages/session-context"
+import { sessionCost, sessionCostFormatter, sessionProviderLabel } from "./session-usage"
 import {
   CONTEXT_BUCKET_COLORS,
   contextComposition,
@@ -40,13 +41,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const sync = useSync()
   const language = useLanguage()
 
-  const usd = createMemo(
-    () =>
-      new Intl.NumberFormat(language.locale(), {
-        style: "currency",
-        currency: "USD",
-      }),
-  )
+  const usd = createMemo(() => sessionCostFormatter(language.locale()))
 
   const ctx = createMemo(() => {
     const last = findLast(props.messages(), (x) => {
@@ -81,8 +76,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
   })
 
   const cost = createMemo(() => {
-    const total = props.messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return usd().format(total)
+    return usd().format(sessionCost(props.messages(), sync.data.part).total)
   })
 
   const counts = createMemo(() => {
@@ -125,7 +119,10 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const providerLabel = createMemo(() => {
     const c = ctx()
     if (!c) return "—"
-    return c.provider?.name ?? c.message.providerID
+    const prompt = props
+      .messages()
+      .find((message): message is UserMessage => message.role === "user" && message.id === c.message.parentID)
+    return sessionProviderLabel(c.message, prompt, c.provider)
   })
 
   const modelLabel = createMemo(() => {

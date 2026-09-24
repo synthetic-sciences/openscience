@@ -12,6 +12,7 @@ import { useLayout } from "@/context/layout"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
 import { SessionContextTab } from "@/components/session/session-context-tab"
+import { sessionCost, sessionCostFormatter } from "@/components/session/session-usage"
 import {
   compactContextTokens,
   contextWindow,
@@ -42,31 +43,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     messages().filter((message): message is UserMessage => message.role === "user"),
   )
 
-  const usd = createMemo(
-    () =>
-      new Intl.NumberFormat(language.locale(), {
-        style: "currency",
-        currency: "USD",
-      }),
-  )
-
-  // The lead's own provider cost plus what its delegated workers spent. Each
-  // Task result carries the child turn's usage, so the readout is the whole
-  // run rather than only the messages in this session.
-  const workerCost = createMemo(() =>
-    messages().reduce((sum, message) => {
-      if (message.role !== "assistant") return sum
-      return (sync.data.part[message.id] ?? []).reduce((inner, part) => {
-        if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") return inner
-        const usage = (part.state.metadata as { usage?: { cost?: unknown } } | undefined)?.usage
-        return inner + (typeof usage?.cost === "number" ? usage.cost : 0)
-      }, sum)
-    }, 0),
-  )
-  const cost = createMemo(() => {
-    const lead = messages().reduce((sum, x) => sum + (x.role === "assistant" ? x.cost : 0), 0)
-    return usd().format(lead + workerCost())
-  })
+  const usd = createMemo(() => sessionCostFormatter(language.locale()))
+  const spend = createMemo(() => sessionCost(messages(), sync.data.part))
+  const cost = createMemo(() => usd().format(spend().total))
 
   const context = createMemo(() => {
     const locale = language.locale()
@@ -140,9 +119,9 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <span class="text-text-invert-strong">{cost()}</span>
         <span class="text-text-invert-base">{language.t("context.usage.cost")}</span>
       </div>
-      <Show when={workerCost() > 0}>
+      <Show when={spend().workers > 0}>
         <div class="text-text-invert-base">
-          {language.t("context.usage.workerCost", { cost: usd().format(workerCost()) })}
+          {language.t("context.usage.workerCost", { cost: usd().format(spend().workers) })}
         </div>
       </Show>
     </div>
