@@ -1283,6 +1283,16 @@ ToolRegistry.register({
           (!filename || !part.filename || part.filename === filename),
       )
     })
+    const preview = createMemo(() => (attachment()?.url?.startsWith("data:image/") ? attachment() : undefined))
+    const open = () => {
+      const image = preview()
+      if (image) {
+        dialog.show(() => <ImagePreview src={image.url} alt={image.filename} />)
+        return
+      }
+      const path = filepath()
+      if (path) data.openFile?.(path)
+    }
     const size = () => {
       const value = typeof props.metadata.size === "number" ? props.metadata.size : undefined
       if (value === undefined) return undefined
@@ -1309,7 +1319,7 @@ ToolRegistry.register({
         <Show when={props.status === "completed"}>
           <div data-component="generated-image-preview">
             <Show
-              when={attachment()?.url?.startsWith("data:image/") ? attachment() : undefined}
+              when={preview()}
               fallback={
                 <div data-slot="generated-image-placeholder">
                   <Icon name="photo" size="small" />
@@ -1322,7 +1332,7 @@ ToolRegistry.register({
                   type="button"
                   data-slot="generated-image-preview-button"
                   aria-label={`Preview ${image().filename ?? "generated image"}`}
-                  onClick={() => dialog.show(() => <ImagePreview src={image().url} alt={image().filename} />)}
+                  onClick={open}
                 >
                   <img src={image().url} alt={image().filename ?? "Generated image"} loading="lazy" />
                 </button>
@@ -1330,12 +1340,10 @@ ToolRegistry.register({
             </Show>
             <div data-slot="generated-image-meta">
               <span>{[props.metadata.model, size()].filter(Boolean).join(" · ")}</span>
-              <Show when={filepath()}>
-                {(path) => (
-                  <Button variant="secondary" size="small" icon="folder" onClick={() => data.openFile?.(path())}>
-                    Open image
-                  </Button>
-                )}
+              <Show when={preview() || filepath()}>
+                <Button variant="secondary" size="small" icon={preview() ? "photo" : "folder"} onClick={open}>
+                  Open image
+                </Button>
               </Show>
             </div>
           </div>

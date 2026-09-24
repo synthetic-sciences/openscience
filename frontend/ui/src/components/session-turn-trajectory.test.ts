@@ -11,7 +11,8 @@ class Observer {
   unobserve() {}
   disconnect() {}
 }
-Object.assign(globalThis, { ResizeObserver: globalThis.ResizeObserver ?? Observer })
+const originalCustomEvent = globalThis.CustomEvent
+Object.assign(globalThis, { ResizeObserver: globalThis.ResizeObserver ?? Observer, CustomEvent: window.CustomEvent })
 
 // Render the real transcript in jsdom: all provider-readable reasoning,
 // streaming prose, and chronological tool rows with expandable output.
@@ -144,9 +145,85 @@ afterEach(() => {
   cleanups.splice(0).forEach((cleanup) => cleanup())
   document.body.replaceChildren()
 })
-afterAll(() => vite.close())
+afterAll(async () => {
+  await vite.close()
+  globalThis.CustomEvent = originalCustomEvent
+})
 
 describe("image generation receipts", () => {
+  test.each(["thumbnail", "Open image"])(
+    "%s opens the saved attachment without reading its old path",
+    async (action) => {
+      const url =
+        "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII="
+      const part: ToolPart = {
+        ...read("prt_image_completed", "figure.png", 1000),
+        tool: "generate_image",
+        state: {
+          status: "completed",
+          input: { prompt: "Scientific diagram", output_path: "figure.png" },
+          output: "Generated figure.png.",
+          title: "figure.png",
+          metadata: { filepath: "/old-location/figure.png", mime: "image/png" },
+          time: { start: 1000, end: 1100 },
+          attachments: [
+            {
+              id: "prt_image_attachment",
+              sessionID,
+              messageID: "msg_0002",
+              type: "file",
+              mime: "image/png",
+              filename: "figure.png",
+              url,
+            },
+          ],
+        },
+      }
+      const opened: string[] = []
+      const host = mount(() => parts.Part({ part, message: assistant(1200) }), empty(), {
+        openFile: (path) => opened.push(path),
+      })
+      const button =
+        action === "thumbnail"
+          ? host.querySelector<HTMLButtonElement>('[aria-label="Preview figure.png"]')
+          : [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+              (item) => item.textContent?.trim() === "Open image",
+            )
+      expect(button).toBeTruthy()
+      button!.click()
+      await ready(() => document.querySelector('[data-slot="image-preview-image"]') !== null)
+      const image = document.querySelector<HTMLImageElement>('[data-slot="image-preview-image"]')!
+      expect(image.getAttribute("src")).toBe(url)
+      expect(image.alt).toBe("figure.png")
+      expect(opened).toEqual([])
+    },
+  )
+
+  test("an image without an inline attachment opens its workspace file", () => {
+    const part: ToolPart = {
+      ...read("prt_image_file", "figure.png", 1000),
+      tool: "generate_image",
+      state: {
+        status: "completed",
+        input: { prompt: "Scientific diagram", output_path: "figure.png" },
+        output: "Generated figure.png.",
+        title: "figure.png",
+        metadata: { filepath: "/research/figure.png" },
+        time: { start: 1000, end: 1100 },
+      },
+    }
+    const opened: string[] = []
+    const host = mount(() => parts.Part({ part, message: assistant(1200) }), empty(), {
+      openFile: (path) => opened.push(path),
+    })
+    const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (item) => item.textContent?.trim() === "Open image",
+    )!
+    button.click()
+    expect(opened).toEqual(["/research/figure.png"])
+    expect(document.querySelector('[data-slot="image-preview-image"]')).toBeNull()
+  })
+
   test("an unavailable image provider never claims a connected OpenRouter account", () => {
     const part: ToolPart = {
       ...read("prt_image_unavailable", "figure.png", 1000),
