@@ -104,6 +104,7 @@ const filesystemSync = Instance.state(
       )
       if (!payload.success || event.directory === directory) return
       if (payload.data.grant.scope !== "installation" && payload.data.projectID !== projectID) return
+      if (payload.data.narrowing === false) return
       // A runtime never mints an instance: without one there is nothing to stop.
       if (!Instance.has(directory)) return
       Instance.provide({
@@ -202,6 +203,7 @@ const authoritySync = Instance.state(
               return true
             }
             if (event.scope !== "installation" && event.projectID !== projectID) return false
+            if (event.narrowing === false) return true
             await stopFilesystem(event.sessionID, event.scope)
             return true
           },
@@ -477,15 +479,12 @@ export async function InstanceBootstrap() {
     ])
   })
 
-  // Only a grant that went away narrows authority. A grant that arrived (a
-  // skill loaded beside a running command, a folder the person just
-  // connected) widens it, and the processes running under the narrower set
-  // are still within bounds; stopping them killed a shell command whenever a
-  // parallel skill load added its read grant.
+  // An added grant can widen access without invalidating running processes.
+  // Publishers still mark revocation, replacement and working-root changes as
+  // narrowing; legacy events without the marker remain conservative.
   Bus.subscribe(SessionFilesystem.Event.Changed, async (payload) => {
-    const grant = payload.properties.grant
-    if (!grant.time.revoked && !grant.time.consumed) return
-    await stopFilesystem(payload.properties.sessionID, grant.scope)
+    if (payload.properties.narrowing === false) return
+    await stopFilesystem(payload.properties.sessionID, payload.properties.grant.scope)
   })
 
   // Tombstoned deletions are deliberately resumed only after all runtime

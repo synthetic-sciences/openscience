@@ -173,6 +173,7 @@ export namespace SessionFilesystem {
         sessionID: z.string(),
         projectID: z.string(),
         grant: Grant,
+        narrowing: z.boolean().optional(),
       }),
     ),
   }
@@ -208,14 +209,20 @@ export namespace SessionFilesystem {
     }
   }
 
-  async function changed(sessionID: string, projectID: string, grant: Grant) {
+  async function changed(
+    sessionID: string,
+    projectID: string,
+    grant: Grant,
+    narrowing = Boolean(grant.time.revoked || grant.time.consumed),
+  ) {
     const signal = await AuthoritySignal.publish({
       kind: "filesystem",
       projectID,
       sessionID,
       scope: grant.scope,
+      narrowing,
     })
-    await Bus.publish(Event.Changed, { sessionID, projectID, grant })
+    await Bus.publish(Event.Changed, { sessionID, projectID, grant, narrowing })
     await AuthoritySignal.settle(signal.revision)
   }
 
@@ -442,7 +449,14 @@ export namespace SessionFilesystem {
         draft.revision++
       })
       const stored = record.grants.find((item) => item.id === grant.id)!
-      await changed(`project:${Instance.project.id}`, Instance.project.id, stored)
+      // Replacements retire the old capability. Project write additions can
+      // also change a session's automatic or previously revoked working root.
+      await changed(
+        `project:${Instance.project.id}`,
+        Instance.project.id,
+        stored,
+        matches.length > 0 || input.access === "write",
+      )
       return stored
     })
   }
@@ -641,7 +655,7 @@ export namespace SessionFilesystem {
     await project(sessionID)
     if (options.revokeExisting !== false) {
       for (const grant of grants) {
-        await changed(sessionID, Instance.project.id, grant)
+        await changed(sessionID, Instance.project.id, grant, true)
       }
     }
     return grants[0]
@@ -686,7 +700,9 @@ export namespace SessionFilesystem {
       if (!additions.length) return record
       return { ...record, revision: record.revision + 1, grants: [...record.grants, ...additions] }
     })
-    for (const grant of additions) await changed(`project:${input.projectID}`, input.projectID, grant)
+    for (const grant of additions) {
+      await changed(`project:${input.projectID}`, input.projectID, grant, grant.access === "write")
+    }
   }
 
   export async function grant(input: {
@@ -858,7 +874,7 @@ export namespace SessionFilesystem {
       draft.revision++
     })
     const stored = result.grants.find((item) => item.id === grant.id) ?? grant
-    await changed(input.childSessionID, Instance.project.id, stored)
+    await changed(input.childSessionID, Instance.project.id, stored, true)
     return stored
   }
 
@@ -948,9 +964,14 @@ export namespace SessionFilesystem {
         draft.revision++
       })
       const stored = result.grants.find((item) => item.id === grant.id) ?? grant
-      await changed(input.sessionID, Instance.project.id, stored)
+      await changed(input.sessionID, Instance.project.id, stored, input.access === "write")
       return stored
     }
+    const shared = await project(input.sessionID)
+    const effective = (record: State) => ({
+      grants: [...record.grants, ...shared.grants],
+      workingRoot: record.workingRoot ?? shared.workingRoot,
+    })
     const result = await Storage.update<State>(key(input.sessionID), (draft) => {
       const duplicate = draft.grants.find(
         (item) =>
@@ -969,7 +990,12 @@ export namespace SessionFilesystem {
       draft.revision++
     })
     const stored = result.grants.find((item) => item.id === grant.id) ?? grant
-    await changed(input.sessionID, Instance.project.id, stored)
+    await changed(
+      input.sessionID,
+      Instance.project.id,
+      stored,
+      resolveToolDirectory(effective(state), "") !== resolveToolDirectory(effective(result), ""),
+    )
     return stored
   }
 

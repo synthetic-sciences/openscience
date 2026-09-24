@@ -151,6 +151,7 @@ export type EventSessionFilesystemChanged = {
         revoked?: number
       }
     }
+    narrowing?: boolean
   }
 }
 

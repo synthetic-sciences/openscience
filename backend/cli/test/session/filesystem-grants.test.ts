@@ -877,6 +877,40 @@ describe("session filesystem grants", () => {
     })
   })
 
+  for (const scope of ["session", "project"] as const)
+    test(`${scope} write additions keep working-folder changes conservative`, async () => {
+      await using fixture = await tmpdir()
+      await using first = await tmpdir()
+      await using second = await tmpdir()
+      await withSession(fixture.path, async (session) => {
+        const changes: Array<boolean | undefined> = []
+        const unsubscribe = Bus.subscribe(SessionFilesystem.Event.Changed, (event) => {
+          if (event.properties.sessionID === session.id) changes.push(event.properties.narrowing)
+        })
+        try {
+          await SessionFilesystem.grant({ sessionID: session.id, path: first.path, access: "write", scope })
+          expect(await SessionFilesystem.toolDirectory(session.id)).toBe(first.path)
+          expect(changes.at(-1)).toBe(true)
+
+          await SessionFilesystem.setProjectWorkingRoot("scratch")
+          const added = await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: second.path,
+            access: "write",
+            scope,
+          })
+          expect(await SessionFilesystem.toolDirectory(session.id)).toBe(await SessionFilesystem.workspace(session.id))
+          // A project addition may also revive another session's explicitly
+          // selected folder, so it remains conservative without scanning them.
+          expect(changes.at(-1)).toBe(scope === "project")
+          await SessionFilesystem.revoke(session.id, added.id)
+          expect(changes.at(-1)).toBe(true)
+        } finally {
+          unsubscribe()
+        }
+      })
+    })
+
   test("stops live compute only in the project whose folder authority narrows", async () => {
     if (!Sandbox.available()) return
     await using external = await tmpdir()
@@ -923,7 +957,18 @@ describe("session filesystem grants", () => {
       },
     })
 
-    const grant = await Instance.provide({
+    const entered = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const unsubscribe = await Instance.provide({
+      directory: first.path,
+      fn: () =>
+        Bus.subscribe(SessionFilesystem.Event.Changed, async (event) => {
+          if (event.properties.sessionID !== one.session.id || event.properties.grant.path !== external.path) return
+          entered.resolve()
+          await release.promise
+        }),
+    })
+    const granting = Instance.provide({
       directory: first.path,
       fn: async () =>
         SessionFilesystem.grant({
@@ -933,10 +978,31 @@ describe("session filesystem grants", () => {
           scope: "installation",
         }),
     })
+    void granting.catch(entered.reject)
+    try {
+      await entered.promise
+      // Keep the publisher inside its bus callback until the actual bootstrap
+      // watcher observes and settles the pending event. This reproduces the
+      // CI race without depending on a poll landing inside a short disk write.
+      let settled = false
+      for (let attempt = 0; attempt < 250; attempt++) {
+        const signal = await Storage.read<{ pending: boolean }>(["authority", "revision"])
+        if (!signal.pending) {
+          settled = true
+          break
+        }
+        await Bun.sleep(20)
+      }
+      expect(settled).toBe(true)
+    } finally {
+      release.resolve()
+      unsubscribe()
+      await granting
+    }
+    const grant = await granting
     expect(grant.scope).toBe("project")
     // A grant that arrived widens authority; the job launched under the
     // narrower set is still within bounds and keeps running.
-    await Bun.sleep(500)
     expect((await ComputeJobs.get(one.job.id, { root: roots.first, workspace: one.workspace }))?.status).toBe("running")
     // Revoking it narrows authority and stops the job, in this project only.
     await Instance.provide({

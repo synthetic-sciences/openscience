@@ -33,6 +33,9 @@ export namespace AuthoritySignal {
       projectID: z.string(),
       sessionID: z.string(),
       scope: z.enum(["once", "session", "project", "installation"]),
+      // Legacy events did not distinguish an added grant from a revocation.
+      // Only an explicit widening may keep existing processes running.
+      narrowing: z.boolean().optional(),
     }),
   ])
   export type Event = z.infer<typeof Event>

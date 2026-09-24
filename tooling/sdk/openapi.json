@@ -56144,6 +56144,9 @@
                   "source",
                   "time"
                 ]
+              },
+              "narrowing": {
+                "type": "boolean"
               }
             },
             "required": [

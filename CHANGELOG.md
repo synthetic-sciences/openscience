@@ -105,6 +105,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **Extra folder read access keeps running work alive.** Adding read access no longer cancels commands, kernels or compute jobs when another project instance or the background permission watcher observes it. Revocations, replaced access and changes that can move the working folder still stop affected work.
+
 - **Windows edits retain exact file identities.** A file replaced while an edit awaits approval is rejected even when its contents match and its large Windows file ID would round to the same number.
 
 - **Claude keeps distinct reasoning blocks intact between tool calls.** Multiple signed thinking blocks in a streamed answer retain their own text and signatures, so a tool continuation can replay them correctly.
