@@ -19,6 +19,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - **Release notes stay inside their dialog.** Long notes scroll independently while the title and navigation remain visible, including in short and narrow windows. Each page starts at the top and supports keyboard scrolling.
 
+- **Windows process cleanup tolerates brief coordination-file access failures.** A bounded retry keeps a transient Windows access denial from interrupting language-server reset, while permanent failures and existing lock owners remain protected.
+
 - **Fast prices remain visible in Ace.** The model catalog preserves Fast's public pricing metadata, so its rates and long-context prices appear when switching speed. Private transport settings and credentials remain hidden.
 
 - **Ace fees follow the route that serves each request.** Direct providers add no funding or service fee; only OpenRouter routes include their configured funding fee. Standard and Fast retain separate price contracts, including when Fast is delivered at Standard speed. Session usage prefers the gateway's calculated Wallet amount, preserves whole-micro rounding for older responses, and leaves provider-key billing unchanged. Unknown prices must refresh before a paid request; rate displays already include applicable fees.

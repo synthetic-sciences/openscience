@@ -110,7 +110,10 @@ export namespace LockCoordination {
       // macOS may report EINVAL or EEXIST rather than ENOENT when recursive
       // mkdir races the final-lease cleanup removing an empty ancestor. Open
       // has the narrower retry set so a UUID collision remains fail-closed.
-      if (!codes.includes(error.code ?? "") || attempts.count >= 100) throw error
+      // Windows can instead deny access while an empty ancestor is pending
+      // deletion. Retry creation only; permanent denial still exhausts the bound.
+      const transient = codes.includes(error.code ?? "") || (process.platform === "win32" && error.code === "EPERM")
+      if (!transient || attempts.count >= 100) throw error
       attempts.count++
       await Bun.sleep(1)
       return open()

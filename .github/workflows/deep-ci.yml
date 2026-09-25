@@ -162,6 +162,8 @@ jobs:
               test/global/data-dir.test.ts
               test/process/windows-job.test.ts
               test/util/atomic-rename.test.ts
+              test/util/lock-coordination.test.ts
+              test/util/file-lease.test.ts
               test/compute/local-python-runtime.test.ts
               test/compute/jobs-persistence.test.ts
               test/global/data-root.test.ts
