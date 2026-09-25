@@ -17,6 +17,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Ace usage keeps cache writes distinct from ordinary input.** Streamed and buffered responses preserve provider-reported cache creation, including available five-minute and one-hour detail. Session token totals count cached tokens once, and the reported request charge stays authoritative.
 - **Session cost details agree with the header.** Both show recorded lead and completed direct worker costs, with enough precision to read sub-cent usage. Managed turns are labeled Ace using the access recorded for that prompt, including after a later switch to provider keys.
 - **Ace rate displays match Wallet prices.** The composer and Rates and limits show the same input/output rates, including fractional cents and Fast or long-context tiers. Ace pricing views omit routing hosts and fee percentages; provider-key prices remain labeled as estimates billed by your provider.
 - **Ace Fast billing follows the delivered tier.** When OpenAI downgrades a Fast request to Standard, settlement uses the lower Standard rate reported by the provider.

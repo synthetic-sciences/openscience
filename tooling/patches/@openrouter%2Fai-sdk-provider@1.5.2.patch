@@ -1,8 +1,60 @@
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index f2edf46e0be21dfa834d514747ac14aeef3f36f2..aab3d29bbf6d34777c206d3031c415e0a36cb399 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -246,6 +246,9 @@ type OpenRouterUsageAccounting = {
+     promptTokens: number;
+     promptTokensDetails?: {
+         cachedTokens: number;
++        cacheWriteTokens?: number;
++        cacheWrite5mTokens?: number;
++        cacheWrite1hTokens?: number;
+     };
+     completionTokens: number;
+     completionTokensDetails?: {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index f2edf46e0be21dfa834d514747ac14aeef3f36f2..aab3d29bbf6d34777c206d3031c415e0a36cb399 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -246,6 +246,9 @@ type OpenRouterUsageAccounting = {
+     promptTokens: number;
+     promptTokensDetails?: {
+         cachedTokens: number;
++        cacheWriteTokens?: number;
++        cacheWrite5mTokens?: number;
++        cacheWrite1hTokens?: number;
+     };
+     completionTokens: number;
+     completionTokensDetails?: {
 diff --git a/dist/index.js b/dist/index.js
-index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8ff01f0047b811b931498e39e092dd5fff67c200 100644
+index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8863973173502bc514a31986e6177e9daea7ab52 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -1834,6 +1834,12 @@ var OpenRouterChatLanguageModel = class {
+@@ -1036,7 +1036,10 @@ var OpenRouterProviderMetadataSchema = import_v43.z.object({
+   usage: import_v43.z.object({
+     promptTokens: import_v43.z.number(),
+     promptTokensDetails: import_v43.z.object({
+-      cachedTokens: import_v43.z.number()
++      cachedTokens: import_v43.z.number(),
++      cacheWriteTokens: import_v43.z.number().optional(),
++      cacheWrite5mTokens: import_v43.z.number().optional(),
++      cacheWrite1hTokens: import_v43.z.number().optional()
+     }).passthrough().optional(),
+     completionTokens: import_v43.z.number(),
+     completionTokensDetails: import_v43.z.object({
+@@ -1452,7 +1455,10 @@ var OpenRouterChatCompletionBaseResponseSchema = import_v46.z.object({
+   usage: import_v46.z.object({
+     prompt_tokens: import_v46.z.number(),
+     prompt_tokens_details: import_v46.z.object({
+-      cached_tokens: import_v46.z.number()
++      cached_tokens: import_v46.z.number().optional(),
++      cache_write_tokens: import_v46.z.number().optional(),
++      cache_write_5m_tokens: import_v46.z.number().optional(),
++      cache_write_1h_tokens: import_v46.z.number().optional()
+     }).passthrough().nullish(),
+     completion_tokens: import_v46.z.number(),
+     completion_tokens_details: import_v46.z.object({
+@@ -1834,6 +1840,12 @@ var OpenRouterChatLanguageModel = class {
        }
      ] : [];
      const content = [];
@@ -15,7 +67,34 @@ index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8ff01f0047b811b931498e39e092dd5f
      content.push(...reasoning);
      if (choice.message.content) {
        content.push({
-@@ -2062,7 +2068,8 @@ var OpenRouterChatLanguageModel = class {
+@@ -1907,9 +1919,12 @@ var OpenRouterChatLanguageModel = class {
+             completionTokens: (_o = usageInfo.outputTokens) != null ? _o : 0,
+             totalTokens: (_p = usageInfo.totalTokens) != null ? _p : 0,
+             cost: (_q = response.usage) == null ? void 0 : _q.cost
+-          }, ((_s = (_r = response.usage) == null ? void 0 : _r.prompt_tokens_details) == null ? void 0 : _s.cached_tokens) != null ? {
++          }, ((_r = response.usage) == null ? void 0 : _r.prompt_tokens_details) != null ? {
+             promptTokensDetails: {
+-              cachedTokens: response.usage.prompt_tokens_details.cached_tokens
++              cachedTokens: response.usage.prompt_tokens_details.cached_tokens ?? 0,
++              cacheWriteTokens: response.usage.prompt_tokens_details.cache_write_tokens,
++              cacheWrite5mTokens: response.usage.prompt_tokens_details.cache_write_5m_tokens,
++              cacheWrite1hTokens: response.usage.prompt_tokens_details.cache_write_1h_tokens
+             }
+           } : {}), ((_u = (_t = response.usage) == null ? void 0 : _t.completion_tokens_details) == null ? void 0 : _u.reasoning_tokens) != null ? {
+             completionTokensDetails: {
+@@ -2013,7 +2028,10 @@ var OpenRouterChatLanguageModel = class {
+                 const cachedInputTokens = (_a16 = value.usage.prompt_tokens_details.cached_tokens) != null ? _a16 : 0;
+                 usage.cachedInputTokens = cachedInputTokens;
+                 openrouterUsage.promptTokensDetails = {
+-                  cachedTokens: cachedInputTokens
++                  cachedTokens: cachedInputTokens,
++                  cacheWriteTokens: value.usage.prompt_tokens_details.cache_write_tokens,
++                  cacheWrite5mTokens: value.usage.prompt_tokens_details.cache_write_5m_tokens,
++                  cacheWrite1hTokens: value.usage.prompt_tokens_details.cache_write_1h_tokens
+                 };
+               }
+               openrouterUsage.completionTokens = value.usage.completion_tokens;
+@@ -2062,7 +2080,8 @@ var OpenRouterChatLanguageModel = class {
                for (const detail of delta.reasoning_details) {
                  if (detail.type === "reasoning.text" /* Text */) {
                    const lastDetail = accumulatedReasoningDetails[accumulatedReasoningDetails.length - 1];
@@ -25,7 +104,7 @@ index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8ff01f0047b811b931498e39e092dd5f
                      lastDetail.text = (lastDetail.text || "") + (detail.text || "");
                      lastDetail.signature = lastDetail.signature || detail.signature;
                      lastDetail.format = lastDetail.format || detail.format;
-@@ -2104,6 +2111,13 @@ var OpenRouterChatLanguageModel = class {
+@@ -2104,6 +2123,13 @@ var OpenRouterChatLanguageModel = class {
                    }
                  }
                }
@@ -39,7 +118,7 @@ index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8ff01f0047b811b931498e39e092dd5f
              } else if (delta.reasoning) {
                emitReasoningChunk(delta.reasoning);
              }
-@@ -2244,7 +2258,7 @@ var OpenRouterChatLanguageModel = class {
+@@ -2244,7 +2270,7 @@ var OpenRouterChatLanguageModel = class {
                    id: toolCall.id,
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });
@@ -49,10 +128,34 @@ index 7af01a3f1f2ab0cc2aaf73e2b99ec4cdcf313c7c..8ff01f0047b811b931498e39e092dd5f
                      type: "tool-call",
                      toolCallId: (_o = toolCall.id) != null ? _o : generateId(),
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..ee4b3ee264aa2a42abc1cd13e7456268035dc83c 100644
+index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..13e2e7b32bfd1d7d5394347d08820058838aeb97 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -1797,6 +1797,12 @@ var OpenRouterChatLanguageModel = class {
+@@ -999,7 +999,10 @@ var OpenRouterProviderMetadataSchema = z3.object({
+   usage: z3.object({
+     promptTokens: z3.number(),
+     promptTokensDetails: z3.object({
+-      cachedTokens: z3.number()
++      cachedTokens: z3.number(),
++      cacheWriteTokens: z3.number().optional(),
++      cacheWrite5mTokens: z3.number().optional(),
++      cacheWrite1hTokens: z3.number().optional()
+     }).passthrough().optional(),
+     completionTokens: z3.number(),
+     completionTokensDetails: z3.object({
+@@ -1415,7 +1418,10 @@ var OpenRouterChatCompletionBaseResponseSchema = z7.object({
+   usage: z7.object({
+     prompt_tokens: z7.number(),
+     prompt_tokens_details: z7.object({
+-      cached_tokens: z7.number()
++      cached_tokens: z7.number().optional(),
++      cache_write_tokens: z7.number().optional(),
++      cache_write_5m_tokens: z7.number().optional(),
++      cache_write_1h_tokens: z7.number().optional()
+     }).passthrough().nullish(),
+     completion_tokens: z7.number(),
+     completion_tokens_details: z7.object({
+@@ -1797,6 +1803,12 @@ var OpenRouterChatLanguageModel = class {
        }
      ] : [];
      const content = [];
@@ -65,7 +168,34 @@ index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..ee4b3ee264aa2a42abc1cd13e7456268
      content.push(...reasoning);
      if (choice.message.content) {
        content.push({
-@@ -2025,7 +2031,8 @@ var OpenRouterChatLanguageModel = class {
+@@ -1870,9 +1882,12 @@ var OpenRouterChatLanguageModel = class {
+             completionTokens: (_o = usageInfo.outputTokens) != null ? _o : 0,
+             totalTokens: (_p = usageInfo.totalTokens) != null ? _p : 0,
+             cost: (_q = response.usage) == null ? void 0 : _q.cost
+-          }, ((_s = (_r = response.usage) == null ? void 0 : _r.prompt_tokens_details) == null ? void 0 : _s.cached_tokens) != null ? {
++          }, ((_r = response.usage) == null ? void 0 : _r.prompt_tokens_details) != null ? {
+             promptTokensDetails: {
+-              cachedTokens: response.usage.prompt_tokens_details.cached_tokens
++              cachedTokens: response.usage.prompt_tokens_details.cached_tokens ?? 0,
++              cacheWriteTokens: response.usage.prompt_tokens_details.cache_write_tokens,
++              cacheWrite5mTokens: response.usage.prompt_tokens_details.cache_write_5m_tokens,
++              cacheWrite1hTokens: response.usage.prompt_tokens_details.cache_write_1h_tokens
+             }
+           } : {}), ((_u = (_t = response.usage) == null ? void 0 : _t.completion_tokens_details) == null ? void 0 : _u.reasoning_tokens) != null ? {
+             completionTokensDetails: {
+@@ -1976,7 +1991,10 @@ var OpenRouterChatLanguageModel = class {
+                 const cachedInputTokens = (_a16 = value.usage.prompt_tokens_details.cached_tokens) != null ? _a16 : 0;
+                 usage.cachedInputTokens = cachedInputTokens;
+                 openrouterUsage.promptTokensDetails = {
+-                  cachedTokens: cachedInputTokens
++                  cachedTokens: cachedInputTokens,
++                  cacheWriteTokens: value.usage.prompt_tokens_details.cache_write_tokens,
++                  cacheWrite5mTokens: value.usage.prompt_tokens_details.cache_write_5m_tokens,
++                  cacheWrite1hTokens: value.usage.prompt_tokens_details.cache_write_1h_tokens
+                 };
+               }
+               openrouterUsage.completionTokens = value.usage.completion_tokens;
+@@ -2025,7 +2043,8 @@ var OpenRouterChatLanguageModel = class {
                for (const detail of delta.reasoning_details) {
                  if (detail.type === "reasoning.text" /* Text */) {
                    const lastDetail = accumulatedReasoningDetails[accumulatedReasoningDetails.length - 1];
@@ -75,7 +205,7 @@ index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..ee4b3ee264aa2a42abc1cd13e7456268
                      lastDetail.text = (lastDetail.text || "") + (detail.text || "");
                      lastDetail.signature = lastDetail.signature || detail.signature;
                      lastDetail.format = lastDetail.format || detail.format;
-@@ -2067,6 +2074,13 @@ var OpenRouterChatLanguageModel = class {
+@@ -2067,6 +2086,13 @@ var OpenRouterChatLanguageModel = class {
                    }
                  }
                }
@@ -89,7 +219,7 @@ index 1ed50c68bda3f1a4f7def2dda80bd595d641a08d..ee4b3ee264aa2a42abc1cd13e7456268
              } else if (delta.reasoning) {
                emitReasoningChunk(delta.reasoning);
              }
-@@ -2207,7 +2221,7 @@ var OpenRouterChatLanguageModel = class {
+@@ -2207,7 +2233,7 @@ var OpenRouterChatLanguageModel = class {
                    id: toolCall.id,
                    delta: (_l = toolCallDelta.function.arguments) != null ? _l : ""
                  });

@@ -706,16 +706,23 @@ export namespace Session {
   /** The cost OpenRouter reports for the request, in USD, when usage
    * accounting was returned. It already reflects the served tier and any
    * long-context pricing, and it is the figure the Wallet is debited from
-   * (plus the funding fee), so it outranks the catalog table. Cache-write
-   * tokens are not exposed by @openrouter/ai-sdk-provider 1.5.2: only
-   * prompt_tokens_details.cached_tokens is copied into its metadata, so a
-   * Claude cache creation still counts as plain input in the token split. */
+   * (plus the funding fee), so it outranks the catalog table. */
   function reportedCost(metadata: ProviderMetadata | undefined): number | undefined {
     const usage = metadata?.["openrouter"]?.["usage"]
     if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
     const cost = usage["cost"]
     if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) return
     return cost
+  }
+
+  function reportedCacheWrite(metadata: ProviderMetadata | undefined): number | undefined {
+    const usage = metadata?.["openrouter"]?.["usage"]
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
+    const details = usage["promptTokensDetails"]
+    if (!details || typeof details !== "object" || Array.isArray(details)) return
+    const count = details["cacheWriteTokens"]
+    if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return
+    return count
   }
 
   export const getUsage = fn(
@@ -729,13 +736,22 @@ export namespace Session {
       fundingFeeBps: z.number().nonnegative().optional(),
     }),
     (input) => {
-      const cacheReadInputTokens = input.usage.cachedInputTokens ?? 0
-      const cacheWriteInputTokens = (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-        0) as number
+      const safe = (value: number) => {
+        if (!Number.isFinite(value) || value < 0) return 0
+        return value
+      }
+      // The SDK can use NaN for omitted cached usage. Sanitize before
+      // subtracting so an unknown cache count cannot erase known input.
+      const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
+      const cacheWriteInputTokens = safe(
+        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
+          // @ts-expect-error
+          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+          reportedCacheWrite(input.metadata) ??
+          0) as number,
+      )
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const uncachedInputTokens = excludesCachedTokens
@@ -753,15 +769,6 @@ export namespace Session {
         /^gpt-(?:5\.[6-9]|[6-9])/.test(input.model.api.id.toLowerCase())
       const adjustedInputTokens = implicitWrite ? 0 : uncachedInputTokens
       const adjustedCacheWriteTokens = implicitWrite ? uncachedInputTokens : cacheWriteInputTokens
-      const safe = (value: number) => {
-        // Clamp non-finite AND negative values: for providers not in the
-        // excludes-cached set, `inputTokens - cacheRead - cacheWrite` can go
-        // negative when the provider already excludes cached tokens, which would
-        // otherwise flow a negative token count (and negative cost) downstream.
-        if (!Number.isFinite(value) || value < 0) return 0
-        return value
-      }
-
       const tokens = {
         input: safe(adjustedInputTokens),
         output: safe(input.usage.outputTokens ?? 0),
