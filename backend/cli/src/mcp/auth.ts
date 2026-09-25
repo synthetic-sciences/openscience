@@ -276,12 +276,6 @@ export namespace McpAuth {
     )
   }
 
-  async function decodeStore(store: Record<string, StoredEntry>): Promise<Record<string, Entry>> {
-    return Object.fromEntries(
-      await Promise.all(Object.entries(store).map(async ([name, entry]) => [name, await decode(entry)])),
-    )
-  }
-
   async function raw(): Promise<Record<string, unknown>> {
     const file = Bun.file(filepath)
     if (!(await file.exists())) return {}
@@ -743,16 +737,6 @@ export namespace McpAuth {
     )
   }
 
-  export function updateCodeVerifier(mcpName: string, codeVerifier: string): Promise<void> {
-    return updateEntry(
-      `mcp-auth.verifier:${mcpName}`,
-      mcpName,
-      (entry) => (entry.codeVerifier = codeVerifier),
-      undefined,
-      { authority: false },
-    )
-  }
-
   export function updateCodeVerifierIfOAuthFlow(
     mcpName: string,
     expectedState: string,
@@ -781,12 +765,6 @@ export namespace McpAuth {
     const entry = await get(mcpName)
     if (!exactOAuthFlow(entry, expectedState, serverUrl, authorityFingerprint)) return undefined
     return entry?.codeVerifier
-  }
-
-  export function clearCodeVerifier(mcpName: string): Promise<void> {
-    return updateEntry(`mcp-auth.verifier.clear:${mcpName}`, mcpName, (entry) => delete entry.codeVerifier, undefined, {
-      authority: false,
-    })
   }
 
   export function updateOAuthState(
@@ -959,12 +937,5 @@ export namespace McpAuth {
         condition: (store) => store[mcpName]?.oauthState === expected,
       },
     )
-  }
-
-  export async function isTokenExpired(mcpName: string): Promise<boolean | null> {
-    const entry = await get(mcpName)
-    if (!entry?.tokens) return null
-    if (!entry.tokens.expiresAt) return false
-    return entry.tokens.expiresAt < Date.now() / 1000
   }
 }
