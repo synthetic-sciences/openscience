@@ -125,6 +125,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Fixed
 
+- **Connected MCP tools no longer grow memory on every step.** Each agent step compiled a fresh input validator for every tool of every connected MCP server and kept all of them for the life of the process. A schema is now compiled once and reused.
+
 - **Windows environment repair tolerates temporary file locks.** Python and R setup retries sharing violations while committing setup files, without deleting the last committed copy. Settings checks coordinate with repair, and a failed interpreter check makes repair available even after a previous successful setup. **Set up or repair** checks the starters again instead of reporting cached success (#714).
 
 - **Extra folder read access keeps running work alive.** Adding read access no longer cancels commands, kernels or compute jobs when another project instance or the background permission watcher observes it. Revocations, replaced access and changes that can move the working folder still stop affected work.

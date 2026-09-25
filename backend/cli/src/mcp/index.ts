@@ -405,12 +405,18 @@ export namespace MCP {
 
   // Convert MCP tool definition to AI SDK Tool type
   const validator = new AjvJsonSchemaValidator()
+  // Tools are converted again on every agent step from a fresh schema object,
+  // and AJV keeps each compiled object for good. Keyed by content, a schema is
+  // compiled once however many steps offer it.
+  const validators = new Map<string, ReturnType<typeof validator.getValidator<Record<string, unknown>>>>()
 
   /** MCP publishes JSON Schema rather than Zod. Attach the SDK's own AJV
    * validator so malformed model calls reach the AI SDK repair hook before a
    * permission prompt or remote MCP request can start. */
   export function inputSchema(name: string, schema: JSONSchema7) {
-    const validate = validator.getValidator<Record<string, unknown>>(schema as never)
+    const key = JSON.stringify(schema)
+    const validate = validators.get(key) ?? validator.getValidator<Record<string, unknown>>(schema as never)
+    validators.set(key, validate)
     return jsonSchema(schema, {
       validate(input) {
         const result = validate(input)
