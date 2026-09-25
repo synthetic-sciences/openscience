@@ -150,6 +150,7 @@ jobs:
               test/file/safe-io.test.ts
               test/file/atomic-write.test.ts
               test/file/identity.test.ts
+              test/file/watcher.test.ts
               test/tool/apply_patch.test.ts
               test/tool/apply_patch-receipts.test.ts
               test/lsp/status.test.ts
@@ -167,6 +168,7 @@ jobs:
               test/openscience-env.test.ts
               test/file/safe-io.test.ts
               test/file/identity.test.ts
+              test/file/watcher.test.ts
               test/file/rename.test.ts
               test/file/trash.test.ts
               test/tool/apply_patch.test.ts

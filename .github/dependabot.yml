@@ -48,6 +48,16 @@ updates:
           - "@vitejs/*"
           - "tailwindcss"
           - "@tailwindcss/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      parcel-watcher:
+        patterns:
+          - "@parcel/watcher"
+          - "@parcel/watcher-*"
       dev-tools:
         patterns:
           - "typescript"
