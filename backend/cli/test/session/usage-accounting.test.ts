@@ -206,6 +206,30 @@ describe("Session.getUsage with a gateway-reported cost", () => {
     }
   })
 
+  test.each([
+    { name: "native receipt", provider: 0.105346, wallet: 0.111141 },
+    { name: "fractional OpenRouter receipt", provider: 0.0000123456, wallet: 0.000013 },
+    { name: "below a half micro", provider: 0.00000049, wallet: 0 },
+    { name: "exact half micro", provider: 0.0000005, wallet: 0.000002 },
+    { name: "below the next half-micro boundary", provider: 0.00000149, wallet: 0.000002 },
+    { name: "at the next half-micro boundary", provider: 0.0000015, wallet: 0.000003 },
+    { name: "zero receipt", provider: 0, wallet: 0 },
+  ])("matches Wallet rounding for a $name without rounding provider-key costs", ({ provider, wallet }) => {
+    expect(Session.getUsage({ model: model(), usage, metadata: reported(provider), fundingFeeBps: 550 }).cost).toBe(
+      wallet,
+    )
+    expect(Session.getUsage({ model: model(), usage, metadata: reported(provider) }).cost).toBe(provider)
+  })
+
+  test("rounds each managed request before costs accumulate, including a zero-fee Wallet", () => {
+    const first = Session.getUsage({ model: model(), usage, metadata: reported(0.0000015), fundingFeeBps: 550 })
+    const second = Session.getUsage({ model: model(), usage, metadata: reported(0.0000015), fundingFeeBps: 550 })
+    expect(first.cost + second.cost).toBeCloseTo(0.000006, 12)
+    expect(Session.getUsage({ model: model(), usage, metadata: reported(0.0000015), fundingFeeBps: 0 }).cost).toBe(
+      0.000002,
+    )
+  })
+
   test("a route whose catalog has not loaded and reports no cost is zero, not a fee on nothing", () => {
     const unpriced = { ...model(), cost: undefined, modes: {} }
     expect(Session.getUsage({ model: unpriced, usage, fundingFeeBps: 550 }).cost).toBe(0)

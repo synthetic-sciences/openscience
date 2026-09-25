@@ -23,6 +23,7 @@ const cases: Array<{
   write: number
   details?: Record<string, number>
   cost?: number
+  charged?: number
 }> = [
   {
     name: "Claude cache creation receipt",
@@ -33,6 +34,7 @@ const cases: Array<{
     write: 20_990,
     details: { cached_tokens: 0, cache_write_tokens: 20_990, cache_write_5m_tokens: 20_990, cache_write_1h_tokens: 0 },
     cost: 0.105346,
+    charged: 0.111141,
   },
   {
     name: "mixed cached reads and 5m/1h writes",
@@ -43,6 +45,7 @@ const cases: Array<{
     write: 500,
     details: { cached_tokens: 200, cache_write_tokens: 500, cache_write_5m_tokens: 400, cache_write_1h_tokens: 100 },
     cost: 0.004321,
+    charged: 0.004559,
   },
   {
     name: "write detail without a cached-read field",
@@ -53,8 +56,18 @@ const cases: Array<{
     write: 500,
     details: { cache_write_tokens: 500 },
     cost: 0,
+    charged: 0,
   },
-  { name: "receipt without cache details", input: 1_000, output: 20, plain: 1_000, read: 0, write: 0, cost: 0.01 },
+  {
+    name: "receipt without cache details",
+    input: 1_000,
+    output: 20,
+    plain: 1_000,
+    read: 0,
+    write: 0,
+    cost: 0.01,
+    charged: 0.01055,
+  },
   {
     name: "catalog fallback with explicit cache writes",
     input: 1_000,
@@ -150,7 +163,7 @@ for (const [format, create] of [
         const cost =
           fixture.cost === undefined
             ? (fixture.plain * 4 + fixture.output * 20 + fixture.read * 0.4 + fixture.write * 5) / 1_000_000
-            : fixture.cost * 1.055
+            : fixture.charged!
         expect(recorded.cost).toBeCloseTo(cost, 12)
         expect(requests).toBe(1)
       })

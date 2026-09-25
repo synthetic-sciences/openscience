@@ -807,7 +807,16 @@ export namespace Session {
               .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
               .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
               .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-          : new Decimal(reported).mul(new Decimal(10_000).add(input.fundingFeeBps ?? 0)).div(10_000)
+          : input.fundingFeeBps === undefined
+            ? new Decimal(reported)
+            : new Decimal(reported)
+                // Match the Wallet's per-request receipt and settlement rounding.
+                .mul(1_000_000)
+                .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
+                .mul(10_000 + Math.min(9_999, Math.floor(input.fundingFeeBps)))
+                .div(10_000)
+                .ceil()
+                .div(1_000_000)
       return {
         cost: safe(cost.toNumber()),
         tokens,
