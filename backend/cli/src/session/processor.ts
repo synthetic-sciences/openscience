@@ -987,6 +987,7 @@ export namespace SessionProcessor {
               },
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
+            const resolved = { model: input.model }
             const request = streamInput
             const stream = await Provider.withRequestContext(requestContext, () =>
               LLM.stream({
@@ -994,6 +995,9 @@ export namespace SessionProcessor {
                 route: traceRoute,
                 trace: { messageID: input.assistantMessage.id, attempt: attempt + 1 },
                 onResponse: () => progress("waiting_first_token"),
+                onModelResolved: (model) => {
+                  resolved.model = model
+                },
                 onReasoningEffortResolved: async (effort) => {
                   if (input.assistantMessage.reasoningEffort === effort) return
                   input.assistantMessage.reasoningEffort = effort
@@ -1174,11 +1178,13 @@ export namespace SessionProcessor {
                 case "finish-step":
                   const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
-                    model: input.model,
+                    model: resolved.model,
                     tier: streamInput.user.tier,
                     usage: value.usage,
                     metadata: value.providerMetadata,
-                    fundingFeeBps: funded ? ManagedPricing.fundingFeeBps(input.model) : undefined,
+                    fundingFeeBps: funded
+                      ? ManagedPricing.fundingFeeBps(resolved.model, streamInput.user.tier)
+                      : undefined,
                   })
                   // Each step is one gateway request the Wallet settles a
                   // moment after its stream ends; announce it here rather than
@@ -1186,6 +1192,8 @@ export namespace SessionProcessor {
                   if (funded) OpenScience.noteManagedSpend()
                   const stepPartID = Identifier.ascending("part")
                   input.assistantMessage.finish = value.finishReason
+                  input.assistantMessage.modelID = resolved.model.id
+                  input.assistantMessage.tier = usage.tier
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
                   await Session.updatePart({
@@ -1195,6 +1203,7 @@ export namespace SessionProcessor {
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
+                    tier: usage.tier,
                     tokens: usage.tokens,
                     cost: usage.cost,
                   })

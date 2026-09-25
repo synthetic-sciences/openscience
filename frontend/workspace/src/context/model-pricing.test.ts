@@ -1,13 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import {
-  fastRateLabel,
-  fundingFeePercent,
-  modelPricing,
-  pricingUpstream,
-  rateBasis,
-  rateLine,
-  routeRates,
-} from "./model-pricing"
+import { fastRateLabel, modelPricing, pricingUpstream, rateBasis, rateLine, routeRates } from "./model-pricing"
 
 const cost = { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } }
 
@@ -15,8 +7,19 @@ describe("route-aware model pricing", () => {
   test("marks variable Wallet input and output as maxima across standard, Fast and context tiers", () => {
     const input = {
       access: "managed" as const,
-      pricing: { upstream_provider: "openrouter" as const, billing_basis: "provider_reported_cost" },
+      pricing: {
+        upstream_provider: "openrouter" as const,
+        hosting_provider: "openrouter" as const,
+        funding_fee_bps: 550,
+        billing_basis: "provider_reported_cost",
+      },
       cost: { ...cost, tiers: [{ ...cost, threshold: 200_000 }] },
+      fastPricing: {
+        upstream_provider: "openrouter" as const,
+        hosting_provider: "openrouter" as const,
+        funding_fee_bps: 550,
+        billing_basis: "provider_reported_cost",
+      },
       fast: { ...cost, input: 4, output: 20, tiers: [{ ...cost, input: 8, output: 40, threshold: 200_000 }] },
     }
     const result = modelPricing(input)
@@ -57,7 +60,7 @@ describe("route-aware model pricing", () => {
     const result = modelPricing({
       access: "managed",
       cost: { input: 5, output: 25, cache: { read: 0.5, write: 6.25 } },
-      pricing: { upstream_provider: "anthropic" },
+      pricing: { upstream_provider: "anthropic", hosting_provider: "anthropic", funding_fee_bps: 0 },
     })
     expect(result.lines[0]).toEqual({ label: "Input", value: "$5.00" })
     expect(result.lines[3]).toEqual({ label: "Cache write", value: "$6.25" })
@@ -66,7 +69,7 @@ describe("route-aware model pricing", () => {
   test("preserves exact long-context boundaries and discounted server prices", () => {
     const result = modelPricing({
       access: "managed",
-      pricing: { upstream_provider: "openrouter" },
+      pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
       cost: {
         input: 2,
         output: 10,
@@ -79,25 +82,33 @@ describe("route-aware model pricing", () => {
   })
 
   test("shows Wallet rates without exposing routing or fee percentages", () => {
-    const managed = modelPricing({ access: "managed", cost, pricing: { upstream_provider: "openrouter" } })
+    const managed = modelPricing({
+      access: "managed",
+      cost,
+      pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
+    })
     expect(managed.note).toBe("USD per 1M tokens · Wallet rates.")
     expect(managed.note).not.toContain("credit")
     const stated = modelPricing({
       access: "managed",
       cost,
-      pricing: { upstream_provider: "openrouter", funding_fee_bps: 700 },
+      pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 700 },
     })
     expect(stated.note).toBe(managed.note)
     expect(stated.note).not.toMatch(/provider|fee|%/i)
     expect(rateLine({ input: 5.275, output: 31.65 })).toBe("$5.275 in · $31.65 out")
-    expect(fundingFeePercent(undefined)).toBe(5.5)
-    expect(fundingFeePercent({ upstream_provider: "openrouter", funding_fee_bps: 0 })).toBe(0)
     expect(modelPricing({ access: "byok", cost }).note).not.toContain("funding fee")
   })
 
   test("shows the Fast rates beside the standard ones when the route offers a Fast mode", () => {
     const fast = { input: 4, output: 20, cache: { read: 0.4, write: 5 } }
-    const result = modelPricing({ access: "managed", cost, pricing: { upstream_provider: "openrouter" }, fast })
+    const result = modelPricing({
+      access: "managed",
+      cost,
+      pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
+      fast,
+      fastPricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
+    })
     expect(result.lines.slice(0, 4).map((line) => line.label)).toEqual([
       "Input",
       "Output",
@@ -110,15 +121,19 @@ describe("route-aware model pricing", () => {
       { label: "Fast · Cached input", value: "$0.40" },
       { label: "Fast · Cache write", value: "$5.00" },
     ])
-    expect(modelPricing({ access: "managed", cost, pricing: { upstream_provider: "openrouter" } }).lines).toHaveLength(
-      4,
-    )
+    expect(
+      modelPricing({
+        access: "managed",
+        cost,
+        pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
+      }).lines,
+    ).toHaveLength(4)
     // A zero placeholder is not a free Fast lane.
     expect(
       modelPricing({
         access: "managed",
         cost,
-        pricing: { upstream_provider: "openrouter" },
+        pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
         fast: { ...fast, input: 0, output: 0 },
       }).lines,
     ).toHaveLength(4)
@@ -138,10 +153,44 @@ describe("route-aware model pricing", () => {
     expect(modelPricing({ access: "chatgpt", cost }).lines).toEqual([])
     expect(modelPricing({ access: "byok", cost: { ...cost, input: 0, output: 0 } }).lines).toEqual([])
     expect(
-      modelPricing({ access: "managed", cost: { ...cost, input: NaN }, pricing: { upstream_provider: "anthropic" } })
-        .lines,
+      modelPricing({
+        access: "managed",
+        cost: { ...cost, input: NaN },
+        pricing: { upstream_provider: "anthropic", hosting_provider: "anthropic", funding_fee_bps: 0 },
+      }).lines,
     ).toEqual([])
     expect(pricingUpstream({ upstream_provider: "openrouter" })).toBe("OpenRouter")
     expect(pricingUpstream(undefined)).toBeUndefined()
   })
+})
+
+test("a direct Fast route has exact prices beside maximum OpenRouter Standard quotes", () => {
+  const input = {
+    access: "managed" as const,
+    cost,
+    fast: { ...cost, input: 4, output: 20 },
+    pricing: {
+      upstream_provider: "openrouter" as const,
+      hosting_provider: "openrouter" as const,
+      funding_fee_bps: 550,
+      billing_basis: "provider_reported_cost",
+    },
+    fastPricing: {
+      upstream_provider: "openrouter" as const,
+      hosting_provider: "openai" as const,
+      funding_fee_bps: 0,
+      billing_basis: "openai_token_usage",
+    },
+  }
+  const rates = routeRates(input)!
+  expect(rateLine(rates.standard, rates.maximum)).toBe("Up to $2.00 in · Up to $10.00 out")
+  expect(rateLine(rates.fast!, rates.fastMaximum)).toBe("$4.00 in · $20.00 out")
+  expect(rateBasis(rates, true)).toBe("Wallet rates")
+  expect(modelPricing(input).lines.find((line) => line.label === "Fast · Input")?.value).toBe("$4.00")
+  expect(modelPricing(input).note).toContain("Standard input and output are maximum estimates")
+  expect(modelPricing(input).note).toContain("Fast uses exact Wallet rates")
+  expect(routeRates({ ...input, fastPricing: undefined })?.fast).toBeUndefined()
+  expect(routeRates({ ...input, pricing: { ...input.pricing, hosting_provider: "azure" } })).toBeUndefined()
+  expect(routeRates({ ...input, pricing: { upstream_provider: "openrouter" } })).toBeUndefined()
+  expect(modelPricing({ ...input, pricing: undefined }).lines).toEqual([])
 })

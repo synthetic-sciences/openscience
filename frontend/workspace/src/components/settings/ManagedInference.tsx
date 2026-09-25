@@ -31,7 +31,6 @@ type Wallet = {
     activationAuthorizationUsd: number
     reloadThresholdUsd: number
     reloadAmountUsd: number
-    fundingFeePercent: number
     processingFeeDisclosedSeparately: boolean
     reloadControlledByAce: boolean
   }

@@ -3,7 +3,6 @@ import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "../../../openscience"
 import { ACE_CONTRACT } from "../../../openscience/ace-contract"
-import { ManagedPricing } from "../../../provider/managed-pricing"
 import { lazy } from "@synsci/util/lazy"
 
 const WalletState = z.object({
@@ -21,8 +20,6 @@ const WalletState = z.object({
     activationAuthorizationUsd: z.number().nonnegative(),
     reloadThresholdUsd: z.number().positive(),
     reloadAmountUsd: z.number().positive(),
-    /** Added to the provider price on Ace turns; the only markup. */
-    fundingFeePercent: z.number().nonnegative(),
     processingFeeDisclosedSeparately: z.boolean(),
     reloadControlledByAce: z.boolean(),
   }),
@@ -79,8 +76,6 @@ export function walletState(input: {
   error?: string
   summary: boolean
   transactions: OpenScience.Transaction[]
-  /** From the account's pricing catalog when it has loaded; the public default otherwise. */
-  fundingFeePercent?: number
   origin?: "browser" | "key"
 }): WalletState {
   const credits = input.snapshot?.credits ?? null
@@ -109,7 +104,6 @@ export function walletState(input: {
     // are only the public default for an account the gateway has not described.
     aceContract: {
       ...ACE_CONTRACT,
-      fundingFeePercent: input.fundingFeePercent ?? ACE_CONTRACT.fundingFeePercent,
       ...(credits?.autoReload
         ? {
             reloadThresholdUsd: credits.autoReload.thresholdCents / 100,
@@ -135,8 +129,6 @@ export async function readWallet(
   > = OpenScience,
   signal?: AbortSignal,
 ): Promise<WalletState> {
-  // The catalog already held for the account, never a network read.
-  const fundingFeePercent = await ManagedPricing.fundingFeePercent()
   const origin = await OpenScience.getSession()
     .then((session) => session?.origin ?? (session ? ("browser" as const) : undefined))
     .catch(() => undefined)
@@ -152,7 +144,6 @@ export async function readWallet(
         error: read.error,
         summary: true,
         transactions: [],
-        fundingFeePercent,
         origin,
       })
     }
@@ -163,7 +154,6 @@ export async function readWallet(
       error: read.value.error,
       summary: true,
       transactions: [],
-      fundingFeePercent,
       origin,
     })
   }
@@ -188,7 +178,6 @@ export async function readWallet(
         .join(" ") || undefined,
     summary: false,
     transactions: transactions ?? [],
-    fundingFeePercent,
     origin,
   })
 }

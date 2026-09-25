@@ -392,16 +392,21 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
       <Show when={props.rates}>
         {(rates) => {
           const effective = () => (props.fast?.active && rates().fast ? rates().fast! : rates().standard)
+          const maximum = () => (props.fast?.active && rates().fast ? rates().fastMaximum : rates().maximum)
           return (
             <section
               class="model-settings-option-section model-settings-rate-section"
               aria-label="Rate"
-              data-maximum={rates().maximum ? "true" : undefined}
+              data-maximum={maximum() ? "true" : undefined}
             >
-              <div class="model-settings-rate" data-model-rate title={rateBasis(rates())}>
+              <div
+                class="model-settings-rate"
+                data-model-rate
+                title={rateBasis(rates(), Boolean(props.fast?.active && rates().fast))}
+              >
                 <span class="model-settings-heading">Rate</span>
                 <span class="model-settings-rate-value">
-                  {rateLine(effective(), rates().maximum)}
+                  {rateLine(effective(), maximum())}
                   <span class="model-settings-unit"> /1M tokens</span>
                 </span>
               </div>
@@ -410,7 +415,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
                   <div class="model-settings-rate model-settings-rate--step" data-model-rate-step>
                     <span class="model-settings-heading">Past {modelContext(tier().threshold)}</span>
                     <span class="model-settings-rate-value">
-                      {rateLine(props.fast?.active && tier().fast ? tier().fast! : tier().standard, rates().maximum)}
+                      {rateLine(props.fast?.active && tier().fast ? tier().fast! : tier().standard, maximum())}
                       <span class="model-settings-unit"> /1M tokens</span>
                     </span>
                   </div>
@@ -720,7 +725,13 @@ export const ModelSettingsPopover: Component<{ trigger?: "label" | "icon" }> = (
         credential: model.provider.source,
         billing: sync.data.config.billing?.llm,
       }) ?? (model.provider.id.startsWith("synsci") ? "managed" : "byok")
-    return routeRates({ access, pricing: model.pricing, cost: model.cost, fast: model.modes?.fast?.cost })
+    return routeRates({
+      access,
+      pricing: model.pricing,
+      cost: model.cost,
+      fast: model.modes?.fast?.cost,
+      fastPricing: model.modes?.fast?.pricing,
+    })
   })
   const unavailable = createMemo(() => current()?.provider.source === "managed" && !current()?.pricing)
   const optionsKey = createMemo(() => `${sync.data.project ?? ""}/${current()?.provider.id}/${current()?.id}`)

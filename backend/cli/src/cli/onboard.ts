@@ -153,7 +153,7 @@ export namespace Onboarding {
             "  • high-quality literature search through Firecrawl",
             "  • scientific schematics and image generation",
             "  • one team wallet for the workspace",
-            "$0 to activate. Provider price plus a 5.5% funding fee, no subscription.",
+            "$0 to activate. Pay for usage at the displayed Wallet rates, no subscription.",
           ].join("\n"),
     )
     const choice = await prompts.select({

@@ -17,6 +17,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Ace fees follow the route that serves each request.** Direct providers add no funding or service fee; only OpenRouter routes include their configured funding fee. Standard and Fast retain separate price contracts, including when Fast is delivered at Standard speed. Session usage prefers the gateway's calculated Wallet amount, preserves whole-micro rounding for older responses, and leaves provider-key billing unchanged. Unknown prices must refresh before a paid request; rate displays already include applicable fees.
+
 - **Ace session charges use Wallet rounding.** Provider-reported charges use the same rounding for each request as Wallet settlement, so small calls no longer show fractional amounts that the Wallet never charges. Provider-key costs retain the provider's reported precision.
 - **Ace usage keeps cache writes distinct from ordinary input.** Streamed and buffered responses preserve provider-reported cache creation, including available five-minute and one-hour detail. Session token totals count cached tokens once, and the reported request charge stays authoritative.
 - **Session cost details agree with the header.** Both show recorded lead and completed direct worker costs, with enough precision to read sub-cent usage. Managed turns are labeled Ace using the access recorded for that prompt, including after a later switch to provider keys.

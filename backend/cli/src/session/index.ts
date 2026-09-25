@@ -703,16 +703,31 @@ export namespace Session {
 
   export const flushPendingParts = (sessionID: string) => partWriter.flushWhere((k) => k.startsWith(sessionID + "/"))
 
-  /** The cost OpenRouter reports for the request, in USD, when usage
-   * accounting was returned. It already reflects the served tier and any
-   * long-context pricing, and it is the figure the Wallet is debited from
-   * (plus the funding fee), so it outranks the catalog table. */
+  /** Raw serving cost in USD, including the delivered tier. Older gateways
+   * need the verified route's fee; current ones report the calculated Wallet
+   * amount separately. Provider-key requests keep the raw amount. */
   function reportedCost(metadata: ProviderMetadata | undefined): number | undefined {
     const usage = metadata?.["openrouter"]?.["usage"]
     if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
     const cost = usage["cost"]
     if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) return
     return cost
+  }
+
+  function walletMetadata(metadata: ProviderMetadata | undefined) {
+    const usage = metadata?.["openrouter"]?.["usage"]
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
+    return z
+      .object({
+        calculatedWalletCostMicrousd: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+        hostingProvider: z.enum(["openrouter", "azure", "openai", "anthropic", "gemini", "xai", "bedrock"]).optional(),
+        serviceTier: z.string().max(32).optional(),
+      })
+      .refine(
+        (value) => value.calculatedWalletCostMicrousd === undefined || value.hostingProvider !== undefined,
+        "Calculated Wallet cost requires its serving host",
+      )
+      .parse(usage)
   }
 
   function reportedCacheWrite(metadata: ProviderMetadata | undefined): number | undefined {
@@ -733,9 +748,17 @@ export namespace Session {
       metadata: z.custom<ProviderMetadata>().optional(),
       /** Basis points the Wallet adds to a provider-reported cost on a
        * managed route; absent on routes the provider bills directly. */
-      fundingFeeBps: z.number().nonnegative().optional(),
+      fundingFeeBps: z.number().int().min(0).max(9_999).optional(),
     }),
     (input) => {
+      const wallet = input.fundingFeeBps !== undefined ? walletMetadata(input.metadata) : undefined
+      const delivered = wallet?.serviceTier ?? input.metadata?.["openai"]?.["serviceTier"]
+      const tier =
+        delivered === "default" || delivered === "standard"
+          ? "standard"
+          : delivered === "priority" || delivered === "fast"
+            ? "fast"
+            : input.tier
       const safe = (value: number) => {
         if (!Number.isFinite(value) || value < 0) return 0
         return value
@@ -783,7 +806,7 @@ export namespace Session {
       // cache-CREATION tokens too. Omitting cache.write meant a mostly-cache-write
       // request that really exceeded 200k was billed at the base tier (cost
       // under-report).
-      const modeCost = input.tier ? input.model.modes?.[input.tier]?.cost : undefined
+      const modeCost = tier ? input.model.modes?.[tier]?.cost : undefined
       const promptTokens = tokens.input + tokens.cache.read + tokens.cache.write
       const tierCost = input.model.cost?.tiers
         ?.filter((tier) => promptTokens > tier.threshold)
@@ -797,28 +820,32 @@ export namespace Session {
         ?.filter((tier) => promptTokens > tier.threshold)
         .sort((a, b) => b.threshold - a.threshold)[0]
       const costInfo = modeTier ?? modeCost ?? catalogCost
-      // The gateway's own figure is what the Wallet is debited (plus the
-      // funding fee); the catalog table is the estimate for everything else.
+      // The calculated Wallet amount is request-specific and need not have
+      // posted yet. Older gateways provide raw cost plus the verified route fee;
+      // catalog estimates already include that fee and must never add it twice.
       const reported = reportedCost(input.metadata)
       const cost =
-        reported === undefined
-          ? new Decimal(0)
-              .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
-              .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
-              .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
-              .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
-          : input.fundingFeeBps === undefined
-            ? new Decimal(reported)
-            : new Decimal(reported)
-                // Match the Wallet's per-request receipt and settlement rounding.
-                .mul(1_000_000)
-                .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
-                .mul(10_000 + Math.min(9_999, Math.floor(input.fundingFeeBps)))
-                .div(10_000)
-                .ceil()
-                .div(1_000_000)
+        wallet?.calculatedWalletCostMicrousd !== undefined
+          ? new Decimal(wallet.calculatedWalletCostMicrousd).div(1_000_000)
+          : reported === undefined
+            ? new Decimal(0)
+                .add(new Decimal(tokens.input).mul(costInfo?.input ?? 0).div(1_000_000))
+                .add(new Decimal(tokens.output).mul(costInfo?.output ?? 0).div(1_000_000))
+                .add(new Decimal(tokens.cache.read).mul(costInfo?.cache?.read ?? 0).div(1_000_000))
+                .add(new Decimal(tokens.cache.write).mul(costInfo?.cache?.write ?? 0).div(1_000_000))
+            : input.fundingFeeBps === undefined
+              ? new Decimal(reported)
+              : new Decimal(reported)
+                  // Match the Wallet's per-request receipt and settlement rounding.
+                  .mul(1_000_000)
+                  .toDecimalPlaces(0, Decimal.ROUND_HALF_UP)
+                  .mul(10_000 + input.fundingFeeBps)
+                  .div(10_000)
+                  .ceil()
+                  .div(1_000_000)
       return {
         cost: safe(cost.toNumber()),
+        tier,
         tokens,
       }
     },

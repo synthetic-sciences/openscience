@@ -281,6 +281,8 @@ export namespace MessageV2 {
 
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
+    /** Delivered speed when the provider reports it; otherwise the selected speed. */
+    tier: z.string().optional(),
     reason: z.string(),
     snapshot: z.string().optional(),
     cost: z.number(),
@@ -515,6 +517,8 @@ export namespace MessageV2 {
     internal: z.object({ step: z.number().int().positive() }).optional(),
     /** Named reasoning level resolved from the final provider options for this request. */
     reasoningEffort: z.string().optional(),
+    /** Delivered speed when the provider reports it; otherwise the selected speed. */
+    tier: z.string().optional(),
     /**
      * @deprecated
      */

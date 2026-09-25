@@ -242,3 +242,48 @@ describe("Session.getUsage with a gateway-reported cost", () => {
     )
   })
 })
+
+describe("route-specific Wallet accounting", () => {
+  const usage = { inputTokens: 1_000, outputTokens: 100, totalTokens: 1_100, cachedInputTokens: 0, reasoningTokens: 0 }
+  test("Fast delivered as Standard retains the direct request fee instead of Standard's OpenRouter fee", () => {
+    const priced = model()
+    priced.pricing = { hosting_provider: "openrouter", funding_fee_bps: 550 }
+    priced.modes.fast.pricing = { hosting_provider: "openai", funding_fee_bps: 0 }
+    const result = Session.getUsage({
+      model: priced,
+      tier: "fast",
+      usage,
+      fundingFeeBps: 0,
+      metadata: { openrouter: { usage: { cost: 0.0010005, hostingProvider: "openai", serviceTier: "default" } } },
+    })
+    expect(result.cost).toBe(0.001001)
+    expect(result.tier).toBe("standard")
+    expect(result.tokens.input).toBe(1_000)
+  })
+  test("exact gateway Wallet amount wins over a stale catalog and raw reported cost", () => {
+    const metadata = {
+      openrouter: { usage: { cost: 0.02, calculatedWalletCostMicrousd: 20_000, hostingProvider: "anthropic" } },
+    }
+    expect(Session.getUsage({ model: model(), usage, fundingFeeBps: 550, metadata }).cost).toBe(0.02)
+    expect(
+      Session.getUsage({
+        model: model(),
+        usage,
+        fundingFeeBps: 0,
+        metadata: {
+          openrouter: { usage: { cost: 0.02, calculatedWalletCostMicrousd: 21_100, hostingProvider: "openrouter" } },
+        },
+      }).cost,
+    ).toBe(0.0211)
+    for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1, "20000", null]) {
+      const invalid = { openrouter: { usage: { ...metadata.openrouter.usage, calculatedWalletCostMicrousd: bad } } }
+      expect(() => Session.getUsage({ model: model(), usage, fundingFeeBps: 0, metadata: invalid })).toThrow()
+      expect(Session.getUsage({ model: model(), usage, metadata: invalid }).cost).toBe(0.02)
+    }
+  })
+  test("fee-inclusive catalog estimates are never marked up a second time", () => {
+    const priced = model()
+    priced.cost = { input: 3.165, output: 15.825, cache: { read: 0.3165, write: 3.95625 } }
+    expect(Session.getUsage({ model: priced, usage, fundingFeeBps: 550 }).cost).toBe(0.0047475)
+  })
+})

@@ -449,6 +449,7 @@ export default function Models() {
                                           pricing={route.source.pricing}
                                           cost={route.source.cost}
                                           fast={route.source.modes?.fast?.cost}
+                                          fastPricing={route.source.modes?.fast?.pricing}
                                         />
                                       )}
                                     </For>

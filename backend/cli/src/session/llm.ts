@@ -31,6 +31,8 @@ import { providerErrorMetadata } from "./provider-error"
 import { Toolset } from "./toolset"
 import { UsageLogging } from "./usage-logging"
 
+import { ManagedPricing } from "@/provider/managed-pricing"
+
 export namespace LLM {
   const log = Log.create({ service: "llm" })
 
@@ -52,6 +54,7 @@ export namespace LLM {
     retries?: number
     trace?: { messageID: string; attempt: number }
     route?: string
+    onModelResolved?: (model: Provider.Model) => void
     onReasoningEffortResolved?: (effort: string | undefined) => void | Promise<void>
     /** Response headers arrived for a provider stream request; the body may
      * still be a keepalive-only prefix, so this is not first output. */
@@ -98,11 +101,18 @@ export namespace LLM {
   }
 
   export async function stream(input: StreamInput) {
-    const tier = input.small
+    const requested = input.small
       ? { model: undefined, options: {}, headers: {} }
       : ProviderTransform.tier(input.model, input.user.tier)
-    const routed = tier.model ? await Provider.getModel(input.model.providerID, tier.model) : input.model
-    const traceRoute = input.route ?? (await resolveAccessRoute(routed.providerID, routed.id))
+    const selected = requested.model ? await Provider.getModel(input.model.providerID, requested.model) : input.model
+    const traceRoute = input.route ?? (await resolveAccessRoute(selected.providerID, selected.id))
+    const routed =
+      traceRoute === "managed"
+        ? await ManagedPricing.forRequest(selected, input.small ? undefined : input.user.tier)
+        : selected
+    const tier = traceRoute === "managed" && !input.small ? ProviderTransform.tier(routed, input.user.tier) : requested
+    if (traceRoute === "managed") input = { ...input, model: routed }
+    input.onModelResolved?.(routed)
     // A per-stream copy: the shared "llm" logger is never tagged, so a title
     // stream and a research stream running at once cannot relabel each other.
     const l = log.child({

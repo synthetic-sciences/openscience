@@ -99,7 +99,7 @@ const route = (providerID: string, variants: string[]) => ({
   limit: { context: 1050000 },
   // Wallet rates carry the 5.5% funding fee: a $5 / $30 provider price.
   cost: { input: 5.275, output: 31.65 },
-  pricing: { upstream_provider: "openrouter" },
+  pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },
 })
 const mount = () => {
   const host = document.createElement("div")
@@ -145,7 +145,17 @@ test("redacted provider variants retain the real composer effort and Fast contro
 test("the composer's Fast toggle shows its price consequence from the route's catalog rates", async () => {
   const model = route("openrouter", ["low", "medium", "high"])
   fixture.setState({
-    models: [{ ...model, modes: { fast: { cost: { input: 10.55, output: 63.3, cache: { read: 1, write: 0 } } } } }],
+    models: [
+      {
+        ...model,
+        modes: {
+          fast: {
+            pricing: { upstream_provider: "openrouter", hosting_provider: "openai", funding_fee_bps: 0 },
+            cost: { input: 10.55, output: 63.3, cache: { read: 1, write: 0 } },
+          },
+        },
+      },
+    ],
     index: 0,
     effort: {},
     tier: {},
@@ -335,4 +345,40 @@ test("All models keeps a choice on the credential already in use", async () => {
   document.querySelector<HTMLButtonElement>(gemini)!.click()
   await settle()
   expect(funded[fixture.state.index]?.id).toBe("google/gemini-3.7-flash")
+})
+
+test("the composer switches maximum Standard quotes to exact direct Fast rates", async () => {
+  const model = route("openrouter", ["low", "medium", "high"])
+  fixture.setState({
+    models: [
+      {
+        ...model,
+        pricing: { ...model.pricing, billing_basis: "provider_reported_cost" },
+        modes: {
+          fast: {
+            cost: { input: 10, output: 60, cache: { read: 1, write: 0 } },
+            pricing: {
+              upstream_provider: "openrouter",
+              hosting_provider: "openai",
+              funding_fee_bps: 0,
+              billing_basis: "openai_token_usage",
+            },
+          },
+        },
+      },
+    ],
+    index: 0,
+    effort: {},
+    tier: {},
+  })
+  const host = mount()
+  host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!.click()
+  await settle()
+  const row = () => document.querySelector("[data-model-rate]")!
+  expect(row().textContent).toContain("Up to $5.275")
+  document.querySelector<HTMLInputElement>("[data-model-fast-toggle] input")!.click()
+  await settle()
+  expect(row().textContent).toContain("$10.00 in")
+  expect(row().textContent).not.toMatch(/Up to|OpenAI|OpenRouter|fee|%/)
+  expect(row().getAttribute("title")).toBe("Wallet rates")
 })

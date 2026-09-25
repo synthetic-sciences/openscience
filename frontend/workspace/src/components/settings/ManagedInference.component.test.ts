@@ -35,7 +35,6 @@ const contract = {
   activationAuthorizationUsd: 0,
   reloadThresholdUsd: 5,
   reloadAmountUsd: 20,
-  fundingFeePercent: 5.5,
   processingFeeDisclosedSeparately: true,
   reloadControlledByAce: true,
 }

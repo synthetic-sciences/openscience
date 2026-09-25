@@ -24226,10 +24226,6 @@
                           "type": "number",
                           "exclusiveMinimum": 0
                         },
-                        "fundingFeePercent": {
-                          "type": "number",
-                          "minimum": 0
-                        },
                         "processingFeeDisclosedSeparately": {
                           "type": "boolean"
                         },
@@ -24241,7 +24237,6 @@
                         "activationAuthorizationUsd",
                         "reloadThresholdUsd",
                         "reloadAmountUsd",
-                        "fundingFeePercent",
                         "processingFeeDisclosedSeparately",
                         "reloadControlledByAce"
                       ]
@@ -56788,6 +56783,9 @@
           "reasoningEffort": {
             "type": "string"
           },
+          "tier": {
+            "type": "string"
+          },
           "mode": {
             "type": "string"
           },
@@ -57600,6 +57598,9 @@
           "type": {
             "type": "string",
             "const": "step-finish"
+          },
+          "tier": {
+            "type": "string"
           },
           "reason": {
             "type": "string"
@@ -63108,6 +63109,49 @@
                     "input",
                     "output",
                     "cache"
+                  ]
+                },
+                "pricing": {
+                  "type": "object",
+                  "properties": {
+                    "upstream_provider": {
+                      "type": "string",
+                      "enum": [
+                        "anthropic",
+                        "gemini",
+                        "xai",
+                        "meta",
+                        "openrouter"
+                      ]
+                    },
+                    "hosting_provider": {
+                      "type": "string",
+                      "enum": [
+                        "azure",
+                        "openai",
+                        "anthropic",
+                        "gemini",
+                        "xai",
+                        "bedrock",
+                        "openrouter"
+                      ]
+                    },
+                    "funding_fee_bps": {
+                      "type": "number"
+                    },
+                    "billing_basis": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "audited_at": {
+                      "type": "string"
+                    },
+                    "source_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "upstream_provider"
                   ]
                 },
                 "provider": {

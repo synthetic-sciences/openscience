@@ -341,7 +341,6 @@ describe("reasoning effort and Fast mode", () => {
       multiple: 2,
       tiers: [{ threshold: 272_000, standard: { input: 4.22, output: 18.99 }, fast: { input: 8.44, output: 37.98 } }],
       basis: "wallet" as const,
-      feePercent: 5.5,
     }
     const context = {
       current: "272000",

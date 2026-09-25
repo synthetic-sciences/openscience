@@ -24,7 +24,37 @@ const cases: Array<{
   details?: Record<string, number>
   cost?: number
   charged?: number
+  wallet?: number
+  host?: string
+  tier?: string
 }> = [
+  {
+    name: "direct OpenAI downgrade with a stale OpenRouter catalog fee",
+    input: 1_000,
+    output: 20,
+    plain: 1_000,
+    read: 0,
+    write: 0,
+    cost: 0.01000049,
+    wallet: 10_000,
+    charged: 0.01,
+    host: "openai",
+    tier: "default",
+  },
+  {
+    name: "authoritative OpenRouter zero Wallet amount",
+    input: 1_000,
+    output: 20,
+    plain: 1_000,
+    read: 0,
+    write: 0,
+    cost: 0,
+    wallet: 0,
+    charged: 0,
+    host: "openrouter",
+    tier: "priority",
+  },
+
   {
     name: "Claude cache creation receipt",
     input: 20_994,
@@ -85,6 +115,59 @@ for (const [format, create] of [
 ] as const) {
   for (const mode of ["stream", "buffered"] as const) {
     describe(`OpenRouter ${format} ${mode} cache accounting`, () => {
+      test.each([-1, 0.5, null, "100", Number.MAX_SAFE_INTEGER + 1])(
+        "rejects malformed calculated Wallet micros %s",
+        async (amount) => {
+          const provider = create({
+            apiKey: "offline-fixture",
+            fetch: Object.assign(
+              async () => {
+                const common = {
+                  id: "chatcmpl-invalid-wallet",
+                  created: 1,
+                  model: model.api.id,
+                  usage: {
+                    prompt_tokens: 10,
+                    completion_tokens: 1,
+                    total_tokens: 11,
+                    cost: 0.01,
+                    hosting_provider: "openai",
+                    calculated_wallet_cost_microusd: amount,
+                  },
+                }
+                if (mode === "buffered")
+                  return Response.json({
+                    ...common,
+                    object: "chat.completion",
+                    choices: [{ index: 0, message: { role: "assistant", content: "OK" }, finish_reason: "stop" }],
+                  })
+                return new Response(
+                  `data: ${JSON.stringify({ ...common, choices: [{ index: 0, delta: { role: "assistant", content: "OK" }, finish_reason: "stop" }] })}\n\ndata: [DONE]\n\n`,
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              },
+              {
+                preconnect() {
+                  throw new Error("Offline fixture")
+                },
+              },
+            ),
+          })
+          const options = {
+            model: provider.chat(model.api.id),
+            prompt: "Invalid receipt.",
+            maxRetries: 0,
+            onError() {},
+          }
+          if (mode === "buffered") await expect(generateText(options)).rejects.toThrow()
+          else {
+            const result = streamText(options)
+            const events = await Array.fromAsync(result.fullStream)
+            expect(events.some((event) => event.type === "error")).toBe(true)
+            expect(await result.finishReason).toBe("error")
+          }
+        },
+      )
       test.each(cases)("preserves $name through the SDK and Session.getUsage", async (fixture) => {
         const wire = {
           prompt_tokens: fixture.input,
@@ -93,6 +176,13 @@ for (const [format, create] of [
           prompt_tokens_details: fixture.details,
           completion_tokens_details: { reasoning_tokens: 7 },
           ...(fixture.cost !== undefined ? { cost: fixture.cost } : {}),
+          ...(fixture.wallet !== undefined
+            ? {
+                calculated_wallet_cost_microusd: fixture.wallet,
+                hosting_provider: fixture.host,
+                service_tier: fixture.tier,
+              }
+            : {}),
         }
         let requests = 0
         const provider = create({
@@ -152,7 +242,17 @@ for (const [format, create] of [
             },
           })
         }
-        const recorded = Session.getUsage({ model, usage, metadata, fundingFeeBps: 550 })
+        if (fixture.wallet !== undefined) {
+          expect(metadata?.openrouter?.usage).toMatchObject({
+            calculatedWalletCostMicrousd: fixture.wallet,
+            hostingProvider: fixture.host,
+            serviceTier: fixture.tier,
+            cost: fixture.cost,
+          })
+          expect(Session.getUsage({ model, usage, metadata }).cost).toBe(fixture.cost!)
+        }
+        const recorded = Session.getUsage({ model, tier: "fast", usage, metadata, fundingFeeBps: 550 })
+        if (fixture.tier) expect(recorded.tier).toBe(fixture.tier === "default" ? "standard" : "fast")
         expect(recorded.tokens).toEqual({
           input: fixture.plain,
           output: fixture.output,

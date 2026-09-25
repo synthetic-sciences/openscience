@@ -326,6 +326,7 @@ export type AssistantMessage = {
     step: number
   }
   reasoningEffort?: string
+  tier?: string
   mode: string
   agent: string
   path: {
@@ -558,6 +559,7 @@ export type StepFinishPart = {
   sessionID: string
   messageID: string
   type: "step-finish"
+  tier?: string
   reason: string
   snapshot?: string
   cost: number
@@ -2529,6 +2531,14 @@ export type Model = {
           }
           threshold: number
         }>
+      }
+      pricing?: {
+        upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
+        hosting_provider?: "azure" | "openai" | "anthropic" | "gemini" | "xai" | "bedrock" | "openrouter"
+        funding_fee_bps?: number
+        billing_basis?: string
+        audited_at?: string
+        source_url?: string
       }
       provider?: {
         body?: {
@@ -10030,7 +10040,6 @@ export type SettingsWalletGetResponses = {
       activationAuthorizationUsd: number
       reloadThresholdUsd: number
       reloadAmountUsd: number
-      fundingFeePercent: number
       processingFeeDisclosedSeparately: boolean
       reloadControlledByAce: boolean
     }

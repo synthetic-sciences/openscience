@@ -38,9 +38,14 @@ test("Ace rates keep exact Wallet amounts while hiding routing hosts and fee per
       access: "managed",
       label: "Ace",
       provider: "OpenRouter",
-      pricing: { upstream_provider: "openrouter", hosting_provider, funding_fee_bps: 550 },
+      pricing: {
+        upstream_provider: "openrouter",
+        hosting_provider,
+        funding_fee_bps: hosting_provider === "openrouter" ? 550 : 0,
+      },
       cost,
       limit: { context: 1_050_000, output: 128_000 },
+      fastPricing: { upstream_provider: "openrouter", hosting_provider: "openai", funding_fee_bps: 0 },
       fast: {
         input: 10.55,
         output: 63.3,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import z from "zod"
+import type { Provider } from "./provider"
 import { GlobalBus } from "@/bus/global"
 import { managedApiBase } from "@/endpoints"
 import { OpenScience, type FundingSnapshot } from "@/openscience"
@@ -15,11 +16,23 @@ const Tier = z.object({
   min_input_tokens: Tokens.optional(),
   max_input_tokens: Tokens.optional(),
 })
+const Host = z.enum(["azure", "openai", "anthropic", "gemini", "xai", "bedrock", "openrouter"])
+const Fee = z.number().int().min(0).max(9_999)
+const Price = z.object({
+  hosting_provider: Host.optional(),
+  funding_fee_bps: Fee.optional(),
+  service_fee_bps: Fee.optional(),
+  billing_basis: z.string().max(64).optional(),
+  audited_at: z.string().max(32).optional(),
+  source_url: z.url().max(2048).optional(),
+  verified: z.boolean().optional(),
+  tiers: z.array(Tier).min(1).max(8),
+})
 const Entry = z.object({
   id: z.string(),
   available: z.boolean().optional(),
   upstream_provider: z.enum(["anthropic", "gemini", "xai", "meta", "openrouter"]),
-  hosting_provider: z.enum(["azure", "openai", "anthropic", "gemini", "xai", "bedrock", "openrouter"]).optional(),
+  hosting_provider: Host.optional(),
   context_length: Tokens,
   max_output_tokens: Tokens.optional(),
   context_options: z.array(Tokens).max(8).optional(),
@@ -37,28 +50,18 @@ const Entry = z.object({
   fast_mode_details: z
     .object({
       available: z.boolean(),
-      hosting_provider: z.enum(["azure", "openai", "anthropic", "gemini", "xai", "bedrock", "openrouter"]).optional(),
+      hosting_provider: Host.optional(),
       transport: z
         .union([z.object({ service_tier: z.literal("priority") }), z.object({ speed: z.literal("fast") })])
         .optional(),
-      pricing: z.object({ verified: z.boolean().optional(), tiers: z.array(Tier).min(1).max(8) }).optional(),
+      pricing: Price.optional(),
     })
     .optional(),
-  pricing: z.object({
-    tiers: z.array(Tier).min(1).max(8),
-    billing_basis: z.string().max(64).optional(),
-    audited_at: z.string().max(32).optional(),
-    source_url: z.url().max(2048).optional(),
-    funding_fee_bps: z.number().int().min(0).max(10_000).optional(),
-  }),
+  pricing: Price,
 })
 
 export namespace ManagedPricing {
   export type Catalog = { prices: Record<string, Model>; availability: Record<string, boolean> }
-
-  /** The Wallet debit for an Ace turn is the gateway's reported OpenRouter
-   * cost plus this funding fee and nothing else; the server may state its own. */
-  export const DEFAULT_FUNDING_FEE_BPS = 550
 
   export type Model = {
     cost: {
@@ -69,7 +72,7 @@ export namespace ManagedPricing {
     }
     pricing: {
       upstream_provider: z.infer<typeof Entry>["upstream_provider"]
-      hosting_provider?: z.infer<typeof Entry>["hosting_provider"]
+      hosting_provider: z.infer<typeof Host>
       billing_basis?: string
       funding_fee_bps: number
       audited_at?: string
@@ -82,6 +85,7 @@ export namespace ManagedPricing {
       string,
       {
         cost?: Model["cost"]
+        pricing: Model["pricing"]
         provider: { body: Record<string, string>; headers?: Record<string, string> }
       }
     >
@@ -99,6 +103,8 @@ export namespace ManagedPricing {
       if (!parsed.success) continue
       const model = parsed.data
       if (!MANAGED_OPENROUTER_MODEL_SET.has(model.id) || model.available === false) continue
+      const pricing = metadata(model.pricing, model.hosting_provider, model.upstream_provider)
+      if (!pricing) continue
       const first = model.pricing.tiers.find((tier) => !tier.min_input_tokens)
       if (!first || (first.input === 0 && first.output === 0)) continue
       const cost = (tier: z.infer<typeof Tier>) => ({
@@ -122,10 +128,12 @@ export namespace ManagedPricing {
       // beside an Azure-hosted standard tier, or xAI's priority processing.
       // Gemini and Bedrock hosts have no such tier, so their models never
       // gain the body flag whatever the catalog says.
-      const fastHost = fast?.hosting_provider ?? model.hosting_provider ?? "openrouter"
+      const fastPricing = fast?.pricing && metadata(fast.pricing, fast.hosting_provider, model.upstream_provider)
+      const fastHost = fastPricing?.hosting_provider
       const body: Record<string, string> | undefined =
         model.upstream_provider === "openrouter" &&
-        ["openrouter", "azure", "openai", "xai"].includes(fastHost) &&
+        fastHost &&
+        ["openrouter", "openai", "xai"].includes(fastHost) &&
         /^(?:openai\/gpt-6-(?:astra|sol|luna)|x-ai\/grok-4\.7)$/.test(model.id) &&
         transport &&
         "service_tier" in transport
@@ -152,10 +160,11 @@ export namespace ManagedPricing {
             : []),
         ],
         modes:
-          model.fast_mode && fast?.available && fast.pricing?.verified === true && premium && body
+          model.fast_mode && fast?.available && fast.pricing?.verified === true && fastPricing && premium && body
             ? {
                 fast: {
                   cost: { ...cost(premium), tiers: tiers(fast.pricing.tiers) },
+                  pricing: fastPricing,
                   provider: { body },
                 },
               }
@@ -164,14 +173,7 @@ export namespace ManagedPricing {
           ...cost(first),
           tiers: tiers(model.pricing.tiers),
         },
-        pricing: {
-          upstream_provider: model.upstream_provider,
-          ...(model.hosting_provider ? { hosting_provider: model.hosting_provider } : {}),
-          ...(model.pricing.billing_basis ? { billing_basis: model.pricing.billing_basis } : {}),
-          funding_fee_bps: model.pricing.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS,
-          audited_at: model.pricing.audited_at,
-          ...(model.pricing.source_url?.startsWith("https://") ? { source_url: model.pricing.source_url } : {}),
-        },
+        pricing,
         limit: {
           context: model.context_length,
           ...(model.max_output_tokens ? { output: model.max_output_tokens } : {}),
@@ -296,20 +298,56 @@ export namespace ManagedPricing {
     return (await catalog(options)).prices
   }
 
-  /** The fee the Wallet adds to a reported cost for this model. A route whose
-   * catalog entry has not loaded is still charged the fee, so the default
-   * applies rather than zero. */
-  export function fundingFeeBps(model: { pricing?: { funding_fee_bps?: number } }): number {
-    return model.pricing?.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS
+  /** Fees belong to a served route, never to an account-wide default. */
+  export function fundingFeeBps(
+    model: {
+      pricing?: { hosting_provider?: string; funding_fee_bps?: number }
+      modes?: Record<string, { pricing?: { hosting_provider?: string; funding_fee_bps?: number } }>
+    },
+    tier?: string,
+  ): number | undefined {
+    const pricing = tier && tier !== "standard" ? model.modes?.[tier]?.pricing : model.pricing
+    const host = Host.safeParse(pricing?.hosting_provider)
+    const fee = Fee.safeParse(pricing?.funding_fee_bps)
+    if (!host.success || !fee.success || (host.data !== "openrouter" && fee.data !== 0)) return
+    return fee.data
   }
 
-  /** The funding fee as a percentage for product copy, from the catalog
-   * already held for the signed-in account (one fee applies to every model
-   * in it). Never starts a network read. */
-  export async function fundingFeePercent(): Promise<number> {
-    const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)
-    const prices = snapshot && cached?.key === fingerprint(snapshot) ? cached.value.prices : {}
-    const first = Object.values(prices)[0]
-    return (first ? fundingFeeBps(first) : DEFAULT_FUNDING_FEE_BPS) / 100
+  /** Refresh unknown pricing once before any paid request, then fail explicitly. */
+  export async function forRequest(model: Provider.Model, tier?: string): Promise<Provider.Model> {
+    if (fundingFeeBps(model, tier) !== undefined) return model
+    const price = (await current({ force: true }))[model.id]
+    if (!price || fundingFeeBps(price, tier) === undefined) {
+      throw new Error(
+        "Ace pricing is unavailable for the selected model and speed. Refresh Models in Settings, then retry.",
+      )
+    }
+    return { ...model, cost: price.cost, pricing: price.pricing, modes: price.modes }
+  }
+
+  function metadata(
+    price: z.infer<typeof Price>,
+    hosting: z.infer<typeof Host> | undefined,
+    upstream: Model["pricing"]["upstream_provider"],
+  ): Model["pricing"] | undefined {
+    if (price.verified === false || (price.service_fee_bps !== undefined && price.service_fee_bps !== 0)) return
+    if (price.hosting_provider && hosting && price.hosting_provider !== hosting) return
+    const host = price.hosting_provider ?? hosting
+    const pricing = { hosting_provider: host, funding_fee_bps: price.funding_fee_bps }
+    const fee = fundingFeeBps({ pricing })
+    if (!host || fee === undefined) return
+    if (
+      price.billing_basis &&
+      price.billing_basis !== (host === "openrouter" ? "provider_reported_cost" : `${host}_token_usage`)
+    )
+      return
+    return {
+      upstream_provider: upstream,
+      hosting_provider: host,
+      funding_fee_bps: fee,
+      ...(price.billing_basis ? { billing_basis: price.billing_basis } : {}),
+      ...(price.audited_at ? { audited_at: price.audited_at } : {}),
+      ...(price.source_url?.startsWith("https://") ? { source_url: price.source_url } : {}),
+    }
   }
 }
