@@ -59,7 +59,7 @@
     "codemirror": "6.0.2",
     "ghostty-web": "0.3.0",
     "igv": "^3.8.4",
-    "katex": "^0.17.0",
+    "katex": "^0.18.7",
     "luxon": "catalog:",
     "molstar": "^5.10.1",
     "pdfjs-dist": "6.3.289",
