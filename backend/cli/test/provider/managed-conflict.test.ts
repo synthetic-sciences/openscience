@@ -30,7 +30,13 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
           : "openrouter",
   context_length: MANAGED_MODEL_DETAILS[id].context,
   max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
-  pricing: { tiers: [{ input: 2, output: 6 }] },
+  hosting_provider: "openrouter",
+  pricing: {
+    hosting_provider: "openrouter",
+    funding_fee_bps: 550,
+    billing_basis: "provider_reported_cost",
+    tiers: [{ input: 2, output: 6 }],
+  },
 }))
 
 const progress = () =>

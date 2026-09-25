@@ -11,60 +11,95 @@ const headers = {
   "OpenScience-Funding-Protocol": "1",
   "OpenScience-Funding-Context": `organization:${organization}`,
 }
-const catalog = MANAGED_OPENROUTER_MODELS.map((id) => ({
-  id,
-  available: true,
-  upstream_provider: id.startsWith("anthropic/")
+const catalog = MANAGED_OPENROUTER_MODELS.map((id) => {
+  const hosting = id.startsWith("anthropic/")
     ? "anthropic"
     : id.startsWith("google/")
       ? "gemini"
-      : id.startsWith("x-ai/")
-        ? "xai"
-        : id.startsWith("meta/")
-          ? "meta"
-          : "openrouter",
-  ...(id.startsWith("anthropic/") ? { hosting_provider: "anthropic" } : {}),
-  context_length: MANAGED_MODEL_DETAILS[id].context,
-  max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
-  pricing: { tiers: [{ input: 2, output: 6 }] },
-  ...(id === "openai/gpt-6-sol"
-    ? {
-        fast_mode: true,
-        fast_mode_details: {
-          available: true,
-          transport: { service_tier: "priority" },
-          pricing: { verified: true, tiers: [{ input: 4, output: 12 }] },
-        },
-      }
-    : {}),
-  ...(id === "anthropic/claude-fable-5.1"
-    ? {
-        fast_mode: true,
-        fast_mode_details: {
-          available: true,
-          transport: { speed: "fast" },
-          pricing: { verified: true, tiers: [{ input: 20, output: 100 }] },
-        },
-      }
-    : {}),
-  ...(id === "anthropic/claude-haiku-4.5"
-    ? { capabilities: { reasoning_efforts: [], thinking_budgets: [0, 4096, 8192, 16384, 32768] } }
-    : {}),
-  ...(id === "x-ai/grok-4.7"
-    ? {
-        capabilities: {
-          reasoning_efforts: ["low", "medium", "high", "xhigh"],
-          reasoning_default: "high",
-        },
-        fast_mode: true,
-        fast_mode_details: {
-          available: true,
-          transport: { service_tier: "priority" },
-          pricing: { verified: true, tiers: [{ input: 4, output: 12 }] },
-        },
-      }
-    : {}),
-}))
+      : id.startsWith("openai/")
+        ? "azure"
+        : "openrouter"
+  return {
+    id,
+    available: true,
+    upstream_provider: id.startsWith("anthropic/")
+      ? "anthropic"
+      : id.startsWith("google/")
+        ? "gemini"
+        : id.startsWith("x-ai/")
+          ? "xai"
+          : id.startsWith("meta/")
+            ? "meta"
+            : "openrouter",
+    hosting_provider: hosting,
+    context_length: MANAGED_MODEL_DETAILS[id].context,
+    max_output_tokens: MANAGED_MODEL_DETAILS[id].output,
+    pricing: {
+      hosting_provider: hosting,
+      funding_fee_bps: hosting === "openrouter" ? 550 : 0,
+      billing_basis: hosting === "openrouter" ? "provider_reported_cost" : `${hosting}_token_usage`,
+      tiers: [{ input: 2, output: 6 }],
+    },
+    ...(id === "openai/gpt-6-sol"
+      ? {
+          fast_mode: true,
+          fast_mode_details: {
+            available: true,
+            transport: { service_tier: "priority" },
+            hosting_provider: "openai",
+            pricing: {
+              hosting_provider: "openai",
+              funding_fee_bps: 0,
+              billing_basis: "openai_token_usage",
+              verified: true,
+              tiers: [{ input: 4, output: 12 }],
+            },
+          },
+        }
+      : {}),
+    ...(id === "anthropic/claude-fable-5.1"
+      ? {
+          fast_mode: true,
+          fast_mode_details: {
+            available: true,
+            transport: { speed: "fast" },
+            hosting_provider: "anthropic",
+            pricing: {
+              hosting_provider: "anthropic",
+              funding_fee_bps: 0,
+              billing_basis: "anthropic_token_usage",
+              verified: true,
+              tiers: [{ input: 20, output: 100 }],
+            },
+          },
+        }
+      : {}),
+    ...(id === "anthropic/claude-haiku-4.5"
+      ? { capabilities: { reasoning_efforts: [], thinking_budgets: [0, 4096, 8192, 16384, 32768] } }
+      : {}),
+    ...(id === "x-ai/grok-4.7"
+      ? {
+          capabilities: {
+            reasoning_efforts: ["low", "medium", "high", "xhigh"],
+            reasoning_default: "high",
+          },
+          fast_mode: true,
+          fast_mode_details: {
+            available: true,
+            transport: { service_tier: "priority" },
+            hosting_provider: "openrouter",
+            pricing: {
+              hosting_provider: "openrouter",
+              funding_fee_bps: 550,
+              billing_basis: "provider_reported_cost",
+              verified: true,
+              tiers: [{ input: 4, output: 12 }],
+            },
+          },
+        }
+      : {}),
+  }
+})
 async function gateway(request: Request) {
   const url = new URL(request.url)
   if (url.pathname.endsWith("/model-catalog")) return Response.json({ models: catalog }, { headers })
@@ -210,7 +245,8 @@ test("Ace keeps every explicitly approved curated model on the scoped OpenRouter
         expect(calls.at(-1)?.body.reasoning).toEqual({ max_tokens: 4096 })
 
         const sol = provider.models["openai/gpt-6-sol"]
-        expect(sol.modes?.fast).toBeDefined()
+        expect(sol.pricing).toMatchObject({ hosting_provider: "azure", funding_fee_bps: 0 })
+        expect(sol.modes?.fast?.pricing).toMatchObject({ hosting_provider: "openai", funding_fee_bps: 0 })
         const fast = ProviderTransform.tier(sol, "fast").options
         const result = await generateText({
           model: await Provider.getLanguage(sol),
