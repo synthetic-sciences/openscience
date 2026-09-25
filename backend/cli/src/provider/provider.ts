@@ -1944,6 +1944,16 @@ export namespace Provider {
           ? mapValues(model.modes, (mode) => ({
               model: mode.model,
               cost: mode.cost,
+              pricing: mode.pricing
+                ? {
+                    upstream_provider: mode.pricing.upstream_provider,
+                    hosting_provider: mode.pricing.hosting_provider,
+                    funding_fee_bps: mode.pricing.funding_fee_bps,
+                    billing_basis: mode.pricing.billing_basis,
+                    audited_at: mode.pricing.audited_at,
+                    source_url: mode.pricing.source_url,
+                  }
+                : undefined,
             }))
           : undefined,
       })),
