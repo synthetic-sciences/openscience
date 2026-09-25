@@ -30,6 +30,7 @@ import { Auth } from "../../src/auth"
 import { ModelsDev } from "../../src/provider/models"
 import { MANAGED_OPENROUTER_MODELS, MANAGED_MODEL_DETAILS } from "../../src/provider/managed-catalog"
 import { OpenScience } from "../../src/openscience"
+import { modelPricing, routeRates } from "../../../../frontend/workspace/src/context/model-pricing"
 
 /* Keep this list aligned with live-catalog.test.ts. The committed fixture makes
    PR CI deterministic; the scheduled live check catches upstream delistings. */
@@ -837,11 +838,103 @@ test("custom provider model exposes configured service modes", async () => {
       expect(redacted.models.echo.headers).toEqual({})
       expect(redacted.models.echo.variants).toEqual({ careful: {} })
       expect(redacted.models.echo.modes?.fast.provider).toBeUndefined()
+      expect(redacted.models.echo.modes?.fast.pricing).toBeUndefined()
       expect(redacted.models.echo.modes?.fast.cost).toEqual({
         input: 6,
         output: 30,
         cache: { read: 0.6, write: 7.5 },
       })
+    },
+  })
+})
+
+test("public managed Fast pricing survives redaction and feeds frontend rates without exposing secrets", async () => {
+  await using tmp = await tmpdir({
+    config: {
+      provider: {
+        e2e: {
+          npm: "@ai-sdk/openai-compatible",
+          options: { apiKey: "provider-secret", baseURL: "https://e2e.test/v1" },
+          models: { echo: { name: "Echo", limit: { context: 1_050_000, output: 32_000 } } },
+        },
+      },
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const provider = (await Provider.list()).e2e
+      const pricing = {
+        upstream_provider: "openrouter" as const,
+        hosting_provider: "openai" as const,
+        funding_fee_bps: 0,
+        billing_basis: "openai_token_usage",
+        audited_at: "2026-09-25",
+        source_url: "https://platform.openai.com/docs/pricing",
+      }
+      const fast = {
+        cost: {
+          input: 4,
+          output: 20,
+          cache: { read: 0.4, write: 5 },
+          tiers: [{ input: 8, output: 30, cache: { read: 0.8, write: 10 }, threshold: 272_000 }],
+        },
+        pricing: { ...pricing, apiKey: "pricing-secret", headers: { authorization: "nested-secret" } },
+        provider: {
+          body: { service_tier: "priority", api_key: "mode-secret" },
+          headers: { authorization: "Bearer mode-secret" },
+        },
+      }
+      const models = Object.fromEntries(
+        ["openai/gpt-6-astra", "openai/gpt-6-sol", "openai/gpt-6-luna"].map((id) => [
+          id,
+          {
+            ...provider.models.echo,
+            id,
+            providerID: "openrouter",
+            options: { apiKey: "model-secret" },
+            headers: { authorization: "Bearer model-secret" },
+            variants: { careful: { apiKey: "variant-secret" } },
+            pricing: { ...pricing, hosting_provider: "azure" as const, billing_basis: "azure_token_usage" },
+            cost: {
+              input: 2,
+              output: 10,
+              cache: { read: 0.2, write: 2.5 },
+              tiers: [{ input: 4, output: 15, cache: { read: 0.4, write: 5 }, threshold: 272_000 }],
+            },
+            modes: { fast },
+          },
+        ]),
+      )
+      const serialized = JSON.stringify(Provider.redact({ ...provider, id: "openrouter", source: "managed", models }))
+      expect(serialized).not.toContain("secret")
+      expect(serialized).not.toContain("e2e.test")
+      expect(serialized).not.toContain("service_tier")
+      const served = Provider.Info.parse(JSON.parse(serialized))
+      for (const model of Object.values(served.models)) {
+        expect(model.modes?.fast.pricing).toEqual(pricing)
+        expect(model.modes?.fast.provider).toBeUndefined()
+        expect(model.modes?.fast.cost).toEqual(fast.cost)
+        const input = {
+          access: "managed" as const,
+          pricing: model.pricing,
+          cost: model.cost,
+          fast: model.modes?.fast.cost,
+          fastPricing: model.modes?.fast.pricing,
+        }
+        expect(routeRates(input)).toEqual({
+          standard: { input: 2, output: 10 },
+          fast: { input: 4, output: 20 },
+          multiple: 2,
+          tiers: [{ threshold: 272_000, standard: { input: 4, output: 15 }, fast: { input: 8, output: 30 } }],
+          basis: "wallet",
+        })
+        const display = modelPricing(input)
+        expect(display.lines).toContainEqual({ label: "Fast · Input", value: "$4.00" })
+        expect(display.lines).toContainEqual({ label: "Fast · Over 272,000 input · Output", value: "$30.00" })
+        expect(JSON.stringify(display)).not.toMatch(/OpenAI|Azure|OpenRouter|fee|%/)
+      }
+      expect(models["openai/gpt-6-sol"].modes.fast.provider.body.service_tier).toBe("priority")
     },
   })
 })
