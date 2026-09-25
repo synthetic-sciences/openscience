@@ -243,26 +243,6 @@ export type TaskOutcome = {
     "completed" | "max_steps" | "tool_failures" | "tool_partial" | "provider_error" | "cancelled" | "empty_handoff"
 }
 
-/**
- * The child transcript remains available through its session id. The parent
- * should receive the child's final handoff instead of importing its tool
- * transcript. An explicit caller-supplied limit remains available for legacy
- * defensive uses, but normal delegation does not truncate the result.
- */
-export function taskHandoff(text: string, limit?: number) {
-  const body = text.replace(/\s*<task_metadata>[\s\S]*?<\/task_metadata>\s*$/u, "").trim()
-  if (limit === undefined || body.length <= limit) return { text: body, truncated: false }
-  const marker = "\n\n[… middle omitted from the parent handoff; the full result remains in the child session …]\n\n"
-  if (limit <= marker.length) return { text: body.slice(0, Math.max(0, limit)), truncated: true }
-  const budget = Math.max(0, limit - marker.length)
-  const head = Math.ceil(budget * 0.72)
-  const tail = budget - head
-  return {
-    text: body.slice(0, head).trimEnd() + marker + (tail ? body.slice(-tail).trimStart() : ""),
-    truncated: true,
-  }
-}
-
 export function classifyTaskOutcome(input: {
   finish?: string
   error?: unknown
@@ -326,10 +306,6 @@ const BACKGROUND_STARTED = [
 /** Background children in flight, by child session id, so a completion can
  * wake the parent exactly once and a second call can find the first. */
 const background = new Map<string, Promise<TaskAttempt.Result>>()
-
-export function backgroundTasks() {
-  return background.size
-}
 
 export const TaskTool = Tool.define("task", async (ctx) => {
   const agents = (await Agent.list()).filter((agent) => agent.mode !== "primary")

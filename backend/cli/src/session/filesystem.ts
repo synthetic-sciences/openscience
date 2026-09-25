@@ -721,63 +721,6 @@ export namespace SessionFilesystem {
   }
 
   /**
-   * Give a direct delegated child read-only access to its parent's scratch
-   * workspace. Both sessions must be isolated siblings in this project's
-   * managed workspace root; arbitrary session or external paths cannot be
-   * supplied. The directional grant lets delegated children inspect finalized
-   * parent artifacts without allowing mutation or exposing unrelated sessions.
-   */
-  export async function grantTaskHandoff(input: { parentSessionID: string; childSessionID: string }) {
-    const [parent, child] = await Promise.all([ensure(input.parentSessionID), ensure(input.childSessionID)])
-    const source = isolated(parent)
-    const target = isolated(child)
-    if (
-      !source ||
-      !target ||
-      source.root !== target.root ||
-      source.workspace === target.workspace ||
-      path.basename(source.workspace) !== input.parentSessionID ||
-      path.basename(target.workspace) !== input.childSessionID ||
-      parent.projectID !== child.projectID ||
-      parent.directory !== child.directory
-    ) {
-      throw new DeniedError({
-        sessionID: input.childSessionID,
-        path: source?.workspace ?? parent.directory,
-        access: "read",
-      })
-    }
-    const grant: Grant = {
-      id: `fsg_${crypto.randomUUID()}`,
-      path: source.workspace,
-      access: "read",
-      scope: "session",
-      source: "handoff",
-      time: { created: Date.now() },
-    }
-    const result = await Storage.update<State>(key(input.childSessionID), (draft) => {
-      const duplicate = draft.grants.find(
-        (item) =>
-          item.source === "handoff" &&
-          item.path === source.workspace &&
-          item.access === "read" &&
-          item.scope === "session" &&
-          !item.time.revoked,
-      )
-      if (duplicate) {
-        grant.id = duplicate.id
-        grant.time = duplicate.time
-        return
-      }
-      draft.grants.push(grant)
-      draft.revision++
-    })
-    const stored = result.grants.find((item) => item.id === grant.id) ?? grant
-    await changed(input.childSessionID, Instance.project.id, stored)
-    return stored
-  }
-
-  /**
    * The lead reads what its worker left in the worker's own scratch. A
    * delegated child keeps side outputs (staged inputs, rendered pages, tool
    * output files) in its isolated workspace; without this grant the parent's
