@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Config } from "../../src/config/config"
 import { ConnectorCatalog } from "../../src/mcp/catalog"
 
 describe("connector catalog", () => {
@@ -42,5 +43,15 @@ describe("connector catalog", () => {
     expect(box?.setup).toMatchObject({ url: "https://mcp.box.com", oauth: "client" })
     expect(s3?.setup?.url).toContain("aws-mcp.us-east-1.api.aws")
     expect(JSON.stringify(ConnectorCatalog.list())).not.toMatch(/client_secret|api_key|access_token/i)
+  })
+
+  test("every setup endpoint is one the connector config accepts", () => {
+    // A preset the save route rejects cannot be set up at all, so each one
+    // has to pass the same remote schema the config route validates with.
+    for (const entry of ConnectorCatalog.list()) {
+      if (!entry.setup) continue
+      const result = Config.McpRemote.safeParse({ type: "remote", url: entry.setup.url })
+      expect({ id: entry.id, ok: result.success }).toEqual({ id: entry.id, ok: true })
+    }
   })
 })

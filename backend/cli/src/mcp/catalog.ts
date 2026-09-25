@@ -197,7 +197,10 @@ const entries = ConnectorCatalogEntry.array().parse([
     setup: {
       type: "remote",
       name: "aws-s3",
-      url: "https://aws-mcp.us-east-1.api.aws/mcp?oauth=initialize",
+      // AWS documents `?oauth=initialize` for clients without MCP OAuth
+      // discovery. Remote endpoints here must not carry query data, and the
+      // plain endpoint starts the same sign-in through discovery.
+      url: "https://aws-mcp.us-east-1.api.aws/mcp",
       oauth: "auto",
     },
   },
