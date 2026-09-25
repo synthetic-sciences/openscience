@@ -28,6 +28,7 @@ export const PROVIDER_NAMES: Record<string, string> = {
   meta: "Meta",
   nvidia: "NVIDIA",
   qwen: "Qwen",
+  xiaomi: "Xiaomi",
 }
 
 export function ProviderMark({ id, title }: { id: string; title?: string }) {

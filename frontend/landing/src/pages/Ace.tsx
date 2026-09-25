@@ -18,7 +18,7 @@ const MODELS: readonly {
 }[] = [
   {
     id: "openai",
-    name: "GPT-5.6 Sol",
+    name: "GPT-6 Astra",
     provider: "openai",
     context: 1_050_000,
     output: 128_000,
@@ -26,7 +26,7 @@ const MODELS: readonly {
   },
   {
     id: "openai",
-    name: "GPT-5.6 Terra",
+    name: "GPT-6 Sol",
     provider: "openai",
     context: 1_050_000,
     output: 128_000,
@@ -34,7 +34,7 @@ const MODELS: readonly {
   },
   {
     id: "openai",
-    name: "GPT-5.6 Luna",
+    name: "GPT-6 Luna",
     provider: "openai",
     context: 1_050_000,
     output: 128_000,
@@ -42,7 +42,7 @@ const MODELS: readonly {
   },
   {
     id: "anthropic",
-    name: "Claude Opus 5",
+    name: "Claude Opus 5.5",
     provider: "anthropic",
     context: 1_000_000,
     output: 128_000,
@@ -50,7 +50,7 @@ const MODELS: readonly {
   },
   {
     id: "anthropic",
-    name: "Claude Fable 5",
+    name: "Claude Fable 5.1",
     provider: "anthropic",
     context: 1_000_000,
     output: 128_000,
@@ -82,13 +82,13 @@ const MODELS: readonly {
   },
   {
     id: "gemini",
-    name: "Gemini 3.7 Flash",
+    name: "Gemini 3.8 Flash",
     provider: "gemini",
     context: 1_048_576,
     output: 65_536,
     inputs: ["text", "image", "video", "audio", "pdf"],
   },
-  { id: "xai", name: "Grok 4.6", provider: "xai", context: 500_000, output: 450_000, inputs: ["text", "image", "pdf"] },
+  { id: "xai", name: "Grok 4.7", provider: "xai", context: 500_000, output: 450_000, inputs: ["text", "image", "pdf"] },
   { id: "zai", name: "GLM 5.3", provider: "zai", context: 1_310_720, output: 131_072, inputs: ["text"] },
   {
     id: "zai",
@@ -108,11 +108,11 @@ const MODELS: readonly {
   },
   {
     id: "deepseek",
-    name: "DeepSeek V4 Flash",
+    name: "DeepSeek V4.1 Flash",
     provider: "deepseek",
     context: 1_048_576,
     output: 384_000,
-    inputs: ["text"],
+    inputs: ["text", "image"],
   },
   {
     id: "qwen",
@@ -155,8 +155,16 @@ const MODELS: readonly {
     inputs: ["text", "image", "video"],
   },
   {
+    id: "xiaomi",
+    name: "MiMo V2.6 Pro",
+    provider: "xiaomi",
+    context: 1_048_576,
+    output: 131_072,
+    inputs: ["text", "image", "video", "audio"],
+  },
+  {
     id: "meta",
-    name: "Muse Spark 1.2",
+    name: "Muse Spark 1.3",
     provider: "meta",
     context: 1_048_576,
     output: 943_718,
@@ -404,7 +412,8 @@ export default function Ace() {
               <div data-component="table" data-variant="paper">
                 <table>
                   <caption>
-                    <strong>Table 1.</strong> The Ace roster, verified against the provider catalogs on 30 August 2026.
+                    <strong>Table 1.</strong> The Ace roster, verified against the Synthetic Sciences managed catalog on
+                    25 September 2026.
                   </caption>
                   <thead>
                     <tr>

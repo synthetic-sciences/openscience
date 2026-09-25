@@ -925,12 +925,9 @@ pre {
     }
   }
 
-  /* The picture can cross the column edges without painting over the patterned gutters. */
   [data-component="demo"] {
     position: relative;
-    width: min(84rem, calc(100vw - clamp(1rem, 4.8vw, 4rem)));
-    margin-left: 50%;
-    transform: translateX(-50%);
+    width: 100%;
     scroll-margin-top: 112px;
 
     .os-viewport {

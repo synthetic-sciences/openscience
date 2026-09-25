@@ -17,6 +17,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **The landing page preview fits inside the page borders.** The Ace model table now matches the current Synthetic Sciences managed catalog, including GPT-6, Claude Opus 5.5, and MiMo V2.6 Pro.
+
 - **Release notes stay inside their dialog.** Long notes scroll independently while the title and navigation remain visible, including in short and narrow windows. Each page starts at the top and supports keyboard scrolling.
 
 - **Windows process cleanup tolerates brief coordination-file access failures.** A bounded retry keeps a transient Windows access denial from interrupting language-server reset, while permanent failures and existing lock owners remain protected.
