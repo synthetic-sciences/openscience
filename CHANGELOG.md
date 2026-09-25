@@ -17,6 +17,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Changed
 
+- **Fast prices remain visible in Ace.** The model catalog preserves Fast's public pricing metadata, so its rates and long-context prices appear when switching speed. Private transport settings and credentials remain hidden.
+
 - **Ace fees follow the route that serves each request.** Direct providers add no funding or service fee; only OpenRouter routes include their configured funding fee. Standard and Fast retain separate price contracts, including when Fast is delivered at Standard speed. Session usage prefers the gateway's calculated Wallet amount, preserves whole-micro rounding for older responses, and leaves provider-key billing unchanged. Unknown prices must refresh before a paid request; rate displays already include applicable fees.
 
 - **Ace session charges use Wallet rounding.** Provider-reported charges use the same rounding for each request as Wallet settlement, so small calls no longer show fractional amounts that the Wallet never charges. Provider-key costs retain the provider's reported precision.
