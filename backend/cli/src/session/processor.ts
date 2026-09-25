@@ -154,17 +154,6 @@ export namespace SessionProcessor {
     )
   }
 
-  export function isToolErrorLoop(parts: MessageV2.Part[], toolName: string, threshold = 2) {
-    const calls = parts.filter(
-      (part): part is MessageV2.ToolPart & { state: MessageV2.ToolStateError } =>
-        part.type === "tool" && part.tool === toolName && part.state.status === "error",
-    )
-    const last = calls.slice(-threshold)
-    if (last.length < threshold) return false
-    const signature = toolErrorSignature(last.at(-1)!.state.error, toolName)
-    return last.every((part) => toolErrorSignature(part.state.error, toolName) === signature)
-  }
-
   export const TOOL_ERROR_GUIDANCE_AT = 2
   export const TOOL_ERROR_STOP_AT = 3
 
