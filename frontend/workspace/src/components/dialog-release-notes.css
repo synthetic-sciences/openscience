@@ -2,6 +2,7 @@
   width: min(100%, 32rem);
   min-height: 0;
   max-height: min(calc(100dvh - 2rem), 36rem);
+  overflow: hidden;
   align-self: center;
   background: var(--color-surface-solid);
 }
@@ -28,28 +29,34 @@
   text-wrap: pretty;
 }
 
-.release-notes-dialog [data-slot="dialog-body"] {
-  overflow: auto;
-}
-
-.release-notes__focus-trap {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
+[data-component="dialog"] [data-slot="dialog-content"].release-notes-dialog [data-slot="dialog-body"] {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .release-notes {
   display: flex;
   min-height: 0;
+  flex: 1;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .release-notes__body {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  min-height: 7.5rem;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
   padding: 0.25rem 1.25rem 1.1rem;
+}
+
+.release-notes__body > * {
+  flex-shrink: 0;
 }
 
 .release-notes__section {
@@ -107,6 +114,7 @@
 
 .release-notes__footer {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -116,6 +124,7 @@
 
 .release-notes__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
@@ -125,8 +134,15 @@
   padding-inline: 0.85rem;
 }
 
+.release-notes__buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
 .release-notes__pager {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.35rem;
   margin-right: 0.35rem;

@@ -64,7 +64,7 @@ export function DialogReleaseNotes(props: { highlights: Highlight[]; version?: s
     handleClose()
   }
 
-  let focusTrap: HTMLDivElement | undefined
+  let body: HTMLDivElement | undefined
 
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === "Escape") {
@@ -85,15 +85,16 @@ export function DialogReleaseNotes(props: { highlights: Highlight[]; version?: s
   }
 
   onMount(() => {
-    focusTrap?.focus()
+    body?.focus({ preventScroll: true })
     document.addEventListener("keydown", handleKeyDown)
     onCleanup(() => document.removeEventListener("keydown", handleKeyDown))
   })
 
-  // Refocus the trap when index changes to ensure escape always works
   createEffect(() => {
-    index() // track index
-    focusTrap?.focus()
+    index()
+    if (!body) return
+    body.scrollTop = 0
+    body.focus({ preventScroll: true })
   })
 
   return (
@@ -108,10 +109,8 @@ export function DialogReleaseNotes(props: { highlights: Highlight[]; version?: s
       fit
       transition
     >
-      {/* Hidden element to capture initial focus and handle escape */}
-      <div ref={focusTrap} tabindex="0" class="release-notes__focus-trap" />
       <div class="release-notes">
-        <div class="release-notes__body">
+        <div ref={body} tabindex="0" role="region" aria-label="Release notes" class="release-notes__body">
           <Show when={section()}>
             <h3 class="release-notes__section">{section()}</h3>
           </Show>
@@ -159,23 +158,25 @@ export function DialogReleaseNotes(props: { highlights: Highlight[]; version?: s
                 </For>
               </div>
             </Show>
-            <Show when={paged() && !isFirst()}>
-              <Button variant="secondary" size="normal" onClick={handleBack}>
-                Back
-              </Button>
-            </Show>
-            <Show
-              when={isLast()}
-              fallback={
-                <Button variant="primary" size="normal" onClick={handleNext}>
-                  Next
+            <div class="release-notes__buttons">
+              <Show when={paged() && !isFirst()}>
+                <Button variant="secondary" size="normal" onClick={handleBack}>
+                  Back
                 </Button>
-              }
-            >
-              <Button variant="primary" size="normal" onClick={handleClose}>
-                Got it
-              </Button>
-            </Show>
+              </Show>
+              <Show
+                when={isLast()}
+                fallback={
+                  <Button variant="primary" size="normal" onClick={handleNext}>
+                    Next
+                  </Button>
+                }
+              >
+                <Button variant="primary" size="normal" onClick={handleClose}>
+                  Got it
+                </Button>
+              </Show>
+            </div>
           </div>
         </div>
       </div>
