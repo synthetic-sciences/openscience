@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { usageCsv, usageDate, usageModels, usageRange, usageTotals, type UsageRow } from "@synsci/util/usage"
@@ -48,6 +48,11 @@ export default function Usage(props: { services?: Services } = {}) {
     managed: undefined as Result | undefined,
     loading: { local: false, managed: false },
     error: { local: "", managed: "" },
+  })
+  onMount(() => {
+    const refresh = () => setState({ model: "all", refresh: state.refresh + 1 })
+    window.addEventListener("openscience:account-changed", refresh)
+    onCleanup(() => window.removeEventListener("openscience:account-changed", refresh))
   })
   const valid = createMemo(
     () =>

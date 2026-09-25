@@ -169,3 +169,15 @@ test("CSV download contains only the active source with its filename and cost ba
   expect(await files[1].blob.text()).not.toContain('"managed-model"')
   expect(await files[1].blob.text()).toContain('"Estimate"')
 })
+
+test("account changes invalidate cached managed usage while the settings panel stays mounted", async () => {
+  const { host, state, button } = await mount()
+  expect(host.querySelector("tbody")?.textContent).toContain("managed-model")
+  state.connected = false
+  window.dispatchEvent(new Event("openscience:account-changed"))
+  expect(host.querySelector("tbody")).toBeNull()
+  await ready(() => host.textContent?.includes("Connect your Synthetic Sciences account") === true)
+  expect(button("Export CSV").disabled).toBe(true)
+  button("API keys").click()
+  await ready(() => !button("Export CSV").disabled)
+})
