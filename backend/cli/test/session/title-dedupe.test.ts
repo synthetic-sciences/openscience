@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Bus } from "../../src/bus"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
@@ -138,6 +139,62 @@ async function provide(base: string, fn: () => Promise<void>, title = true) {
 }
 
 describe("session title generation", () => {
+  test("a late failed summary stream does not escape the completed answer as an unhandled rejection", async () => {
+    const local = fixture()
+    const gate = Promise.withResolvers<void>()
+    local.state.hold = gate.promise
+    local.state.fail = true
+    try {
+      await provide(local.base, async () => {
+        const session = await Session.create({ title: "Existing conversation title" })
+        let summaries = 0
+        const unsubscribe = Bus.subscribe(MessageV2.Event.Updated, (event) => {
+          const info = event.properties.info
+          if (info.sessionID === session.id && info.role === "user" && info.summary?.diffs) summaries++
+        })
+        try {
+          const result = await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            parts: [{ type: "text", text: "Compare sequencing pipelines on this cohort." }],
+          })
+          expect(result.parts.some((part) => part.type === "text" && part.text === "RESEARCH_ANSWER")).toBe(true)
+          await local.received("message", 1)
+          // Both the prompt and the completed processor step have joined the
+          // same pending title stream after writing their durable diff summary.
+          await until(async () => summaries >= 2)
+          gate.resolve()
+          await until(async () => {
+            await Log.flush()
+            return (await Bun.file(Log.file()).text())
+              .split("\n")
+              .some(
+                (line) =>
+                  line.includes("service=session.processor") &&
+                  line.includes(`sessionID=${session.id}`) &&
+                  line.includes("failed to summarize session") &&
+                  line.includes("No output generated"),
+              )
+          })
+          const answer = await MessageV2.get({ sessionID: session.id, messageID: result.info.id })
+          expect(answer.info.role === "assistant" && answer.info.error).toBeUndefined()
+          expect(answer.parts.some((part) => part.type === "text" && part.text === "RESEARCH_ANSWER")).toBe(true)
+          expect(local.count("research")).toBe(1)
+          expect(local.count("message")).toBe(1)
+          expect(local.count("session")).toBe(0)
+        } finally {
+          unsubscribe()
+          await Instance.dispose()
+        }
+      })
+    } finally {
+      gate.resolve()
+      local.stop()
+    }
+  })
+
   test("disabling UI titles preserves the research answer and diff summaries without auxiliary calls", async () => {
     const local = fixture()
     try {

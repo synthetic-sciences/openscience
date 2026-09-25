@@ -1225,7 +1225,7 @@ export namespace SessionProcessor {
                   SessionSummary.summarize({
                     sessionID: input.sessionID,
                     messageID: input.assistantMessage.parentID,
-                  })
+                  }).catch((error) => log.error("failed to summarize session", { sessionID: input.sessionID, error }))
                   // Only compact MID-TASK — when the agent is still going (more tool calls).
                   // On a completed answer (finish "stop"/"length"/…) we must NOT compact here:
                   // that would auto-resume a finished request and make the agent invent
