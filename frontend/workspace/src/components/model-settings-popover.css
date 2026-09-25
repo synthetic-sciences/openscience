@@ -675,6 +675,11 @@
   white-space: nowrap;
 }
 
+.model-settings-rate-section[data-maximum] .model-settings-rate-value {
+  white-space: normal;
+  text-align: right;
+}
+
 .model-settings-rate-section .model-settings-consequence {
   margin: 0;
 }

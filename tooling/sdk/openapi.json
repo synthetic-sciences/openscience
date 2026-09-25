@@ -62935,6 +62935,10 @@
               "funding_fee_bps": {
                 "type": "number"
               },
+              "billing_basis": {
+                "type": "string",
+                "maxLength": 64
+              },
               "audited_at": {
                 "type": "string"
               },

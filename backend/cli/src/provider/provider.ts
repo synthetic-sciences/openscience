@@ -1875,6 +1875,7 @@ export namespace Provider {
             .enum(["azure", "openai", "anthropic", "gemini", "xai", "bedrock", "openrouter"])
             .optional(),
           funding_fee_bps: z.number().optional(),
+          billing_basis: z.string().max(64).optional(),
           audited_at: z.string().optional(),
           source_url: z.string().optional(),
         })

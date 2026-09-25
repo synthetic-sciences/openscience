@@ -46,6 +46,7 @@ const Entry = z.object({
     .optional(),
   pricing: z.object({
     tiers: z.array(Tier).min(1).max(8),
+    billing_basis: z.string().max(64).optional(),
     audited_at: z.string().max(32).optional(),
     source_url: z.url().max(2048).optional(),
     funding_fee_bps: z.number().int().min(0).max(10_000).optional(),
@@ -69,6 +70,7 @@ export namespace ManagedPricing {
     pricing: {
       upstream_provider: z.infer<typeof Entry>["upstream_provider"]
       hosting_provider?: z.infer<typeof Entry>["hosting_provider"]
+      billing_basis?: string
       funding_fee_bps: number
       audited_at?: string
       source_url?: string
@@ -165,6 +167,7 @@ export namespace ManagedPricing {
         pricing: {
           upstream_provider: model.upstream_provider,
           ...(model.hosting_provider ? { hosting_provider: model.hosting_provider } : {}),
+          ...(model.pricing.billing_basis ? { billing_basis: model.pricing.billing_basis } : {}),
           funding_fee_bps: model.pricing.funding_fee_bps ?? DEFAULT_FUNDING_FEE_BPS,
           audited_at: model.pricing.audited_at,
           ...(model.pricing.source_url?.startsWith("https://") ? { source_url: model.pricing.source_url } : {}),

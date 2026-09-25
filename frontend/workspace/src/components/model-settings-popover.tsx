@@ -393,11 +393,15 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
         {(rates) => {
           const effective = () => (props.fast?.active && rates().fast ? rates().fast! : rates().standard)
           return (
-            <section class="model-settings-option-section model-settings-rate-section" aria-label="Rate">
+            <section
+              class="model-settings-option-section model-settings-rate-section"
+              aria-label="Rate"
+              data-maximum={rates().maximum ? "true" : undefined}
+            >
               <div class="model-settings-rate" data-model-rate title={rateBasis(rates())}>
                 <span class="model-settings-heading">Rate</span>
                 <span class="model-settings-rate-value">
-                  {rateLine(effective())}
+                  {rateLine(effective(), rates().maximum)}
                   <span class="model-settings-unit"> /1M tokens</span>
                 </span>
               </div>
@@ -406,7 +410,7 @@ export const ModelEffortPanel: Component<ModelEffortPanelProps> = (props) => {
                   <div class="model-settings-rate model-settings-rate--step" data-model-rate-step>
                     <span class="model-settings-heading">Past {modelContext(tier().threshold)}</span>
                     <span class="model-settings-rate-value">
-                      {rateLine(props.fast?.active && tier().fast ? tier().fast! : tier().standard)}
+                      {rateLine(props.fast?.active && tier().fast ? tier().fast! : tier().standard, rates().maximum)}
                       <span class="model-settings-unit"> /1M tokens</span>
                     </span>
                   </div>

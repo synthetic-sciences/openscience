@@ -170,6 +170,36 @@ test("the composer's Fast toggle shows its price consequence from the route's ca
   expect(document.querySelector("[data-model-rate]")?.getAttribute("title")).toBe("Wallet rates")
 })
 
+test("the composer labels variable Wallet rates as maxima and keeps exact native rates unqualified", async () => {
+  const model = route("openrouter", ["low", "medium", "high"])
+  fixture.setState({
+    models: [
+      {
+        ...model,
+        pricing: { ...model.pricing, billing_basis: "provider_reported_cost" },
+        cost: { ...model.cost, tiers: [{ input: 10.55, output: 63.3, threshold: 272000 }] },
+        modes: {},
+      },
+    ],
+    index: 0,
+    effort: {},
+    tier: {},
+  })
+  const host = mount()
+  host.querySelector<HTMLButtonElement>("[data-model-effort-chip]")!.click()
+  await settle()
+  const rate = () => document.querySelector("[data-model-rate]")!
+  expect(rate().textContent).toContain("Up to $5.275 in · Up to $31.65 out")
+  expect(rate().getAttribute("title")).toBe("Wallet maximum input and output rates")
+  expect(document.querySelector("[data-model-rate-step]")?.textContent).toContain("Up to $10.55 in · Up to $63.30 out")
+  expect(rate().textContent).not.toMatch(/OpenRouter|provider|fee|%/i)
+  fixture.setState("models", 0, "pricing", "billing_basis", "azure_token_usage")
+  await settle()
+  expect(rate().textContent).toContain("$5.275 in · $31.65 out")
+  expect(rate().textContent).not.toContain("Up to")
+  expect(rate().getAttribute("title")).toBe("Wallet rates")
+})
+
 test("a provider metadata refresh restores options without replacing the chosen model", async () => {
   const model = route("openrouter", [])
   fixture.setState({

@@ -1,9 +1,51 @@
 import { describe, expect, test } from "bun:test"
-import { fastRateLabel, fundingFeePercent, modelPricing, pricingUpstream, rateLine } from "./model-pricing"
+import {
+  fastRateLabel,
+  fundingFeePercent,
+  modelPricing,
+  pricingUpstream,
+  rateBasis,
+  rateLine,
+  routeRates,
+} from "./model-pricing"
 
 const cost = { input: 2, output: 10, cache: { read: 0.2, write: 2.5 } }
 
 describe("route-aware model pricing", () => {
+  test("marks variable Wallet input and output as maxima across standard, Fast and context tiers", () => {
+    const input = {
+      access: "managed" as const,
+      pricing: { upstream_provider: "openrouter" as const, billing_basis: "provider_reported_cost" },
+      cost: { ...cost, tiers: [{ ...cost, threshold: 200_000 }] },
+      fast: { ...cost, input: 4, output: 20, tiers: [{ ...cost, input: 8, output: 40, threshold: 200_000 }] },
+    }
+    const result = modelPricing(input)
+    expect(result.lines.filter((line) => /(?:Input|Output)$/.test(line.label)).map((line) => line.value)).toEqual([
+      "Up to $2.00",
+      "Up to $10.00",
+      "Up to $2.00",
+      "Up to $10.00",
+      "Up to $4.00",
+      "Up to $20.00",
+      "Up to $8.00",
+      "Up to $40.00",
+    ])
+    expect(result.lines[2]?.value).toBe("$0.20")
+    expect(result.note).toContain("cache prices are estimates")
+    expect(result.note).not.toMatch(/provider|fee|%/i)
+    const rates = routeRates(input)!
+    expect(rates.maximum).toBe(true)
+    expect(rateBasis(rates)).toBe("Wallet maximum input and output rates")
+    expect(rateLine(rates.standard, rates.maximum)).toBe("Up to $2.00 in · Up to $10.00 out")
+    for (const billing_basis of ["anthropic_token_usage", "azure_token_usage", "gemini_token_usage"]) {
+      const exact = { ...input, pricing: { ...input.pricing, billing_basis } }
+      expect(modelPricing(exact).lines[0]?.value).toBe("$2.00")
+      expect(routeRates(exact)?.maximum).toBeUndefined()
+    }
+    const byok = { ...input, access: "byok" as const }
+    expect(modelPricing(byok).lines[0]?.value).toBe("$2.00")
+    expect(routeRates(byok)?.maximum).toBeUndefined()
+  })
   test("identifies Azure hosting behind the compatible managed transport", () => {
     expect(pricingUpstream({ upstream_provider: "openrouter", hosting_provider: "azure" })).toBe("Azure OpenAI")
     expect(pricingUpstream({ upstream_provider: "openrouter", hosting_provider: "anthropic" })).toBe("Anthropic")

@@ -64,6 +64,15 @@ test("pricing ingestion copies only reviewed non-executable metadata", () => {
   expect(ManagedPricing.parse({ models: [{ ...entry, pricing: { tiers: [{ input: -1, output: 25 }] } }] })).toEqual({})
 })
 
+test("pricing preserves the billing basis used to distinguish maximum and exact rates", () => {
+  for (const billing_basis of ["provider_reported_cost", "anthropic_token_usage", "azure_token_usage"]) {
+    const parsed = ManagedPricing.parse({ models: [{ ...entry, pricing: { ...entry.pricing, billing_basis } }] })
+    expect(parsed[entry.id]?.pricing.billing_basis).toBe(billing_basis)
+    expect(parsed[entry.id]?.cost.input).toBe(5)
+  }
+  expect(ManagedPricing.parse({ models: [entry] })[entry.id]?.pricing.billing_basis).toBeUndefined()
+})
+
 test("native prices remain readable by the released catalog schema when optional new hosts are omitted", () => {
   // v2.0.133 validates these provider-bearing fields before accepting a price
   // row. Both host positions are optional, but neither enum knows Anthropic.
@@ -381,7 +390,10 @@ test("provider list retries failed pricing after cooldown without a runtime rest
             context_length: 1_050_000,
             max_output_tokens: 128_000,
             capabilities: { reasoning_efforts: ["low", "medium", "high", "xhigh", "max"] },
-            pricing: { tiers: [{ input: 10, output: 50, cache_read: 1, cache_write: 12.5 }] },
+            pricing: {
+              billing_basis: "provider_reported_cost",
+              tiers: [{ input: 10, output: 50, cache_read: 1, cache_write: 12.5 }],
+            },
             fast_mode: true,
             fast_mode_details: {
               available: true,
@@ -428,6 +440,7 @@ test("provider list retries failed pricing after cooldown without a runtime rest
         }
         expect(restored?.modes?.fast.provider?.body).toEqual({ service_tier: "priority" })
         expect(restored?.cost.input).toBe(10)
+        expect(Provider.Model.parse(restored).pricing?.billing_basis).toBe("provider_reported_cost")
         expect(calls).toBe(2)
       },
     })

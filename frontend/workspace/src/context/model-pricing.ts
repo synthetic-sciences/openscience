@@ -8,6 +8,7 @@ type Rates = {
 type ModelPricing = {
   upstream_provider: "anthropic" | "gemini" | "xai" | "meta" | "openrouter"
   hosting_provider?: "azure" | "openai" | "anthropic" | "gemini" | "xai" | "bedrock" | "openrouter"
+  billing_basis?: string
   /** The only markup on an Ace turn, stated by the account's catalog; the public 5.5% otherwise. */
   funding_fee_bps?: number
   audited_at?: string
@@ -40,10 +41,11 @@ function valid(rates: Rates) {
     .every((value) => Number.isFinite(value) && value! >= 0)
 }
 
-function rateLines(rates: Rates, prefix = ""): PricingLine[] {
+function rateLines(rates: Rates, prefix = "", maximum = false): PricingLine[] {
+  const qualifier = maximum ? "Up to " : ""
   return [
-    { label: `${prefix}Input`, value: dollars.format(rates.input) },
-    { label: `${prefix}Output`, value: dollars.format(rates.output) },
+    { label: `${prefix}Input`, value: qualifier + dollars.format(rates.input) },
+    { label: `${prefix}Output`, value: qualifier + dollars.format(rates.output) },
     ...(rates.cache_read ? [{ label: `${prefix}Cached input`, value: dollars.format(rates.cache_read) }] : []),
     ...(rates.cache_write ? [{ label: `${prefix}Cache write`, value: dollars.format(rates.cache_write) }] : []),
   ]
@@ -95,19 +97,24 @@ export function modelPricing(input: {
   const fastTiers = (input.fast?.tiers ?? [])
     .map((tier) => ({ ...tier, cache_read: tier.cache.read, cache_write: tier.cache.write }))
     .filter((tier) => valid(tier) && Number.isFinite(tier.threshold) && tier.threshold > 0)
+  const maximum = input.access === "managed" && input.pricing?.billing_basis === "provider_reported_cost"
   return {
     note:
       input.access === "managed"
-        ? "USD per 1M tokens · Wallet rates."
+        ? maximum
+          ? "USD per 1M tokens · Wallet input and output are maximum estimates; cache prices are estimates."
+          : "USD per 1M tokens · Wallet rates."
         : "USD per 1M tokens · catalog estimate; billed by your provider.",
     lines: [
-      ...rateLines(rates),
-      ...stepped.flatMap((tier) => rateLines(tier, `Over ${tier.threshold.toLocaleString()} input · `)),
-      ...(legacy && valid(legacy) ? rateLines(legacy, "200,000+ input · ") : []),
+      ...rateLines(rates, "", maximum),
+      ...stepped.flatMap((tier) => rateLines(tier, `Over ${tier.threshold.toLocaleString()} input · `, maximum)),
+      ...(legacy && valid(legacy) ? rateLines(legacy, "200,000+ input · ", maximum) : []),
       ...(fast && valid(fast) && !(fast.input === 0 && fast.output === 0)
         ? [
-            ...rateLines(fast, "Fast · "),
-            ...fastTiers.flatMap((tier) => rateLines(tier, `Fast · Over ${tier.threshold.toLocaleString()} input · `)),
+            ...rateLines(fast, "Fast · ", maximum),
+            ...fastTiers.flatMap((tier) =>
+              rateLines(tier, `Fast · Over ${tier.threshold.toLocaleString()} input · `, maximum),
+            ),
           ]
         : []),
     ],
@@ -137,6 +144,7 @@ export type RouteRates = {
   tiers: Array<{ threshold: number; standard: Cost; fast?: Cost }>
   /** Wallet rates carry the funding fee; a key is billed by the provider. */
   basis: "wallet" | "provider"
+  maximum?: boolean
   feePercent?: number
 }
 
@@ -175,6 +183,9 @@ export function routeRates(input: {
     ...(uniform && ratio !== undefined ? { multiple: Number(ratio.toFixed(2)) } : {}),
     tiers,
     basis: input.access === "managed" ? "wallet" : "provider",
+    ...(input.access === "managed" && input.pricing?.billing_basis === "provider_reported_cost"
+      ? { maximum: true }
+      : {}),
     ...(input.access === "managed" ? { feePercent: fundingFeePercent(input.pricing) } : {}),
   }
 }
@@ -183,12 +194,14 @@ export function routeRates(input: {
 export const tokenRate = dollars
 
 /** `$2.00 in · $10.00 out`, the shape every rate in the popover takes. */
-export function rateLine(cost: { input: number; output: number }) {
-  return `${tokenRate.format(cost.input)} in · ${tokenRate.format(cost.output)} out`
+export function rateLine(cost: { input: number; output: number }, maximum = false) {
+  const qualifier = maximum ? "Up to " : ""
+  return `${qualifier}${tokenRate.format(cost.input)} in · ${qualifier}${tokenRate.format(cost.output)} out`
 }
 
 /** Where the numbers come from, in a few words. */
 export function rateBasis(rates: RouteRates) {
+  if (rates.maximum) return "Wallet maximum input and output rates"
   return rates.basis === "wallet" ? "Wallet rates" : "Catalog estimate · billed by your provider"
 }
 
