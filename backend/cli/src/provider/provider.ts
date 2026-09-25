@@ -1131,16 +1131,6 @@ export namespace Provider {
     }
   }
 
-  export function isManagedProxyBaseURL(baseURL: unknown): baseURL is string {
-    if (!hasManagedProxyPath(baseURL)) return false
-    try {
-      const url = new URL(baseURL)
-      return !url.search && !url.hash
-    } catch {
-      return false
-    }
-  }
-
   function requireAtlasProxyForManagedKey(provider: Info, options: Record<string, any>) {
     const effective = effectiveKey(provider, options)
     if (!Auth.isAtlasApiKey(effective)) return

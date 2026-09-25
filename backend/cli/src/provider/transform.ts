@@ -78,17 +78,6 @@ export namespace ProviderTransform {
     return undefined
   }
 
-  // Whether a model is Anthropic/Claude on ANY route (native, Bedrock, Vertex, or
-  // OpenRouter). Checks the display id AND the wire api.id, lowercased, plus the
-  // provider/npm — so a config alias, mixed-case slug, or id/api.id divergence
-  // can't slip past a caller's guard. Mirrors the canonical detection in message().
-  function isAnthropic(model: Provider.Model): boolean {
-    if (model.providerID === "anthropic") return true
-    if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") return true
-    const ids = `${model.id} ${model.api.id}`.toLowerCase()
-    return ids.includes("claude") || ids.includes("anthropic")
-  }
-
   function normalizeMessages(
     msgs: ModelMessage[],
     model: Provider.Model,
