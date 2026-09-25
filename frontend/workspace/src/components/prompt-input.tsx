@@ -1151,24 +1151,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
-  const insertEditorText = (cursor: number, value: string) => {
-    editorRef.focus({ preventScroll: true })
-    setCursorPosition(editorRef, cursor)
-    const selection = window.getSelection()
-    if (!selection || selection.rangeCount === 0) return cursor
-
-    const range = selection.getRangeAt(0)
-    const node = document.createTextNode(value)
-    range.deleteContents()
-    range.insertNode(node)
-    range.setStart(node, value.length)
-    range.collapse(true)
-    selection.removeAllRanges()
-    selection.addRange(range)
-    handleInput()
-    return cursor + value.length
-  }
-
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     setStore("popover", null)

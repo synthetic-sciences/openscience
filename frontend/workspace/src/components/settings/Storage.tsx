@@ -255,14 +255,6 @@ export const Storage: Component = () => {
   }
 
   const maxBytes = createMemo(() => Math.max(1, ...(usage()?.entries.map((e) => e.bytes) ?? [1])))
-  const updatedLabel = createMemo(() => {
-    const value = usage()?.updated_at
-    if (!value) return undefined
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return undefined
-    return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
-  })
-
   return (
     <PanelScroll>
       <div class="settings-preferences-panel settings-preferences-panel--storage">
