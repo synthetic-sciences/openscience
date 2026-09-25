@@ -95,14 +95,14 @@ Review sources, assumptions, code and outputs before relying on a scientific con
 
 ## What you can do
 
-| Task                      | What happens                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Review literature**     | Search scientific sources, compare findings, save cited evidence.                                     |
-| **Analyze data**          | Inspect inputs, write and run analysis code, produce figures and reports.                             |
-| **Reproduce experiments** | Agree on a claim, prerequisites and budget, then compare measured results.                            |
-| **Run compute**           | Local kernels for everyday work; Modal for GPUs and long jobs, each dispatch approved before it runs. |
-| **Reuse procedures**      | Browse the bundled skills or add a workflow specific to your lab.                                     |
-| **Extend it**             | MCP servers, custom agents and commands, plugins, or the TypeScript SDK.                              |
+| Task                      | What happens                                                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Review literature**     | Search scientific sources, compare findings, save cited evidence.                                                              |
+| **Analyze data**          | Inspect inputs, write and run analysis code, produce figures and reports.                                                      |
+| **Reproduce experiments** | Agree on a claim, prerequisites and budget, then compare measured results.                                                     |
+| **Run compute**           | Local kernels for everyday work; Modal, SSH hosts, or Slurm and PBS clusters for GPUs and long jobs, approved before they run. |
+| **Reuse procedures**      | Browse the bundled skills or add a workflow specific to your lab.                                                              |
+| **Extend it**             | MCP servers, custom agents and commands, plugins, or the TypeScript SDK.                                                       |
 
 A skill describes a procedure; it does not mean every tool or service it references is installed. Check availability in **Customize** before a substantial task.
 
@@ -116,7 +116,7 @@ OpenScience ships ten bring-your-own-key adapters for NVIDIA BioNeMo NIM endpoin
 your request
   → Research agent plans, then works step by step
       → tools: shell, Python/R kernels, files, search, connectors, compute
-      → workers for bounded parallel tasks (explore, execute)
+      → workers for bounded parallel tasks (explore, general, and five domain specialists)
   → answer, with the trace and the files it produced
 ```
 
@@ -128,13 +128,15 @@ The [capability map](https://openscience.sh/docs/#/openscience/capabilities), [E
 
 ## Model access
 
-| Option            | Setup                                         | Cost                                        |
-| ----------------- | --------------------------------------------- | ------------------------------------------- |
-| **Your provider** | An API key or a supported sign-in.            | Your provider's billing.                    |
-| **Local model**   | Ollama, LM Studio or any compatible endpoint. | Your hardware.                              |
-| **Ace**           | Sign in, choose a workspace, fund its wallet. | Provider cost plus a 5.5% fee, per request. |
+| Option            | Setup                                         | Cost                                                   |
+| ----------------- | --------------------------------------------- | ------------------------------------------------------ |
+| **Your provider** | An API key or a supported sign-in.            | Your provider's billing.                               |
+| **Local model**   | Ollama, LM Studio or any compatible endpoint. | Your hardware.                                         |
+| **Ace**           | Sign in, choose a workspace, fund its Wallet. | Pay as you go at the Wallet rate shown for each model. |
 
-An account is optional for your own keys and local models. Details are in [Models](https://openscience.sh/docs/#/openscience/models), [Local models](https://openscience.sh/docs/#/openscience/local-models) and [Pricing](https://openscience.sh/docs/#/openscience/pricing).
+Ace has no subscription. Direct provider routes add no fee; models served through OpenRouter include its funding fee (5.5% by default), already counted in the displayed rate. The card processing fee is shown at checkout.
+
+First-run setup asks you to sign in to an OpenScience account; headless `openscience run` does not. Model usage through your own keys or a local model is never charged to an Ace Wallet. Details are in [Models](https://openscience.sh/docs/#/openscience/models), [Local models](https://openscience.sh/docs/#/openscience/local-models) and [Pricing](https://openscience.sh/docs/#/openscience/pricing).
 
 ## Documentation
 
