@@ -10,6 +10,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- **Customize → Usage** sits below Ace with managed, API-key, local-model, subscription, and historical activity views. Filter by dates and model, inspect daily totals, and export a CSV of the selected usage. Managed totals use confirmed Wallet receipts; saved conversation usage uses recorded access routes and provider cost estimates.
+
 - **Workspace folders work before the first message.** Folders selected when creating a project appear immediately in Files, where you can browse, edit, rename, and recover files without starting a conversation. **Customize → Workspaces** manages each project's connected folders, read/write access, and default working folder. Permission changes reach open previews and running tools, and project work stays in its connected working folder unless you choose another location.
 
 - **First-run setup takes a Google (Gemini) key, and counts what is already connected.** **Connect your models** and `openscience init` list Google beside Anthropic, OpenAI and OpenRouter. A provider the runtime already reaches (a key in your environment such as `GOOGLE_GENERATIVE_AI_API_KEY`, a key stored earlier, a local endpoint) shows as connected, and the step no longer warns **No model connected yet** or offers **Continue without a model** when one is. The managed Ace route does not count as a model of your own.

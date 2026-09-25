@@ -32,6 +32,7 @@ export const SETTINGS_PANEL_IDS = [
   "general",
   "workspaces",
   "ace",
+  "usage",
   "models",
   "local-models",
   "skills",
@@ -85,6 +86,13 @@ export const SETTINGS_PANELS: SettingsPanel[] = [
     icon: "sparkles",
     section: "app",
     component: lazy(() => import("./Ace")),
+  },
+  {
+    id: "usage",
+    title: "Usage",
+    icon: "activity",
+    section: "app",
+    component: lazy(() => import("./Usage")),
   },
   // ── Inference ──
   {

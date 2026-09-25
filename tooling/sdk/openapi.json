@@ -22150,6 +22150,238 @@
         ]
       }
     },
+    "/settings/usage/local": {
+      "get": {
+        "operationId": "settings.usage.local",
+        "summary": "Get local usage by day and model",
+        "responses": {
+          "200": {
+            "description": "Usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "route": {
+                            "type": "string",
+                            "enum": [
+                              "managed",
+                              "byok",
+                              "local",
+                              "chatgpt",
+                              "subscription",
+                              "custom",
+                              "unknown"
+                            ]
+                          },
+                          "calls": {
+                            "type": "number"
+                          },
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "reasoning": {
+                            "type": "number"
+                          },
+                          "cacheRead": {
+                            "type": "number"
+                          },
+                          "cacheWrite": {
+                            "type": "number"
+                          },
+                          "tokens": {
+                            "type": "number"
+                          },
+                          "cost": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "provider",
+                          "model",
+                          "route",
+                          "calls",
+                          "input",
+                          "output",
+                          "reasoning",
+                          "cacheRead",
+                          "cacheWrite",
+                          "tokens",
+                          "cost"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "connected",
+                    "rows"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.local({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/usage/managed": {
+      "get": {
+        "operationId": "settings.usage.managed",
+        "summary": "Get managed usage by day and model",
+        "responses": {
+          "200": {
+            "description": "Usage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "connected": {
+                      "type": "boolean"
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "date": {
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": "string"
+                          },
+                          "route": {
+                            "type": "string",
+                            "enum": [
+                              "managed",
+                              "byok",
+                              "local",
+                              "chatgpt",
+                              "subscription",
+                              "custom",
+                              "unknown"
+                            ]
+                          },
+                          "calls": {
+                            "type": "number"
+                          },
+                          "input": {
+                            "type": "number"
+                          },
+                          "output": {
+                            "type": "number"
+                          },
+                          "reasoning": {
+                            "type": "number"
+                          },
+                          "cacheRead": {
+                            "type": "number"
+                          },
+                          "cacheWrite": {
+                            "type": "number"
+                          },
+                          "tokens": {
+                            "type": "number"
+                          },
+                          "cost": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "date",
+                          "provider",
+                          "model",
+                          "route",
+                          "calls",
+                          "input",
+                          "output",
+                          "reasoning",
+                          "cacheRead",
+                          "cacheWrite",
+                          "tokens",
+                          "cost"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "connected",
+                    "rows"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.managed({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/local/start": {
       "post": {
         "operationId": "postSettingsLocalStart",
@@ -57598,6 +57830,37 @@
           "type": {
             "type": "string",
             "const": "step-finish"
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "route": {
+                "type": "string",
+                "enum": [
+                  "managed",
+                  "byok",
+                  "chatgpt",
+                  "subscription",
+                  "local",
+                  "custom"
+                ]
+              },
+              "provider": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "time": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "route",
+              "provider",
+              "model",
+              "time"
+            ]
           },
           "tier": {
             "type": "string"

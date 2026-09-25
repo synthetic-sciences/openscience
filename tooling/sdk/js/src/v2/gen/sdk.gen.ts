@@ -427,8 +427,10 @@ import type {
   SettingsUpdatesInstallResponses,
   SettingsUpdatesStageResponses,
   SettingsUpdatesStateResponses,
+  SettingsUsageLocalResponses,
   SettingsUsageLoggingGetResponses,
   SettingsUsageLoggingUpdateResponses,
+  SettingsUsageManagedResponses,
   SettingsWalletGetResponses,
   SubtaskPartInput,
   TextPartInput,
@@ -2021,6 +2023,64 @@ export class UsageLogging extends HeyApiClient {
   }
 }
 
+export class Usage extends HeyApiClient {
+  /**
+   * Get local usage by day and model
+   */
+  public local<ThrowOnError extends boolean = false>(
+    parameters?: {
+      start?: string
+      end?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "start" },
+            { in: "query", key: "end" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SettingsUsageLocalResponses, unknown, ThrowOnError>({
+      url: "/settings/usage/local",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get managed usage by day and model
+   */
+  public managed<ThrowOnError extends boolean = false>(
+    parameters?: {
+      start?: string
+      end?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "start" },
+            { in: "query", key: "end" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SettingsUsageManagedResponses, unknown, ThrowOnError>({
+      url: "/settings/usage/managed",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Updates extends HeyApiClient {
   /**
    * Check for an OpenScience update
@@ -2463,6 +2523,11 @@ export class Settings extends HeyApiClient {
   private _usageLogging?: UsageLogging
   get usageLogging(): UsageLogging {
     return (this._usageLogging ??= new UsageLogging({ client: this.client }))
+  }
+
+  private _usage?: Usage
+  get usage(): Usage {
+    return (this._usage ??= new Usage({ client: this.client }))
   }
 
   private _updates?: Updates

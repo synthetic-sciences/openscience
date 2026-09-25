@@ -559,6 +559,12 @@ export type StepFinishPart = {
   sessionID: string
   messageID: string
   type: "step-finish"
+  usage?: {
+    route: "managed" | "byok" | "chatgpt" | "subscription" | "local" | "custom"
+    provider: string
+    model: string
+    time: number
+  }
   tier?: string
   reason: string
   snapshot?: string
@@ -9339,6 +9345,76 @@ export type SettingsUsageLoggingUpdateResponses = {
 
 export type SettingsUsageLoggingUpdateResponse =
   SettingsUsageLoggingUpdateResponses[keyof SettingsUsageLoggingUpdateResponses]
+
+export type SettingsUsageLocalData = {
+  body?: never
+  path?: never
+  query?: {
+    start?: string
+    end?: string
+  }
+  url: "/settings/usage/local"
+}
+
+export type SettingsUsageLocalResponses = {
+  /**
+   * Usage
+   */
+  200: {
+    connected: boolean
+    rows: Array<{
+      date: string
+      provider: string
+      model: string
+      route: "managed" | "byok" | "local" | "chatgpt" | "subscription" | "custom" | "unknown"
+      calls: number
+      input: number
+      output: number
+      reasoning: number
+      cacheRead: number
+      cacheWrite: number
+      tokens: number
+      cost: number
+    }>
+  }
+}
+
+export type SettingsUsageLocalResponse = SettingsUsageLocalResponses[keyof SettingsUsageLocalResponses]
+
+export type SettingsUsageManagedData = {
+  body?: never
+  path?: never
+  query?: {
+    start?: string
+    end?: string
+  }
+  url: "/settings/usage/managed"
+}
+
+export type SettingsUsageManagedResponses = {
+  /**
+   * Usage
+   */
+  200: {
+    connected: boolean
+    rows: Array<{
+      date: string
+      provider: string
+      model: string
+      route: "managed" | "byok" | "local" | "chatgpt" | "subscription" | "custom" | "unknown"
+      calls: number
+      input: number
+      output: number
+      reasoning: number
+      cacheRead: number
+      cacheWrite: number
+      tokens: number
+      cost: number
+    }>
+  }
+}
+
+export type SettingsUsageManagedResponse = SettingsUsageManagedResponses[keyof SettingsUsageManagedResponses]
 
 export type PostSettingsLocalStartData = {
   body?: {

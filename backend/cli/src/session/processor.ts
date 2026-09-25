@@ -1203,6 +1203,12 @@ export namespace SessionProcessor {
                     messageID: input.assistantMessage.id,
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
+                    usage: {
+                      route: accessRoute(credentialSource, resolved.model),
+                      provider: resolved.model.providerID,
+                      model: resolved.model.id,
+                      time: Date.now(),
+                    },
                     tier: usage.tier,
                     tokens: usage.tokens,
                     cost: usage.cost,

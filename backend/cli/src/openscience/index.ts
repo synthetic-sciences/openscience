@@ -1894,6 +1894,15 @@ export namespace OpenScience {
     createdAt: string
   }
 
+  export async function getUsage(start: string, end: string, signal?: AbortSignal): Promise<unknown | null> {
+    const session = (await getReconciledFundingState({ signal }))?.snapshot
+    if (!session) return null
+    const query = new URLSearchParams({ since: start, until: end })
+    const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/usage?${query}`, { signal })
+    if (!response.ok) throw new Error(`Managed usage could not be loaded (${response.status}). Please retry.`)
+    return response.json()
+  }
+
   export async function getTransactions(
     limit = 20,
     snapshot?: FundingSnapshot,

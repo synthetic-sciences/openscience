@@ -281,6 +281,14 @@ export namespace MessageV2 {
 
   export const StepFinishPart = PartBase.extend({
     type: z.literal("step-finish"),
+    usage: z
+      .object({
+        route: z.enum(["managed", "byok", "chatgpt", "subscription", "local", "custom"]),
+        provider: z.string(),
+        model: z.string(),
+        time: z.number(),
+      })
+      .optional(),
     /** Delivered speed when the provider reports it; otherwise the selected speed. */
     tier: z.string().optional(),
     reason: z.string(),
