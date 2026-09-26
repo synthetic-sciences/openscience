@@ -5,7 +5,7 @@ Available subagents (pass the name as subagent_type):
 
 Not for: reading a known file (read, glob), finding a string (grep), a few files (read), or checking your own output; that is your job. If no agent fits, use the tools directly.
 
-1. A subagent starts fresh unless task_id resumes its earlier session. A fresh brief is self-contained: objective, inputs with full paths (a worker's relative paths resolve in your working folder, not in Project files), constraints, what to produce, how to verify it, what to return; say whether it may change files.
+1. A subagent starts fresh unless task_id resumes its earlier session. A fresh brief is self-contained: objective, inputs with full paths (a worker's relative paths resolve in your working folder, not in Project files), constraints, what to produce and where (its own files inside the project, not a report or /tmp), how to verify it, what to return; say whether it may change files.
 2. Launch independent subagents together in one message; never duplicate delegated work.
 3. Subagents work in your project directory; their files are the deliverable. The result returns once in <task_result> with a reusable task_id; the user does not see it, so summarize what matters.
 4. Read the report's Verification (command, exit code, what it proves); without one it is a claim.

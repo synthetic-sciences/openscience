@@ -291,6 +291,9 @@ test("coreSkills indexes the core category in task order and points at provider 
       expect(index).toContain("check compute_job targets first: runpod-gpu-cloud")
       expect(index).toContain("database: uniprot-database")
       expect(index).toContain("6-skill library")
+      // A discovered disagreement about a convention routes to the library
+      // before a side is chosen; the cue sits on the search line the lead reads.
+      expect(index).toContain("search the library for that convention before choosing a side")
     },
   })
 })

@@ -756,3 +756,17 @@ describe("provider activity watchdog", () => {
     expect(timings[0].outcome).toBe("completed")
   })
 })
+
+test("the idle deadline follows the effort the request asks for", () => {
+  const body = (effort: string) => JSON.stringify({ model: "gpt-5.6-sol", input: "x", reasoning: { effort } })
+  expect(Provider.scaleIdleTimeout(600_000, body("max"))).toBe(2_700_000)
+  expect(Provider.scaleIdleTimeout(600_000, body("xhigh"))).toBe(1_500_000)
+  expect(Provider.scaleIdleTimeout(600_000, body("high"))).toBe(900_000)
+  expect(Provider.scaleIdleTimeout(600_000, body("medium"))).toBe(600_000)
+  expect(
+    Provider.scaleIdleTimeout(600_000, JSON.stringify({ model: "m", messages: [], reasoning_effort: "max" })),
+  ).toBe(2_700_000)
+  // No deadline stays no deadline; a non-JSON body is left alone.
+  expect(Provider.scaleIdleTimeout(false, body("max"))).toBe(false)
+  expect(Provider.scaleIdleTimeout(600_000, undefined)).toBe(600_000)
+})

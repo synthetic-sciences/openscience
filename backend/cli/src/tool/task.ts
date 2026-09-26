@@ -18,6 +18,7 @@ import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { Log } from "@/util/log"
+import { SessionWake } from "@/session/wake"
 
 const log = Log.create({ service: "tool.task" })
 
@@ -324,11 +325,28 @@ const BACKGROUND_STARTED = [
 ].join("\n")
 
 /** Background children in flight, by child session id, so a completion can
- * wake the parent exactly once and a second call can find the first. */
-const background = new Map<string, Promise<TaskAttempt.Result>>()
+ * wake the parent exactly once and a second call can find the first. `result`
+ * never rejects; `joined` records that a later call is already waiting for the
+ * report, so the completion must not deliver it a second time as a wake-up. */
+type Background = { result: Promise<TaskAttempt.Result>; joined: boolean }
+const background = new Map<string, Background>()
 
 export function backgroundTasks() {
   return background.size
+}
+
+const JOINED =
+  "Waited for this background worker to finish; its report follows. The new brief was not sent to it: resume with this task_id if a follow-up is still needed."
+
+/** Wait for a running background child, or stop when the caller's turn does. */
+function join(entry: Background, abort: AbortSignal) {
+  entry.joined = true
+  return new Promise<TaskAttempt.Result>((resolve, reject) => {
+    const cancel = () => reject(new Error("Waiting for the background worker was cancelled with the turn."))
+    if (abort.aborted) return cancel()
+    abort.addEventListener("abort", cancel, { once: true })
+    entry.result.then(resolve, reject).finally(() => abort.removeEventListener("abort", cancel))
+  })
 }
 
 export const TaskTool = Tool.define("task", async (ctx) => {
@@ -382,6 +400,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         parentSession: parent,
         projectID: Instance.project.id,
       })
+
+      // A task_id naming a background worker still at work is a request for
+      // its result. Prompting that session mid-turn would abort the turn and
+      // return an empty "provider error"; wait for the report instead, and
+      // deliver it here once.
+      const running = continuation ? background.get(continuation.id) : undefined
+      if (running) {
+        const result = await join(running, ctx.abort)
+        return { ...result, output: `${JOINED}\n${result.output}` }
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {
@@ -661,31 +689,15 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       // parent's turn (whose abort fires when the turn ends); its completion
       // wakes the parent with a synthetic message carrying the same envelope.
       const parentAgent = ctx.agent
-      const wake = async (output: string) => {
-        // Write the message first, then make sure a loop answers it: a wake
-        // that lands as the parent's turn is ending can slip past that loop's
-        // final read, so run the loop again until the message has a reply.
-        const message = await SessionPrompt.prompt({
+      const wake = (output: string) =>
+        SessionWake.deliver({
           sessionID: ctx.sessionID,
           agent: parentAgent,
           model: leadModel,
           variant: typeof ctx.extra?.variant === "string" ? ctx.extra.variant : undefined,
-          noReply: true,
-          parts: [{ type: "text", synthetic: true, text: output }],
+          text: output,
+          describe: `background task ${session.id}`,
         })
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await SessionPrompt.loop(ctx.sessionID).catch(() => undefined)
-          const messages = await Session.messages({ sessionID: ctx.sessionID })
-          const answered = messages.some(
-            (item) => item.info.role === "assistant" && item.info.parentID === message.info.id,
-          )
-          if (answered) return
-        }
-        log.warn("background task completion was recorded but the parent did not answer it", {
-          sessionID: ctx.sessionID,
-          child: session.id,
-        })
-      }
       // The dispatching call settled long ago with `background: true`; once the
       // worker finishes, the recorded call takes the worker's real outcome and
       // duration so the transcript shows the work, not the dispatch. The output
@@ -701,36 +713,31 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       if (!background.has(session.id)) {
         // Detached from the dispatching turn's admission context: the child
-        // and the wake-up run after that turn has finished.
-        const pending = SessionPrompt.detached(() => run(new AbortController().signal, false))
-          .then(async (result) => {
-            background.delete(session.id)
-            await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
-            await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
-              log.error("background task completion could not wake the parent", { error }),
-            )
-            return result
-          })
-          .catch(async (error: unknown) => {
-            background.delete(session.id)
-            const message = error instanceof Error ? error.message : String(error)
-            const result = TaskAttempt.Result.parse({
-              title: params.description,
-              metadata: { ...metadata, outcome: "error", stopReason: "provider_error" },
-              output: renderTaskOutput({
-                sessionID: session.id,
-                state: "error",
-                summary: `Background task failed: ${params.description}`,
-                text: message,
-              }),
-            })
-            await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
-            await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
-              log.error("background task failure could not wake the parent", { error }),
-            )
-            return result
-          })
-        background.set(session.id, pending)
+        // and the wake-up run after that turn has finished. A failure becomes
+        // an error result so a caller waiting on the entry always gets one.
+        const outcome = SessionPrompt.detached(() => run(new AbortController().signal, false)).catch((error: unknown) =>
+          TaskAttempt.Result.parse({
+            title: params.description,
+            metadata: { ...metadata, outcome: "error", stopReason: "provider_error" },
+            output: renderTaskOutput({
+              sessionID: session.id,
+              state: "error",
+              summary: `Background task failed: ${params.description}`,
+              text: error instanceof Error ? error.message : String(error),
+            }),
+          }),
+        )
+        const entry: Background = { result: outcome, joined: false }
+        background.set(session.id, entry)
+        outcome.then(async (result) => {
+          background.delete(session.id)
+          await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
+          // A call that joined the worker has already taken the report.
+          if (entry.joined) return
+          await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
+            log.error("background task completion could not wake the parent", { error }),
+          )
+        })
       }
       return {
         title: params.description,

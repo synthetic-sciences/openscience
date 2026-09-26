@@ -40,6 +40,7 @@ async function seeded(input: {
   text?: string
   error?: MessageV2.Assistant["error"]
   params: { description: string; prompt: string; subagent_type: string; task_id?: string; background?: boolean }
+  user?: Partial<MessageV2.User>
 }) {
   const userID = Identifier.ascending("message")
   const messageID = Identifier.ascending("message")
@@ -52,6 +53,7 @@ async function seeded(input: {
     effort: "normal",
     model,
     time: { created: 1 },
+    ...input.user,
   })
   await Session.updateMessage(assistant(input.parent.id, userID, messageID, 2))
   const identity = {
@@ -357,6 +359,55 @@ describe("Task tool contract", () => {
             .find((part) => part.type === "text" && part.synthetic && part.text.includes("Scan complete: 12 files."))
           if (injected) {
             expect(injected.type === "text" && injected.text).toContain(`<task id="${child.id}" state="completed">`)
+            return
+          }
+          await Bun.sleep(50)
+        }
+        throw new Error("background completion never reached the parent session")
+      },
+    })
+  })
+
+  test("a background worker's report carries the turn's settings into the parent", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const params = {
+          description: "Long scan",
+          prompt: "Scan everything.",
+          subagent_type: "explore",
+          background: true,
+        }
+        const delegationSettings = {
+          level: "standard" as const,
+          autonomy: "autonomous" as const,
+          workerModel: { providerID: "offline-fixture", modelID: "worker-model" },
+        }
+        const { ctx } = await seeded({
+          parent,
+          params,
+          text: "Scan complete: 3 files.",
+          user: { effort: "ultra", delegationSettings, system: "Project context.", deadline: 4_102_444_800_000 },
+        })
+        await (await TaskTool.init()).execute(params, ctx)
+        const deadline = Date.now() + 10_000
+        while (Date.now() < deadline) {
+          const messages = await Session.messages({ sessionID: parent.id })
+          const wake = messages.find((message) =>
+            message.parts.some((part) => part.type === "text" && part.synthetic && part.text.includes("Scan complete")),
+          )
+          if (wake && wake.info.role === "user") {
+            // The report continues the same turn: the loop resolves autonomy,
+            // the worker model and the posture from the newest user message,
+            // so a wake with defaults would silently change all three.
+            expect(wake.info.delegationSettings).toEqual(delegationSettings)
+            expect(wake.info.effort).toBe("ultra")
+            expect(wake.info.system).toBe("Project context.")
+            // The budget unit anchors the time budget to the message that set
+            // the deadline; a wake carrying it would restart the clock.
+            expect(wake.info.deadline).toBeUndefined()
             return
           }
           await Bun.sleep(50)

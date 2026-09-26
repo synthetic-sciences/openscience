@@ -681,8 +681,35 @@
       outline-offset: -2px;
     }
 
-    > [data-slot="collapsible-content"][data-closed] {
-      display: none;
+    /* Open and close glide instead of snapping. The content sits in a grid
+       row that eases from 0fr to 1fr, so the height animates without a
+       measured pixel value, and the body fades in with it. Kobalte keeps the
+       body mounted (forceMount), so a pending question or draft inside a fold
+       and find-in-page both survive; the child clips itself while collapsed. */
+    > [data-slot="collapsible-content"] {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition:
+        grid-template-rows var(--duration-medium, 240ms) var(--ease-standard, ease),
+        opacity var(--duration-medium, 240ms) var(--ease-standard, ease);
+    }
+
+    > [data-slot="collapsible-content"] > * {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    > [data-slot="collapsible-content"][data-expanded] {
+      grid-template-rows: 1fr;
+      opacity: 1;
+    }
+
+    /* Honour a reader who asked the system for less motion: reveal at once. */
+    @media (prefers-reduced-motion: reduce) {
+      > [data-slot="collapsible-content"] {
+        transition: none;
+      }
     }
 
     [data-slot="trace-group-body"] {

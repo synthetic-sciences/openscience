@@ -1,6 +1,6 @@
 ---
 name: delegation
-description: Delegates independent work to worker agents through the Task tool, choosing between the explore scout and the ml, biology, physics, chemistry and data specialists, writing a self-contained brief for a worker that cannot see the conversation, setting boundaries on files and compute, and reading the handoff back critically. Use before dispatching a worker or interpreting its result, and when deciding whether a task should be delegated at all. Never delegate the literature retrieval loop or a step of an experiment loop already underway.
+description: Delegates independent work to worker agents through the Task tool, choosing between the explore scout and the ml, biology, physics, chemistry and data specialists, writing a self-contained brief for a worker that cannot see the conversation, setting boundaries on files and compute, using two independent annotators with adjudication when labels are judged against an expert reference, and reading the handoff back critically. Use before dispatching a worker or interpreting its result, and when deciding whether a task should be delegated at all. Never delegate the literature retrieval loop or a step of an experiment loop already underway.
 summary: "When and how to hand independent work to a worker or specialist; the brief and the handoff."
 category: core
 role: support
@@ -92,9 +92,31 @@ the task is worth a worker.
   the same worker (`task_id` from its result), start another, or finish here.
 - Do not repeat the worker's diary to the user. Report the outcome and what changed.
 
+## Two annotators for expert-judged labels
+
+When the output is a set of labels judged against an expert reference — a cell type per
+cluster, a drainage or variability class per instance, a finding per image, a category
+per record — one pass by one reader is the weakest design there is, and the grader's
+macro-average makes the rare classes decisive. Have two workers label independently from
+the protocol and the data, each blind to the other, with the rare classes named to both
+before they start. Then adjudicate every disagreement yourself by re-reading the
+protocol's definitions and precedence rules against the evidence for that instance, never
+by majority or by splitting the difference. Where the protocol allows partial credit by
+lineage, an adjudicated broad label beats a confident wrong fine one; where it does not,
+decide. The cost is one extra worker context; the alternative is a single reader's blind
+spots scored at full weight.
+
 ## Concurrency and limits
 
 Several workers may run at once for genuinely parallel phases (a sweep across datasets, a
 survey split by subsystem). Workers cannot spawn workers unless `subagent_depth` allows
 it. Publishing (pushing, releasing, uploading) stays with you. Each worker costs a full model context; three workers for a
 task one skill load would have solved is the common mistake.
+
+When a build or a proof is split among workers, give each its own file inside the project
+(a helper module, a lemma file) and the compile or test command that includes it, and
+integrate each piece into the deliverable as it lands, so the deliverable builds at every
+step. A component that lives in `/tmp` or only in a worker's report is not part of the
+deliverable; a lead waiting for the last report has nothing to ship if the budget ends
+first. Before opening a second round of workers, ask what the first round changed in the
+project.

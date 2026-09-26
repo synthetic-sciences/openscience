@@ -284,3 +284,45 @@ test("Bedrock: autoloads when AWS_WEB_IDENTITY_TOKEN_FILE is present", async () 
     },
   })
 })
+
+test("Bedrock: an id that already names an inference profile is sent as is; a bare Claude id gets the region's", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "openscience.json"),
+        JSON.stringify({
+          $schema: "https://syntheticsciences.ai/config.json",
+          provider: {
+            "amazon-bedrock": {
+              options: { region: "us-east-1" },
+              models: {
+                "us.anthropic.claude-opus-5": {},
+                "global.anthropic.claude-fable-5-1": {},
+                "anthropic.claude-opus-5": {},
+                "us.openai.gpt-5.6-sol": {},
+              },
+            },
+          },
+        }),
+      )
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("AWS_BEARER_TOKEN_BEDROCK", "test-bearer-token")
+      Env.set("AWS_PROFILE", "")
+      Env.set("AWS_ACCESS_KEY_ID", "")
+    },
+    fn: async () => {
+      const sent = async (id: string) => {
+        const language = await Provider.getLanguage(await Provider.getModel("amazon-bedrock", id))
+        return (language as { modelId: string }).modelId
+      }
+      expect(await sent("us.anthropic.claude-opus-5")).toBe("us.anthropic.claude-opus-5")
+      expect(await sent("global.anthropic.claude-fable-5-1")).toBe("global.anthropic.claude-fable-5-1")
+      expect(await sent("anthropic.claude-opus-5")).toBe("us.anthropic.claude-opus-5")
+      expect(await sent("us.openai.gpt-5.6-sol")).toBe("us.openai.gpt-5.6-sol")
+    },
+  })
+})

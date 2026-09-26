@@ -369,6 +369,19 @@ describe("SessionProcessor.providerFailureAction", () => {
     expect(SessionRetry.resubmittable(wrap(body))).toBe(true)
   })
 
+  test("a provider that never answered is resubmitted once; one that stalled mid-response is not", () => {
+    const timeout = (phase: string) =>
+      new MessageV2.APIError({
+        message: "The model request timed out after 300 seconds waiting for response headers.",
+        isRetryable: false,
+        metadata: { code: "provider_request_timeout", dispatch_state: "outcome_unknown", action: "resubmit", phase },
+      }).toObject()
+    expect(SessionRetry.resubmittable(timeout("connect"))).toBe(true)
+    expect(SessionRetry.resubmittable(timeout("stream"))).toBe(false)
+    // Still not a retry of the same request under the ordinary policy.
+    expect(SessionRetry.retryable(timeout("connect"))).toBeUndefined()
+  })
+
   test("only the gateway's no-progress verdict is resubmittable", () => {
     for (const code of [
       "managed_outcome_unknown",

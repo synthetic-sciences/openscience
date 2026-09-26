@@ -199,6 +199,25 @@ export namespace SessionRetry {
     return false
   }
 
+  /** The provider refused the request because an image in it failed its
+   * content filter ("Image processing blocked due to content policy
+   * violation", `code: content_policy_violation`, `param: input`). The
+   * verdict is deterministic for that image: a lizard census sheet that one
+   * filter rejects is rejected on every retry, and a run that read it lost
+   * its remaining hours failing the same request three times. The remedy is
+   * to withhold the images and retry, never to resend them. */
+  export function isInputContentPolicy(error: ReturnType<NamedError["toObject"]>): boolean {
+    const { code, type, message } = normalizeProviderError(error)
+    const lower = message.toLowerCase()
+    const policy =
+      code === "content_policy_violation" ||
+      type === "content_policy_violation" ||
+      lower.includes("content_policy_violation") ||
+      lower.includes("content policy violation")
+    if (!policy) return false
+    return lower.includes("image") || lower.includes('"param":"input"') || lower.includes("param: input")
+  }
+
   // Managed idempotency verdicts the gateway answers identically for this key.
   // The key is stable across attempts, so a session-level retry of the same
   // body can only reproduce the verdict; the provider fetch wrapper already
@@ -239,7 +258,15 @@ export namespace SessionRetry {
    * duplicated step is cheaper than a halted run.
    */
   export function resubmittable(error: ReturnType<NamedError["toObject"]>) {
-    return normalizeProviderError(error).code === "managed_request_timeout"
+    if (normalizeProviderError(error).code === "managed_request_timeout") return true
+    // The same reasoning covers a direct provider that never answered: a
+    // request that timed out while connecting, before any header or byte
+    // came back, produced nothing to keep and nothing to duplicate on the
+    // page. One eight-hour run ended on exactly that, with its deliverables
+    // already written. A timeout after the response began is different (the
+    // provider was working, and partial output exists) and stays terminal.
+    const data = (error as { data?: { metadata?: Record<string, unknown> } }).data
+    return data?.metadata?.code === "provider_request_timeout" && data.metadata.phase === "connect"
   }
 
   /** The error the user sees for a terminal provider failure. A dispatched

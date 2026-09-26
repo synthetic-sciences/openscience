@@ -159,6 +159,50 @@ try {
   },
 )
 
+test.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
+  "an update whose displaced original is renumbered by the filesystem still succeeds and leaves no staging file",
+  async () => {
+    // Modal's gVisor root is an overlay: the first exchange touching a file
+    // shipped in the image copies it up under a new inode. The edit landed,
+    // yet the tool reported "Atomic exchange failed…" and left the old bytes
+    // beside the target in 20 of the campaign's trials.
+    await using fixture = await tmpdir({ config: { lsp: false, formatter: false } })
+    const target = path.join(fixture.path, "solve.py")
+    await fs.writeFile(target, "original\n")
+    const exchange = SafeDirectoryIO.swapEntries
+    const barrier = spyOn(SafeDirectoryIO, "swapEntries").mockImplementation(
+      (left, right, expectedLeft, expectedRight, options) =>
+        exchange(left, right, expectedLeft, expectedRight, {
+          ...options,
+          afterMutation: async (a, b) => {
+            const bytes = await fs.readFile(b)
+            await fs.unlink(b)
+            await fs.writeFile(b, bytes)
+            await options?.afterMutation?.(a, b)
+          },
+        }),
+    )
+    try {
+      await Instance.provide({
+        directory: fixture.path,
+        fn: async () => {
+          const tool = await ApplyPatchTool.init()
+          const result = await tool.execute(
+            { patchText: "*** Begin Patch\n*** Update File: solve.py\n@@\n-original\n+proposed\n*** End Patch" },
+            context,
+          )
+          expect(result.metadata.files).toHaveLength(1)
+          expect(await fs.readFile(target, "utf8")).toBe("proposed\n")
+          expect((await fs.readdir(fixture.path)).filter((name) => name.startsWith(".openscience-"))).toEqual([])
+          await Instance.dispose()
+        },
+      })
+    } finally {
+      barrier.mockRestore()
+    }
+  },
+)
+
 for (const phase of ["before", "after"] as const) {
   test.skipIf(process.platform !== "darwin" && process.platform !== "linux")(
     `atomic replacement preserves another writer's bytes changed ${phase} exchange`,

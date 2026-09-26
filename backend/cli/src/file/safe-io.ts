@@ -11,6 +11,7 @@ export namespace SafeFileIO {
     afterDirectoryVerify?: (target: string) => void | Promise<void>
     afterRenameVerify?: (source: string, target: string) => void | Promise<void>
     afterRenameMutation?: (source: string, target: string) => void | Promise<void>
+    afterReplaceMutation?: (target: string, staged: string) => void | Promise<void>
   }
 
   const hooks = { value: undefined as TestHooks | undefined }
@@ -277,6 +278,7 @@ export namespace SafeFileIO {
       mode: approved.mode,
       approved,
       afterVerify: hooks.value?.afterDirectoryVerify,
+      afterReplaceMutation: hooks.value?.afterReplaceMutation,
     })
   }
 

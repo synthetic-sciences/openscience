@@ -7,12 +7,25 @@ import type { Config } from "@/config/config"
  * A test can replace the clock and the cgroup root.
  */
 export namespace HarnessState {
-  export type Unit = "headless-policy" | "redirect" | "deliverables" | "budget" | "cost" | "durable-jobs" | "workers"
+  export type Unit =
+    | "headless-policy"
+    | "redirect"
+    | "deliverables"
+    | "acceptance"
+    | "unattended"
+    | "review"
+    | "budget"
+    | "cost"
+    | "durable-jobs"
+    | "workers"
 
   export const UNITS: readonly Unit[] = [
     "headless-policy",
     "redirect",
     "deliverables",
+    "acceptance",
+    "unattended",
+    "review",
     "budget",
     "cost",
     "durable-jobs",
@@ -26,9 +39,22 @@ export namespace HarnessState {
     startedAt?: number
     deadline?: number
     deliverables: string[]
+    /** The header the request states for a CSV/TSV deliverable, by path. */
+    deliverableHeaders?: Record<string, string>
     deliverableRounds: number
     /** The last mechanical check still found problems. */
     deliverablesFailing: boolean
+    /** The verification contract the first request states: commands that
+     * must pass, tokens banned under a path. */
+    acceptance: { commands: { command: string; cwd?: string }[]; banned: { tokens: string[]; scope: string }[] }
+    acceptanceRounds: number
+    acceptanceFailing: boolean
+    /** Times the unattended-run continuation has answered a final question. */
+    unattendedRounds: number
+    /** Times the review of a written report has sent the lead back with gaps. */
+    reviewRounds: number
+    /** The last review's list, for the second read to check against. */
+    reviewGaps?: string[]
     budgetNudged: boolean
     guardTrips: number
     budgetReminders: Set<50 | 85>
@@ -56,6 +82,11 @@ export namespace HarnessState {
       deliverables: [],
       deliverableRounds: 0,
       deliverablesFailing: false,
+      acceptance: { commands: [], banned: [] },
+      acceptanceRounds: 0,
+      acceptanceFailing: false,
+      unattendedRounds: 0,
+      reviewRounds: 0,
       budgetNudged: false,
       guardTrips: 0,
       budgetReminders: new Set(),

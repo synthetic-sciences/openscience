@@ -176,3 +176,19 @@ test("recorded estimates expose documents once without changing provider billing
     )?.tokens,
   ).toBeUndefined()
 })
+
+test("the tool-definition prefix is its own bucket and the rows reconcile with the total", () => {
+  const value = {
+    total: 160,
+    tokens: { system: 10, text: 20, reasoning: 5, tool: 15, skills: 5, image: 25, document: 40, definitions: 40 },
+  }
+  const rows = recordedContextComposition(value)
+  expect(rows.find((row) => row.label === "Tool definitions")?.tokens).toBe(40)
+  expect(rows.reduce((sum, row) => sum + (row.tokens ?? 0), 0)).toBe(value.total)
+  // Absent (the transcript fallback cannot see it), the bucket carries no width.
+  expect(
+    recordedContextComposition({ ...value, tokens: { ...value.tokens, definitions: undefined } }).find(
+      (row) => row.label === "Tool definitions",
+    )?.tokens,
+  ).toBeUndefined()
+})

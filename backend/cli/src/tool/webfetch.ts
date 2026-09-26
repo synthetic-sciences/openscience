@@ -751,8 +751,10 @@ function storageCapacityCode(error: unknown) {
 
 async function availableDownloadBytes(target: DownloadTarget) {
   const disk = await fs.statfs(target.root)
-  const available = disk.bavail * disk.bsize
-  if (!Number.isSafeInteger(available) || available < 0) {
+  // A sandbox overlay can report more free space than 2^53 bytes; an
+  // unbounded disk is not a hazard, so clamp rather than refuse.
+  const available = Math.min(disk.bavail * disk.bsize, Number.MAX_SAFE_INTEGER)
+  if (!Number.isFinite(available) || available < 0) {
     throw new Error("Workspace disk capacity could not be represented safely; the download was not started")
   }
   return Math.max(0, available - DOWNLOAD_DISK_RESERVE_BYTES)

@@ -81,12 +81,19 @@ needs a client that can ask. `src/tool/visibility.ts` holds the rules.
 
 `src/harness/*` are internal plugins registered at boot behind
 `harness.<unit>` config switches (all on by default): `redirect`,
-`deliverables`, `budget`, `cost`, plus the switches `headless-policy`,
-`durable-jobs`, `workers`. The loop offers two hook points: `loop.before_finish`
-(the model returned a final answer; a unit may inject a bounded continuation)
-and `loop.guard` (a repetition guard tripped; a unit may redirect instead of
-stopping). Injected continuations are durable synthetic user messages of kind
-`harness`.
+`deliverables`, `acceptance`, `unattended`, `review`, `budget`, `cost`, plus
+the switches `headless-policy`, `durable-jobs`, `workers`. The loop offers two hook points:
+`loop.before_finish` (the model returned a final answer, or a guard ended the
+turn; a unit may inject a bounded continuation) and `loop.guard` (a repetition
+guard tripped; a unit may redirect instead of stopping). Injected continuations
+are durable synthetic user messages of kind `harness`. `deliverables` checks
+that the named outputs exist and parse; `acceptance` runs the verification
+contract the first request states (a recognised build or test command, tokens
+banned under a path) and continues the turn with the grader's own output when
+it fails; `unattended` answers a final question once under autonomous
+autonomy; `review` reads a written-report deliverable against the request in a
+fresh context (agent `reader`, `agent/prompt/reader.txt`) and continues once
+with the gaps.
 
 ### Provider transport and plugins
 

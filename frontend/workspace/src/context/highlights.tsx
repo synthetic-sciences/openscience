@@ -63,12 +63,16 @@ function parseHighlight(value: unknown): Highlight | undefined {
 }
 
 /** One line of release Markdown as readable text: links keep their label,
- * emphasis marks go, and the trailing pull-request reference is dropped. */
+ * emphasis marks go, and the git-log tail a person did not write — the
+ * author or bot attribution and the pull-request number — is dropped, so a
+ * dependency bump reads "Bump X from a to b", not "… (#734) (dependabot[bot])". */
 export function cleanReleaseLine(line: string) {
   return line
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
+    .replace(/\s+by\s+@[\w-]+\s+in\s+https?:\/\/\S+\s*$/i, "")
+    .replace(/\s*\((?:@[\w-]+|[\w.-]+\[bot\])\)\s*$/i, "")
     .replace(/\s*\(#\d+\)\s*$/g, "")
     .replace(/\s+/g, " ")
     .trim()

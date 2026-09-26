@@ -2215,6 +2215,15 @@ export type Config = {
     "headless-policy"?: boolean
     redirect?: boolean
     deliverables?: boolean
+    acceptance?: boolean
+    /**
+     * Under autonomous autonomy, a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver
+     */
+    unattended?: boolean
+    /**
+     * When the deliverable is a written report, one fresh-context read of the request against the report before the turn ends, and one continuation with what the report does not address
+     */
+    review?: boolean
     budget?: boolean
     /**
      * Spend visibility beside the time budget; an optional soft ceiling injects a wrap-up reminder
@@ -2337,6 +2346,10 @@ export type Config = {
      * Enable pruning of old tool outputs (default: true)
      */
     prune?: boolean
+    /**
+     * Experimental. When a tool call is pruned, also shorten its long string arguments (a patch body, a script) to a preview in what the model re-reads. The stored input stays complete and a write that reproduces a preview is refused. Default: false.
+     */
+    pruneInputs?: boolean
     /**
      * @deprecated Ignored. Automatic compaction uses the model's usable context capacity.
      */

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { BashTool, normalizeBashInput } from "../../src/tool/bash"
+import { BashTool, normalizeBashInput, DEFAULT_BASH_TIMEOUT_MS } from "../../src/tool/bash"
 import { Instance } from "../../src/project/instance"
 import { executionSession, tmpdir } from "../fixture/fixture"
 import { PermissionNext } from "../../src/permission/next"
 import { Truncate } from "../../src/tool/truncation"
+import { BashOutput } from "../../src/tool/bash-output"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { Shell } from "../../src/shell/shell"
 import { Config } from "../../src/config/config"
@@ -131,6 +132,35 @@ describe("tool.bash", () => {
         expect(result.metadata.exit).toBe(0)
         expect(result.metadata.output).toContain("survived")
         await SessionFilesystem.revoke(ctx.sessionID, grant.id)
+      },
+    })
+  })
+
+  test("a non-zero exit is stated in the text the model reads; a truncated output keeps its end", async () => {
+    if (process.platform === "win32") return
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // Quiet failure: no stderr, so only the code says it failed.
+        const failed = await bash.execute({ command: "exit 3", description: "Fails quietly" }, await context())
+        expect(failed.metadata.exit).toBe(3)
+        expect(failed.output).toContain("Command exited with code 3")
+        const fine = await bash.execute({ command: "echo ok", description: "Succeeds" }, await context())
+        expect(fine.output).not.toContain("exited with code")
+        // A traceback at the end of a long output is shown without a second step.
+        const noisy = await bash.execute(
+          {
+            command: "for i in $(seq 1 4000); do echo \"progress $i\"; done; echo 'ValueError: bad shape' >&2; exit 1",
+            description: "Prints a lot, then fails",
+          },
+          await context(),
+        )
+        expect(noisy.metadata.truncated).toBe(true)
+        expect(noisy.output).toContain("truncated...")
+        expect(noisy.output).toContain("The output ends with:")
+        expect(noisy.output).toContain("ValueError: bad shape")
+        expect(noisy.output).toContain("Command exited with code 1")
       },
     })
   })
@@ -543,7 +573,8 @@ describe("tool.bash truncation", () => {
         expect(Date.now() - started).toBeLessThan(20_000)
         expect((result.metadata as any).truncated).toBe(true)
         expect(result.output).not.toContain("sk-largeoutput0123456789")
-        expect(result.output.length).toBeLessThan(Truncate.MAX_BYTES + 2_000)
+        // The head preview, the tail kept for the model, and the notice.
+        expect(result.output.length).toBeLessThan(Truncate.MAX_BYTES + BashOutput.TAIL_BYTES + 2_000)
         // One live update per interval, not one per chunk.
         expect(updates).toBeLessThan(200)
         const saved = await Bun.file((result.metadata as any).outputPath).text()
@@ -587,4 +618,8 @@ describe("tool.bash truncation", () => {
       },
     })
   })
+})
+
+test("a command with no timeout given runs for at most twenty minutes by default", () => {
+  expect(DEFAULT_BASH_TIMEOUT_MS).toBe(20 * 60_000)
 })

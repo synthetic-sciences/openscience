@@ -40,15 +40,20 @@ describe("Truncate", () => {
       expect(result.content).toContain("truncated...")
     })
 
-    test("truncates from head by default", async () => {
-      const lines = Array.from({ length: 10 }, (_, i) => `line${i}`).join("\n")
+    test("truncates from head by default and shows how the output ended", async () => {
+      const lines = Array.from({ length: 100 }, (_, i) => `line${i}`).join("\n")
       const result = await Truncate.output(lines, { maxLines: 3 })
 
       expect(result.truncated).toBe(true)
       expect(result.content).toContain("line0")
       expect(result.content).toContain("line1")
       expect(result.content).toContain("line2")
-      expect(result.content).not.toContain("line9")
+      // The middle is in the file; the end travels with the preview, since a
+      // traceback or a status line lives there.
+      expect(result.content).not.toContain("line50")
+      expect(result.content).toContain("The output ends with:")
+      expect(result.content).toContain("line99")
+      expect(result.content.indexOf("line99")).toBeGreaterThan(result.content.indexOf("truncated..."))
     })
 
     test("truncates from tail when direction is tail", async () => {

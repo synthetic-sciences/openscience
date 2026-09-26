@@ -51,11 +51,12 @@ test("compute is a stable env line; the 50%/85% reminders fire once each and car
   // during the session may go there. Nothing rides along every step either;
   // a status line is appended to the transcript only when it changes, so a
   // running "elapsed" figure would be a new message every step.
-  expect(first.lines).toEqual(["Compute: 4 CPUs, 16 GiB", "Time budget: 1h"])
+  expect(first.lines[0]).toBe("Compute: 4 CPUs, 16 GiB")
+  expect(first.lines[1]).toStartWith("Time budget: 1h. The work ends when you end your turn")
   expect(first.status).toEqual([])
   now += 31 * 60_000
   const half = await render()
-  expect(half.lines).toEqual(["Compute: 4 CPUs, 16 GiB", "Time budget: 1h"])
+  expect(half.lines).toEqual(first.lines)
   expect(half.status).toHaveLength(1)
   expect(half.status[0]).toContain("31m of the 1h time budget is used (half)")
   expect((await render()).status).toEqual([])
@@ -216,5 +217,23 @@ test("a finished turn with failing deliverables and time left is asked to contin
   now += 90 * 60_000
   const output = { message: undefined as string | undefined }
   await other["loop.before_finish"]!({ sessionID: "ses_d", messageID: "msg_a", turn: "msg_1", injections: 0 }, output)
+  expect(output.message).toBeUndefined()
+})
+
+test("a fast finish with passing deliverables ends the turn; the unit does not ask for a second look", async () => {
+  let now = 9_000_000
+  HarnessState.clock.now = () => now
+  const unit = await BudgetUnit({} as PluginInput)
+  await unit["chat.message"]!(
+    { sessionID: "ses_e", messageID: "msg_1" },
+    { message: { time: { created: now }, deadline: now + 480 * 60_000 } as never, parts: [] },
+  )
+  // Eight hours, named deliverables that passed, done in five minutes. Whether the
+  // answer was checked is the acceptance and deliverables units' question; a
+  // nudge to reconsider it replaced right answers with worse ones in scored runs.
+  HarnessState.get("ses_e").deliverables = ["/results/answers.csv"]
+  now += 5 * 60_000
+  const output = { message: undefined as string | undefined }
+  await unit["loop.before_finish"]!({ sessionID: "ses_e", messageID: "msg_a", turn: "msg_1", injections: 0 }, output)
   expect(output.message).toBeUndefined()
 })

@@ -9,6 +9,7 @@ import DESCRIPTION from "./read.txt"
 import { Identifier } from "../id/id"
 import { assertExternalDirectory, isAuthorizedPath, sessionToolDirectory } from "./external-directory"
 import { InstructionPrompt } from "../session/instruction"
+import { MessageV2 } from "../session/message-v2"
 import { readImageDimensions } from "../util/image"
 import { SafeFileIO } from "@/file/safe-io"
 import { Literature } from "../research/literature"
@@ -241,10 +242,16 @@ export const ReadTool = Tool.define("read", {
       // with the pages counted, so the reader is never left to guess whether
       // the document arrived.
       const text = isPdf ? await pdfText(filepath, ctx.abort) : undefined
+      // A PDF longer than a provider accepts per attachment is not attached:
+      // the request carrying it would be refused, identically, on every retry.
+      const pdfPages = isPdf ? MessageV2.pdfPagesOf(Buffer.from(fileBytes).toString("latin1")) : 0
+      const attachable = !isPdf || pdfPages <= MessageV2.PDF_MAX_PAGES
       const msg = isPdf
         ? text
-          ? `PDF read successfully: ${text.pages} page${text.pages === 1 ? "" : "s"}, ${text.chars.toLocaleString()} characters of text extracted with ${text.tool}.`
-          : "PDF attached. No text was extracted: no PDF text extractor is installed (pdftotext from poppler, or PyMuPDF via `pip install pymupdf`). Use `literature read` on the file for passages by query once one is installed."
+          ? `PDF read successfully: ${text.pages} page${text.pages === 1 ? "" : "s"}, ${text.chars.toLocaleString()} characters of text extracted with ${text.tool}.${attachable ? "" : ` ${MessageV2.oversizedPdfNote(pdfPages)}`}`
+          : attachable
+            ? "PDF attached. No text was extracted: no PDF text extractor is installed (pdftotext from poppler, or PyMuPDF via `pip install pymupdf`). Use `literature read` on the file for passages by query once one is installed."
+            : `No text was extracted: no PDF text extractor is installed (pdftotext from poppler, or PyMuPDF via \`pip install pymupdf\`). ${MessageV2.oversizedPdfNote(pdfPages)}`
         : dims
           ? `Image read successfully: ${dims.width}×${dims.height} ${mime.replace("image/", "").toUpperCase()}, ${Math.max(1, Math.round(fileBytes.byteLength / 1024))} KB.`
           : `${kind} read successfully`
@@ -268,16 +275,18 @@ export const ReadTool = Tool.define("read", {
             : {}),
           ...(instructions.length > 0 && { loaded: instructions.map((i) => i.filepath) }),
         },
-        attachments: [
-          {
-            id: Identifier.ascending("part"),
-            sessionID: ctx.sessionID,
-            messageID: ctx.messageID,
-            type: "file",
-            mime,
-            url: `data:${mime};base64,${Buffer.from(fileBytes).toString("base64")}`,
-          },
-        ],
+        attachments: attachable
+          ? [
+              {
+                id: Identifier.ascending("part"),
+                sessionID: ctx.sessionID,
+                messageID: ctx.messageID,
+                type: "file",
+                mime,
+                url: `data:${mime};base64,${Buffer.from(fileBytes).toString("base64")}`,
+              },
+            ]
+          : [],
       }
     }
 

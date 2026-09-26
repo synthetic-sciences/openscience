@@ -725,13 +725,13 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
-  /** How long a provider keeps a cached prefix warm without traffic: OpenAI
-   * guarantees thirty minutes on GPT-5.6 and later (five to ten on earlier
-   * models), Anthropic five. Past this, a request pays for its prefix again
-   * whether or not the transcript changed, so a routine prune costs nothing
-   * extra; inside it, the same prune costs a full read. Erring long is cheap
-   * (stale output rides along at the cache rate); erring short is a full read. */
-  export const CACHE_WINDOW_MS = 30 * 60_000
+  /** Mid-turn, a routine prune waits until the old tool output it would clear
+   * is this share of the context. Clearing T tokens from a context of C
+   * rewrites the remaining C - T once at the cache-write price and then saves
+   * T at the cache-read price on every later step; with writes about twelve
+   * times reads, a third of the context pays for itself within some
+   * twenty-five steps, and a lead that runs for hours takes hundreds. */
+  export const PRUNE_SHARE = 1 / 3
 
   // Skill loads, Results and the deliverables checklist are never pruned:
   // each is small and the model steers by them.
@@ -742,13 +742,12 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
   // context's dead weight; the model steers by what it did recently.
   //
   // A provider's cached prefix ends at the first cleared part, and everything
-  // after it is re-read at full price. With no `target` the prune is total,
-  // which costs nothing when the cache is cold. With a `target` (the tokens
-  // the budget needs back while the cache is warm), the prune clears only that
-  // much, newest-eligible first, so the invalidated prefix is as short as the
-  // shortfall allows: one prune inside the window once re-read 143k tokens to
-  // reclaim 70k.
-  export async function prune(input: { sessionID: string; target?: number }) {
+  // after it is re-read at full price. With no `target` the prune is total.
+  // With a `target` (the tokens the budget needs back), the prune clears only
+  // that much, newest-eligible first, so the invalidated prefix is as short as
+  // the shortfall allows. `floor` raises the least worth clearing above
+  // PRUNE_MINIMUM: nothing is touched unless at least that much would go.
+  export async function prune(input: { sessionID: string; target?: number; floor?: number }) {
     const config = await Config.get()
     if (config.compaction?.prune === false) return 0
     log.info("pruning", { target: input.target })
@@ -782,7 +781,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
       }
     }
     log.info("found", { pruned, total })
-    if (pruned > PRUNE_MINIMUM) {
+    if (pruned > Math.max(PRUNE_MINIMUM, input.floor ?? 0)) {
       for (const part of toPrune) {
         if (part.state.status === "completed") {
           part.state.time.compacted = Date.now()

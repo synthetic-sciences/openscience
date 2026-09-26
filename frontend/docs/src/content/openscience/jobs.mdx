@@ -29,6 +29,8 @@ A job can specify a working directory, packages, resource requirements, output p
 
 ## Follow the job
 
+A job that finishes within 30 seconds of dispatch comes back in the same step: its outcome, the tail of its command output and what it delivered, so a short computation costs one tool call rather than a start, a wait, a logs and an artifacts call. A longer job is dispatched and wakes the conversation with its outcome when it ends, so the agent goes on with other work in the meantime instead of polling.
+
 Use the project **Compute** view or ask about the job identifier:
 
 ```text

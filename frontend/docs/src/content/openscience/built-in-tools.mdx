@@ -11,12 +11,12 @@ Which tools the agent sees follows permissions, not the wording of your request.
 
 | Operation | Tool names you may see | Example request |
 | --- | --- | --- |
-| Read a file | `read` | Read methods/protocol.md and summarize the assay steps. |
+| Read a file | `read` | Read methods/protocol.md and summarize the assay steps. A PDF over the provider's page limit (100 pages) is read as text without being attached; an image the provider's content filter refuses is withheld from the transcript and the step runs again without it. |
 | Find paths | `glob` | Find analysis scripts and data dictionaries in this project. |
 | Search file contents | `grep` | Find every place the analysis applies a sample exclusion. |
 | Edit a file | `edit`, `apply_patch` | Correct the unit conversion and show the resulting diff. |
 | Write a file | `write` | Save the agreed methods note to results/methods.md. |
-| Run a command | `bash` | Run the project's documented tests and report failures. |
+| Run a command | `bash` | Run the project's documented tests and report failures. A command with no timeout given stops after twenty minutes; longer work goes through `compute_job`. |
 
 Give exact paths for important inputs, and preserve original data. Use [Code and terminal](/openscience/code) for repository work and [Files](/openscience/files) for locations and editing.
 

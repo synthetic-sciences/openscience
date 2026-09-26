@@ -1003,7 +1003,7 @@ describe("compaction edge cases", () => {
     expect(run.compacted).toBe(1)
   }, 30_000)
 
-  test("8a. a 5 MB tool result in the open turn is pruned before any request; the turn still answers", async () => {
+  test("8a. a 5 MB tool result in the open turn is pruned before any request is built; one request answers", async () => {
     const provider = fixture(({ bytes }) => (bytes > 1_000_000 ? tooLarge() : reply("EDGE_ANSWER_EIGHT_A")))
     try {
       await withProject({
@@ -1024,26 +1024,22 @@ describe("compaction edge cases", () => {
           expect(result.info.time.completed).toBeDefined()
           expect(text(result)).toBe("EDGE_ANSWER_EIGHT_A")
 
-          // Bounded: the estimate refuses the body before it is sent, one
-          // recovery continuation closes the rejected span, pruning clears
-          // the result, and one request goes out.
-          expect(provider.requests.length).toBeLessThanOrEqual(4)
+          // The prune at the turn boundary clears the result before the
+          // request is built, so the estimate never has to refuse a body and
+          // no recovery continuation is needed: one request goes out.
+          expect(provider.requests).toHaveLength(1)
           expect(provider.statuses()).toEqual([["main", 200]])
           expect(provider.mains()[0].bytes).toBeLessThan(1_000_000)
           expect(provider.mains()[0].body).not.toContain("GIANT_OUTPUT_START")
           expect(provider.mains()[0].body).toContain("cleared")
 
           const messages = await Session.messages({ sessionID: session.id })
-          const failures = errors(messages)
-          expect(failures).toHaveLength(1)
-          expect(failures[0]).toContain("cannot fit")
-          expect(failures[0]).toContain("No provider request was sent")
-          expect(failures[0]).toContain("will retry this request once automatically")
+          expect(errors(messages)).toHaveLength(0)
           expect(
             messages.filter(
               (message) => message.info.role === "user" && SessionLoopState.messageKind(message.info) === "context",
             ),
-          ).toHaveLength(1)
+          ).toHaveLength(0)
           expect(summaries(messages)).toHaveLength(0)
           const tool = messages
             .flatMap((message) => message.parts)

@@ -509,6 +509,70 @@ for name, genes in metagenes.items():
     print(f"  Top genes: {', '.join(genes.index[:5])}")
 ```
 
+### Workflow 4: Cohort-level readings of a called study (cBioPortal-format tables)
+
+A study delivered as `data_clinical_*.txt`, `data_mutations.txt` (MAF) and
+`data_cna.txt` is already called; the analysis is the cohort reading, and a
+reviewer of such a study expects every one of the following, whether or not the
+question names them:
+
+1. **Per-sample binary alteration calls, with the definition stated.** A sample
+   is altered in a gene when it carries a nonsynonymous mutation (name the
+   `Variant_Classification` values counted; restrict to oncogenic calls when an
+   annotation such as OncoKB is available), a deep deletion or amplification
+   (`±2` in the discrete CNA matrix; say whether gains and shallow losses were
+   excluded) or a fusion. Multiple samples per patient: state whether the unit is
+   the sample or the patient, and give the denominator either way.
+2. **Pathway-level frequency as the union of altered samples**, not the sum of
+   gene frequencies. Use the canonical member list of the pathway named,
+   including the receptor tyrosine kinases and the negative regulators that feed
+   a signalling cascade, not only its core kinases; state the list and its
+   source (Sanchez-Vega et al. 2018, Cell, curated the ten oncogenic signalling
+   pathways in TCGA: RTK-RAS, PI3K, TP53, cell cycle, WNT, NOTCH, MYC, HIPPO,
+   TGF-β, NRF2, and is the standard template), and report the per-gene breakdown
+   beside the union.
+3. **The reference group beside the group of interest.** An exposed, resistant,
+   metastatic or post-therapy group is read against the naive, sensitive,
+   primary or pre-therapy group of the same subtype, with counts, frequencies,
+   the difference and a Fisher's exact test; a frequency alone is not a finding.
+4. **Strata of the phenotype's known driver.** Where a therapy or phenotype has
+   an established driver alteration (the resistance mutation of the drug's
+   target, the defining fusion or hotspot of the subtype), report the pathway's
+   frequency within the driver-mutant and driver-wild-type strata.
+5. **Co-occurrence and mutual exclusivity.** Between the pathway (or its top
+   genes) and the driver: a 2x2 table of per-sample calls, odds ratio, Fisher's
+   exact p; DISCOVER or a permutation test when many genes are compared.
+   Exclusivity is the classic reading of two routes to the same phenotype.
+6. **Clinical association where the table allows it**: subtype, sample type,
+   site, prior therapy; and an oncoprint-style summary of the altered samples.
+
+```python
+import pandas as pd
+from scipy.stats import fisher_exact
+
+clin = pd.read_csv("data_clinical_sample.txt", sep="\t", comment="#")
+maf = pd.read_csv("data_mutations.txt", sep="\t", comment="#", low_memory=False)
+cna = pd.read_csv("data_cna.txt", sep="\t", index_col=0)
+
+NONSYN = {"Missense_Mutation", "Nonsense_Mutation", "Frame_Shift_Del", "Frame_Shift_Ins",
+          "Splice_Site", "In_Frame_Del", "In_Frame_Ins", "Nonstop_Mutation", "Translation_Start_Site"}
+def altered(genes: list[str]) -> pd.Series:
+    """Per-sample union of nonsynonymous mutation or deep deletion/amplification in any of `genes`."""
+    mut = set(maf.loc[maf.Hugo_Symbol.isin(genes) & maf.Variant_Classification.isin(NONSYN), "Tumor_Sample_Barcode"])
+    present = [g for g in genes if g in cna.index]
+    cn = set(cna.columns[(cna.loc[present].abs() == 2).any(axis=0)]) if present else set()
+    return clin.SAMPLE_ID.isin(mut | cn).set_axis(clin.SAMPLE_ID)
+
+pathway = altered(PATHWAY_GENES)      # the stated member list
+driver = altered([DRIVER_GENE])       # the phenotype's known driver
+for name, mask in {"post": clin.GROUP.eq("post"), "naive": clin.GROUP.eq("naive")}.items():
+    ids = clin.loc[mask, "SAMPLE_ID"]
+    print(name, f"{pathway[ids].sum()}/{len(ids)} = {pathway[ids].mean():.1%}")
+table = pd.crosstab(pathway, driver)
+odds, p = fisher_exact(table)
+print(table, f"\nOR={odds:.2f} p={p:.3g}  (OR<1: mutually exclusive)")
+```
+
 ## Best Practices
 
 1. **Always use paired tumor-normal** for somatic calling — tumor-only mode has high false positive rates

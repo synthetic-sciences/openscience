@@ -39,7 +39,13 @@ const MAX_METADATA_LENGTH = 30_000
 const PREVIEW_INTERVAL = 200
 /** Characters of each stream kept for the provenance record (clip() adds the marker). */
 const PROVENANCE_HEAD = 2000
-const DEFAULT_TIMEOUT = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 0
+// A command the model gave no timeout runs for at most twenty minutes. A
+// worker once sat thirty minutes in a Lean process waiting on input that
+// would never come, with the rest of an eight-hour budget ahead of it; a
+// bounded call returns what the command printed and lets the model decide
+// to rerun longer, differently, or as a durable job.
+export const DEFAULT_BASH_TIMEOUT_MS = Flag.OPENSCIENCE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 20 * 60_000
+const DEFAULT_TIMEOUT = DEFAULT_BASH_TIMEOUT_MS
 
 export const log = Log.create({ service: "bash-tool" })
 
@@ -186,7 +192,12 @@ export const BashTool = Tool.define("bash", async () => {
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
     parameters: z.object({
       command: z.string().trim().min(1).describe("The command to execute"),
-      timeout: z.number().describe("Optional timeout in milliseconds").optional(),
+      timeout: z
+        .number()
+        .describe(
+          "Timeout in milliseconds; default 20 minutes. Give a longer one for a build or run you know takes longer, or use the durable job tool.",
+        )
+        .optional(),
       workdir: z
         .string()
         .describe("The working directory to run the command in. Defaults to the session workspace.")
@@ -715,6 +726,13 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push(stopped.reason ?? "User aborted the command")
       }
 
+      // A failure that printed little, or whose message scrolled into the
+      // saved file, would otherwise read as success: the status travels in
+      // the text the model sees, not only in the metadata.
+      if (proc.exitCode !== null && proc.exitCode !== 0 && !timedOut && !aborted) {
+        resultMetadata.push(`Command exited with code ${proc.exitCode}`)
+      }
+
       const notes =
         resultMetadata.length > 0 ? "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>" : ""
       if (summary.truncated) await Truncate.grant(outputFile, ctx.sessionID)
@@ -726,6 +744,7 @@ export const BashTool = Tool.define("bash", async () => {
                 removed: summary.removed.count,
                 unit: summary.removed.unit,
                 filepath: outputFile,
+                tail: summary.tail,
               },
               await Agent.get(ctx.agent).catch(() => undefined),
             )

@@ -71,6 +71,8 @@ The reads → counts stage can be run two ways. They produce equivalent gene cou
 
 When unsure, prefer **Path A**: `nf-core/rnaseq` already wires together FastQC → trimming → STAR/Salmon → quantification → tximport → MultiQC with sensible, reviewed defaults, which is the most defensible option. Path B exists for transparency and constrained setups.
 
+**A named method overrides this routing.** When the task, protocol or paper being reproduced names the tool, its release, the contrast direction or the fold-change and FDR cutoffs, run that tool at that release, in that language, with that contrast and those cutoffs: a result compared against a specific pipeline's numbers is judged on scale and membership, so a scientifically valid substitute (pydeseq2 for R DESeq2, Salmon for STAR+RSEM, TPM for size-factor normalization, a different cutoff) shifts every value and every row set. Install the pinned version in its own environment (see `execution-hygiene`), and when it cannot be installed, say so in the methods file and name the substitute and its known differences rather than swapping silently.
+
 Both paths converge on a **gene-level counts matrix**, after which the workflow is identical.
 
 ## Setup

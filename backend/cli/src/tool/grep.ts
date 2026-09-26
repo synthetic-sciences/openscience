@@ -5,6 +5,7 @@ import { Ripgrep } from "../file/ripgrep"
 import DESCRIPTION from "./grep.txt"
 import { Instance } from "../project/instance"
 import path from "path"
+import fs from "node:fs/promises"
 import { assertExternalDirectory, sessionToolDirectory } from "./external-directory"
 
 const MAX_LINE_LENGTH = 2000
@@ -103,7 +104,15 @@ export const GrepTool = Tool.define("grep", {
     // files exist. A valid content search can also find files but no matching
     // lines; keep that distinct from a filename search.
     if (exitCode === 2 && collected.lines.length === 0) {
-      throw new Error(`Search failed: ${errorOutput.trim() || "Some paths could not be searched."}`)
+      // "Some paths could not be searched" sent leads hunting for a permission
+      // problem when the path simply was not there, and one of them rebuilt by
+      // hand what the missing directory would have told it. Say which it is.
+      const detail = errorOutput.trim()
+      const missing = await fs
+        .stat(searchPath)
+        .then(() => undefined)
+        .catch(() => `No such file or directory: ${searchPath}`)
+      throw new Error(`Search failed: ${missing ?? detail ?? "Some paths could not be searched."}`)
     }
     if (exitCode === 1) {
       return {
