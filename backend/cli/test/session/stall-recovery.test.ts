@@ -317,3 +317,86 @@ test.each(["finished-stream", "stop-with-tool", "stop-with-error", "stalled-stre
   },
   20_000,
 )
+
+test.each(["answers", "stays-silent"])(
+  "a stream that dies before any model output is sent once more as a new request (%s)",
+  async (mode) => {
+    let requests = 0
+    using server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        const body = await request.json()
+        if (!JSON.stringify(body).includes(marker)) {
+          return new Response(`${chunk({ content: "Helper title" })}${chunk({}, "stop")}data: [DONE]\n\n`, {
+            headers: { "content-type": "text/event-stream" },
+          })
+        }
+        requests++
+        if (requests === 2 && mode === "answers") {
+          return new Response(
+            `${chunk({ role: "assistant", content: "Answered on the resubmit." })}${chunk({}, "stop")}data: [DONE]\n\n`,
+            {
+              headers: { "content-type": "text/event-stream" },
+            },
+          )
+        }
+        // Headers and one role-only chunk, then nothing: the shape of a
+        // connection that died after its first byte.
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoder.encode(chunk({ role: "assistant" })))
+            },
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    })
+    const base = stressProviderConfig(`http://127.0.0.1:${server.port}/v1`)
+    const config = {
+      ...base,
+      provider: {
+        ...base.provider,
+        [STRESS_PROVIDER_ID]: {
+          ...base.provider[STRESS_PROVIDER_ID],
+          options: { ...base.provider[STRESS_PROVIDER_ID].options, connectTimeout: 2_000, idleTimeout: 500 },
+        },
+      },
+    }
+    await using tmp = await tmpdir({ git: true, config })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const session = await Session.create({ title: "Silent stream resubmit" })
+        const result = await SessionPrompt.prompt({
+          sessionID: session.id,
+          model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+          agent: "research",
+          delegation: false,
+          system: marker,
+          parts: [{ type: "text", text: "Answer once." }],
+        })
+        if (result.info.role !== "assistant") throw new Error("Expected an assistant result")
+        expect(requests).toBe(2)
+        expect(SessionStatus.get(session.id)).toEqual({ type: "idle" })
+        if (mode === "answers") {
+          expect(result.info.error).toBeUndefined()
+          expect(result.parts.some((part) => part.type === "text" && part.text === "Answered on the resubmit.")).toBe(
+            true,
+          )
+          return
+        }
+        expect(result.info.error).toMatchObject({
+          name: "APIError",
+          data: { isRetryable: false, metadata: { code: "provider_request_timeout", phase: "stream" } },
+        })
+      },
+    })
+  },
+  20_000,
+)

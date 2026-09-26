@@ -116,7 +116,7 @@ Use **Show reasoning and activity / Hide reasoning and activity** above a turn t
 
 Readable passages appear as plain prose, with routine provider phase headings removed from the display. OpenScience does not generate another summary or modify the stored provider response. A model that exposes only a reasoning summary cannot be made to expose private internal reasoning through this setting.
 
-An open response can pause between outputs. OpenScience shows the time since the last output and keeps waiting by default; **Stop** cancels your wait without undoing completed work. Explicit provider timeout settings still apply, as do provider-side limits. Resubmitting a stopped or failed request can incur a new charge.
+An open response can pause between outputs. OpenScience shows the time since the last output and keeps waiting by default; after two minutes without model output the turn's status says so instead of "Thinking". **Stop** cancels your wait without undoing completed work. Explicit provider timeout settings still apply, as do provider-side limits. Resubmitting a stopped or failed request can incur a new charge.
 
 For usage across conversations, open **Customize → Usage**. See [Usage reports and CSV exports](/openscience/usage).
 

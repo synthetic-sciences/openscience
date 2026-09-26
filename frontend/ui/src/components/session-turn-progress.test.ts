@@ -3,7 +3,13 @@ import { readdirSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import type { SessionRequestProgress } from "@synsci/sdk/v2/client"
 import { dict as en } from "../i18n/en"
-import { PROGRESS_HINT_MS, PROGRESS_SLOW_MS, headerProgress, progressStatus } from "./session-turn-progress"
+import {
+  HEADER_SILENCE_MS,
+  PROGRESS_HINT_MS,
+  PROGRESS_SLOW_MS,
+  headerProgress,
+  progressStatus,
+} from "./session-turn-progress"
 
 const since = 1_000_000
 const base: SessionRequestProgress = {
@@ -116,10 +122,12 @@ describe("request phase status copy", () => {
       progressStatus(at("streaming"), since),
       progressStatus(at("conflict_wait"), since),
       progressStatus(at("retry_wait", { retryAfterMs: 1 }), since),
+      headerProgress(at("waiting_first_token"), since + HEADER_SILENCE_MS),
+      headerProgress(at("streaming", { lastOutputAt: since }), since + HEADER_SILENCE_MS),
     ].flatMap((item) => (item ? [item] : []))
-    expect(used.length).toBe(6)
+    expect(used.length).toBe(8)
     const keys = new Set(used.flatMap((item) => [item.key, ...(item.hint ? [item.hint] : [])]))
-    expect(keys.size).toBe(7)
+    expect(keys.size).toBe(9)
     for (const item of used) {
       for (const name of Object.keys(item.params)) expect(en[item.key]).toContain(`{{${name}}}`)
     }
@@ -137,6 +145,27 @@ describe("request phase status copy", () => {
 })
 
 describe("headerProgress", () => {
+  test("a model silent for minutes is named; a shorter wait or a running tool reads as thinking", () => {
+    const quiet = since + HEADER_SILENCE_MS
+    expect(headerProgress(at("waiting_first_token"), quiet - 1)).toBeUndefined()
+    expect(headerProgress(at("waiting_first_token"), quiet)).toEqual({
+      key: "ui.sessionTurn.status.noOutput",
+      params: {},
+    })
+    // The attempt's elapsed time before the phase began counts toward the silence.
+    expect(headerProgress(at("waiting_first_token", { elapsedMs: 60_000 }), since + 60_000)?.key).toBe(
+      "ui.sessionTurn.status.noOutput",
+    )
+    expect(headerProgress(at("connecting"), quiet)?.key).toBe("ui.sessionTurn.status.noOutput")
+    expect(headerProgress(at("streaming", { lastOutputAt: since }), quiet - 1)).toBeUndefined()
+    expect(headerProgress(at("streaming", { lastOutputAt: since }), quiet)).toEqual({
+      key: "ui.sessionTurn.status.noNewOutput",
+      params: {},
+    })
+    expect(headerProgress(at("streaming", { lastOutputAt: since }), quiet, true)).toBeUndefined()
+    expect(headerProgress(at("preparing"), quiet)).toBeUndefined()
+  })
+
   test("only a retry countdown or a conflict wait earn a label of their own", () => {
     expect(headerProgress(at("preparing"), since + 40_000)).toBeUndefined()
     expect(headerProgress(at("connecting"), since + 5_000)).toBeUndefined()

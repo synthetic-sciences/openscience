@@ -984,6 +984,9 @@ export namespace SessionProcessor {
           // whole request, so they are withdrawn before the next attempt
           // rather than left in front of the answer that replaces them.
           const attemptParts: string[] = []
+          // Whether this attempt produced readable model output; a stream
+          // that died before any may be sent once more as a new request.
+          let produced = false
           try {
             progress("preparing")
             traceRoute = accessRoute(credentialSource, input.model)
@@ -1069,6 +1072,7 @@ export namespace SessionProcessor {
               ) {
                 output.progress()
                 progress("streaming")
+                produced = true
               }
               switch (value.type) {
                 case "start":
@@ -1447,7 +1451,7 @@ export namespace SessionProcessor {
               const action = iife(() => {
                 const decided = providerFailureAction(cause, error, toolOutcomes.started())
                 if (decided.type !== "terminal" || toolOutcomes.started()) return decided
-                if (resubmits >= 1 || !SessionRetry.resubmittable(error)) return decided
+                if (resubmits >= 1 || !SessionRetry.resubmittable(error, { output: produced })) return decided
                 resubmits += 1
                 return {
                   type: "retry" as const,

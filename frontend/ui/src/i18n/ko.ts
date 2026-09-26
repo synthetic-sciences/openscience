@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "편집 수행 중",
   "ui.sessionTurn.status.runningCommands": "명령어 실행 중",
   "ui.sessionTurn.status.thinking": "생각 중",
+  "ui.sessionTurn.status.noOutput": "아직 모델 출력이 없습니다",
+  "ui.sessionTurn.status.noNewOutput": "모델의 새 출력이 없습니다",
   "ui.sessionTurn.status.gatheringThoughts": "생각 정리 중",
   "ui.sessionTurn.progress.connecting": "{{model}}에 연결 중…",
   "ui.sessionTurn.progress.stillConnecting": "{{model}}에 계속 연결 중 ({{seconds}}초)",

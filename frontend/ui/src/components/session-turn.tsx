@@ -975,12 +975,20 @@ export function SessionTurn(
     onCleanup(() => clearInterval(timer))
   })
 
-  // The header names what the reader can act on: a retry countdown or a
-  // conflict wait. A request being prepared, sent or quietly streamed reads
-  // as thinking, and the tool that is running reads as its own activity. The
-  // clock beside the label keeps the wait honest; the request detail
-  // ("Waiting for output from …", "No new output for 58s") sits in the tooltip.
-  const phase = createMemo(() => headerProgress(progress(), store.now))
+  // The header names what the reader can act on: a retry countdown, a
+  // conflict wait, or a model silent for minutes. A request being prepared,
+  // sent or briefly quiet reads as thinking, and the tool that is running
+  // reads as its own activity. The clock beside the label keeps the wait
+  // honest; the request detail ("Waiting for output from …", "No new output
+  // for 58s") sits in the tooltip.
+  const tool = createMemo(() => {
+    const latest = assistantMessages().at(-1)
+    if (!latest) return false
+    return (data.store.part[latest.id] ?? emptyParts).some(
+      (part) => part.type === "tool" && part.state.status === "running",
+    )
+  })
+  const phase = createMemo(() => headerProgress(progress(), store.now, tool()))
   const detail = createMemo(() => {
     const status = progressStatus(progress(), store.now)
     if (!status) return

@@ -299,6 +299,15 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **A response that dies before any output recovers on its own.** One
+  Extra-high turn on the managed gateway got its first byte, then nothing,
+  and read as "Thinking" for eighteen minutes; left alone it would have
+  failed at twenty-five. The gateway relays keepalives and ends a silent
+  stream itself, so its ten-minute deadline no longer grows with reasoning
+  effort. A request that times out before any model output reached the page
+  is sent once more as a new request (the provider may bill both), and after
+  two minutes without output the turn's status says "No output from the
+  model yet" instead of "Thinking". A running tool keeps the status calm.
 - **A message sent while a turn is working no longer appears twice.** The
   server renumbers a message whose id would sort below a step the running
   turn started after the send, and the transcript kept the composer's

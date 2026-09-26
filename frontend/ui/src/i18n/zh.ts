@@ -26,6 +26,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "正在修改",
   "ui.sessionTurn.status.runningCommands": "正在运行命令",
   "ui.sessionTurn.status.thinking": "思考中",
+  "ui.sessionTurn.status.noOutput": "模型尚无输出",
+  "ui.sessionTurn.status.noNewOutput": "模型暂无新输出",
   "ui.sessionTurn.status.gatheringThoughts": "正在整理思路",
   "ui.sessionTurn.progress.connecting": "正在连接 {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "仍在连接 {{model}}（{{seconds}}秒）",

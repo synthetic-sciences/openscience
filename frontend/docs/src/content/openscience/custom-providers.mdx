@@ -99,7 +99,7 @@ Provider options support request deadlines in milliseconds:
 | Option | Default |
 | --- | --- |
 | `connectTimeout` | 300000 (5 minutes) waiting for response headers; 600000 (10 minutes) for the managed Ace gateway, which sends headers only once the upstream body begins; disabled by default for local endpoints. |
-| `idleTimeout` | 600000 (10 minutes) for remote endpoints, including the managed Ace gateway; reset by every response-body chunk and disabled by default for local endpoints. |
+| `idleTimeout` | 600000 (10 minutes) for remote endpoints, including the managed Ace gateway; reset by every response-body chunk and disabled by default for local endpoints. Other remote endpoints allow longer at higher reasoning effort (1.5× at `high`, 2.5× at `xhigh`, 4.5× at `max`); the managed gateway ends a silent stream itself, so its deadline does not grow. |
 | `outputIdleTimeout` | Disabled; optionally bound the wait for readable output or tool-call activity. |
 | `timeout` | No total-duration limit by default. |
 
@@ -119,4 +119,4 @@ Active remote responses keep running because keepalives and streamed private rea
 
 This allows twenty minutes without new readable output. Set an individual option to `false` to disable that deadline. Disabling `timeout` does not disable the other deadlines. These settings cannot extend limits imposed by the service itself.
 
-Review partial results before retrying a timed-out request. Your service may already have processed part of it.
+Review partial results before retrying a timed-out request. Your service may already have processed part of it. A request that timed out before any model output arrived is sent once more automatically as a new request; the service may bill both.

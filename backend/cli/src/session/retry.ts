@@ -257,16 +257,21 @@ export namespace SessionRetry {
    * terminal. The provider may bill the first copy if it did finish late; one
    * duplicated step is cheaper than a halted run.
    */
-  export function resubmittable(error: ReturnType<NamedError["toObject"]>) {
+  export function resubmittable(error: ReturnType<NamedError["toObject"]>, input: { output: boolean }) {
     if (normalizeProviderError(error).code === "managed_request_timeout") return true
     // The same reasoning covers a direct provider that never answered: a
     // request that timed out while connecting, before any header or byte
     // came back, produced nothing to keep and nothing to duplicate on the
     // page. One eight-hour run ended on exactly that, with its deliverables
-    // already written. A timeout after the response began is different (the
-    // provider was working, and partial output exists) and stays terminal.
+    // already written. A body that fell silent before any model output is
+    // the same case found later: nothing reached the page, and the gateway's
+    // own no-progress error never arrived because the connection had died.
+    // Once model output exists the attempt stays terminal, so the partial
+    // output is kept rather than discarded and paid for twice.
     const data = (error as { data?: { metadata?: Record<string, unknown> } }).data
-    return data?.metadata?.code === "provider_request_timeout" && data.metadata.phase === "connect"
+    if (data?.metadata?.code !== "provider_request_timeout") return false
+    if (data.metadata.phase === "connect") return true
+    return !input.output && (data.metadata.phase === "first_event" || data.metadata.phase === "stream")
   }
 
   /** The error the user sees for a terminal provider failure. A dispatched

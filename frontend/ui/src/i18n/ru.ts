@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Внесение изменений",
   "ui.sessionTurn.status.runningCommands": "Выполнение команд",
   "ui.sessionTurn.status.thinking": "Размышление",
+  "ui.sessionTurn.status.noOutput": "Модель пока ничего не выдала",
+  "ui.sessionTurn.status.noNewOutput": "Нет нового вывода от модели",
   "ui.sessionTurn.status.gatheringThoughts": "Сбор мыслей",
   "ui.sessionTurn.progress.connecting": "Подключение к {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "Подключение к {{model}} всё ещё выполняется ({{seconds}}с)",

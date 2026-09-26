@@ -25,6 +25,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Making edits",
   "ui.sessionTurn.status.runningCommands": "Running commands",
   "ui.sessionTurn.status.thinking": "Thinking",
+  "ui.sessionTurn.status.noOutput": "No output from the model yet",
+  "ui.sessionTurn.status.noNewOutput": "No new output from the model",
   "ui.sessionTurn.status.gatheringThoughts": "Writing response",
   "ui.sessionTurn.status.queued": "Queued · follows the current step",
   "ui.sessionTurn.status.awaitingApproval": "Waiting for your approval",
