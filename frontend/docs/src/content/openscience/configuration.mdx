@@ -53,7 +53,8 @@ Use `/check-data data/samples.csv` in the workspace, or `openscience run --comma
 | `permission` | Action rules such as `ask`, `allow`, and `deny`. |
 | `agent.<name>` | Per-agent `model`, `variant`, `skills` (categories for a specialist's domain index), `prompt`, `permission`. A rule that names a tool offers it to that agent without a skill. |
 | `subagent_depth` | How many levels of workers may nest; default `1` (only the lead dispatches). |
-| `harness` | Switches for the harness units, all on by default: `redirect`, `deliverables`, `budget`, `cost` (or `{ "max_usd": n }` for a soft spend ceiling), `headless-policy`, `durable-jobs`, `workers`. |
+| `harness` | Switches for the harness units, all on by default: `redirect`, `deliverables`, `acceptance`, `unattended`, `review`, `budget`, `cost` (or `{ "max_usd": n }` for a soft spend ceiling), `headless-policy`, `durable-jobs`, `workers`. |
+| `compaction` | `auto` (default `true`), `prune` (default `true`), `recentImages`, and the experimental `pruneInputs`: when an old tool call is pruned, also shorten its long string arguments (a patch body, a script) to a preview in what the model re-reads; the stored call stays complete (default `false`). |
 | `server.port` | Port for the local workspace or server. |
 | `autoupdate` | Update preference: `true`, `false`, or `"notify"`. |
 
@@ -66,7 +67,10 @@ Each unit delivers one piece of context at a precise point in the loop and can b
 | Unit | What it does |
 | --- | --- |
 | `redirect` | When the same tool failure repeats three times (or the model loops on text), inject one strategy-change message instead of stopping; a second trip stops the turn. |
-| `deliverables` | When the first request names its output files, check each named file before the turn ends (present, non-empty, parses, no NaN/Inf, no placeholder text, no duplicate ids) and list the failures once; two rounds at most. |
+| `deliverables` | When the first request names its output files, check each named file before the turn ends (present, non-empty, parses, no NaN/Inf, no placeholder text) and list the failures once; two rounds at most. Files listed under a destination ("save to `results/`: `a.csv`, `b.tsv`") are looked for there. |
+| `acceptance` | When the first request states its own verification (a recognised build or test command such as `lake build`, `pytest -q tests/`, `cargo test`, a `check.sh`; tokens forbidden under a path such as `sorry` under `src/`), run the command and grep the path before the turn ends and continue the turn with the grader's own output when they fail; three rounds at most. The command runs through the session's `bash` tool under the same permission rule and card a model-typed command gets, inside the same sandbox; one the rules do not permit is reported as not run. |
+| `unattended` | Under autonomous autonomy (`openscience run --auto-approve`, or the Autonomous setting), a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver. |
+| `review` | When the deliverable is a written report, read it once in a fresh context (the internal `reader` agent) against the request before the turn ends, and continue the turn once with what the report does not address. |
 | `budget` | Show CPUs and memory (from the container's cgroup) and, with a deadline, the time budget and elapsed time in the environment block; remind at 50% and 85%; ask to continue when time remains and deliverables fail. |
 | `cost` | Show spend so far beside the time budget; an optional soft ceiling adds a wrap-up reminder, never a hard stop. |
 | `headless-policy` | In `openscience run --auto-approve`, continue past denied tool calls and answer questions with their recommended option. |

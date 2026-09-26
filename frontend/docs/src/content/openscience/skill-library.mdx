@@ -3,7 +3,7 @@ title: "Skill directory"
 description: "Browse the research procedures included with this documentation version."
 ---
 
-OpenScience includes 367 skill files in this version. This directory is generated from the bundled library. Each entry describes the procedure and links to its full usage instructions and supporting files on GitHub.
+OpenScience includes 371 skill files in this version. This directory is generated from the bundled library. Each entry describes the procedure and links to its full usage instructions and supporting files on GitHub.
 
 Use **Customize → Skills** or `openscience skill list --all` for the library available in your installed version. A listed skill is a procedure, not a claim that all of its software, data, or services are installed.
 
@@ -55,6 +55,7 @@ Most of these skills were written by other people and adapted for OpenScience's 
 | [immunology-assays](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/immunology-assays/SKILL.md) | Computational analysis of immunology experimental data. |
 | [lamindb](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/lamindb/SKILL.md) | This skill should be used when working with LaminDB, an open-source data framework for biology that makes data queryable, traceable, reproducible, and FAIR. |
 | [latchbio-integration](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/latchbio-integration/SKILL.md) | Latch platform for bioinformatics workflows. |
+| [marker-panel-annotation](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/marker-panel-annotation/SKILL.md) | Assigns cell-type labels to clusters from a protein marker panel (multiplexed imaging such as MIBI, CODEX, IMC and CyCIF; mass and flow cytometry; CITE-seq protein), where the labels are judged against an expert reference. |
 | [microbial-dynamics](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/microbial-dynamics/SKILL.md) | Microbial population dynamics modeling and analysis. |
 | [molecular-cloning](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/molecular-cloning/SKILL.md) | Molecular cloning simulation and design. |
 | [neurokit2](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/biology/neurokit2/SKILL.md) | Comprehensive biosignal processing toolkit for analyzing physiological data including ECG, EEG, EDA, RSP, PPG, EMG, and EOG signals. |
@@ -104,6 +105,7 @@ Most of these skills were written by other people and adapted for OpenScience's 
 | [denovo-design](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/denovo-design/SKILL.md) | De novo molecule generation for drug discovery. |
 | [diffdock](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/diffdock/SKILL.md) | Diffusion-based molecular docking. |
 | [drug-design](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/drug-design/SKILL.md) | End-to-end drug discovery pipeline orchestration. |
+| [framework-topology](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/framework-topology/SKILL.md) | Turns a crystal structure (CIF) of a hydrogen-bonded, coordination or covalent framework into its underlying net and the quantities a topology question asks for: node definition, the periodic quotient graph, connectivity as distinct neighbours rather than… |
 | [hypogenic](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/hypogenic/SKILL.md) | Automated LLM-driven hypothesis generation and testing on tabular datasets. |
 | [matchms](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/matchms/SKILL.md) | Spectral similarity and compound identification for metabolomics. |
 | [medchem](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/chemistry/medchem/SKILL.md) | Medicinal chemistry filters. |
@@ -169,6 +171,8 @@ Most of these skills were written by other people and adapted for OpenScience's 
 
 | Skill and usage instructions | What the procedure covers |
 | --- | --- |
+| [acceptance-checks](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/acceptance-checks/SKILL.md) | Turns the acceptance criteria a task states into executable checks and runs them against the finished outputs before delivering, rather than trusting that a correct-looking analysis satisfies them; rehearses the hidden condition when the grader scores… |
+| [analysis-report](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/analysis-report/SKILL.md) | Writes the trace and report for an analysis whose output a reader will judge, restating the question with its binding clauses, recording data provenance, the method with every parameter that matters, results with raw and adjusted numbers and uncertainty,… |
 | [autoresearch](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/autoresearch/SKILL.md) | Runs a hill-climbing study over many training or analysis runs with the study and experiments tools, one metric and direction, a baseline, ideas ranked by expected value, exactly one run per idea, kill criteria and a budget, verdicts with analysis and… |
 | [brainstorming](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/brainstorming/SKILL.md) | Generates and selects research directions, mapping what is known and what is open, producing many candidate ideas by named moves (gap, transfer, inversion, constraint change, scale, failure analysis), then ranking them by tractability and value and… |
 | [citations](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/citations/SKILL.md) | Resolves, verifies and formats references, every citation confirmed against Crossref, OpenAlex, arXiv or PubMed before it enters the bibliography, BibTeX built from resolved metadata, and existing .bib files audited for fabricated or mismatched entries. |
@@ -187,6 +191,8 @@ Most of these skills were written by other people and adapted for OpenScience's 
 | [schematics](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/schematics/SKILL.md) | Creates or refines publication-quality technical diagrams with the native generate_image tool (Nano Banana Pro through Ace or a Gemini key, GPT Image 2 through an OpenAI key), method and architecture overviews, pipelines, CONSORT and PRISMA flows,… |
 | [scientific-visualization](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/scientific-visualization/SKILL.md) | Creates and audits truthful, accessible, publication-ready scientific figures with Matplotlib, Seaborn or Plotly, covering figure design, multi-panel layouts, uncertainty and missing-data displays, colour and contrast review, image metadata validation and… |
 | [sources](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/sources/SKILL.md) | Audits claims against their sources, each statement in a draft, report, answer or summary traced to the passage, table, dataset or run that supports it, and marked supported, partially supported, unsupported or contradicted, with a provenance table as the… |
+| [statistical-conventions](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/statistical-conventions/SKILL.md) | Chooses and reports statistical tests the way a careful referee expects, deciding paired versus unpaired and parametric versus rank-based from the design, using ordered-trend tests such as Jonckheere-Terpstra and Cochran-Armitage for dose or grade levels,… |
+| [submitted-code](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/core/submitted-code/SKILL.md) | Writes code that survives being re-executed by someone else on inputs you never saw, targeting the grader's or collaborator's runtime rather than your own, with one self-contained entry point using only the libraries the specification names, no reliance on… |
 
 ## Data engineering
 
@@ -448,7 +454,6 @@ Most of these skills were written by other people and adapted for OpenScience's 
 | [research-workflows](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/research/research-workflows/SKILL.md) | Plan, review, verify, reproduce, compare, audit sources, and package scientific work. |
 | [review](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/research/review/SKILL.md) | Independently review code, results, claims, or an artifact and return prioritized, evidence-backed findings. |
 | [scholar-evaluation](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/scholar-evaluation/SKILL.md) | Evaluate scholarly work with structured criteria for rigor, methodology, evidence, writing, and publication readiness. |
-| [statistical-conventions](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/research/statistical-conventions/SKILL.md) | Chooses and reports statistical tests the way a careful referee expects, deciding paired versus unpaired and parametric versus rank-based from the design, using ordered-trend tests such as Jonckheere-Terpstra and Cochran-Armitage for dose or grade levels,… |
 | [statistical-power](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/research/statistical-power/SKILL.md) | Sample-size and statistical power calculations for planning studies. |
 
 ## Visualization
@@ -466,7 +471,6 @@ Most of these skills were written by other people and adapted for OpenScience's 
 
 | Skill and usage instructions | What the procedure covers |
 | --- | --- |
-| [analysis-report](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/writing/analysis-report/SKILL.md) | Writes the trace and report for an analysis whose output a reader will judge, restating the question with its binding clauses, recording data provenance, the method with every parameter that matters, results with raw and adjusted numbers and uncertainty,… |
 | [hugging-face-paper-publisher](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/writing/hugging-face-paper-publisher/SKILL.md) | Publish and manage research papers on Hugging Face Hub. |
 | [latex-posters](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/writing/latex-posters/SKILL.md) | Create professional research posters in LaTeX using beamerposter, tikzposter, or baposter. |
 | [markdown-mermaid-writing](https://github.com/synthetic-sciences/openscience/blob/main/backend/cli/skills/writing/markdown-mermaid-writing/SKILL.md) | Comprehensive markdown and Mermaid diagram writing skill. |
