@@ -1,28 +1,29 @@
 [data-component="dialog"] [data-slot="dialog-content"].release-notes-dialog {
-  width: min(100%, 32rem);
+  width: min(100%, 34rem);
   min-height: 0;
-  max-height: min(calc(100dvh - 2rem), 36rem);
+  max-height: min(calc(100dvh - 2rem), 38rem);
   overflow: hidden;
   align-self: center;
   background: var(--color-surface-solid);
+  border-radius: var(--radius-xl, 1rem);
 }
 
 .release-notes-dialog [data-slot="dialog-header"] {
-  padding: 1.1rem 1.25rem 0.4rem;
+  padding: 1.5rem 1.5rem 0.5rem;
 }
 
 .release-notes-dialog [data-slot="dialog-title"] {
   color: var(--color-text);
-  font-size: 1.125rem;
+  font-size: 1.3125rem;
   font-weight: var(--font-weight-emphasis);
-  letter-spacing: -0.018em;
-  line-height: 1.3;
+  letter-spacing: -0.022em;
+  line-height: 1.25;
 }
 
 .release-notes-dialog [data-slot="dialog-description"] {
   max-width: 58ch;
-  margin: 0 !important;
-  padding: 0 3.25rem 0.75rem 1.25rem;
+  margin: 0.25rem 0 0 !important;
+  padding: 0 3.25rem 1rem 1.5rem;
   color: var(--color-text-muted);
   font-size: 0.8125rem;
   line-height: 1.5;
@@ -45,56 +46,67 @@
 .release-notes__body {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.85rem;
   min-height: 0;
   min-width: 0;
   flex: 1 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
   overflow-wrap: anywhere;
-  padding: 0.25rem 1.25rem 1.1rem;
+  padding: 0.35rem 1.5rem 1.35rem;
 }
 
 .release-notes__body > * {
   flex-shrink: 0;
 }
 
+/* The section reads as a quiet eyebrow above its list, not a second title. */
 .release-notes__section {
   margin: 0;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-family: var(--font-family-sans);
-  font-size: 0.8125rem;
-  font-weight: var(--font-weight-emphasis);
-  letter-spacing: 0.01em;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.03em;
 }
 
 .release-notes__text {
   margin: 0;
   color: var(--color-text);
-  font-size: 0.875rem;
-  line-height: 1.55;
+  font-size: 0.9375rem;
+  line-height: 1.6;
   text-wrap: pretty;
 }
 
 .release-notes__list {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.7rem;
   margin: 0;
-  padding: 0 0 0 1.1rem;
-  list-style: disc outside;
+  padding: 0;
+  list-style: none;
   color: var(--color-text);
-  font-size: 0.875rem;
-  line-height: 1.5;
+  font-size: 0.9375rem;
+  line-height: 1.55;
 }
 
+/* A soft dot on its own column, so a wrapped item hangs cleanly under its
+   text rather than under the bullet. */
 .release-notes__list li {
-  display: list-item;
+  position: relative;
+  padding-left: 1.15rem;
   text-wrap: pretty;
 }
 
-.release-notes__list li::marker {
-  color: var(--color-text-muted);
+.release-notes__list li::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 0.1rem;
+  width: 0.28rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--color-text-faint);
 }
 
 .release-notes__media {
@@ -118,8 +130,20 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.75rem 1.25rem 0.85rem;
+  padding: 0.85rem 1.5rem 1rem;
   border-top: 1px solid var(--color-border);
+}
+
+/* "Don't show again" is an aside, not a peer of the primary action: keep it
+   quiet on the left so the eye lands on Next / Got it. */
+.release-notes__footer > [data-component="button"]:first-child {
+  color: var(--color-text-faint);
+  font-size: 0.8125rem;
+  padding-inline: 0;
+}
+
+.release-notes__footer > [data-component="button"]:first-child:hover {
+  color: var(--color-text-muted);
 }
 
 .release-notes__actions {

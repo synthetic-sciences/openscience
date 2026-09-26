@@ -590,11 +590,19 @@ export default function Page(): JSX.Element {
   const contextSubscription = sdk.event.on("session.context", (event) => {
     const id = event.properties.sessionID
     const stored = sync.data.message[id] ?? []
+    // The headline counts the whole request the provider caches, not only the
+    // message log: budget.total adds the tool-definition schemas and prompt
+    // overhead sent every turn, so the estimate matches the cache-read the
+    // finished turn reports instead of jumping when it settles. The difference
+    // is shown as its own "Tool definitions" bucket so the breakdown reconciles.
+    const composed = event.properties.total
+    const assembled = event.properties.budget?.total ?? composed
+    const definitions = Math.max(0, assembled - composed)
     setEstimates((current) => ({
       ...current,
-      [id]: estimate(stored, event.properties.total, {
-        total: event.properties.total,
-        tokens: event.properties.tokens,
+      [id]: estimate(stored, assembled, {
+        total: assembled,
+        tokens: { ...event.properties.tokens, definitions },
       }),
     }))
   })

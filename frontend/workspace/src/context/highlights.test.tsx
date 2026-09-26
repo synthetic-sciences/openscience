@@ -41,4 +41,14 @@ describe("release body parsing", () => {
   test("cleanReleaseLine strips links, emphasis and the trailing PR reference", () => {
     expect(cleanReleaseLine("**Bold** and [a link](http://x) here (#42)")).toBe("Bold and a link here")
   })
+
+  test("cleanReleaseLine drops a bot or author attribution and the PR number behind it", () => {
+    expect(cleanReleaseLine("Bump @codemirror/view from 6.43.11 to 6.43.12 (#734) (dependabot[bot])")).toBe(
+      "Bump @codemirror/view from 6.43.11 to 6.43.12",
+    )
+    expect(cleanReleaseLine("Preserve running work when access widens (#717) (@aayambansal)")).toBe(
+      "Preserve running work when access widens",
+    )
+    expect(cleanReleaseLine("Faster startup by @octocat in https://github.com/x/y/pull/12")).toBe("Faster startup")
+  })
 })

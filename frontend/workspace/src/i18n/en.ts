@@ -273,7 +273,7 @@ export const dict = {
   "context.composition.note":
     "Approximate shares of loaded text before this call, using four characters per token. Excludes this response, complete system instructions, tool definitions, media, and server-side context changes. These shares do not measure provider token usage.",
   "context.composition.recordedNote":
-    "Estimates from the last observed pre-call context. Documents and images are separate from text. Excludes tool definitions and provider-specific wrappers; these are not billed token counts.",
+    "Estimated from the last pre-call context, including the tool-definition schemas sent with every request. Documents and images are counted apart from text. Small provider-specific wrappers are omitted, so this can read a little under the provider's own count.",
   "context.composition.notReported": "Not reported",
   "context.headline.of": "of {{window}} tokens",
   "context.headline.tokens": "tokens",

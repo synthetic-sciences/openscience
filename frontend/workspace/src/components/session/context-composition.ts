@@ -64,16 +64,34 @@ export type ContextCompositionEstimate = {
     skills: number
     image: number
     document?: number
+    // The tool-definition schemas and prompt overhead sent with every request,
+    // part of the cached prefix the provider bills but absent from the message
+    // log. Present only for the pre-call estimate, which knows the assembled
+    // request size; the transcript fallback cannot see it.
+    definitions?: number
   }
 }
 
 export type ContextBucket =
-  "system" | "text" | "reasoning" | "tool" | "skills" | "image" | "document" | "instructions" | "user" | "assistant"
+  | "system"
+  | "definitions"
+  | "text"
+  | "reasoning"
+  | "tool"
+  | "skills"
+  | "image"
+  | "document"
+  | "instructions"
+  | "user"
+  | "assistant"
 
-/** These are server estimates of separate content buckets, not billed token allocations. */
+/** The server's estimate of the assembled request, one row per content type.
+ * Tool definitions sit beside system instructions: both are the fixed prefix
+ * the provider caches and bills on every turn. */
 export function recordedContextComposition(value: ContextCompositionEstimate) {
   return [
     { key: "system" as const, label: "System instructions", tokens: value.tokens.system },
+    { key: "definitions" as const, label: "Tool definitions", tokens: value.tokens.definitions },
     { key: "text" as const, label: "Conversation text", tokens: value.tokens.text },
     { key: "reasoning" as const, label: "Reasoning", tokens: value.tokens.reasoning },
     { key: "tool" as const, label: "Tool calls and results", tokens: value.tokens.tool },
@@ -106,6 +124,7 @@ export const CONTEXT_BUCKET_COLORS: Record<ContextBucket, string> = {
   user: "var(--syntax-success)",
   assistant: "var(--syntax-property)",
   reasoning: "var(--syntax-keyword)",
+  definitions: "var(--syntax-constant)",
   tool: "var(--syntax-warning)",
   skills: "var(--syntax-property)",
   image: "var(--syntax-string)",
