@@ -112,26 +112,37 @@
     }
   }
 
-  /* Head ------------------------------------------------------------- */
+  /* Front: title, authors, the hero figure and the headline numbers, on a
+     wider measure than the text so the figure and strip have room. */
+  [data-slot="front"] {
+    width: min(52rem, 100% - 2 * var(--padding));
+    margin: 0 auto;
+    padding: var(--vertical-padding) 0 0;
+    color: var(--ink-2);
+    line-height: 1.6;
+    -webkit-text-stroke: 0;
+  }
+  [data-slot="front"] + [data-slot="paper"] {
+    padding-top: 0.6rem;
+  }
+
   [data-slot="head"] {
     text-align: center;
-    padding: clamp(1rem, 4vw, 2.4rem) 0 1.6rem;
     h1 {
       font-weight: 400;
-      font-size: 2.7rem;
-      line-height: 1.05;
-      letter-spacing: -0.01em;
+      font-size: clamp(2.4rem, 5vw, 3.4rem);
+      line-height: 1;
+      letter-spacing: -0.015em;
       color: var(--ink);
-      margin: 0 0 0.45rem;
+      margin: 0 0 0.7rem;
     }
     p {
       margin: 0;
-      hyphens: none;
     }
     [data-slot="sub"] {
-      font-size: 1.18rem;
+      font-size: 1.25rem;
       color: var(--ink-2);
-      margin: 0 0 1.5rem;
+      margin: 0 0 1.8rem;
     }
     [data-slot="authors"] {
       color: var(--ink);
@@ -142,19 +153,29 @@
     [data-slot="affil"] {
       font-size: 0.86rem;
       color: var(--ink-2);
-      margin: 0.15rem 0 0;
+      margin: 0.2rem 0 0;
     }
     [data-slot="email"] {
-      font-size: 0.8rem;
-      color: var(--muted);
-      margin: 0.1rem 0 0;
+      font-size: 0.78rem;
+      margin: 0.25rem 0 0;
       font-family: var(--mono);
       letter-spacing: -0.01em;
+      a {
+        color: var(--muted);
+        background: none;
+        text-decoration: none;
+      }
+      a:hover {
+        color: var(--ink);
+      }
+      a + a {
+        margin-left: 1.6em;
+      }
     }
     [data-slot="date"] {
       font-size: 0.82rem;
       color: var(--muted);
-      margin: 0.9rem 0 1.4rem;
+      margin: 0.8rem 0 1.6rem;
     }
     [data-slot="actions"] {
       display: flex;
@@ -163,6 +184,17 @@
       align-items: center;
       gap: 1.3rem;
       font-size: 0.85rem;
+      a {
+        color: var(--accent);
+        text-decoration: none;
+        background-image: linear-gradient(currentColor, currentColor);
+        background-size: 100% 1px;
+        background-repeat: no-repeat;
+        background-position: 0 100%;
+      }
+      a:hover {
+        color: var(--ink);
+      }
       a[data-slot="button"] {
         background: var(--color-background-strong);
         color: var(--color-text-inverted);
@@ -178,7 +210,7 @@
   }
 
   [data-slot="hero-figure"] {
-    margin: 1.4rem 0 0;
+    margin: 2.6rem 0 0;
     svg {
       width: 100%;
       height: auto;
@@ -186,8 +218,9 @@
       overflow: visible;
     }
     figcaption {
+      max-width: var(--col);
       text-align: center;
-      margin: 0.5rem auto 0;
+      margin: 0.7rem auto 0;
     }
   }
 
@@ -195,7 +228,7 @@
   [data-slot="stats"] {
     display: grid;
     grid-template-columns: 1fr 1fr 1.12fr 0.88fr;
-    margin: 2.4rem 0 0;
+    margin: 2.2rem 0 0;
     background: var(--plate);
     border: 1px solid var(--rule);
     border-radius: 3px;

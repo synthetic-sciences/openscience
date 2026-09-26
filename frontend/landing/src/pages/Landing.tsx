@@ -257,11 +257,14 @@ export default function Landing() {
 
           <section data-component="section" id="benchmarks" data-nav="Benchmarks">
             <div data-slot="section-title">
-              <h3>The #1 scientific agent</h3>
+              <h3>The state-of-the-art AI co-scientist</h3>
               <div>
                 <p>
-                  OpenScience leads every public benchmark for scientific agents we have run. Each runs in its native
-                  environment with its own verifier or judge, and is compared with the benchmark's public leaderboard.
+                  OpenScience scores <strong>{NUMBERS.tbs_pct}%</strong> on Terminal-Bench Science, {NUMBERS.tbs_margin}{" "}
+                  above Codex with the same model; <strong>{NUMBERS.tb4_pct}%</strong> on Terminal-Bench 4.0 (science),
+                  ahead of all {NUMBERS.lb4_n} public entries; and <strong>{NUMBERS.bio_mean}</strong> on
+                  BiomniBench-DA, ahead of {NUMBERS.bio_other_short}, OmicOS, and Claude Code. See the{" "}
+                  <a href="/benchmark">benchmark report</a>.
                 </p>
               </div>
               <div data-component="benchmarks">
@@ -269,10 +272,6 @@ export default function Landing() {
                   <BenchmarkFigure key={benchmark.id} benchmark={benchmark} index={index + 1} />
                 ))}
               </div>
-              <a href="/benchmark" data-slot="button-light" data-slot-spacing="">
-                <span>Read the benchmark report</span>
-                <Arrow />
-              </a>
             </div>
           </section>
 

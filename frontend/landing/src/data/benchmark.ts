@@ -194,3 +194,11 @@ export const BIO_MEANS: readonly { name: string; value: number; harness: Harness
   { name: "OmicOS", value: 76.6, harness: "oth" },
   { name: "Claude Code", value: 68.6, harness: "cc" },
 ]
+
+/** Terminal-Bench 4.0 (science): the best public entry of each harness. */
+export const TB4_BEST: readonly { name: string; value: number; harness: Harness }[] = [
+  { name: "OpenScience", value: 71.4, harness: "os" },
+  { name: "Claude Code", value: 60.0, harness: "cc" },
+  { name: "Codex", value: 45.7, harness: "codex" },
+  { name: "Grok Build", value: 30.0, harness: "oth" },
+]

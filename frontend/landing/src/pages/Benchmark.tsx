@@ -219,7 +219,7 @@ export default function Benchmark() {
         <Header current="benchmark" />
 
         <div data-component="content">
-          <article data-slot="paper">
+          <section data-slot="front">
             <header data-slot="head">
               <h1>OpenScience</h1>
               <p data-slot="sub">The #1 scientific agent, open source</p>
@@ -228,7 +228,10 @@ export default function Benchmark() {
                 <span>Aayam Bansal</span>
               </p>
               <p data-slot="affil">Synthetic Sciences</p>
-              <p data-slot="email">{"{ishaan, aayam}@syntheticsciences.ai"}</p>
+              <p data-slot="email">
+                <a href="mailto:ishaan@syntheticsciences.ai">ishaan@syntheticsciences.ai</a>
+                <a href="mailto:aayam@syntheticsciences.ai">aayam@syntheticsciences.ai</a>
+              </p>
               <p data-slot="date">September 2026</p>
               <div data-slot="actions">
                 <a href="/download" data-slot="button">
@@ -306,7 +309,9 @@ export default function Benchmark() {
                 <div data-slot="compare">using OpenScience</div>
               </div>
             </div>
+          </section>
 
+          <article data-slot="paper">
             <Section id="results" glyph={glyphResults}>
               Results
             </Section>
