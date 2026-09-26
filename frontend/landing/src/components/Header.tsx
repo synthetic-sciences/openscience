@@ -17,6 +17,7 @@ export function Wordmark() {
 const LINKS = [
   { label: "GitHub", href: GITHUB, external: true },
   { label: "Docs", href: DOCS },
+  { label: "Benchmark", href: "/benchmark" },
   { label: "Ace", href: "/ace" },
   { label: "Ascent", href: ASCENT, external: true },
 ] as const
@@ -34,7 +35,7 @@ function DownloadIcon() {
   )
 }
 
-export default function Header({ current }: { current?: "download" | "ace" | "privacy" }) {
+export default function Header({ current }: { current?: "download" | "ace" | "privacy" | "benchmark" }) {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {

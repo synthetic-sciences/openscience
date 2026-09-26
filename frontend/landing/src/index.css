@@ -58,11 +58,14 @@
   --grid-tile: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M0 0L40 40M0 40L40 0' stroke='rgba(255,255,255,0.09)' stroke-width='0.5'/></svg>");
 
   --color-icon: hsl(10, 3%, 43%);
-  /* Synthetic Sciences turquoise, the site's colour; a soft wash of it, and a
-     warm ochre used only for the other agents in the charts. */
+  /* Synthetic Sciences turquoise, the site's colour, and a soft wash of it. */
   --color-accent: hsl(181, 32%, 62%);
   --color-accent-soft: hsla(181, 32%, 62%, 0.16);
-  --color-chart-other: hsl(24, 38%, 60%);
+  /* The harness colours of every result figure: slate for Codex, ochre for
+     Claude Code, graphite for other agents; OpenScience is the accent. */
+  --color-chart-codex: hsl(211, 24%, 66%);
+  --color-chart-cc: hsl(27, 55%, 64%);
+  --color-chart-other: hsl(36, 6%, 46%);
 
   --padding: clamp(1.5rem, calc(15vw - 7.5rem), 5rem);
   --page-gutter: clamp(0.75rem, calc(12.5vw - 3rem), 6rem);
@@ -985,6 +988,10 @@ pre {
 
         strong {
           color: var(--color-text-strong);
+        }
+        small {
+          flex-basis: 100%;
+          color: var(--color-text-weak);
         }
         /* The benchmark's own page; internal benchmarks have no link. */
         a {

@@ -7,7 +7,8 @@ import Header from "@/components/Header"
 import { useMeta } from "@/components/Meta"
 import { ProviderRow } from "@/components/ProviderMark"
 import Workspace from "@/components/Workspace"
-import { BENCHMARKS, PRELIMINARY } from "@/data/benchmarks"
+import { BENCHMARKS, BENCHMARK_MODEL, FORTHCOMING } from "@/data/benchmarks"
+import { NUMBERS } from "@/data/benchmark"
 import { DOCS, GITHUB, LICENSE, SYNTHETIC_SCIENCES, docs } from "@/data/links"
 
 /* Install command per tab. `highlight` is the part set in ink. */
@@ -82,19 +83,15 @@ function InstallTabs() {
 
 const WHAT = [
   ["Model agnostic", "Free models included, or your own keys for any provider"],
-  ["Scientific databases", "UniProt, PDB, ChEMBL, PubChem, arXiv, and 37 more, as tools"],
-  ["Bundled skills", "355 skills across biology, chemistry, physics, ML, and writing, with a curated research core"],
+  ["Scientific databases", `UniProt, PDB, ChEMBL, PubChem, arXiv, and ${NUMBERS.connectors_total - 5} more, as tools`],
+  [
+    "Bundled skills",
+    `${NUMBERS.skills_total} skills across biology, chemistry, physics, ML, and writing, with a curated research core`,
+  ],
   ["ChatGPT Plus/Pro", "Sign in with OpenAI to use the subscription you already have"],
   ["Manages compute", "Builds environments and scales on demand: your laptop, cluster, or GPUs"],
   ["Multi-session", "Run several agents in parallel on the same project"],
 ] as const
-
-const RIVALS = (() => {
-  const chart = BENCHMARKS[2].chart
-  const names =
-    chart.kind === "comparison" ? chart.rows.filter((row) => row.name !== "OpenScience").map((row) => row.name) : []
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}` : names.join("")
-})()
 
 function Arrow() {
   return (
@@ -260,14 +257,17 @@ export default function Landing() {
 
           <section data-component="section" id="benchmarks" data-nav="Benchmarks">
             <div data-slot="section-title">
-              <h3>The state-of-the-art AI co-scientist</h3>
+              <h3>The #1 scientific agent</h3>
               <div>
                 <p>
-                  {PRELIMINARY ? "In preliminary runs, " : ""}OpenScience scores{" "}
-                  <strong>{BENCHMARKS[0].score.toFixed(1)}%</strong> on {BENCHMARKS[0].name}, on the cost-per-task
-                  frontier; <strong>{BENCHMARKS[1].score.toFixed(1)}%</strong> on {BENCHMARKS[1].name}, above the
-                  baseline harness on every model we tried; and <strong>{BENCHMARKS[2].score.toFixed(1)}%</strong> on{" "}
-                  {BENCHMARKS[2].name}, ahead of {RIVALS}.
+                  OpenScience leads every public benchmark for scientific agents we have run. With a {BENCHMARK_MODEL}{" "}
+                  lead it solves <strong>{NUMBERS.tbs_pct}%</strong> of Terminal-Bench Science, {NUMBERS.tbs_margin}{" "}
+                  points over Codex with the same model; <strong>{NUMBERS.tb4_pct}%</strong> of the science tasks in
+                  Terminal-Bench 4.0, {NUMBERS.tb4_margin} over Claude Code; and averages{" "}
+                  <strong>{NUMBERS.bio_mean}</strong> on BiomniBench-DA, {NUMBERS.bio_margin} over{" "}
+                  {NUMBERS.bio_other_short}. {FORTHCOMING.slice(0, -1).join(", ")} and{" "}
+                  {FORTHCOMING[FORTHCOMING.length - 1]} are running now. Every figure, trace and method is on the{" "}
+                  <a href="/benchmark">benchmark page</a>.
                 </p>
               </div>
               <div data-component="benchmarks">
@@ -275,6 +275,10 @@ export default function Landing() {
                   <BenchmarkFigure key={benchmark.id} benchmark={benchmark} index={index + 1} />
                 ))}
               </div>
+              <a href="/benchmark" data-slot="button-light" style={{ marginTop: "40px" }}>
+                <span>Read the benchmark report</span>
+                <Arrow />
+              </a>
             </div>
           </section>
 

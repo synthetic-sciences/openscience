@@ -1,0 +1,548 @@
+/* Generated from the launch post's blog.css (openscience-launch/export):
+   every figure rule, scoped to /benchmark, harness tokens prefixed h-.
+   Regenerate rather than edit. */
+
+[data-page="benchmark"] svg.divergence {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+[data-page="benchmark"] svg.divergence .tr {
+  fill: none;
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+[data-page="benchmark"] svg.divergence .tr.a {
+  stroke: var(--accent);
+}
+[data-page="benchmark"] svg.divergence .tr.b {
+  stroke: var(--other);
+}
+[data-page="benchmark"] svg.divergence .axis {
+  stroke: var(--rule);
+}
+[data-page="benchmark"] svg.divergence .split {
+  stroke: var(--rule-2);
+  stroke-dasharray: 2 3;
+}
+[data-page="benchmark"] svg.divergence .lab {
+  fill: var(--muted);
+  font-size: 10.5px;
+  font-family: var(--serif);
+}
+.js [data-page="benchmark"] svg.divergence .tr {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: bench-draw 6s cubic-bezier(0.4, 0.1, 0.3, 1) 0.3s forwards;
+}
+@keyframes bench-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes bench-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes bench-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  to {
+    opacity: 0.55;
+    transform: none;
+  }
+}
+[data-page="benchmark"] svg.glyph path,
+[data-page="benchmark"] svg.glyph circle {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+[data-page="benchmark"] svg.glyph .fill {
+  fill: var(--accent);
+  stroke: none;
+}
+[data-page="benchmark"] svg.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+  font-family: var(--serif);
+}
+[data-page="benchmark"] svg.chart text {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.chart text.ink {
+  fill: var(--ink);
+  font-size: 11px;
+}
+[data-page="benchmark"] svg.chart text.num,
+[data-page="benchmark"] svg.chart text.tk {
+  fill: var(--muted);
+  font-size: 10px;
+}
+[data-page="benchmark"] svg.chart text.lab {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.chart text.ttl {
+  fill: var(--ink);
+  font-size: 13px;
+}
+[data-page="benchmark"] svg.chart text.sub {
+  fill: var(--muted);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.chart text.mono {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  fill: var(--ink-2);
+}
+[data-page="benchmark"] svg.chart .gl {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+[data-page="benchmark"] svg.chart .sep {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+[data-page="benchmark"] .fam-science {
+  fill: var(--accent);
+}
+[data-page="benchmark"] .fam-ml {
+  fill: var(--other);
+}
+[data-page="benchmark"] .fam-data {
+  fill: var(--slate);
+}
+[data-page="benchmark"] .fam-craft {
+  fill: var(--graphite);
+}
+[data-page="benchmark"] .bar.h-os,
+[data-page="benchmark"] .pt.h-os,
+[data-page="benchmark"] .cell.h-os {
+  fill: var(--accent);
+}
+[data-page="benchmark"] .bar.h-os2 {
+  fill: var(--accent);
+  fill-opacity: 0.42;
+}
+[data-page="benchmark"] .bar.h-codex,
+[data-page="benchmark"] .pt.h-codex,
+[data-page="benchmark"] .cell.h-codex {
+  fill: var(--slate);
+}
+[data-page="benchmark"] .bar.h-cc,
+[data-page="benchmark"] .pt.h-cc,
+[data-page="benchmark"] .cell.h-cc {
+  fill: var(--other);
+}
+[data-page="benchmark"] .bar.h-oth {
+  fill: var(--graphite);
+}
+[data-page="benchmark"] svg.chart text.rl {
+  fill: var(--ink-2);
+  font-size: 11px;
+}
+[data-page="benchmark"] svg.chart text.rl.ours {
+  fill: var(--ink);
+}
+[data-page="benchmark"] svg.chart text.rl .md {
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.chart text.val {
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.chart text.val.h-os,
+[data-page="benchmark"] svg.chart text.val.h-os2 {
+  fill: var(--accent);
+}
+[data-page="benchmark"] svg.chart text.val.h-codex {
+  fill: var(--slate);
+}
+[data-page="benchmark"] svg.chart text.val.h-cc {
+  fill: var(--other);
+}
+[data-page="benchmark"] svg.chart text.val.h-oth {
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.board text.rl {
+  paint-order: stroke;
+  stroke: var(--plate);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+[data-page="benchmark"] svg.domains .range {
+  stroke: var(--rule-2);
+  stroke-width: 1.2;
+}
+[data-page="benchmark"] svg.domains .pt {
+  stroke: var(--plate);
+  stroke-width: 1.2;
+}
+[data-page="benchmark"] svg.matrix .cell0 {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 0.8;
+}
+[data-page="benchmark"] svg.matrix text.dom {
+  fill: var(--ink-2);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.matrix .star {
+  fill: var(--accent);
+}
+[data-page="benchmark"] svg.arch .box {
+  fill: var(--plate);
+  stroke: var(--rule-2);
+  stroke-width: 1;
+}
+[data-page="benchmark"] svg.arch .box.lead {
+  stroke: var(--accent);
+  stroke-width: 1.4;
+  fill: var(--plate);
+}
+[data-page="benchmark"] svg.arch .pill {
+  fill: var(--plate);
+  stroke: var(--rule-2);
+}
+[data-page="benchmark"] svg.arch text.ttl {
+  font-size: 13px;
+}
+[data-page="benchmark"] svg.arch text.item {
+  fill: var(--ink-2);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.arch .ln {
+  fill: none;
+  stroke: var(--rule-2);
+  stroke-width: 1;
+}
+[data-page="benchmark"] svg.arch .ln.acc {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+}
+[data-page="benchmark"] svg.arch .ln.dash {
+  stroke-dasharray: 2 3;
+}
+[data-page="benchmark"] svg.arch .ln.flow {
+  stroke-dasharray: 3 3;
+}
+[data-page="benchmark"] svg.arch .mk-g {
+  fill: var(--rule-2);
+}
+[data-page="benchmark"] svg.arch .mk-a {
+  fill: var(--accent);
+}
+[data-page="benchmark"] svg.arch .pulse {
+  fill: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-page="benchmark"] svg.arch .ln.flow {
+    animation: bench-march 1.2s linear infinite;
+  }
+  [data-page="benchmark"] svg.arch .ln.flow.rev {
+    animation-direction: reverse;
+  }
+}
+@keyframes bench-march {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-page="benchmark"] svg.arch .pulse {
+    display: none;
+  }
+}
+[data-page="benchmark"] svg.skills rect.u {
+  rx: 1;
+}
+[data-page="benchmark"] svg.skills rect.u:hover {
+  fill: var(--ink);
+}
+[data-page="benchmark"] svg.connectors .lk0 {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  fill: none;
+}
+[data-page="benchmark"] svg.connectors .lk {
+  stroke: var(--rule-2);
+  stroke-width: 0.9;
+  fill: none;
+}
+[data-page="benchmark"] svg.connectors .leaf {
+  fill: var(--plate);
+  stroke: var(--accent);
+  stroke-width: 1.2;
+}
+[data-page="benchmark"] svg.connectors .dom {
+  fill: var(--accent);
+}
+[data-page="benchmark"] svg.connectors .hub {
+  fill: var(--ink);
+}
+[data-page="benchmark"] svg.connectors .leaves text {
+  fill: var(--ink-2);
+  font-size: 10.5px;
+}
+[data-page="benchmark"] svg.connectors .dlab {
+  fill: var(--accent);
+  font-size: 10.5px;
+  paint-order: stroke;
+  stroke: var(--plate);
+  stroke-width: 4px;
+}
+[data-page="benchmark"] svg.connectors .dlab .num {
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.raster .span {
+  stroke: var(--rule-2);
+  stroke-width: 1;
+}
+[data-page="benchmark"] svg.raster .tick {
+  stroke-width: 1;
+  fill: none;
+  opacity: 0.85;
+}
+[data-page="benchmark"] svg.raster .dispatch {
+  stroke: #c44e52;
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.75;
+}
+[data-page="benchmark"] svg.raster text.role {
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.raster text.desc {
+  font-size: 9.5px;
+  fill: var(--muted);
+}
+[data-page="benchmark"] .g-shell {
+  stroke: var(--ink);
+}
+[data-page="benchmark"] .g-files {
+  stroke: var(--graphite);
+}
+[data-page="benchmark"] .g-kernel {
+  stroke: var(--accent);
+}
+[data-page="benchmark"] .g-compute {
+  stroke: var(--other);
+}
+[data-page="benchmark"] .g-search {
+  stroke: var(--slate);
+}
+[data-page="benchmark"] .g-skill {
+  stroke: #8a6bb0;
+}
+[data-page="benchmark"] .g-plan {
+  stroke: #c6a93f;
+}
+[data-page="benchmark"] .g-delegate {
+  stroke: #c44e52;
+}
+[data-page="benchmark"] .g-other {
+  stroke: #cfc9bf;
+}
+[data-page="benchmark"] svg.polar .ring {
+  fill: none;
+  stroke: var(--rule);
+}
+[data-page="benchmark"] svg.polar .ring.budget {
+  stroke: var(--accent);
+  stroke-dasharray: 3 4;
+  opacity: 0.7;
+}
+[data-page="benchmark"] svg.polar .rlab {
+  font-size: 9.5px;
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.polar .rlab.halo {
+  paint-order: stroke;
+  stroke: var(--plate);
+  stroke-width: 4px;
+}
+[data-page="benchmark"] svg.polar .spoke {
+  stroke-width: 1.4;
+}
+[data-page="benchmark"] svg.polar .spoke.ours {
+  stroke: var(--accent);
+  opacity: 0.6;
+}
+[data-page="benchmark"] svg.polar .spoke.other {
+  stroke: var(--other);
+  opacity: 0.5;
+}
+[data-page="benchmark"] svg.polar .dot.ours {
+  fill: var(--accent);
+}
+[data-page="benchmark"] svg.polar .dot.other {
+  fill: var(--plate);
+  stroke: var(--other);
+  stroke-width: 1.3;
+}
+[data-page="benchmark"] svg.polar text.tl {
+  font-size: 9px;
+  fill: var(--muted);
+}
+[data-page="benchmark"] svg.polar text.tl.solved {
+  fill: var(--ink-2);
+}
+[data-page="benchmark"] svg.polar text.big {
+  font-size: 26px;
+  fill: var(--ink);
+}
+[data-page="benchmark"] svg.swarm .dot {
+  fill: var(--accent);
+  fill-opacity: 0.85;
+  stroke: var(--plate);
+  stroke-width: 0.8;
+}
+[data-page="benchmark"] svg.swarm .meanline.h-os {
+  stroke: var(--accent);
+  stroke-width: 1.3;
+}
+[data-page="benchmark"] svg.swarm .meanline.h-oth {
+  stroke: var(--other);
+  stroke-width: 1.1;
+  stroke-dasharray: 4 3;
+}
+[data-page="benchmark"] svg.swarm text.val.h-oth {
+  fill: var(--other);
+}
+[data-page="benchmark"] svg.bifurcation {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+[data-page="benchmark"] svg.bifurcation path {
+  stroke: var(--ink);
+  stroke-width: 1;
+  opacity: 0.3;
+}
+[data-page="benchmark"] .pending-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  [data-page="benchmark"] .pending-grid {
+    grid-template-columns: 1fr;
+  }
+}
+[data-page="benchmark"] .pending {
+  background: var(--plate);
+  border: 1px solid var(--rule);
+  padding: 12px;
+  border-radius: 2px;
+}
+[data-page="benchmark"] .pending h5 {
+  font-weight: 400;
+  font-size: 0.86rem;
+  margin: 0;
+  color: var(--ink);
+}
+[data-page="benchmark"] .pending .m {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 0.05rem 0 0.5rem;
+}
+[data-page="benchmark"] .pending svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+[data-page="benchmark"] .pending svg text {
+  font-family: var(--serif);
+  fill: var(--muted);
+  font-size: 10px;
+}
+[data-page="benchmark"] .pending svg text.rl {
+  fill: var(--ink-2);
+}
+[data-page="benchmark"] .pending svg line {
+  stroke: var(--rule);
+}
+[data-page="benchmark"] .pending .soon {
+  fill: var(--muted);
+  font-size: 11px;
+}
+[data-page="benchmark"] .pending .d {
+  font-size: 0.7rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin: 0.6rem 0 0;
+}
+@media (max-width: 700px) {
+  [data-page="benchmark"] svg.skills,
+  [data-page="benchmark"] svg.raster,
+  [data-page="benchmark"] svg.board,
+  [data-page="benchmark"] svg.arch,
+  [data-page="benchmark"] svg.domains,
+  [data-page="benchmark"] svg.matrix {
+    min-width: 600px;
+  }
+  [data-page="benchmark"] svg.polar,
+  [data-page="benchmark"] svg.connectors {
+    min-width: 560px;
+  }
+  [data-page="benchmark"] svg.swarm {
+    min-width: 560px;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-page="benchmark"] svg.skills rect.u {
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    transition-delay: calc(var(--i) * 11ms);
+  }
+  .js [data-page="benchmark"] .in svg.skills rect.u {
+    opacity: 1;
+  }
+  .js [data-page="benchmark"] svg.board .bar,
+  .js [data-page="benchmark"] .pending .bar {
+    transform-box: fill-box;
+    transform-origin: left center;
+    transform: scaleX(0);
+    transition: transform 1s cubic-bezier(0.2, 0.7, 0.2, 1);
+    transition-delay: calc(var(--i, 0) * 45ms);
+  }
+  .js [data-page="benchmark"] .in svg.board .bar,
+  .js [data-page="benchmark"] .pending.in .bar {
+    transform: scaleX(1);
+  }
+  .js [data-page="benchmark"] svg.polar .spoke {
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    transition: stroke-dashoffset 1.2s ease;
+    transition-delay: calc(var(--i) * 14ms);
+  }
+  .js [data-page="benchmark"] .in svg.polar .spoke {
+    stroke-dashoffset: 0;
+  }
+  .js [data-page="benchmark"] svg.connectors .lk {
+    stroke-dasharray: 260;
+    stroke-dashoffset: 260;
+    transition: stroke-dashoffset 1.6s ease 0.2s;
+  }
+  .js [data-page="benchmark"] .in svg.connectors .lk {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .js [data-page="benchmark"] svg.divergence .tr {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
