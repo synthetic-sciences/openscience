@@ -354,6 +354,30 @@ export async function execute(input: RunInput): Promise<number> {
   const pendingCompute = new Set<string>()
 
   const deadline = input.deadline ? Date.now() + input.deadline * 1000 : undefined
+  const rootBusy = () =>
+    sdk.session
+      .status()
+      .then((result) => result.data?.[sessionID]?.type === "busy")
+      .catch(() => false)
+  // A detached result is written to the root as a user message at once, even
+  // mid-turn, and a loop then answers it. So the root owes a turn while it is
+  // busy or while any of its user messages has no reply: a worker quicker than
+  // the turn that started it has already left the pending set when that turn
+  // goes idle, with its report still to be read.
+  const turnOwed = async () => {
+    if (await rootBusy()) return true
+    const messages = (await sdk.session.messages({ sessionID }).catch(() => undefined))?.data ?? []
+    const answered = new Set(messages.flatMap((item) => (item.info.role === "assistant" ? [item.info.parentID] : [])))
+    return messages.some((item) => item.info.role === "user" && !answered.has(item.info.id))
+  }
+  // Ends the run once the root has neither a turn running nor one starting;
+  // a turn that started meanwhile ends the run at its own idle.
+  const guard = () =>
+    setTimeout(async () => {
+      if (finished || (await rootBusy())) return
+      finished = true
+      controller.abort()
+    }, IDLE_GRACE_MS.settled)
   const processor = (async () => {
     for await (const event of events.stream) {
       if (finished) break
@@ -470,7 +494,11 @@ export async function execute(input: RunInput): Promise<number> {
       }
 
       if (event.type === "session.idle" && event.properties.sessionID === sessionID) {
-        if (pendingBackground.size === 0 && pendingCompute.size === 0) break
+        if (pendingBackground.size === 0 && pendingCompute.size === 0) {
+          if (!(await turnOwed())) break
+          guard()
+          continue
+        }
         // A job that outlives the run's own budget is not worth waiting for.
         if (pendingBackground.size === 0 && deadline && Date.now() > deadline) break
         continue
@@ -496,12 +524,9 @@ export async function execute(input: RunInput): Promise<number> {
         // while this slept (its last events, the answer among them, are still
         // in the stream and its idle will end the run), or the wake never
         // reached it and nothing more will come. Read on; a short timer
-        // settles the second case.
-        setTimeout(() => {
-          if (finished) return
-          finished = true
-          controller.abort()
-        }, IDLE_GRACE_MS.settled)
+        // settles the second case, unless a late wake has started a turn by
+        // then: that turn's idle ends the run above.
+        guard()
         continue
       }
 
@@ -602,8 +627,10 @@ export async function execute(input: RunInput): Promise<number> {
   // the last worker's completion wakes the root, and that turn's idle ends
   // the run. Waiting only while workers are pending would abort the wake
   // turn the moment the last worker finished, before the root could take
-  // its report. Bounded by the run's deadline when it has one.
-  if (!settled && (pendingBackground.size > 0 || pendingCompute.size > 0)) {
+  // its report. A worker quicker than the grace has already left the pending
+  // set by now while the root is still busy on its report, so a busy root is
+  // waited for too. Bounded by the run's deadline when it has one.
+  if (!settled && (pendingBackground.size > 0 || pendingCompute.size > 0 || (await turnOwed()))) {
     while (!settled) {
       if (deadline && Date.now() > deadline + IDLE_GRACE_MS.settled) break
       settled = await settle(processor, 5_000)
