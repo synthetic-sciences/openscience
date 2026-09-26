@@ -247,11 +247,7 @@ export default function Benchmark() {
             </header>
 
             <figure data-slot="hero-figure">
-              <div dangerouslySetInnerHTML={{ __html: heroSvg }} />
-              <figcaption>
-                Two solutions of the Lorenz system (σ = 10, ρ = 28, β = 8/3) whose starting points differ by 10
-                <sup>−5</sup> in <i>x</i>. They agree to the eye until <i>t</i> ≈ {N.t_split}, then part ways.
-              </figcaption>
+              <div aria-hidden dangerouslySetInnerHTML={{ __html: heroSvg }} />
             </figure>
 
             <div data-slot="stats">
