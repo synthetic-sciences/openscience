@@ -299,6 +299,11 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **A message sent while a turn is working no longer appears twice.** The
+  server renumbers a message whose id would sort below a step the running
+  turn started after the send, and the transcript kept the composer's
+  placeholder beside the stored copy until the session was reopened. The
+  placeholder now gives way to the stored message.
 - **Deliverables listed under a destination are looked for there.** "Save
   the results to `/root/results/`." or "Create `/root/results` with these
   artifacts:" followed by bare names owes those names inside that directory;

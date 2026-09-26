@@ -30,6 +30,7 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
@@ -200,6 +201,7 @@ const ResearchSlider: Component<{
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const navigate = useNavigate()
   const sdk = useSDK()
+  const globalSDK = useGlobalSDK()
   const sync = useSync()
   const globalSync = useGlobalSync()
   const platform = usePlatform()
@@ -2511,7 +2513,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     addOptimisticMessage()
     setSubmitting(false)
 
+    // The server renumbers a message whose id would sort below one it created
+    // after the send (a step of the running turn, when the message is queued),
+    // so the stored copy can arrive under another id. Its text part keeps
+    // this id, which is how the optimistic copy knows to step aside.
+    const settle = globalSDK.event.on(sessionDirectory, (event) => {
+      if (event.type !== "message.part.updated" || event.properties.part.id !== textPart.id) return
+      settle()
+      if (event.properties.part.messageID !== messageID) removeOptimisticMessage()
+    })
+
     const restoreSubmission = () => {
+      settle()
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
       }
