@@ -26,6 +26,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ### Added
 
+- **openscience.sh/benchmark.** The launch report: Terminal-Bench Science, Terminal-Bench 4.0 (science) and BiomniBench-DA against every public entry, with the figures, traces and method. The front page's benchmark figures now show these results; OpenScience Bench, ResearchClawBench and BixBench 3 are still running.
 - **The context panel counts the tool definitions and matches the provider's cache.** The
   "in progress" estimate summed only the message log, so it read well under the request the
   provider actually cached and then jumped when the turn settled and the tool-definition
