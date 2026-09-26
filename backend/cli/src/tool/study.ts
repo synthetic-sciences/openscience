@@ -497,7 +497,9 @@ export const StudyTool = Tool.define("study", {
       const run = await Experiments.getRun(params.run_id)
       if (!run || run.studyID !== current.id) throw new Error(`Run ${params.run_id} is not in this study`)
       if (run.status === "running" && run.jobID) {
-        throw new Error(`Run ${run.id} is still running; record it after it ends.`)
+        throw new Error(
+          `Run ${run.id} is still running; its ending arrives as a study update and that is when it is recorded. Read its metrics meanwhile with the experiments tool.`,
+        )
       }
       if (run.status === "running") {
         // No job ever bound: the dispatch was interrupted. Recording it is

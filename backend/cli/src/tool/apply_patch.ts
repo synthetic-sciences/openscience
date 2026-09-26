@@ -18,6 +18,7 @@ import DESCRIPTION from "./apply_patch.txt"
 import { ToolRetryGuard } from "@/session/tool-retry-guard"
 import { File } from "../file"
 import { FileTrash } from "../file/trash"
+import { Global } from "../global"
 import { Lock } from "@/util/lock"
 import { SessionFilesystem } from "@/session/filesystem"
 import { AuthoritySignal } from "@/project/authority-signal"
@@ -173,6 +174,21 @@ async function assertApprovedFile(filepath: string, approved: ApprovedFile) {
   }
 }
 
+/** The original an exchange displaced to the staging name, proven by its
+ * bytes: an overlay root copies a lower-layer file up on exchange and
+ * renumbers it (the first edit of a file shipped in a container image), so
+ * its identity is not evidence either way. Returns the file as it now is, so
+ * a later rollback can address it by its current identity. */
+async function readDisplacedFile(filepath: string, approved: ApprovedFile) {
+  const current = await readApprovedFile(filepath).catch((error) => {
+    throw new Error(`Refusing to edit ${filepath}: the displaced original is unreadable: ${error}`)
+  })
+  if (!current.bytes.equals(approved.bytes)) {
+    throw new Error(`Refusing to edit ${filepath}: the displaced original changed after approval`)
+  }
+  return current
+}
+
 async function stageFile(target: string, content: string, mode: number) {
   await fs.mkdir(path.dirname(target), { recursive: true })
   const canonical = await Filesystem.canonical(target)
@@ -199,6 +215,9 @@ type PreparedChange = {
   target?: string
   staged?: string
   stagedApproved?: ApprovedFile
+  /** The original as it sits at the staging name after the exchange; its
+   * identity may differ from `change.approved` on an overlay root. */
+  displaced?: ApprovedFile
   backup?: string
   sourceMoved: boolean
   installed: boolean
@@ -239,20 +258,27 @@ async function removeInstalled(item: PreparedChange) {
 async function exchangeUpdate(item: PreparedChange, rollback = false) {
   const target = item.change.filePath
   const staged = item.staged!
+  // A rollback swaps back what the exchange left at each name: the original
+  // by the identity it has now, not the one it had before the exchange.
+  const original = item.displaced ?? item.change.approved!
   const before = rollback ? item.stagedApproved! : item.change.approved!
-  const after = rollback ? item.change.approved! : item.stagedApproved!
-  const verify = async (left: string, right: string, leftFile: ApprovedFile, rightFile: ApprovedFile) => {
-    await assertApprovedFile(left, leftFile)
-    await assertApprovedFile(right, rightFile)
-  }
+  const after = rollback ? original : item.stagedApproved!
   await SafeDirectoryIO.swapEntries(
     target,
     staged,
     { dev: before.dev, ino: before.ino, type: "file" },
     { dev: after.dev, ino: after.ino, type: "file" },
     {
-      afterVerify: (left, right) => verify(left, right, before, after),
-      afterMutation: (left, right) => verify(left, right, after, before),
+      afterVerify: async (left, right) => {
+        await assertApprovedFile(left, before)
+        await assertApprovedFile(right, after)
+      },
+      afterMutation: async (left, right) => {
+        await assertApprovedFile(left, after)
+        // The displaced side is verified by content: see readDisplacedFile.
+        const moved = await readDisplacedFile(right, before)
+        if (!rollback) item.displaced = moved
+      },
       beforeRollback: (left) => assertApprovedFile(left, after),
     },
   )
@@ -264,13 +290,34 @@ async function cleanupStage(item: PreparedChange) {
   if (!item.staged || !item.stagedApproved) return
   // A failed exchange rollback can retain an unexpected/original entry at the
   // staging name. Never delete it merely because its name belongs to us.
-  const approved = item.exchanged ? item.change.approved! : item.stagedApproved
+  // After a successful exchange the staging name holds the original as the
+  // exchange left it (its identity may have changed on an overlay root).
+  const approved = item.exchanged ? (item.displaced ?? item.change.approved!) : item.stagedApproved
   try {
     await assertApprovedFile(item.staged, approved)
     await fs.unlink(item.staged)
   } catch {
-    if (await Bun.file(item.staged).exists()) {
+    if (!(await Bun.file(item.staged).exists())) return
+    // After a rollback the staging name may hold the user's own inode, and it
+    // stays where a recovery can find it. After a successful exchange it
+    // holds the content the edit replaced; when its identity does not verify
+    // even so, that copy is moved to recovery rather than left beside the
+    // target, where a grader that scans the directory would read it as the
+    // agent's work: a proof directory once failed a banned-token check on the
+    // old stub's `sorry` in one of these.
+    if (!item.exchanged) {
       Log.Default.warn("Patch staging file retained for recovery", { path: item.staged })
+      return
+    }
+    const recovery = path.join(Global.Path.data, "file-trash", "edit-staging")
+    const kept = path.join(recovery, `${Date.now()}-${path.basename(item.staged)}`)
+    try {
+      await fs.mkdir(recovery, { recursive: true, mode: 0o700 })
+      await fs.copyFile(item.staged, kept)
+      await fs.unlink(item.staged)
+      Log.Default.warn("Patch staging file moved to recovery", { from: item.staged, to: kept })
+    } catch (error) {
+      Log.Default.warn("Patch staging file retained for recovery", { path: item.staged, error })
     }
   }
 }

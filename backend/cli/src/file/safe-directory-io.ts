@@ -30,6 +30,8 @@ export namespace SafeDirectoryIO {
     mode: number
     approved?: Snapshot
     afterVerify?: (target: string) => void | Promise<void>
+    /** After the exchange and before its verification; a test's barrier. */
+    afterReplaceMutation?: (target: string, staged: string) => void | Promise<void>
   }
 
   export type MoveOptions = {
@@ -551,9 +553,33 @@ export namespace SafeDirectoryIO {
     }
   }
 
+  /** The entry at our staging name after an exchange, proven by its bytes
+   * rather than its identity: an overlay root copies a lower-layer file up
+   * on exchange and renumbers it, so the original we displaced can come back
+   * under a new inode. Bytes equal to the approved snapshot are ours to
+   * remove; anything else stays where a recovery can find it. */
+  async function displaced(directory: Directory, file: string, approved: Snapshot) {
+    const api = native()
+    const fd = invoke("openat", file, () =>
+      api.openat(directory.fd, name(file), FS.O_RDONLY | FS.O_NOFOLLOW | FS.O_NONBLOCK | O_CLOEXEC, 0),
+    )
+    try {
+      const before = await stat(fd)
+      if (!before.isFile()) throw new Error(`Only regular files can be approved for replacement: ${file}`)
+      if (before.size !== approved.bytes.byteLength) {
+        throw new Error(`Refusing to remove ${file}: the displaced original changed after approval`)
+      }
+      const bytes = await readAll(fd, before.size)
+      if (!bytes.equals(approved.bytes))
+        throw new Error(`Refusing to remove ${file}: the displaced original changed after approval`)
+    } finally {
+      await close(fd)
+    }
+  }
+
   async function cleanupStage(directory: Directory, staged: string, approved: Snapshot) {
     try {
-      await snapshot(directory, staged, approved)
+      await displaced(directory, staged, approved)
       unlink(directory, staged)
       await sync(directory.fd, true)
     } catch (error) {
@@ -572,6 +598,7 @@ export namespace SafeDirectoryIO {
     staged: Awaited<ReturnType<typeof stage>>,
     target: string,
     approved: Snapshot,
+    options?: Options,
   ) {
     const before = { dev: approved.dev, ino: approved.ino, type: "file" as const }
     const after = { dev: staged.approved.dev, ino: staged.approved.ino, type: "file" as const }
@@ -589,9 +616,10 @@ export namespace SafeDirectoryIO {
           await snapshot(directory, target, approved)
           await snapshot(directory, staged.file, staged.approved)
         },
-        afterMutation: async () => {
+        afterMutation: async (left, right) => {
+          await options?.afterReplaceMutation?.(left, right)
           await snapshot(directory, target, staged.approved)
-          await snapshot(directory, staged.file, approved)
+          await displaced(directory, staged.file, approved)
         },
         beforeRollback: async () => {
           // A writer may have changed the installed inode without replacing it.
@@ -612,7 +640,7 @@ export namespace SafeDirectoryIO {
       await options.afterVerify?.(resolved.path)
       const staged = await stage(parent, content, options.mode)
       try {
-        if (options.approved) await replace(parent, staged, resolved.file, options.approved)
+        if (options.approved) await replace(parent, staged, resolved.file, options.approved, options)
         else {
           await install(parent, staged.file, resolved.file)
           unlink(parent, staged.file)
@@ -755,7 +783,13 @@ export namespace SafeDirectoryIO {
         openEntry(parent, rightPath.file, rightPath.path),
       ])
       try {
-        if (!matches(receivedLeft.entry, rightExpected) || !matches(receivedRight.entry, leftExpected)) {
+        // The public name must now hold exactly the approved replacement. The
+        // displaced entry may carry a new identity: an overlay root copies a
+        // lower-layer file up on exchange and renumbers it (Modal's gVisor
+        // root does this the first time a file shipped in the image is
+        // edited), so its identity proves nothing either way; the caller's
+        // afterMutation reads its bytes, which do.
+        if (!matches(receivedLeft.entry, rightExpected) || receivedRight.entry.type !== leftExpected.type) {
           throw new Error("Atomic exchange produced unexpected directory entries")
         }
       } finally {
@@ -780,9 +814,10 @@ export namespace SafeDirectoryIO {
         swap(parent, leftPath.file, rightPath.file)
         await sync(parent.fd, true)
       } catch (error) {
+        const reason = cause instanceof Error ? cause.message : String(cause)
         throw new AggregateError(
           [cause, error],
-          "Atomic exchange failed and could not be rolled back without replacing an unapproved entry",
+          `Atomic exchange failed and could not be rolled back without replacing an unapproved entry: ${reason}`,
         )
       }
       throw cause

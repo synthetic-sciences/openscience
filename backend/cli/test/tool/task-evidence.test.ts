@@ -154,3 +154,14 @@ test("Task hands back only this turn's immutable child outputs, readable by the 
     },
   })
 })
+
+test("shell writes are read from the command text: redirects, tee and heredocs, not devices or stdin", () => {
+  expect(
+    TaskEvidence.shellWrites("cat > /tmp/Interp.lean <<'EOF'\nimport Mathlib\nEOF\nlake env lean /tmp/Interp.lean"),
+  ).toEqual(["/tmp/Interp.lean"])
+  expect(
+    TaskEvidence.shellWrites("python train.py 2>&1 | tee logs/run.log && echo done >> results/summary.txt"),
+  ).toEqual(["results/summary.txt", "logs/run.log"])
+  expect(TaskEvidence.shellWrites("grep -c sorry src/*.lean; ls > /dev/null; echo $x 2>/dev/null")).toEqual([])
+  expect(TaskEvidence.shellWrites("python3 - <<'PY'\nprint(1)\nPY")).toEqual([])
+})

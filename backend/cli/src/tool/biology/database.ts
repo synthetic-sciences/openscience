@@ -35,6 +35,35 @@ async function fetchText(url: string): Promise<string> {
   }
 }
 
+// ── NCBI E-utilities ─────────────────────────────────────────────────────────
+// NCBI allows 3 requests a second without an API key and 10 with one, per
+// caller, and answers the excess with HTTP 429. Parallel workers looking up
+// references tripped that in one run out of two; the model cannot fix a rate
+// limit, so the tool paces itself and retries once, and adds the key when
+// NCBI_API_KEY is set.
+const EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+const eutilsState = { next: 0 }
+
+function eutilsURL(path: string) {
+  const key = process.env["NCBI_API_KEY"]
+  return `${EUTILS}/${path}${key ? `&api_key=${encodeURIComponent(key)}` : ""}`
+}
+
+async function eutils<T>(path: string, fetcher: (url: string) => Promise<T>): Promise<T> {
+  const interval = process.env["NCBI_API_KEY"] ? 110 : 350
+  const now = Date.now()
+  const slot = Math.max(now, eutilsState.next)
+  eutilsState.next = slot + interval
+  if (slot > now) await new Promise((resolve) => setTimeout(resolve, slot - now))
+  try {
+    return await fetcher(eutilsURL(path))
+  } catch (error) {
+    if (!(error instanceof Error && /HTTP 429/.test(error.message))) throw error
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    return fetcher(eutilsURL(path))
+  }
+}
+
 // ── UniProt ──────────────────────────────────────────────────────────────────
 
 export const QueryUniprotTool = Tool.define("query_uniprot", {
@@ -199,12 +228,12 @@ export const QueryKeggTool = Tool.define("query_kegg", {
     const q = params.query.trim()
 
     if (params.operation === "info") {
-      const text = await fetchText(`${base}/get/${q}`)
+      const text = await eutils(`get/${q}`, fetchText)
       return { title: `KEGG: ${q}`, output: text.slice(0, 8000), metadata: {} as Record<string, any> }
     }
 
     if (params.operation === "genes") {
-      const text = await fetchText(`${base}/link/${params.organism}/${q}`)
+      const text = await eutils(`link/${params.organism}/${q}`, fetchText)
       const genes = text
         .trim()
         .split("\n")
@@ -221,7 +250,7 @@ export const QueryKeggTool = Tool.define("query_kegg", {
     }
 
     // find
-    const text = await fetchText(`${base}/find/pathway/${encodeURIComponent(q)}`)
+    const text = await eutils(`find/pathway/${encodeURIComponent(q)}`, fetchText)
     const results = text
       .trim()
       .split("\n")
@@ -258,11 +287,11 @@ export const QueryPubmedTool = Tool.define("query_pubmed", {
   }),
   async execute(params, _ctx) {
     const limit = Math.min(Math.max(params.max_results, 1), 20)
-    const base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 
     // Search for IDs
-    const search = await fetchJSON(
-      `${base}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(params.query)}&retmode=json&retmax=${limit}&sort=${params.sort}`,
+    const search = await eutils(
+      `esearch.fcgi?db=pubmed&term=${encodeURIComponent(params.query)}&retmode=json&retmax=${limit}&sort=${params.sort}`,
+      fetchJSON,
     )
     const ids = search.esearchresult?.idlist
 
@@ -271,7 +300,7 @@ export const QueryPubmedTool = Tool.define("query_pubmed", {
     }
 
     // Fetch summaries
-    const summary = await fetchJSON(`${base}/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`)
+    const summary = await eutils(`esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`, fetchJSON)
 
     const articles = ids.map((id: string) => {
       const a = summary.result?.[id]
@@ -291,7 +320,7 @@ export const QueryPubmedTool = Tool.define("query_pubmed", {
     })
 
     // Fetch plain-text abstracts
-    const abstracts = await fetchText(`${base}/efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=text`)
+    const abstracts = await eutils(`efetch.fcgi?db=pubmed&id=${ids.join(",")}&rettype=abstract&retmode=text`, fetchText)
 
     return {
       title: `PubMed: ${params.query}`,
@@ -325,21 +354,21 @@ export const QueryNcbiGeneTool = Tool.define("query_ncbi_gene", {
   }),
   async execute(params, _ctx) {
     const limit = Math.min(Math.max(params.limit, 1), 10)
-    const base = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
     const q = params.query.trim()
 
     const isId = /^\d+$/.test(q)
     const ids = isId
       ? [q]
-      : await fetchJSON(
-          `${base}/esearch.fcgi?db=gene&term=${encodeURIComponent(q)}[Gene]+AND+${encodeURIComponent(params.organism)}[Organism]&retmode=json&retmax=${limit}`,
+      : await eutils(
+          `esearch.fcgi?db=gene&term=${encodeURIComponent(q)}[Gene]+AND+${encodeURIComponent(params.organism)}[Organism]&retmode=json&retmax=${limit}`,
+          fetchJSON,
         ).then((d: any) => d.esearchresult?.idlist || [])
 
     if (!ids.length) {
       return { title: "NCBI Gene", output: `No genes found for "${q}"`, metadata: {} }
     }
 
-    const summary = await fetchJSON(`${base}/esummary.fcgi?db=gene&id=${ids.join(",")}&retmode=json`)
+    const summary = await eutils(`esummary.fcgi?db=gene&id=${ids.join(",")}&retmode=json`, fetchJSON)
 
     const entries = ids.map((id: string) => {
       const g = summary.result?.[id]

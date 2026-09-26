@@ -58,6 +58,22 @@ export namespace TaskEvidence {
     }
   }
 
+  /** Paths a shell command writes to, read from its text: `> file`, `>> file`,
+   * `tee file`, `cat > file <<EOF`. Best effort; temporary and device paths
+   * are skipped. */
+  export function shellWrites(command: string): string[] {
+    const out = new Set<string>()
+    for (const match of command.matchAll(/(?:^|[^<>|&])>{1,2}\s*(?:"([^"\n]+)"|'([^'\n]+)'|([^\s;&|)]+))/g)) {
+      const target = match[1] ?? match[2] ?? match[3]
+      if (target && !target.startsWith("&") && !target.startsWith("/dev/")) out.add(target)
+    }
+    for (const match of command.matchAll(/\btee\s+(?:-a\s+)?(?:"([^"\n]+)"|'([^'\n]+)'|([^\s;&|)]+))/g)) {
+      const target = match[1] ?? match[2] ?? match[3]
+      if (target && !target.startsWith("-") && !target.startsWith("/dev/")) out.add(target)
+    }
+    return [...out].filter((value) => value !== "/dev/null" && !/^\$\(/.test(value))
+  }
+
   export async function collect(input: {
     projectID: string
     sessionID: string
@@ -82,6 +98,7 @@ export namespace TaskEvidence {
         message.parts.flatMap((part) => {
           if (part.type !== "tool" || part.tool !== "bash") return []
           const metadata = part.state.status === "completed" ? part.state.metadata : undefined
+          const command = typeof part.state.input?.command === "string" ? part.state.input.command : ""
           return [
             {
               messageID: part.messageID,
@@ -90,6 +107,10 @@ export namespace TaskEvidence {
               status: observableToolStatus(part),
               exit: typeof metadata?.exit === "number" ? metadata.exit : null,
               ...(typeof metadata?.provenanceID === "string" && { provenanceID: metadata.provenanceID }),
+              // Files the shell wrote (redirects, tee, heredocs): the file
+              // tools leave receipts, a heredoc leaves nothing, and a lead
+              // that cannot see where a worker's work landed cannot use it.
+              written: metadata?.exit === 0 ? shellWrites(command) : [],
             },
           ]
         }),
@@ -125,6 +146,9 @@ export namespace TaskEvidence {
         files.push(file)
       }
     }
+    const shell = [...new Set(evidence.commands.flatMap((item) => item.written ?? []))].filter(
+      (file) => !seen.has(file),
+    )
     return [
       ...(lines.length
         ? ["Saved outputs (immutable versions; use artifact read_file with these exact IDs):", ...lines]
@@ -139,6 +163,12 @@ export namespace TaskEvidence {
             `Completed file changes: ${files.length} unique ${files.length === 1 ? "file" : "files"} across ${evidence.mutations.length} successful mutation ${evidence.mutations.length === 1 ? "call" : "calls"}.`,
             ...files.map((file) => `- ${JSON.stringify(file)}`),
             "Full mutation receipts remain in the child trace.",
+          ]
+        : []),
+      ...(shell.length
+        ? [
+            `Files written by shell commands (from the command text; verify before relying on them): ${shell.length}.`,
+            ...shell.slice(0, 40).map((file) => `- ${JSON.stringify(file)}`),
           ]
         : []),
     ].join("\n")

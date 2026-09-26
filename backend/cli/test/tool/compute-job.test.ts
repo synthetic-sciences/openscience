@@ -8,7 +8,8 @@ import { PermissionNext } from "../../src/permission/next"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
-import { ComputeJobParameters, createComputeJobTool } from "../../src/tool/compute-job"
+import { Filesystem } from "../../src/util/filesystem"
+import { ComputeJobParameters, computeJobTesting, createComputeJobTool } from "../../src/tool/compute-job"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
 type Asked = { permission: string; patterns: string[]; always?: string[]; metadata?: Record<string, unknown> }
@@ -172,12 +173,53 @@ test("plans and starts a detached local job through the model-facing broker", as
         patterns: [preview.metadata.compute_job.plan?.digest],
         always: [],
       })
-      expect(dispatched.output).toContain(`Dispatched local job ${job.id}`)
-      expect(dispatched.output).toContain("compute_job wait")
-      expect(dispatched.output).toContain("do not poll with shell sleep")
+      // A job that finishes within the dispatch's grace comes back settled,
+      // with its output's tail and what it delivered, in this one step: no
+      // wait, logs or artifacts round-trips for work a shell command returns
+      // in one.
+      expect(dispatched.output).toContain(`"id": "${job.id}"`)
+      expect(dispatched.output).toContain('"status": "succeeded"')
+      expect(dispatched.output).toContain("local broker ready")
+      expect(dispatched.output).toContain('"delivered"')
+      expect(dispatched.output).not.toContain("Dispatched local job")
       const finished = await ComputeJobs.wait(job.id, { root, workspace: tmp.path, timeout: 5_000 })
       expect(finished.status).toBe("succeeded")
-      expect(await ComputeJobs.log(job.id, { root, workspace: tmp.path })).toContain("local broker ready")
+    },
+  })
+})
+
+test("a local job at the project root runs in place when scratch is the project, even for a study's refreshed dispatch", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  await fs.writeFile(path.join(tmp.path, "train.py"), "print('trained')\n")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      // A headless run's sessions use the project as their workspace.
+      const session = await Session.create({ workspace: "project" })
+      const tool = await createComputeJobTool({ root, workspace: tmp.path }).init()
+      const asked: Asked[] = []
+      const workload = {
+        name: "in place",
+        purpose: "Run where the code is.",
+        command: "python3 train.py",
+        cwd: ".",
+        target: { kind: "local" as const },
+      }
+      const preview = await tool.execute({ action: "plan", ...workload }, context(session.id, asked))
+      expect(preview.metadata.compute_job.plan).toMatchObject({
+        provider: "local",
+        cwd: await Filesystem.canonical(tmp.path),
+      })
+      // The same request with the absolute project path, and through the
+      // study path that refreshes staged copies from the project.
+      const absolute = await tool.execute({ action: "plan", ...workload, cwd: tmp.path }, context(session.id, asked))
+      expect(absolute.metadata.compute_job.plan).toMatchObject({
+        provider: "local",
+        cwd: await Filesystem.canonical(tmp.path),
+      })
+      expect(asked).toEqual([])
     },
   })
 })
@@ -216,6 +258,56 @@ test("keeps one project inventory across isolated conversation workspaces", asyn
         timeout: 5_000,
       })
       expect(finished.status).toBe("succeeded")
+    },
+  })
+})
+
+test("a worker starts a local job in the lead's directory it was given to work in", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const data = path.join(tmp.path, "data")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const lead = await Session.create({})
+      const worker = await Session.create({ parentID: lead.id })
+      // What the task tool does for every worker: its own scratch, the
+      // lead's directory as its working directory.
+      await SessionFilesystem.shareWorkingDirectory({ parentSessionID: lead.id, childSessionID: worker.id })
+      const directory = await SessionFilesystem.toolDirectory(worker.id)
+      expect(directory).toBe(await SessionFilesystem.toolDirectory(lead.id))
+      expect(directory).not.toBe(await SessionFilesystem.workspace(worker.id))
+      await fs.mkdir(path.join(directory, "fits"), { recursive: true })
+      await fs.writeFile(path.join(directory, "fits", "run.sh"), "printf fitted > result.txt\n")
+
+      const tool = await createComputeJobTool({ data }).init()
+      // A worker's job used to fail here with "Compute project does not match
+      // the session workspace", because the compute workspace was the
+      // worker's private scratch while its code sat in the lead's directory.
+      const dispatched = await tool.execute(
+        {
+          action: "start",
+          name: "worker fit",
+          purpose: "A worker's long computation, detached.",
+          command: "sh run.sh",
+          cwd: "fits",
+          target: { kind: "local" },
+        },
+        context(worker.id, []),
+      )
+      const job = dispatched.metadata.job
+      if (!job) throw new Error("compute_job did not return its durable handle")
+      const finished = await ComputeJobs.wait(job.id, {
+        data,
+        projectDirectory: tmp.path,
+        workspace: directory,
+        timeout: 5_000,
+      })
+      expect(finished.status).toBe("succeeded")
+      expect(await fs.readFile(path.join(directory, "fits", "result.txt"), "utf8")).toBe("fitted")
+      // The lead sees the worker's job in the one project inventory.
+      const listed = await tool.execute({ action: "list", limit: 20 }, context(lead.id, []))
+      expect(listed.output).toContain(job.id)
     },
   })
 })
@@ -380,7 +472,8 @@ test("starts Modal through JobBroker only after a digest-bound scoped approval",
       expect(asked[0]).toMatchObject({ permission: "modal", patterns: [digest], always: [digest, "allowance:60"] })
       expect(asked[0]!.metadata).toMatchObject({ compute: { allowance: { proposed_minutes: 60 } } })
       expect(dispatched.metadata.job?.modal?.approval).toBe(digest)
-      expect(dispatched.output).toContain("Dispatched modal job")
+      // The fixture's Modal job settles at once, so the dispatch reports it settled.
+      expect(dispatched.output).toContain('"status": "succeeded"')
 
       // The person answered "this session": the exact plan and the hour's
       // allowance are granted. A different job (new script, new digest) in
@@ -554,6 +647,10 @@ test("an absolute Project-files directory is the same request as its relative fo
 
       // The Project-files root has no relative form: say what to name instead.
       await expect(plan(tmp.path)).rejects.toThrow(/Project files root itself.*cwd "autoresearch_churn"/)
+      // Session scratch itself is where jobs run (in a headless run it is the
+      // project, and the code sits there): its root is the working directory ".".
+      const rooted = await plan(workspace)
+      expect(rooted.metadata.compute_job.plan).toMatchObject({ provider: "modal", workspace_cwd: "." })
       // And a directory outside both roots stays outside.
       await expect(plan(path.join(path.dirname(tmp.path), "somewhere-else"))).rejects.toThrow(
         /outside Session scratch and Project files/,
@@ -1001,6 +1098,74 @@ test("inspects project jobs, logs, and delivered artifacts without approval", as
       expect(logs.output).toContain("visible output")
       expect(artifacts.output).toContain("results/value.txt")
       expect(asked).toEqual([])
+    },
+  })
+})
+
+test("a mis-copied job id resolves to the one job it is closest to; an unresolvable id lists the jobs", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const session = await Session.create({})
+      const workspace = await SessionFilesystem.workspace(session.id)
+      const job = await start(tmp.path, root, session.id, { name: "null models", command: "printf done" })
+      await ComputeJobs.wait(job.id, { root, workspace, timeout: 5_000 })
+      const tool = await createComputeJobTool({ root, workspace }).init()
+      const ctx = context(session.id, [])
+      // The transcription errors seen in the field: a case flip, one hex
+      // digit substituted, one character dropped; and the job's name.
+      const flipped = job.id.slice(0, -1) + job.id.slice(-1).toUpperCase()
+      const substituted = job.id.replace(/^./, (c) => (c === "f" ? "e" : "f"))
+      const dropped = job.id.slice(0, 3) + job.id.slice(4)
+      for (const spelling of [flipped, substituted, dropped, "null models"]) {
+        const result = await tool.execute({ action: "status", job_id: spelling }, ctx)
+        expect(result.output).toContain(job.id)
+      }
+      await expect(tool.execute({ action: "status", job_id: "no-such-job" }, ctx)).rejects.toThrow(
+        `Jobs in this project: ${job.id} (null models,`,
+      )
+    },
+  })
+})
+
+test("a job that outlives the dispatch grace comes back as a dispatch that will wake the session", async () => {
+  await using tmp = await tmpdir({ git: true })
+  const root = path.join(tmp.path, "compute")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await trustProject()
+      const session = await Session.create({})
+      const workspace = await SessionFilesystem.workspace(session.id)
+      using _grace = computeJobTesting({ settleGraceMs: 300 })
+      const tool = await createComputeJobTool({ root, workspace }).init()
+      const asked: Asked[] = []
+      const dispatched = await tool.execute(
+        {
+          action: "start",
+          name: "long fit",
+          purpose: "A computation longer than the dispatch grace.",
+          command: "sleep 2 && printf done",
+          target: { kind: "local" },
+        },
+        context(session.id, asked),
+      )
+      const job = dispatched.metadata.job
+      if (!job) throw new Error("compute_job did not return its started job")
+      // Not settled within the grace: the model gets the dispatch, told the
+      // job will wake it, rather than an invitation to poll.
+      expect(dispatched.output).toContain(`Dispatched local job ${job.id}`)
+      expect(dispatched.output).toMatch(/wake you with its outcome|compute_job wait/)
+      expect(dispatched.output).not.toContain('"status": "succeeded"')
+      const finished = await ComputeJobs.wait(job.id, { root, workspace, timeout: 10_000 })
+      expect(finished.status).toBe("succeeded")
+      // Once settled, a wait carries the output's tail and the deliveries.
+      const waited = await tool.execute({ action: "wait", job_id: job.id, seconds: 5 }, context(session.id, []))
+      expect(waited.output).toContain('"output_tail": "done"')
+      expect(waited.output).toContain('"delivered"')
     },
   })
 })

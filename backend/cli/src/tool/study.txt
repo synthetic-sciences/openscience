@@ -5,7 +5,7 @@ Actions (one per call):
 - status: baseline, best, queue, live runs, budget, lessons.
 - propose: ideas[] with title, description, why, ev (metric units × confidence), config; baseline first with priority 1000.
 - start: idea_id + command (the script must log the metric through openscience_track or wandb). One run per idea, never two. The run executes in the study root by default, so the command is "python train.py ...", uploads and artifacts are named relative to that root, and the data the script reads lives inside it; the tracking SDK is added to the uploads for you.
-- record: run_id, kept, analysis, optional conclusion/lessons; baseline:true marks the reference run.
+- record: run_id, kept, analysis, optional conclusion/lessons; baseline:true marks the reference run. A run is recorded once it has ended; the study update that announces its ending is the cue, so there is no need to check whether it has.
 - drop: idea_id + reason.
 - conclude: conclusion (what was learned, best configuration, what remains open).
 - reopen: budget (the additional maxHours/maxRuns/maxCostUSD the user just agreed to). Continues a concluded, halted or paused study with its runs, ideas, lessons and best run intact, instead of creating a second study.

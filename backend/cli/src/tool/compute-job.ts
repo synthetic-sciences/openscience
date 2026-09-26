@@ -10,6 +10,9 @@ import { ComputeAllowance } from "@/permission/allowance"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Filesystem } from "@/util/filesystem"
 import { Tool } from "./tool"
+import { SessionWake } from "@/session/wake"
+import { SessionPrompt } from "@/session/prompt"
+import { Log } from "@/util/log"
 
 const COMPUTE_ACTIONS = [
   "targets",
@@ -32,7 +35,7 @@ const ACTION_DESCRIPTIONS = {
   start: "Create and dispatch a detached compute job after any required approval.",
   list: "List project-scoped compute jobs, optionally filtered by status.",
   status: "Inspect the latest state of one existing job.",
-  wait: "Suspend until the job's state changes or it settles, or the timeout passes; log lines alone do not end the wait (read them with logs).",
+  wait: "Suspend until the job's state changes or it settles, or the timeout passes; log lines alone do not end the wait (read them with logs). A wait that reaches its timeout hands control back and the job wakes you when it ends, so wait once rather than polling.",
   logs: "Read lifecycle events and bounded command output for one existing job.",
   artifacts: "Inspect expected and delivered outputs for one existing job.",
   cancel: "Stop one live job after dedicated approval.",
@@ -132,7 +135,7 @@ const ComputeJobActionParameters = z
       .object({
         action: action("wait"),
         job_id: z.string().trim().min(1),
-        seconds: z.number().int().min(1).default(600),
+        seconds: z.number().int().min(1).default(3_600),
       })
       .strict()
       .describe(ACTION_EXAMPLES.wait),
@@ -370,7 +373,13 @@ export async function computeOptions(sessionID: string, base?: JobBroker.Options
 }
 
 async function options(sessionID: string, base?: JobBroker.Options): Promise<ResolvedOptions> {
-  const workspace = await SessionFilesystem.workspace(sessionID)
+  // Where the session's relative paths resolve, which is where its code is:
+  // the lead's own scratch or project, and for a worker the lead's directory
+  // it was given to work in. The worker's private scratch is not it: with
+  // that as the compute workspace every worker's `start` was refused as
+  // "Compute project does not match the session workspace", and workers
+  // ran their long computations through the shell instead.
+  const workspace = await SessionFilesystem.toolDirectory(sessionID)
   if (base) return { ...base, projectDirectory: base.projectDirectory ?? Instance.directory, workspace }
   const module = await import("@/server/routes/settings/compute")
   const settings = await module.ComputeSettings.get()
@@ -421,7 +430,7 @@ export async function relativeWorkingDirectory(input: {
   workspace: string
 }): Promise<string> {
   const hint =
-    'Give the directory that holds the code, relative to Session scratch or Project files (for example cwd "autoresearch_churn" with command "python train.py"). No compute job was dispatched.'
+    'Give the directory that holds the code, relative to Session scratch or Project files (for example cwd "autoresearch_churn" with command "python train.py"); when the code sits at the project root, copy the scripts it needs into a subdirectory and name that. No compute job was dispatched.'
   if (!path.isAbsolute(input.cwd)) {
     if (input.cwd.split(/[\\/]/).includes("..")) {
       throw new Error(`Compute working directory cannot contain '..': ${input.cwd}. ${hint}`)
@@ -433,10 +442,13 @@ export async function relativeWorkingDirectory(input: {
     const canonical = await Filesystem.canonical(root)
     if (!canonical || !Filesystem.contains(canonical, target)) continue
     const relative = path.relative(canonical, target)
+    // Jobs run in Session scratch, so its root is a working directory (in a
+    // headless run it is the project itself, and the code is there). The
+    // Project-files root has no relative form and is refused with the
+    // directory to name instead.
+    if (relative === "" && root === input.workspace) return "."
     if (relative === "") {
-      throw new Error(
-        `Compute working directory is the ${root === input.workspace ? "Session scratch" : "Project files"} root itself: ${input.cwd}. ${hint}`,
-      )
+      throw new Error(`Compute working directory is the Project files root itself: ${input.cwd}. ${hint}`)
     }
     return relative
   }
@@ -491,6 +503,10 @@ async function stageProjectDirectory(input: {
   }
 
   const source = await directory(project, input.cwd)
+  // Session scratch and Project files are one directory in a headless run
+  // (`--workspace project`): the code is already where the job runs, and a
+  // study's refresh has nothing to overlay.
+  if (source.canonical && current.canonical === source.canonical) return
   if (staged && (!source.canonical || !source.info?.isDirectory())) return
   if (!source.canonical || !Filesystem.contains(project, source.canonical) || !source.info?.isDirectory()) {
     throw new Error(
@@ -514,13 +530,16 @@ async function stageProjectDirectory(input: {
 
   const label = input.target.kind === "ssh" ? "SSH staging" : "Modal staging"
   const manifest = await ModalPlan.stagingFiles(source.canonical, input.uploads ?? [], label, {
-    prefix: input.target.kind === "ssh" ? input.cwd.replaceAll("\\", "/").replace(/^\.\//, "") : undefined,
+    prefix:
+      input.target.kind === "ssh" && input.cwd !== "."
+        ? input.cwd.replaceAll("\\", "/").replace(/^\.\//, "")
+        : undefined,
     denied: input.explicitUploads ? "error" : "skip",
     exclude: input.exclude,
   })
   const disk = await fs.statfs(workspace)
-  const available = disk.bavail * disk.bsize
-  if (!Number.isSafeInteger(available) || available < 0) {
+  const available = Math.min(disk.bavail * disk.bsize, Number.MAX_SAFE_INTEGER)
+  if (!Number.isFinite(available) || available < 0) {
     throw new Error(`${label} disk capacity could not be represented safely; no compute job was dispatched`)
   }
   const capacity = Math.max(0, available - COMPUTE_STAGE_DISK_RESERVE_BYTES)
@@ -661,10 +680,51 @@ async function jobs(sessionID: string, base?: JobBroker.Options) {
   return { resolved, jobs: await JobBroker.list(resolved) }
 }
 
+/** Edits (insert, delete, substitute) between two short strings. */
+function distance(a: string, b: string) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i)
+  for (let i = 1; i <= a.length; i++) {
+    let previous = row[0]!
+    row[0] = i
+    for (let j = 1; j <= b.length; j++) {
+      const current = row[j]!
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1))
+      previous = current
+    }
+  }
+  return row[b.length]!
+}
+
+/** The job an id names. A twelve-character random id is mis-copied about
+ * once a run (a case flip, one hex digit off, a dropped character), and the
+ * wait or the log read then never happened. An id that names no job resolves
+ * to the one job it is unambiguously closest to, or to the one job with that
+ * name; otherwise the error lists what exists instead of inviting another
+ * guess. */
+function resolve(id: string, jobs: JobBroker.Job[]) {
+  const exact = jobs.find((item) => item.id === id)
+  if (exact) return exact
+  const wanted = id.trim().toLowerCase()
+  const relaxed = jobs.find((item) => item.id.toLowerCase() === wanted)
+  if (relaxed) return relaxed
+  const named = jobs.filter((item) => item.name === id.trim())
+  if (named.length === 1) return named[0]
+  const near = jobs.filter((item) => distance(item.id.toLowerCase(), wanted) <= 2)
+  if (near.length === 1) return near[0]
+}
+
 async function selected(id: string, sessionID: string, base?: JobBroker.Options) {
   const state = await jobs(sessionID, base)
-  const job = state.jobs.find((item) => item.id === id)
-  if (!job) throw new Error(`Compute job ${id} was not found in this project`)
+  const job = resolve(id, state.jobs)
+  if (!job) {
+    const known = state.jobs
+      .slice(-8)
+      .map((item) => `${item.id} (${item.name}, ${item.status})`)
+      .join("; ")
+    throw new Error(
+      `Compute job ${id} was not found in this project.${known ? ` Jobs in this project: ${known}.` : ""}`,
+    )
+  }
   return { ...state, job }
 }
 
@@ -691,11 +751,98 @@ function artifacts(job: JobBroker.Job) {
   }
 }
 
+const log = Log.create({ service: "tool.compute-job" })
+
+/** A watcher is not a lease on the run: a job that never settles stops being
+ * waited on after a day, and `status` still answers for it. */
+const WAKE_LIMIT_MS = 24 * 60 * 60_000
+/** How long a dispatch waits for its job before handing back a step. */
+const settle = { graceMs: 30_000 }
+
+/** A test's barrier for the dispatch grace; disabled outside tests. */
+export function computeJobTesting(input: { settleGraceMs: number }) {
+  if (!process.env.OPENSCIENCE_TEST_HOME) throw new Error("compute_job test hooks are disabled outside tests")
+  const prior = settle.graceMs
+  settle.graceMs = input.settleGraceMs
+  return {
+    [Symbol.dispose]() {
+      settle.graceMs = prior
+    },
+  }
+}
+/** The tail of a job's output a settled report carries inline. */
+const REPORT_TAIL_BYTES = 6_000
+
+/** A settled job as the model needs it in one reading: the summary, the
+ * tail of its command output, and what it delivered. */
+async function settledReport(job: JobBroker.Job, options: JobBroker.Options) {
+  const output = await JobBroker.log(job.id, { ...options, bytes: REPORT_TAIL_BYTES }).catch(() => "")
+  const { job: _repeated, ...delivered } = artifacts(job)
+  return {
+    ...summary(job),
+    output_tail: output || "No command output was captured.",
+    ...delivered,
+    note: "This is the job's final state. Its full output is one `logs` call away if the tail is not enough.",
+  }
+}
+
+/** Jobs already being watched, so repeated waits arm one watcher each. */
+const watched = new Set<string>()
+
+/** Wait for a job to settle, detached from the turn that asked, then deliver
+ * its outcome to the session as a synthetic message. Mirrors the background
+ * worker path in `task.ts`: work that outlives its turn reports itself instead
+ * of being polled for. */
+async function armWake(
+  ctx: { sessionID: string; messageID: string; agent: string; extra?: { [key: string]: any } },
+  jobID: string,
+  resolved: JobBroker.Options,
+) {
+  if (watched.has(jobID)) return true
+  // Arming a wake never fails the wait it rides on: a call with no resolvable
+  // turn behind it (a direct invocation, a test harness) simply keeps the
+  // old behaviour of returning at the timeout.
+  const origin = await SessionWake.origin({
+    sessionID: ctx.sessionID,
+    messageID: ctx.messageID,
+    agent: ctx.agent,
+    variant: ctx.extra?.variant,
+  }).catch(() => undefined)
+  if (!origin) return false
+  watched.add(jobID)
+  SessionPrompt.detached(async () => {
+    try {
+      const job = await JobBroker.wait(jobID, { ...resolved, timeout: WAKE_LIMIT_MS })
+      await SessionWake.deliver({
+        ...origin,
+        text: `Compute job ${job.id} (${job.name}) ended with status ${job.status}. Read its logs with compute_job logs and its outputs with compute_job artifacts before continuing.`,
+        describe: `compute job ${jobID}`,
+      })
+    } catch (error) {
+      // The wake is what a caller waits on, so a watcher that cannot report
+      // the outcome still reports that: silence would leave a headless run
+      // waiting for a turn that never comes.
+      log.warn("a compute job could not wake its session", { jobID, error: `${error}` })
+      await SessionWake.deliver({
+        ...origin,
+        text: `Compute job ${jobID} could not be watched to completion (${error instanceof Error ? error.message : String(error)}). Check it with compute_job status.`,
+        describe: `compute job ${jobID}`,
+      }).catch(() => undefined)
+    } finally {
+      watched.delete(jobID)
+    }
+  }).catch((error: unknown) => {
+    watched.delete(jobID)
+    log.warn("a compute job wake could not be started", { jobID, error: `${error}` })
+  })
+  return true
+}
+
 export function createComputeJobTool(base?: JobBroker.Options) {
   return Tool.define<typeof ComputeJobParameters, Metadata>("compute_job", {
     description: [
       "Detached local, SSH/scheduler, and Modal jobs; prefer Python/R for interactive work.",
-      "Use targets to discover, plan to preview, start to dispatch, and wait instead of shell polling. list/status/logs/artifacts inspect jobs; cancel, retry_delivery, and release manage them.",
+      "Use targets to discover, plan to preview, start to dispatch, and wait instead of shell polling. A start that settles within 30 s returns the job's outcome, output tail and deliveries in that one step; a longer job wakes you when it ends. list/status/logs/artifacts inspect jobs; cancel, retry_delivery, and release manage them.",
       "plan/start require name, purpose, command, and target. Remote starts require scoped approval. Other job actions use job_id.",
       'Example: {"action":"start","name":"Analysis","purpose":"Produce results","command":"python analysis.py","target":{"kind":"local"}}.',
       'Use "action", never "operation"; target is an object, never a JSON string. Never call Modal SDK/CLI directly.',
@@ -847,10 +994,32 @@ export function createComputeJobTool(base?: JobBroker.Options) {
         )
         const complete: Metadata = { ...metadata, compute_job: { action: input.action, plan, job }, job }
         ctx.metadata({ title: `Compute job: ${input.name}`, metadata: complete })
+        // Most jobs finish in seconds, and the dispatch used to hand back a
+        // step that said only "queued": the model then spent a wait, a logs
+        // and an artifacts call on each — four round-trips, each re-sending
+        // the whole context, for work a shell command returns in one. A job
+        // that settles within the grace comes back with its output; one that
+        // runs on wakes the session when it ends.
+        const settled = await JobBroker.wait(job.id, { ...resolved, timeout: settle.graceMs, signal: ctx.abort }).catch(
+          () => undefined,
+        )
+        const staged = prepared.staged ? `Staged Project files/${prepared.staged} into Session scratch. ` : ""
+        if (settled) {
+          return {
+            title: `Compute job: ${input.name}`,
+            metadata: { ...complete, job: settled },
+            output: `${staged}${json(await settledReport(settled, resolved))}`,
+          }
+        }
+        const woken = await armWake(ctx, job.id, resolved)
         return {
           title: `Compute job: ${input.name}`,
           metadata: complete,
-          output: `${prepared.staged ? `Staged Project files/${prepared.staged} into Session scratch. ` : ""}Dispatched ${plan.provider} job ${job.id}. Status: ${job.status}. Use compute_job wait to suspend until meaningful progress, completion, or your selected timeout; do not poll with shell sleep.`,
+          output: `${staged}Dispatched ${plan.provider} job ${job.id}. Status: ${job.status} after ${Math.round(settle.graceMs / 1000)} s.${
+            woken
+              ? " It will wake you with its outcome when it ends: continue with other work, or end your turn and the wake starts a new one. Use compute_job wait only if nothing else can proceed; do not poll with shell sleep."
+              : " Use compute_job wait to suspend until it settles or your selected timeout; do not poll with shell sleep."
+          }`,
         }
       }
 
@@ -907,16 +1076,31 @@ export function createComputeJobTool(base?: JobBroker.Options) {
           }
         }
         const result = interrupted.result
+        // A wait that reaches its timeout used to hand back a step that said
+        // nothing and invited another wait: 396 such calls across one campaign,
+        // each re-sending the whole context. The job now wakes the session when
+        // it settles, the same way a background worker does, so the model can
+        // do other work or end its turn.
+        const woken = result.timed_out ? await armWake(ctx, state.job.id, state.resolved) : false
+        // A settled job's wait carries what the model would otherwise fetch
+        // with two more calls: the output's tail and the delivered artifacts.
+        const report = result.changed.includes("settled") ? await settledReport(result.job, state.resolved) : undefined
         return {
           title: `Compute job: ${result.job.name}`,
           metadata: { compute_job: { action: input.action, job: result.job } },
           output: json({
-            ...summary(result.job),
+            ...(report ?? summary(result.job)),
             changed: result.changed,
             waited_ms: result.waited_ms,
             timed_out: result.timed_out,
             output_bytes: result.output_bytes,
             event_bytes: result.event_bytes,
+            ...(woken
+              ? {
+                  will_wake: true,
+                  note: `Job ${state.job.id} is still running and will wake you with its outcome when it ends. Do not wait for it again: continue with other work, or end your turn and the wake starts a new one.`,
+                }
+              : {}),
           }),
         }
       }

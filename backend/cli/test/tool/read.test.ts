@@ -277,6 +277,36 @@ describe("tool.read truncation", () => {
     })
   })
 
+  test("a PDF longer than a provider accepts is read without being attached", async () => {
+    // A provider refuses a request carrying a PDF over its page limit, and
+    // refuses the identical request on every retry; a 376-page scanned thesis
+    // read whole would have ended the run. The page count is what the raw
+    // bytes declare.
+    const pdf = (pages: number) =>
+      `%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Count ${pages} >> endobj\n` +
+      Array.from({ length: pages }, (_, i) => `${i + 3} 0 obj << /Type /Page /Parent 2 0 R >> endobj\n`).join("") +
+      "trailer << /Root 1 0 R >>\n%%EOF\n"
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await fs.writeFile(path.join(dir, "thesis.pdf"), pdf(376))
+        await fs.writeFile(path.join(dir, "note.pdf"), pdf(3))
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const read = await ReadTool.init()
+        const long = await read.execute({ filePath: path.join(tmp.path, "thesis.pdf") }, ctx)
+        expect(long.attachments ?? []).toEqual([])
+        expect(long.output).toContain("376 pages, over the 100-page limit")
+        expect(long.output).toContain("do not attach it again")
+        const short = await read.execute({ filePath: path.join(tmp.path, "note.pdf") }, ctx)
+        expect(short.attachments?.length).toBe(1)
+        expect(short.attachments?.[0].mime).toBe("application/pdf")
+      },
+    })
+  })
+
   test("rejects invalid line windows before touching the file", async () => {
     const read = await ReadTool.init()
     await expect(read.execute({ filePath: "missing.txt", offset: -1 }, ctx)).rejects.toThrow("invalid arguments")

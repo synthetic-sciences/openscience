@@ -83,6 +83,24 @@ describe("tool.grep", () => {
     })
   })
 
+  test("a path that is not there says so, rather than blaming what could not be searched", async () => {
+    await using tmp = await tmpdir({
+      init: (dir) => Bun.write(path.join(dir, "sample.md"), "needle"),
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const absent = path.join(tmp.path, "packages", "not-here")
+        // The old message named neither the path nor the reason, and a lead
+        // that read it as a permission wall rebuilt by hand what the directory
+        // would have told it.
+        await expect((await GrepTool.init()).execute({ pattern: "anything", path: absent }, ctx)).rejects.toThrow(
+          `No such file or directory: ${absent}`,
+        )
+      },
+    })
+  })
+
   for (const input of [{ pattern: "[" }, { pattern: "needle", include: "[" }]) {
     test(`invalid ${input.include ? "include" : "regex"} is a search failure, not an empty success`, async () => {
       await using tmp = await tmpdir({

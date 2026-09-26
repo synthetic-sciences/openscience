@@ -29,7 +29,15 @@ export namespace BashOutput {
     open: () => FileSink
     /** Called after the preview changed; callers throttle their own publishing. */
     onPreview?: (preview: string) => void
+    /** How much of the end of an overflowing output stays in memory for the
+     * model: a traceback or a final status line sits at the tail, and a model
+     * shown the head alone tends not to spend a step on the saved file. */
+    tailBytes?: number
+    tailLines?: number
   }
+
+  export const TAIL_BYTES = 4 * 1024
+  export const TAIL_LINES = 40
 
   export interface Summary {
     /** Redacted head of the output, within the byte and line limits. */
@@ -39,6 +47,9 @@ export namespace BashOutput {
     lines: number
     /** What the preview left out, in the unit whose limit was hit first. */
     removed: { count: number; unit: "bytes" | "lines" }
+    /** The last whole lines of an overflowing output, within the tail limits;
+     * empty when nothing overflowed. */
+    tail: string
   }
 
   export class Capture {
@@ -59,6 +70,10 @@ export namespace BashOutput {
     private ended = false
     private dropping: "line" | "pem" | undefined
     private marker = ""
+    // The tail after overflow, as a small list of parts trimmed from the
+    // front, so a noisy command costs the tail budget and no more.
+    private tailParts: string[] = []
+    private tailLength = 0
 
     constructor(private readonly options: Options) {}
 
@@ -87,6 +102,56 @@ export namespace BashOutput {
         bytes: this.bytes,
         lines: this.lines,
         removed,
+        tail: this.previewClosed ? this.tail() : "",
+      }
+    }
+
+    /** The retained tail as whole lines: the first line is dropped when the
+     * front trim cut through it, so the model never sees a fragment. */
+    private tail(): string {
+      const text = this.tailParts.join("")
+      const budgetBytes = this.options.tailBytes ?? TAIL_BYTES
+      const budgetLines = this.options.tailLines ?? TAIL_LINES
+      let start = 0
+      if (Buffer.byteLength(text, "utf-8") > budgetBytes) {
+        // Trim by bytes, then forward to the next whole line.
+        let bytes = 0
+        let index = text.length
+        while (index > 0 && bytes < budgetBytes) {
+          index--
+          bytes += Buffer.byteLength(text[index], "utf-8")
+        }
+        const newline = text.indexOf("\n", index)
+        start = newline < 0 ? text.length : newline + 1
+      }
+      // Then by lines: keep the last `budgetLines`, counting a final line
+      // without its newline as a line.
+      const kept = text.slice(start)
+      const trailing = kept.endsWith("\n") ? 1 : 0
+      const lines = count(kept, "\n") + (trailing ? 0 : 1)
+      if (lines > budgetLines) {
+        let seen = 0
+        for (let index = text.length - 1; index >= start; index--) {
+          if (text[index] !== "\n") continue
+          seen++
+          if (seen === budgetLines + trailing) {
+            start = index + 1
+            break
+          }
+        }
+      }
+      return text.slice(start)
+    }
+
+    private keepTail(text: string): void {
+      this.tailParts.push(text)
+      this.tailLength += text.length
+      // Keep a little more than the budget so whole-line trimming has slack;
+      // characters are an upper bound on bytes here, so this never under-keeps.
+      const slack = (this.options.tailBytes ?? TAIL_BYTES) * 2
+      while (this.tailParts.length > 1 && this.tailLength - this.tailParts[0].length >= slack) {
+        this.tailLength -= this.tailParts[0].length
+        this.tailParts.shift()
       }
     }
 
@@ -154,12 +219,14 @@ export namespace BashOutput {
       this.lines += newlines
       if (this.sink) {
         this.sink.write(text)
+        this.keepTail(text)
         return
       }
       if (this.previewClosed) {
         this.sink = this.options.open()
         this.sink.write(this.preview)
         this.sink.write(text)
+        this.keepTail(text)
         return
       }
       const fits =
@@ -182,6 +249,7 @@ export namespace BashOutput {
         this.sink = this.options.open()
         this.sink.write(this.preview)
         this.sink.write(text.slice(kept.length))
+        this.keepTail(text.slice(kept.length))
       }
       this.options.onPreview?.(this.preview)
     }

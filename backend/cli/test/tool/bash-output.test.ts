@@ -59,6 +59,34 @@ describe("BashOutput.Capture", () => {
     expect(saved).not.toContain("sk-secret1234")
   })
 
+  test("keeps the end of an overflowing output as whole lines, redacted, within the tail limits", async () => {
+    await using sink = await scratch()
+    const redact = (text: string) => text.replaceAll("sk-secret1234", "[REDACTED]")
+    const capture = new BashOutput.Capture({
+      redact,
+      maxBytes: 10 * 1024,
+      maxLines: 100,
+      open: () => sink.open(),
+      tailBytes: 512,
+      tailLines: 5,
+    })
+    for (let i = 1; i <= 3_000; i++) capture.write(`progress ${i} token=sk-secret1234\n`)
+    capture.write('Traceback (most recent call last):\n  File "run.py", line 9\nValueError: bad shape\n')
+    const summary = await capture.end()
+    expect(summary.truncated).toBe(true)
+    const tail = summary.tail.split("\n").filter(Boolean)
+    // The last five whole lines, the traceback among them; nothing cut mid-line.
+    expect(tail).toHaveLength(5)
+    expect(tail.at(-1)).toBe("ValueError: bad shape")
+    expect(tail[0]).toMatch(/^progress \d+ token=\[REDACTED\]$/)
+    expect(summary.tail).not.toContain("sk-secret1234")
+    expect(summary.preview).not.toContain("Traceback")
+    // A small output keeps no tail: nothing was left out.
+    const small = new BashOutput.Capture({ redact: identity, maxBytes: 1024, maxLines: 50, open: () => sink.open() })
+    small.write("ok\n")
+    expect((await small.end()).tail).toBe("")
+  })
+
   test("reports bytes when a byte limit is hit before the line limit", async () => {
     await using sink = await scratch()
     const capture = new BashOutput.Capture({ redact: identity, maxBytes: 100, maxLines: 1000, open: () => sink.open() })

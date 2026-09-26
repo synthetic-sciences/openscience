@@ -4,7 +4,7 @@ Use Bash for builds, tests, packages, Git, utilities, and scripts. Prefer file t
 
 Use the web and literature tools for internet retrieval, not curl or wget.
 
-All Bash children stop when the call ends; `&`, `nohup`, `disown`, and `setsid` are not durable. For work that must outlive the call, use the durable job tool when it is offered (start a local job, then wait for it); never poll with Bash.
+All Bash children stop when the call ends; `&`, `nohup`, `disown`, and `setsid` are not durable. A call stops after 20 minutes unless you give `timeout`; the output so far comes back with the fact. For work that must outlive the call, use the durable job tool when it is offered (start a local job, then wait for it); never poll with Bash.
 
 Do not emit timestamp, marker, no-op, or repeated readiness commands. Before a long run, use at most one bounded preflight that checks all necessary inputs together, then launch immediately when it passes.
 

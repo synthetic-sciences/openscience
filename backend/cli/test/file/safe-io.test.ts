@@ -267,6 +267,64 @@ describe("SafeFileIO", () => {
     expect(await Bun.file(target).text()).toBe("contained")
   })
 
+  test.skipIf(process.platform === "win32")(
+    "completes a replacement whose displaced original comes back under a new inode",
+    async () => {
+      // An overlay root (Modal's gVisor sandboxes) copies a lower-layer file up
+      // on exchange and renumbers it: the first edit of any file shipped in the
+      // image. The public name holds the replacement either way; the displaced
+      // original is ours to remove by its bytes, not by an identity the
+      // filesystem has just changed.
+      await using tmp = await tmpdir({
+        init: (directory) => Bun.write(path.join(directory, "solve.py"), "original"),
+      })
+      const target = path.join(tmp.path, "solve.py")
+      const approved = await SafeFileIO.read(target)
+      const renumbered = { value: false }
+      using barrier = SafeFileIO.testing({
+        afterReplaceMutation: async (_target, staged) => {
+          const bytes = await fs.readFile(staged)
+          await fs.unlink(staged)
+          await fs.writeFile(staged, bytes)
+          renumbered.value = true
+        },
+      })
+
+      await SafeFileIO.write(target, "replacement", approved)
+
+      expect(renumbered.value).toBe(true)
+      expect(await Bun.file(target).text()).toBe("replacement")
+      expect((await fs.readdir(tmp.path)).filter((file) => file.startsWith(".openscience-"))).toEqual([])
+    },
+  )
+
+  test.skipIf(process.platform === "win32")(
+    "retains a displaced entry whose bytes are not the original's",
+    async () => {
+      await using tmp = await tmpdir({
+        init: (directory) => Bun.write(path.join(directory, "solve.py"), "original"),
+      })
+      const target = path.join(tmp.path, "solve.py")
+      const approved = await SafeFileIO.read(target)
+      using barrier = SafeFileIO.testing({
+        afterReplaceMutation: async (_target, staged) => {
+          // A different file at our staging name. Written beside the original
+          // and renamed over it, so its inode is allocated while the original's
+          // is still live: an unlink-then-write can be handed the freed number
+          // back (ext4 does), which would make a stranger's file look like the
+          // original edited in place.
+          await fs.writeFile(`${staged}.other`, "someone else's bytes")
+          await fs.rename(`${staged}.other`, staged)
+        },
+      })
+
+      await expect(SafeFileIO.write(target, "replacement", approved)).rejects.toThrow("changed after approval")
+      const retained = (await fs.readdir(tmp.path)).filter((file) => file.startsWith(".openscience-"))
+      expect(retained).toHaveLength(1)
+      expect(await Bun.file(path.join(tmp.path, retained[0]!)).text()).toBe("someone else's bytes")
+    },
+  )
+
   test("replaces only the exact approved file through its held parent", async () => {
     await using tmp = await tmpdir({
       init: (directory) => Bun.write(path.join(directory, "result.txt"), "approved"),
