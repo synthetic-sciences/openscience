@@ -3,6 +3,9 @@ import type { Config } from "@/config/config"
 import { HarnessState } from "./state"
 import { RedirectUnit } from "./redirect"
 import { DeliverablesUnit } from "./deliverables"
+import { AcceptanceUnit } from "./acceptance"
+import { UnattendedUnit } from "./unattended"
+import { ReviewUnit } from "./review"
 import { BudgetUnit } from "./budget"
 import { CostUnit } from "./cost"
 
@@ -21,6 +24,9 @@ export namespace Harness {
     return {
       redirect: RedirectUnit,
       deliverables: DeliverablesUnit,
+      acceptance: AcceptanceUnit,
+      unattended: UnattendedUnit,
+      review: ReviewUnit,
       budget: BudgetUnit,
       cost: CostUnit,
     }

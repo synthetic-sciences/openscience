@@ -984,20 +984,12 @@ export namespace SessionPrompt {
       return output.message
     }
     const workspace = await SessionFilesystem.workspace(sessionID)
-    // Pruning rewrites old tool results, and the provider's cached prefix ends
-    // where the first rewrite begins: the next request re-reads everything after
-    // it at full price. That is free only when the cache has gone cold anyway,
-    // so a turn that follows a long pause (a person typing, a run waiting)
-    // prunes here, while a wake inside the cache window keeps its prefix and
-    // leaves pruning to the capacity checks in the loop, which prune when they
-    // must.
-    const lastCompleted = durable.reduce<number | undefined>((latest, message) => {
-      if (message.info.role !== "assistant" || !message.info.time.completed) return latest
-      return Math.max(latest ?? 0, message.info.time.completed)
-    }, undefined)
-    if (!lastCompleted || Date.now() - lastCompleted > SessionCompaction.CACHE_WINDOW_MS) {
-      await SessionCompaction.prune({ sessionID })
-    }
+    // Old tool results are cleared at every turn boundary, as OpenCode does:
+    // the newest 40k tokens of output stay, older results become one-line
+    // summaries the model can re-run. A gate that waited for a cold cache
+    // never opened in an autonomous run, whose contexts then grew for hours
+    // and whose cost was mostly re-reading them.
+    await SessionCompaction.prune({ sessionID })
     const readMessages = async () => {
       let messages = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
       // Atomic message writes can briefly overlap a directory scan on busy or
@@ -1545,8 +1537,30 @@ export namespace SessionPrompt {
             !!(m.info as MessageV2.Assistant).finish &&
             m.info.id > lastFinished!.id,
         )
+      // A turn in an autonomous run is hundreds of steps long, so the prune at
+      // its boundary is not enough: once the old tool output that could be
+      // cleared reaches a third of what the last step carried, clear it now.
+      // One rewrite of the shorter prefix is repaid within a few dozen steps.
+      const carried = lastFinished && lastFinished.summary !== true ? TokenUsage.total(lastFinished.tokens) : 0
+      const routine =
+        carried > 0 && !freshlyCompacted
+          ? await SessionCompaction.prune({ sessionID, floor: Math.floor(carried * SessionCompaction.PRUNE_SHARE) })
+          : 0
+      if (routine > 0) {
+        msgs = await readMessages()
+        SessionTelemetry.recordCompaction({
+          sessionID,
+          trigger: "proactive",
+          mechanism: "prune",
+          before: carried,
+          reclaimed: routine,
+        })
+      }
       // Compact proactively when reported usage fills the usable model capacity.
+      // The last step's usage predates a routine prune made just above, so the
+      // capacity check waits for the next step's real figure.
       const overThreshold =
+        routine === 0 &&
         !!lastFinished &&
         lastFinished.summary !== true &&
         (await SessionCompaction.isOverflow({ tokens: lastFinished.tokens, model, context: lastUser.context }))
@@ -1966,6 +1980,7 @@ export namespace SessionPrompt {
           ...MessageV2.toModelMessages(sessionMessages, model, {
             keepRecentImages: SessionCompaction.recentImages(config),
             imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
+            reduceInputs: config.compaction?.pruneInputs === true,
           }),
           ...(isLastStep
             ? [
@@ -1989,16 +2004,37 @@ export namespace SessionPrompt {
       if (result === "guard") {
         const trip = processor.guard
         const redirect = trip
-          ? await guard({ sessionID, kind: "tool_errors", tool: trip.tool, trips: ++guardTrips.tool_errors })
+          ? await guard({ sessionID, kind: trip.kind, tool: trip.tool, trips: ++guardTrips[trip.kind] })
           : undefined
         if (redirect) {
           await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: redirect })
           continue
         }
         if (trip) await processor.stopOnGuard(trip)
+        // A guard's stop is still the end of a turn: the units that speak
+        // before a finish (a deliverable missing, budget left) speak here too,
+        // or a headless run ends with nothing produced and hours unused.
+        const finish = { message: undefined as string | undefined }
+        if (!bareMode && harnessInjections < HARNESS_INJECTION_LIMIT) {
+          await Plugin.trigger(
+            "loop.before_finish",
+            { sessionID, messageID: processor.message.id, turn, injections: harnessInjections },
+            finish,
+          )
+        }
+        if (finish.message) {
+          harnessInjections++
+          await enqueue({ user: lastUser, kind: "harness", epoch: turn, text: finish.message })
+          continue
+        }
         break
       }
       if (result === "stop") break
+      // The provider refused an image and the processor withheld it from the
+      // transcript; the step runs again on the amended record. Bounded by the
+      // images there are to withhold: the processor reports the refusal as the
+      // turn's error once none is left.
+      if (result === "withheld") continue
       if (result === "overflow") {
         // Honor an explicit opt-out: if the user disabled auto-compaction, a hard
         // overflow must NOT silently rewrite their history to a summary. Surface a
@@ -2519,7 +2555,7 @@ export namespace SessionPrompt {
           ? "Delegation is Low. Delegate at most one genuinely independent branch, and only when it clearly shortens the path to the result."
           : settings.level === "high"
             ? "Delegation is High. Parallelize independent branches freely, one worker per branch; prefer a worker for any self-contained branch of research, analysis or writing over doing it inline."
-            : "Delegation is Auto. Delegate a genuinely independent branch when it shortens the path to the result; otherwise do the work here."
+            : "Delegation is Auto. Delegate, in parallel when branches are independent, whenever it shortens the path to the result; the deliverable and its integration stay here. Give each worker its own files inside the project and the command that checks them, integrate each result into the deliverable as it lands so it builds at every step, and read the handoff's file list before launching the next worker. A worker re-attempting the step you are on yourself duplicates spend. Splitting independent items across workers is the normal way to cover a set, and an independent re-implementation of a computation is new evidence: where two of them disagree, the disagreement is the finding. What adds nothing is a second opinion on the same interpretive question — a re-reading of your own evidence by your own model is not a check, so dispatch a review only when you can name what the reviewer will have that you do not, whether other data, a tool you have not run, or a derivation carried out from scratch, and ask it for a result you can check rather than an opinion. When you would hand the whole problem to more than one specialist, do it yourself and dispatch only the parts you cannot."
     const interaction = decisionPolicy(settings.autonomy)
     return [
       `Research effort: ${effort.toUpperCase()}. ${posture}`,

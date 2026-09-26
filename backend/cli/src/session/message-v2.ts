@@ -764,6 +764,9 @@ export namespace MessageV2 {
        * is cut with a marker. A summarizer that overflowed on the full
        * transcript gets one more attempt at this reduced fidelity. */
       toolOutputMaxChars?: number
+      /** Experimental (`compaction.pruneInputs`): a pruned call's long string
+       * arguments are rendered as previews. */
+      reduceInputs?: boolean
       /** The full transcript `input` is a prefix of. The reasoning boundary
        * and the image budget are taken from it, so a compaction head rendered
        * on its own is byte-identical to the same span inside the conversation
@@ -809,6 +812,11 @@ export namespace MessageV2 {
     const emitted = new Set<string>()
     // Returns a placeholder string when this image occurrence should be dropped, else undefined.
     const dropImage = (mime: string, url: string, filename?: string): string | undefined => {
+      if (mime === "application/pdf" && url.startsWith("data:")) {
+        const pages = pdfPages(url)
+        if (pages > PDF_MAX_PAGES) return oversizedPdfNote(pages, filename)
+        return undefined
+      }
       if (!isImage(mime)) return undefined
       if (options?.stripMedia) return `[image omitted${filename ? `: ${filename}` : ""}]`
       // Oversized guard (P2.4): a too-large image is replaced by an actionable resize
@@ -1040,7 +1048,11 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 // Reducing a result must not turn its authoritative input into
                 // a shortened payload that a later call could execute.
-                input: compactToolInput(part.tool, part.state.input, !!part.state.time.compacted || isDuplicate),
+                input: compactToolInput(
+                  part.tool,
+                  part.state.input,
+                  options?.reduceInputs === true && !!part.state.time.compacted,
+                ),
                 output,
                 ...(differentModel
                   ? {}
@@ -1174,19 +1186,33 @@ export namespace MessageV2 {
   // Page objects hidden inside compressed object streams are not visible to
   // this scan, so the count is a floor of one page.
   export const PDF_PAGE_TOKENS = 3_000
+  /** The most pages a provider accepts in one PDF attachment (OpenAI: 100).
+   * A 376-page scanned thesis attached whole is refused as a deterministic
+   * invalid request, and the identical request would be refused again on
+   * every retry; its text is read through an extractor instead. */
+  export const PDF_MAX_PAGES = 100
   const pdfPageCache = new Map<string, number>()
+
+  /** Page objects a PDF's raw bytes declare. Pages hidden in compressed
+   * object streams are not visible to this scan, so the count is a floor. */
+  export function pdfPagesOf(latin1: string) {
+    return Math.max(1, latin1.match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0)
+  }
 
   export function pdfPages(url: string) {
     const payload = mediaIdentity(url)
     const key = `${payload.length}:${Bun.hash(payload)}`
     const cached = pdfPageCache.get(key)
     if (cached !== undefined) return cached
-    const bytes = Buffer.from(payload, "base64").toString("latin1")
-    const pages = bytes.match(/\/Type\s*\/Page(?![s\w])/g)?.length ?? 0
-    const count = Math.max(1, pages)
+    const count = pdfPagesOf(Buffer.from(payload, "base64").toString("latin1"))
     if (pdfPageCache.size >= 64) pdfPageCache.clear()
     pdfPageCache.set(key, count)
     return count
+  }
+
+  /** The note that stands in for a PDF too long to attach. */
+  export function oversizedPdfNote(pages: number, filename?: string) {
+    return `[PDF not attached${filename ? `: ${filename}` : ""}: ${pages} pages, over the ${PDF_MAX_PAGES}-page limit a provider accepts per attachment. Read its text with an extractor (pdftotext from poppler, or PyMuPDF via \`pip install pymupdf\`) and page ranges with \`literature read\`; do not attach it again]`
   }
 
   /** Estimate a non-image attachment the way the provider will bill it. Files
@@ -1293,10 +1319,40 @@ export namespace MessageV2 {
   export const ARG_TRUNCATION_MARKER = PayloadIntegrity.MARKER
   export const hasArgTruncationMarker = PayloadIntegrity.hasMarker
 
-  /** Tool inputs remain byte-exact even when results are reduced. Lossy
-   * summaries belong in the result, never in executable argument fields. */
-  export function compactToolInput(_tool: string, input: Record<string, unknown>, _reduced: boolean) {
-    return input
+  /** Arguments shorter than this always travel whole. */
+  export const INPUT_PREVIEW_FLOOR = 2_000
+
+  /** Argument fields whose body the filesystem can give back: the model wrote
+   * this text to a file, so a preview costs it a `read`, not the content. A
+   * `command`, a worker's `prompt` or a search pattern is recoverable from
+   * nowhere and always travels whole, however long it is. */
+  const RECOVERABLE_INPUT_FIELDS: Record<string, readonly string[]> = {
+    apply_patch: ["patchText"],
+    write: ["content"],
+    edit: ["oldString", "newString"],
+    python: ["code"],
+    r: ["code"],
+  }
+
+  /** Tool inputs remain byte-exact even when results are reduced, by default:
+   * an earlier release shortened them, and models wrote the shortened text
+   * back into files. With `compaction.pruneInputs` a *pruned* call's long
+   * string arguments become the same `…[+N chars]` preview that release used,
+   * because PayloadIntegrity already refuses a write that reproduces one; the
+   * stored input is never touched, only what the model re-reads. In a run
+   * that writes code, these arguments are most of what pruning leaves behind.
+   * Only fields the filesystem can return are shortened; see
+   * RECOVERABLE_INPUT_FIELDS. */
+  export function compactToolInput(tool: string, input: Record<string, unknown>, reduced: boolean) {
+    if (!reduced) return input
+    const fields = RECOVERABLE_INPUT_FIELDS[tool]
+    if (!fields) return input
+    const long = fields.flatMap((field) => {
+      const value = input[field]
+      return typeof value === "string" && value.length > INPUT_PREVIEW_FLOOR ? [[field, value] as const] : []
+    })
+    if (!long.length) return input
+    return { ...input, ...Object.fromEntries(long.map(([key, value]) => [key, PayloadIntegrity.legacyPreview(value)])) }
   }
 
   const TaskArtifactHandle = z.object({ artifactID: z.string().min(1), versionID: z.string().min(1) })

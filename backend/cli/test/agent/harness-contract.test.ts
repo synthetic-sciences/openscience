@@ -115,3 +115,14 @@ test("data-analysis skills keep reports and figures opt-in", async () => {
   expect(skill).toContain("Save only when requested")
   expect(skill).not.toContain("### Step 5: Save Report")
 })
+
+test("the science block holds a check to the real system's data, not to cases the model wrote itself", () => {
+  const science = SystemPrompt.science()
+  expect(science).toMatch(/only as hard as you made it/)
+  expect(science).toMatch(/holding some of them back from the fitting/)
+  expect(science).toMatch(/refine on the real problem until the answer stops moving/)
+  expect(science).toMatch(/agreement with it is not an estimate of error against reality/)
+  expect(science).toMatch(/judge the revision on the evidence the first one was judged by/)
+  expect(science).toMatch(/keep the best artifact that satisfies every constraint/)
+  expect(science).toMatch(/disagreement between plausible models in the uncovered conditions is your error estimate/)
+})

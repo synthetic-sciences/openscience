@@ -389,6 +389,46 @@ export namespace SessionProcessor {
     }
   }
 
+  export const WITHHELD_NOTE =
+    "[image withheld: the provider's content filter rejected the request while it was attached; work from the file through code instead of viewing it]"
+
+  /** Remove the images from the tool results the provider refused to look
+   * at, most recent first: the current turn's own results, and when it has
+   * none left, every result in the session. The note left in the output says
+   * why the image is gone, so the model turns to the pixels through code
+   * rather than reading the file again. Returns how many were withheld. */
+  export async function withholdImages(sessionID: string, messageID: string) {
+    const isImage = (attachment: { mime: string }) => attachment.mime.startsWith("image/")
+    const scrub = async (parts: MessageV2.Part[]) => {
+      let withheld = 0
+      for (const part of parts) {
+        if (part.type !== "tool" || part.state.status !== "completed") continue
+        const attachments = part.state.attachments ?? []
+        const images = attachments.filter(isImage)
+        if (!images.length) continue
+        withheld += images.length
+        const kept = attachments.filter((attachment) => !isImage(attachment))
+        await Session.updatePart({
+          ...part,
+          state: {
+            ...part.state,
+            attachments: kept,
+            output: `${part.state.output}\n${images.map(() => WITHHELD_NOTE).join("\n")}`,
+          },
+        })
+      }
+      return withheld
+    }
+    const own = await scrub(await MessageV2.parts(messageID))
+    if (own > 0) return own
+    let total = 0
+    for await (const message of MessageV2.stream(sessionID)) {
+      if (message.info.role !== "assistant") continue
+      total += await scrub(message.parts)
+    }
+    return total
+  }
+
   /** A provider policy finish is terminal, but tool side effects are not a
    * textual handoff. Preserve the finish reason while giving every client a
    * retryable error whenever the provider filters the final answer, including
@@ -778,7 +818,7 @@ export namespace SessionProcessor {
   }) {
     let snapshot: string | undefined
     let blocked = false
-    let guardTrip: { kind: "tool_errors"; tool: string } | undefined
+    let guardTrip: { kind: "tool_errors" | "repeated_call"; tool: string } | undefined
     let shouldBreakOnDeny = true
     let attempt = 0
     let transientRetries = 0
@@ -787,6 +827,7 @@ export namespace SessionProcessor {
     let output: ReturnType<typeof outputWatchdog> | undefined
     let needsCompaction = false
     let overflow = false
+    let withheld = false
 
     const toolOutcomes = createToolOutcomeCoordinator({
       abort: input.abort,
@@ -839,7 +880,9 @@ export namespace SessionProcessor {
         return guardTrip
       },
       /** No unit redirected the trip: end the turn the way the guard always did. */
-      async stopOnGuard(trip: { kind: "tool_errors"; tool: string }) {
+      async stopOnGuard(trip: { kind: "tool_errors" | "repeated_call"; tool: string }) {
+        // A repeated incomplete call was announced when it was caught.
+        if (trip.kind === "repeated_call") return
         await Session.updatePart({
           id: Identifier.ascending("part"),
           messageID: input.assistantMessage.id,
@@ -930,6 +973,7 @@ export namespace SessionProcessor {
         const tracking = tracks({ tools: streamInput.tools, toolcall: input.model.capabilities.toolcall })
         needsCompaction = false
         overflow = false
+        withheld = false
         shouldBreakOnDeny = prepared.shouldBreak
         let traceRoute = "custom"
         while (true) {
@@ -1132,11 +1176,15 @@ export namespace SessionProcessor {
                   // execution envelope (guardRepeat), where an ask can still
                   // stop the call. Only the harmless `invalid` placeholder,
                   // which executes nothing, is judged from the stream here.
+                  // The trip is a guard like the others: the loop lets a unit
+                  // redirect it, and the units that speak before a finish
+                  // speak; a dead stop here once ended an unattended run at
+                  // step six with nothing delivered.
                   if (value.toolName === "invalid") {
                     const parts = await turnPartsNow()
                     if (isMalformedLoop(parts, value.input)) {
                       const source = InvalidCall.signature(value.input).split(":", 1)[0]
-                      blocked = true
+                      guardTrip = { kind: "repeated_call", tool: source }
                       await Session.updatePart({
                         id: Identifier.ascending("part"),
                         messageID: input.assistantMessage.id,
@@ -1375,7 +1423,23 @@ export namespace SessionProcessor {
               // assistant bubble; the outer loop compacts it away and resumes.
               input.assistantMessage.finish = "compact"
             }
-            if (!overflow) {
+            // An image the provider's content filter refuses is refused on
+            // every retry, so the same request is never resent: the images are
+            // withheld from the results that carried them and the outer loop
+            // runs the step again on the amended transcript. Only when there is
+            // no image left to withhold is the refusal the turn's error.
+            if (!overflow && SessionRetry.isInputContentPolicy(error)) {
+              const count = await withholdImages(input.sessionID, input.assistantMessage.id).catch(() => 0)
+              if (count > 0) {
+                log.info("provider refused an image; withheld and retrying", { sessionID: input.sessionID, count })
+                // No finish reason: a finish would read as a final answer to
+                // the loop, and "compact" would start a compaction. The step's
+                // tool calls and their amended results stay; the next step
+                // continues from them.
+                withheld = true
+              }
+            }
+            if (!overflow && !withheld) {
               // A silent provider retrying ten times at the same idle deadline
               // recreates the original 50-minute failure. Idle expiry is a
               // terminal, actionable outcome; other transient failures retain
@@ -1387,7 +1451,7 @@ export namespace SessionProcessor {
                 resubmits += 1
                 return {
                   type: "retry" as const,
-                  message: "The gateway reported no progress on the request; resubmitting it once as a new request",
+                  message: "The request got no response; resubmitting it once as a new request",
                 }
               })
               if (action.type === "retry") {
@@ -1493,7 +1557,7 @@ export namespace SessionProcessor {
           // guard cannot see (the model reworded its arguments each time). On the
           // second such error, append corrective guidance to the tool result the
           // model will read next; on the third, stop the turn.
-          if (!overflow && !needsCompaction && !blocked && !input.assistantMessage.error) {
+          if (!overflow && !withheld && !needsCompaction && !blocked && !input.assistantMessage.error) {
             const lastError = p.findLast(
               (part): part is MessageV2.ToolPart => part.type === "tool" && part.state.status === "error",
             )
@@ -1534,6 +1598,7 @@ export namespace SessionProcessor {
           await Session.updateMessage(input.assistantMessage)
           progress(input.assistantMessage.error ? "error" : "done")
           if (overflow) return "overflow"
+          if (withheld) return "withheld"
           if (needsCompaction) return "compact"
           if (guardTrip) return "guard"
           if (blocked) return "stop"

@@ -434,8 +434,8 @@ export namespace DataRelocation {
 
   async function preflightCapacity(target: string, required: number) {
     const volume = await fs.statfs(path.dirname(target))
-    const available = Number(volume.bavail) * Number(volume.bsize)
-    if (!Number.isSafeInteger(available) || available < 0) {
+    const available = Math.min(Number(volume.bavail) * Number(volume.bsize), Number.MAX_SAFE_INTEGER)
+    if (!Number.isFinite(available) || available < 0) {
       throw new Error(`Could not establish safe free-space capacity for ${path.dirname(target)}`)
     }
     const reserve = Math.max(minimumReserve, Math.min(maximumReserve, Math.ceil(required * 0.1)))

@@ -315,6 +315,95 @@ function failingReader(root: { value: string }) {
   return { instance, requests, calls: () => calls }
 }
 
+/** A model that keeps failing the same way through the redirect, so the guard
+ * stops the turn; once the deliverables unit speaks, it answers with text. */
+function stubbornReader(root: { value: string }) {
+  let calls = 0
+  const chunk = (delta: object, finish: string | null) =>
+    `data: ${JSON.stringify({
+      id: "chatcmpl-stubborn",
+      object: "chat.completion.chunk",
+      created: 1,
+      model: STRESS_PROVIDER_MODEL,
+      choices: [{ index: 0, delta, finish_reason: finish }],
+      ...(finish ? { usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } } : {}),
+    })}\n\n`
+  const reply = (content: string) =>
+    new Response(chunk({ role: "assistant", content }, null) + chunk({}, "stop") + "data: [DONE]\n\n", {
+      headers: { "content-type": "text/event-stream" },
+    })
+  const instance = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const body = await request.json()
+      const conversation = JSON.stringify(body.messages)
+      if (!conversation.includes("Methods and deliverables")) return reply("title")
+      if (conversation.includes("named outputs are not ready"))
+        return reply("Wrote results/alpha.csv from what was available.")
+      if (calls >= 12) return reply("Giving up.")
+      calls++
+      const call = {
+        id: `call_${calls}`,
+        type: "function",
+        function: { name: "read", arguments: JSON.stringify({ filePath: `${root.value}/missing-${calls}.txt` }) },
+      }
+      return new Response(
+        chunk({ role: "assistant", tool_calls: [{ index: 0, ...call }] }, null) +
+          chunk({}, "tool_calls") +
+          "data: [DONE]\n\n",
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  return { instance, calls: () => calls }
+}
+
+test("a guard's stop still lets the deliverables unit continue the turn when named outputs are missing", async () => {
+  const root = { value: "" }
+  const fixture = stubbornReader(root)
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    root.value = tmp.path
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const session = await Session.create({ workspace: "project" })
+        await SessionPrompt.prompt({
+          sessionID: session.id,
+          model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+          agent: "research",
+          parts: [{ type: "text", text: `${SPEC} Start by reading the configuration file.` }],
+        })
+        // Three failures, the redirect, three more, the stop: six failed reads.
+        expect(fixture.calls()).toBe(6)
+        const parts = (await Session.messages({ sessionID: session.id })).flatMap((message) => message.parts)
+        const stopped = parts.findIndex(
+          (part) => part.type === "text" && part.text.includes("stopped this turn after three consecutive"),
+        )
+        expect(stopped).toBeGreaterThan(-1)
+        // The deliverables unit spoke after the stop, and the model got another turn.
+        const continued = parts.findIndex(
+          (part, index) =>
+            index > stopped &&
+            part.type === "text" &&
+            part.synthetic &&
+            part.text.includes("named outputs are not ready"),
+        )
+        expect(continued).toBeGreaterThan(stopped)
+        expect(
+          parts.some(
+            (part, index) => index > continued && part.type === "text" && part.text.includes("Wrote results/alpha.csv"),
+          ),
+        ).toBe(true)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
 test("three same-cause tool failures become one redirect instead of a stop; the redirect is a synthetic continuation", async () => {
   const root = { value: "" }
   const fixture = failingReader(root)

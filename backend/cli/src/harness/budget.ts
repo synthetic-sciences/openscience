@@ -1,6 +1,7 @@
 import os from "node:os"
 import path from "path"
 import type { Hooks, Plugin } from "@synsci/plugin"
+import { Session } from "@/session"
 import { SessionLoopState } from "@/session/loop-state"
 import type { MessageV2 } from "@/session/message-v2"
 import { HarnessState } from "./state"
@@ -55,8 +56,17 @@ export namespace Budget {
    * system prompt: the machine, and the time budget's total when there is
    * one (its deadline is fixed when the turn that set it begins). */
   export function lines(machine: { cpus: number; gib: number }, state?: HarnessState.Session) {
+    // What a budget means to someone working alone: the work ends when the
+    // turn ends, and time left over is not kept for later. Without this, a
+    // lead whose own checks still fail writes a hand-off ("the target is not
+    // yet verified") as if someone would pick it up, and stops with most of
+    // the budget unused.
     const budget =
-      state?.deadline && state.startedAt ? [`Time budget: ${duration(state.deadline - state.startedAt)}`] : []
+      state?.deadline && state.startedAt
+        ? [
+            `Time budget: ${duration(state.deadline - state.startedAt)}. The work ends when you end your turn and unused time is not kept: while your own checks show the result falls short of what was asked and time remains, keep improving it; end the turn when it meets its checks or the remaining time cannot change it.`,
+          ]
+        : []
     return [`Compute: ${machine.cpus} CPUs, ${machine.gib} GiB`, ...budget]
   }
 
@@ -109,7 +119,11 @@ export const BudgetUnit: Plugin = async () => {
     },
     async "loop.before_finish"(input, output) {
       const state = HarnessState.get(input.sessionID)
-      if (output.message || state.budgetNudged || !state.deliverablesFailing) return
+      if (output.message) return
+      // A worker's brief is not the user's request; the lead answers for it.
+      const session = await Session.get(input.sessionID).catch(() => undefined)
+      if (session?.parentID) return
+      if (state.budgetNudged || !state.deliverablesFailing) return
       const left = Budget.remaining(state, HarnessState.clock.now())
       if (left === undefined || left <= 0.15) return
       state.budgetNudged = true

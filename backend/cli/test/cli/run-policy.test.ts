@@ -6,6 +6,7 @@ import { PermissionNext } from "../../src/permission/next"
 import { Provider } from "../../src/provider/provider"
 import { Server } from "../../src/server/server"
 import { execute, session, type RunInput } from "../../src/cli/cmd/run"
+import { computeJobTesting } from "../../src/tool/compute-job"
 import { RunEvents } from "../../src/cli/run-events"
 import { Log } from "../../src/util/log"
 import { tmpdir, trustProject } from "../fixture/fixture"
@@ -58,13 +59,22 @@ function text(reply: string, reasoning?: string) {
   ])
 }
 
+// Providers issue a distinct id per call; two calls of one tool in one turn
+// with the same id would be merged into one part by the loop.
+let calls = 0
 function call(name: string, args: Record<string, unknown>) {
+  calls += 1
   return sse([
     chunk(
       {
         role: "assistant",
         tool_calls: [
-          { index: 0, id: `call_${name}`, type: "function", function: { name, arguments: JSON.stringify(args) } },
+          {
+            index: 0,
+            id: `call_${name}_${calls}`,
+            type: "function",
+            function: { name, arguments: JSON.stringify(args) },
+          },
         ],
       },
       null,
@@ -93,6 +103,20 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
       const done = hasToolResult(body.messages)
       if (prompt.includes("RUN_READ")) {
         return done ? text("RUN_READ_DONE") : call("read", { filePath: options.secret })
+      }
+      if (prompt.includes("RUN_ASK_AUTHORITY")) {
+        return done
+          ? text("RUN_ASK_AUTHORITY_DONE")
+          : call("question", {
+              reason: "missing_authority",
+              questions: [
+                {
+                  header: "Input",
+                  question: "Please provide the reference table.",
+                  options: [{ label: "Provide the table", description: "Upload it" }],
+                },
+              ],
+            })
       }
       if (prompt.includes("RUN_QUESTION")) {
         return done
@@ -123,6 +147,71 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
               subagent_type: "explore",
             })
       }
+      // The lead starts a slow background worker, then asks it for its result
+      // by task_id while it is still running; the tool waits and hands over
+      // the report once.
+      if (prompt.includes("RUN_BACKGROUND_JOIN")) {
+        const started = prompt.match(/<task id="(ses_[^"]+)" state="running">/)
+        if (prompt.includes("Waited for this background worker")) return text("RUN_JOIN_DONE")
+        if (started) {
+          return call("task", {
+            description: "Collect findings",
+            prompt: "What do you have so far?",
+            subagent_type: "explore",
+            task_id: started[1],
+          })
+        }
+        return call("task", {
+          description: "Inspect files slowly",
+          prompt: "CHILD_SLOW inspect the files",
+          subagent_type: "explore",
+          background: true,
+        })
+      }
+      // The worker is quick; the lead's turn on its report is slow, as a
+      // real integration turn is. The run must wait for that turn too.
+      if (prompt.includes("RUN_BACKGROUND_SLOWWAKE")) {
+        if (prompt.includes('state="completed"')) {
+          await Bun.sleep(7_000)
+          return text("RUN_SLOWWAKE_DONE")
+        }
+        return done
+          ? text("Launched the inspection; its report will arrive as a new turn.")
+          : call("task", {
+              description: "Inspect files later",
+              prompt: "CHILD_BRIEF inspect the files",
+              subagent_type: "explore",
+              background: true,
+            })
+      }
+      // A worker slower than the run's idle grace: the lead answers long
+      // before the child does, as a real worker on a real task does.
+      if (prompt.includes("RUN_BACKGROUND_SLOW")) {
+        return done
+          ? text("RUN_BACKGROUND_DONE")
+          : call("task", {
+              description: "Inspect files slowly",
+              prompt: "CHILD_SLOW inspect the files",
+              subagent_type: "explore",
+              background: true,
+            })
+      }
+      // The lead starts a slow local compute job and waits once; the wait
+      // times out, the job wakes the lead when it settles, and the run must
+      // still be alive to carry that turn.
+      if (prompt.includes("RUN_COMPUTE_WAKE")) {
+        if (prompt.includes("ended with status")) return text("RUN_COMPUTE_WOKE")
+        if (prompt.includes("will_wake")) return text("Waiting for the job; it will wake me.")
+        const started = prompt.match(/Dispatched local job ([\w-]+)\./)
+        if (started) return call("compute_job", { action: "wait", job_id: started[1], seconds: 1 })
+        return call("compute_job", {
+          action: "start",
+          name: "Slow probe",
+          purpose: "Exercise the wake path.",
+          command: "sleep 6; echo COMPUTE_WAKE_DONE",
+          target: { kind: "local" },
+        })
+      }
       if (prompt.includes("RUN_BACKGROUND")) {
         return done
           ? text("RUN_BACKGROUND_DONE")
@@ -132,6 +221,10 @@ function provider(options: { secret: string; hold?: () => Promise<void> }) {
               subagent_type: "explore",
               background: true,
             })
+      }
+      if (prompt.includes("CHILD_SLOW")) {
+        await Bun.sleep(12_000)
+        return text("CHILD_DONE: two files inspected, slowly.")
       }
       if (prompt.includes("CHILD_BRIEF")) return text("CHILD_DONE: two files inspected.")
       if (prompt.includes("RUN_DENIED")) {
@@ -367,6 +460,36 @@ describe("openscience run policy loop", () => {
           "Yes (Recommended)",
         )
         expect(out.events().at(-1)).toMatchObject({ type: "done", status: "completed", exitCode: 0, children: [] })
+      },
+    })
+  }, 20_000)
+
+  test("under auto-approve a request for input is answered as the run's own assumption, not as a user's reply", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({ sdk: client, sessionID, message: "RUN_ASK_AUTHORITY now", policy: "allow" })
+        expect(await code).toBe(0)
+        const tool = out.events().find((event) => event.type === "tool_use")
+        expect(tool?.type === "tool_use" && tool.part.tool).toBe("question")
+        // A missing_authority question reaches the run's policy, which takes
+        // the first option; the model must hear that nobody answered rather
+        // than "the user has answered", or it treats its own guess as
+        // confirmed and waits for a file no one will send.
+        const output = tool?.type === "tool_use" && tool.part.state.status === "completed" ? tool.part.state.output : ""
+        expect(output).toContain("No one is available to answer in this run")
+        expect(output).toContain("Provide the table")
+        expect(output).not.toContain("User has answered")
+        expect(out.events().at(-1)).toMatchObject({ type: "done", status: "completed", exitCode: 0 })
       },
     })
   }, 20_000)
@@ -609,6 +732,193 @@ describe("openscience run headless harness", () => {
       },
     })
   }, 30_000)
+
+  test("a compute job still running keeps the run alive, and its end wakes the lead", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        // The six-second probe must outlive the dispatch grace to exercise
+        // the wake path; at the default grace it would settle inline.
+        using _grace = computeJobTesting({ settleGraceMs: 1_000 })
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_COMPUTE_WAKE now",
+          policy: "allow",
+        })
+        expect(await code).toBe(0)
+        const events = out.events()
+        // The wait returned at its timeout saying the job would wake the lead,
+        // rather than handing back a step that invites another wait.
+        const waited = events.find(
+          (event) =>
+            event.type === "tool_use" &&
+            event.part.tool === "compute_job" &&
+            event.part.state.status === "completed" &&
+            event.part.state.output.includes("will_wake"),
+        )
+        expect(waited).toBeDefined()
+        // The run did not end at that idle: the job's completion arrived as a
+        // new turn and the lead answered it.
+        const woken = events.some((event) => event.type === "text" && event.part.text.includes("RUN_COMPUTE_WOKE"))
+        expect(woken).toBe(true)
+        const messages = (await client.session.messages({ sessionID })).data ?? []
+        expect(
+          messages.some((message) =>
+            message.parts.some(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("ended with status"),
+            ),
+          ),
+        ).toBe(true)
+        const doneEvent = events.at(-1)
+        if (doneEvent?.type !== "done") throw new Error("missing done")
+        expect(doneEvent.status).toBe("completed")
+      },
+    })
+  }, 60_000)
+
+  test("a background worker slower than the idle grace is waited for, not aborted", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const started = Date.now()
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_BACKGROUND_SLOW now",
+          policy: "allow",
+          delegation: "standard",
+        })
+        expect(await code).toBe(0)
+        // The run outlived the ten-second grace because a worker was pending.
+        expect(Date.now() - started).toBeGreaterThan(11_000)
+        const events = out.events()
+        const childText = events.findIndex((event) => event.type === "text" && event.parentID === sessionID)
+        expect(childText).toBeGreaterThan(-1)
+        expect(events[childText].type === "text" && events[childText].part.text).toContain("slowly")
+        const woken = events.findIndex(
+          (event, index) =>
+            index > childText &&
+            event.type === "text" &&
+            !event.parentID &&
+            event.part.text.includes("RUN_BACKGROUND_DONE"),
+        )
+        expect(woken).toBeGreaterThan(childText)
+        const done = events.at(-1)
+        if (done?.type !== "done") throw new Error("missing done")
+        expect(done.status).toBe("completed")
+        expect(done.children).toHaveLength(1)
+      },
+    })
+  }, 60_000)
+
+  test("the turn that takes a worker's report is waited for even when it outlasts the wait tick", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_BACKGROUND_SLOWWAKE now",
+          policy: "allow",
+          delegation: "standard",
+        })
+        expect(await code).toBe(0)
+        const events = out.events()
+        // The lead's answer to the worker's report is in the run's output:
+        // the run did not stop when the pending set emptied.
+        const final = events.filter((event) => event.type === "text" && !event.parentID).at(-1)
+        expect(final?.type === "text" && final.part.text).toContain("RUN_SLOWWAKE_DONE")
+        const done = events.at(-1)
+        if (done?.type !== "done") throw new Error("missing done")
+        expect(done.status).toBe("completed")
+        const messages = (await client.session.messages({ sessionID })).data ?? []
+        const aborted = messages.some(
+          (message) => message.info.role === "assistant" && message.info.error?.name === "MessageAbortedError",
+        )
+        expect(aborted).toBe(false)
+      },
+    })
+  }, 60_000)
+
+  test("resuming a background worker that is still running waits for its report and delivers it once", async () => {
+    const stub = provider({ secret: "" })
+    servers.push(stub.server)
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(stub.baseURL) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const client = sdk(tmp.path)
+        const sessionID = (await client.session.create({})).data!.id
+        const { out, code } = run({
+          sdk: client,
+          sessionID,
+          message: "RUN_BACKGROUND_JOIN now",
+          policy: "allow",
+          delegation: "standard",
+        })
+        expect(await code).toBe(0)
+        const events = out.events()
+        const tasks = events.filter(
+          (event) => event.type === "tool_use" && event.part.tool === "task" && !event.parentID,
+        )
+        expect(tasks).toHaveLength(2)
+        const second = tasks[1]
+        if (second.type !== "tool_use" || second.part.state.status !== "completed")
+          throw new Error("second task call did not complete")
+        // The resume waited for the worker instead of interrupting it: no
+        // provider error, the worker's own words, one report.
+        expect(second.part.state.output).toContain("Waited for this background worker")
+        expect(second.part.state.output).toContain("slowly")
+        expect(second.part.state.output).toContain('state="completed"')
+        expect(second.part.state.output).not.toContain("provider error")
+        expect(second.part.state.time.end - second.part.state.time.start).toBeGreaterThan(5_000)
+        const final = events.filter((event) => event.type === "text" && !event.parentID).at(-1)
+        expect(final?.type === "text" && final.part.text).toContain("RUN_JOIN_DONE")
+        // The completion did not also arrive as a wake-up turn.
+        const messages = (await client.session.messages({ sessionID })).data ?? []
+        const woke = messages.some((message) =>
+          message.parts.some((part) => part.type === "text" && part.synthetic && part.text.includes("<task id=")),
+        )
+        expect(woke).toBe(false)
+        const done = events.at(-1)
+        if (done?.type !== "done") throw new Error("missing done")
+        expect(done.status).toBe("completed")
+        expect(done.children).toHaveLength(1)
+      },
+    })
+  }, 60_000)
 
   test("a denied tool call does not end an auto-approved run", async () => {
     const stub = provider({ secret: "" })

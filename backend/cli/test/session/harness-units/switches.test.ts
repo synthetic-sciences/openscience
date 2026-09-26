@@ -14,12 +14,16 @@ test("every unit is on by default and a false switch removes its plugin and its 
     fn: async () => {
       const config = await Config.get()
       for (const unit of HarnessState.UNITS) expect(Harness.enabled(config, unit)).toBe(true)
-      expect(Harness.units(config)).toHaveLength(4)
+      expect(Harness.units(config)).toHaveLength(7)
       const off: Config.Info = {
         ...config,
         harness: { redirect: false, budget: false, "headless-policy": false, "durable-jobs": false },
       }
-      expect(Harness.units(off)).toHaveLength(2)
+      expect(Harness.units(off)).toHaveLength(5)
+      // The unattended-run continuation is a unit like the others: one switch removes it.
+      expect(Harness.units({ ...config, harness: { unattended: false } })).toHaveLength(6)
+      // So is the review of a written report.
+      expect(Harness.units({ ...config, harness: { review: false } })).toHaveLength(6)
       Harness.headless("ses_h", { continueOnDeny: true })
       expect(Harness.continueOnDeny(config, "ses_h")).toBe(true)
       expect(Harness.continueOnDeny(off, "ses_h")).toBe(false)

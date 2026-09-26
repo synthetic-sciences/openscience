@@ -1795,4 +1795,70 @@ describe("session.compaction.prune protections", () => {
       expect(ids.map(compacted)).toEqual([false, false, false, true, true, false])
     })
   })
+
+  test("a routine prune mid-turn waits until the clearable output is worth the rewrite", async () => {
+    await using tmp = await tmpdir()
+    await withSession(tmp.path, async (session) => {
+      const user = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "user",
+        time: { created: 1 },
+        agent: "research",
+        model: { providerID: "test", modelID: "test-model" },
+        effort: "normal",
+      })
+      const assistant = await Session.updateMessage({
+        id: await MessageV2.nextMessageID(session.id),
+        sessionID: session.id,
+        role: "assistant",
+        parentID: user.id,
+        modelID: "test-model",
+        providerID: "test",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        finish: "tool-calls",
+        time: { created: 2, completed: 3 },
+      })
+      // Four results of 25k tokens: the newest sits inside the protected 40k,
+      // the one before it crosses the line, so 75k is clearable.
+      const chunk = "y".repeat(4 * 25_000)
+      const ids = ["prt_a", "prt_b", "prt_c", "prt_d"]
+      for (const id of ids) {
+        await Session.updatePart({
+          id,
+          sessionID: session.id,
+          messageID: assistant.id,
+          type: "tool",
+          tool: "bash",
+          callID: `call_${id}`,
+          state: {
+            status: "completed",
+            input: {},
+            title: "bash",
+            output: chunk,
+            metadata: {},
+            time: { start: 1, end: 2 },
+          },
+        })
+      }
+      await Session.flushPendingParts(session.id)
+      const compacted = async () =>
+        (await Session.messages({ sessionID: session.id }))
+          .flatMap((message) => message.parts)
+          .filter((part): part is MessageV2.ToolPart => part.type === "tool")
+          .map((part) => (part.state.status === "completed" ? part.state.time.compacted !== undefined : undefined))
+      // A context of 300k: a third is 100k, and 75k clearable does not pay for
+      // rewriting the rest, so nothing is touched and the cached prefix stays.
+      expect(await SessionCompaction.prune({ sessionID: session.id, floor: 100_000 })).toBe(0)
+      expect(await compacted()).toEqual([false, false, false, false])
+      // A context of 150k: a third is 50k, 75k clears it.
+      expect(await SessionCompaction.prune({ sessionID: session.id, floor: 50_000 })).toBe(75_000)
+      expect(await compacted()).toEqual([true, true, true, false])
+      expect(SessionCompaction.PRUNE_SHARE).toBeCloseTo(1 / 3)
+    })
+  })
 })

@@ -1,5 +1,3 @@
-import { Ripgrep } from "../file/ripgrep"
-
 import { Instance } from "../project/instance"
 import { SessionFilesystem } from "./filesystem"
 
@@ -216,11 +214,15 @@ export namespace SystemPrompt {
     "autoresearch",
     "compute",
     "execution-hygiene",
+    "statistical-conventions",
+    "submitted-code",
+    "acceptance-checks",
     "delegation",
     "figures",
     "scientific-visualization",
     "schematics",
     "generate-image",
+    "analysis-report",
     "paper-writing",
     "ml-paper-writing",
     "citations",
@@ -274,7 +276,7 @@ export namespace SystemPrompt {
       "Core skills, loaded with skill({name}) when the request matches. Load the skill for each phase as that phase begins (figures before the first plot, schematics before a diagram, generate-image before an illustration, a writing skill before drafting a report or paper), one at a time rather than all up front; do not load a skill on keywords alone, and do not narrate the load. Diagrams, schematics and illustrations are rendered with generate_image, never drawn as TikZ or SVG.",
       ...core.map((skill) => `- ${skill.name}: ${skill.summary ?? sentence(skill.description)}`),
       ...(pointers.length ? ["Library skills by exact name for provider and database work:", ...pointers] : []),
-      `Anything else in the ${catalog.length}-skill library: skill({query:"<focused task>"}) and load an exact returned name.`,
+      `Anything else in the ${catalog.length}-skill library: skill({query:"<focused task>"}) and load an exact returned name. A disagreement you discover between two sources about a convention — a coordinate frame, a numbering, a unit, a version, a file's layout — is the moment to search the library for that convention before choosing a side: the skill says which source is the frame, and a wrong choice there shifts every number after it. The data in front of you have a type — counts, summary statistics, a single-cell matrix, survival times, intensities, peaks, a mutation table — and the library holds the field's standard analysis for each; before designing your own pipeline for such data, search the library for the type, because the standard method is what a reader expects and what a hand-rolled one is judged against; analysis-report lists the standard readings by kind of data, and a request that names a method makes that method the primary analysis with yours beside it.`,
       "</core-skills>",
     ].join("\n")
   }
@@ -379,16 +381,6 @@ export namespace SystemPrompt {
               : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."
         } Reuse the selected folder's existing layout. Do not create an extra "OpenScience Research" root or mirror an attached project into Project files. Inspect a referenced plan subfolder without treating it as a new working location; keep outputs in the selected Working folder and existing project layout unless the user requests another location. Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
         `The physical paths above are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
-        `<files>`,
-        `  ${
-          project.vcs === "git" && false
-            ? await Ripgrep.tree({
-                cwd: workspace,
-                limit: 200,
-              })
-            : ""
-        }`,
-        `</files>`,
       ].join("\n"),
     ]
   }

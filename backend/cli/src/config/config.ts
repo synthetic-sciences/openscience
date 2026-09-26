@@ -1291,6 +1291,19 @@ export namespace Config {
           "headless-policy": z.boolean().optional(),
           redirect: z.boolean().optional(),
           deliverables: z.boolean().optional(),
+          acceptance: z.boolean().optional(),
+          unattended: z
+            .boolean()
+            .optional()
+            .describe(
+              "Under autonomous autonomy, a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver",
+            ),
+          review: z
+            .boolean()
+            .optional()
+            .describe(
+              "When the deliverable is a written report, one fresh-context read of the request against the report before the turn ends, and one continuation with what the report does not address",
+            ),
           budget: z.boolean().optional(),
           cost: z
             .union([z.boolean(), z.object({ max_usd: z.number().positive().optional() })])
@@ -1429,6 +1442,12 @@ export namespace Config {
         .object({
           auto: z.boolean().optional().describe("Enable automatic compaction when context is full (default: true)"),
           prune: z.boolean().optional().describe("Enable pruning of old tool outputs (default: true)"),
+          pruneInputs: z
+            .boolean()
+            .optional()
+            .describe(
+              "Experimental. When a tool call is pruned, also shorten its long string arguments (a patch body, a script) to a preview in what the model re-reads. The stored input stays complete and a write that reproduces a preview is refused. Default: false.",
+            ),
           threshold: z
             .number()
             .min(0)
