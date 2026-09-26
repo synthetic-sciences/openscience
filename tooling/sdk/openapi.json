@@ -62410,6 +62410,17 @@
               "deliverables": {
                 "type": "boolean"
               },
+              "acceptance": {
+                "type": "boolean"
+              },
+              "unattended": {
+                "description": "Under autonomous autonomy, a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver",
+                "type": "boolean"
+              },
+              "review": {
+                "description": "When the deliverable is a written report, one fresh-context read of the request against the report before the turn ends, and one continuation with what the report does not address",
+                "type": "boolean"
+              },
               "budget": {
                 "type": "boolean"
               },
@@ -62709,6 +62720,10 @@
               },
               "prune": {
                 "description": "Enable pruning of old tool outputs (default: true)",
+                "type": "boolean"
+              },
+              "pruneInputs": {
+                "description": "Experimental. When a tool call is pruned, also shorten its long string arguments (a patch body, a script) to a preview in what the model re-reads. The stored input stays complete and a write that reproduces a preview is refused. Default: false.",
                 "type": "boolean"
               },
               "threshold": {
