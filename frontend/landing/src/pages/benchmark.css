@@ -142,48 +142,52 @@
     [data-slot="sub"] {
       font-size: 1.25rem;
       color: var(--ink-2);
-      margin: 0 0 1.8rem;
+      margin: 0 0 2rem;
     }
-    [data-slot="authors"] {
-      color: var(--ink);
-      span + span {
-        margin-left: 1.6em;
+    /* The byline: one column per author, name over email, then the
+       affiliation and date on one line. */
+    [data-slot="byline"] {
+      display: flex;
+      justify-content: center;
+      gap: 3rem;
+      flex-wrap: wrap;
+    }
+    [data-slot="author"] {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15rem;
+      span {
+        color: var(--ink);
+        font-size: 1.02rem;
       }
-    }
-    [data-slot="affil"] {
-      font-size: 0.86rem;
-      color: var(--ink-2);
-      margin: 0.2rem 0 0;
-    }
-    [data-slot="email"] {
-      font-size: 0.78rem;
-      margin: 0.25rem 0 0;
-      font-family: var(--mono);
-      letter-spacing: -0.01em;
       a {
         color: var(--muted);
-        background: none;
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        letter-spacing: -0.01em;
         text-decoration: none;
       }
       a:hover {
-        color: var(--ink);
-      }
-      a + a {
-        margin-left: 1.6em;
+        color: var(--accent);
       }
     }
-    [data-slot="date"] {
-      font-size: 0.82rem;
+    [data-slot="affil"] {
+      margin: 0.9rem 0 1.8rem;
       color: var(--muted);
-      margin: 0.8rem 0 1.6rem;
+      font-size: 0.84rem;
+      span {
+        margin: 0 0.5em;
+        opacity: 0.6;
+      }
     }
     [data-slot="actions"] {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
       align-items: center;
-      gap: 1.3rem;
-      font-size: 0.85rem;
+      gap: 1.6rem;
+      font-size: 0.88rem;
       a {
         color: var(--accent);
         text-decoration: none;

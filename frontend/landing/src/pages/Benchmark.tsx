@@ -223,16 +223,19 @@ export default function Benchmark() {
             <header data-slot="head">
               <h1>OpenScience</h1>
               <p data-slot="sub">The #1 scientific agent, open source</p>
-              <p data-slot="authors">
-                <span>Ishaan Gangwani</span>
-                <span>Aayam Bansal</span>
+              <div data-slot="byline">
+                <div data-slot="author">
+                  <span>Ishaan Gangwani</span>
+                  <a href="mailto:ishaan@syntheticsciences.ai">ishaan@syntheticsciences.ai</a>
+                </div>
+                <div data-slot="author">
+                  <span>Aayam Bansal</span>
+                  <a href="mailto:aayam@syntheticsciences.ai">aayam@syntheticsciences.ai</a>
+                </div>
+              </div>
+              <p data-slot="affil">
+                Synthetic Sciences <span aria-hidden>·</span> September 2026
               </p>
-              <p data-slot="affil">Synthetic Sciences</p>
-              <p data-slot="email">
-                <a href="mailto:ishaan@syntheticsciences.ai">ishaan@syntheticsciences.ai</a>
-                <a href="mailto:aayam@syntheticsciences.ai">aayam@syntheticsciences.ai</a>
-              </p>
-              <p data-slot="date">September 2026</p>
               <div data-slot="actions">
                 <a href="/download" data-slot="button">
                   Download
