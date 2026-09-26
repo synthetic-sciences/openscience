@@ -135,3 +135,62 @@ export const PENDING: readonly PendingBenchmark[] = [
 ]
 
 export const TRACES = "https://github.com/synthetic-sciences/benchmarks-openscience"
+
+/** Terminal-Bench Science resolution rate by domain: ours against the
+ * strongest Codex and Claude Code entries. */
+export const TBS_DOMAINS = {
+  domains: ["Life", "Physical", "Earth", "Math", "Engineering"],
+  series: [
+    { name: "OpenScience", harness: "os", values: [73.7, 76.5, 87.5, 82.4, 55.6] },
+    { name: "Codex · GPT-6 Astra", harness: "codex", values: [59.6, 58.8, 79.2, 80.4, 70.4] },
+    { name: "Claude Code · Opus 5.5", harness: "cc", values: [54.4, 60.8, 62.5, 76.5, 63.0] },
+  ],
+} as const satisfies {
+  domains: readonly string[]
+  series: readonly { name: string; harness: Harness; values: readonly number[] }[]
+}
+
+/** Every public Terminal-Bench 4.0 entry on the 14 science tasks, ranked. */
+export const TB4_ALL: readonly { v: number; h: Harness }[] = [
+  { v: 60.0, h: "cc" },
+  { v: 52.9, h: "cc" },
+  { v: 52.9, h: "cc" },
+  { v: 50.0, h: "cc" },
+  { v: 50.0, h: "cc" },
+  { v: 47.1, h: "cc" },
+  { v: 45.7, h: "codex" },
+  { v: 44.3, h: "codex" },
+  { v: 44.3, h: "cc" },
+  { v: 42.9, h: "codex" },
+  { v: 42.9, h: "cc" },
+  { v: 42.9, h: "cc" },
+  { v: 40.0, h: "codex" },
+  { v: 38.6, h: "cc" },
+  { v: 38.6, h: "cc" },
+  { v: 38.6, h: "codex" },
+  { v: 34.3, h: "codex" },
+  { v: 34.3, h: "cc" },
+  { v: 31.4, h: "cc" },
+  { v: 30.0, h: "oth" },
+  { v: 21.4, h: "codex" },
+  { v: 20.0, h: "codex" },
+  { v: 20.0, h: "oth" },
+  { v: 15.7, h: "oth" },
+  { v: 14.3, h: "oth" },
+  { v: 11.4, h: "cc" },
+  { v: 10.0, h: "oth" },
+]
+
+/** OpenScience's rubric score on each of the 50 BiomniBench-DA tasks. */
+export const BIO_TASKS: readonly number[] = [
+  23, 35, 43, 45, 46, 48, 56, 57, 59, 60, 65, 67, 72, 73, 76, 76, 80, 80, 80, 84, 84, 85, 85, 86, 87, 88, 90, 91, 92,
+  95, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100,
+]
+
+/** Mean BiomniBench-DA scores under the same judge, harness names only. */
+export const BIO_MEANS: readonly { name: string; value: number; harness: Harness }[] = [
+  { name: "OpenScience", value: 82.2, harness: "os" },
+  { name: "AIPOCH", value: 81.04, harness: "oth" },
+  { name: "OmicOS", value: 76.6, harness: "oth" },
+  { name: "Claude Code", value: 68.6, harness: "cc" },
+]

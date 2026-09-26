@@ -3,7 +3,6 @@ import { CopyStatus, useCopy } from "@/components/Copy"
 import { Footer } from "@/components/Footer"
 import Header from "@/components/Header"
 import { useMeta } from "@/components/Meta"
-import Workspace from "@/components/Workspace"
 import { NUMBERS, PENDING, SNAPSHOT, TRACES, type BoardRow, type PendingBenchmark } from "@/data/benchmark"
 import { GITHUB, docs } from "@/data/links"
 import heroSvg from "@/data/benchmark/hero.svg?raw"
@@ -21,7 +20,6 @@ import rasterSvg from "@/data/benchmark/raster.svg?raw"
 import bifurcationSvg from "@/data/benchmark/bifurcation.svg?raw"
 import glyphResults from "@/data/benchmark/glyph-results.svg?raw"
 import glyphLoop from "@/data/benchmark/glyph-loop.svg?raw"
-import glyphInterface from "@/data/benchmark/glyph-interface.svg?raw"
 import glyphAgent from "@/data/benchmark/glyph-agent.svg?raw"
 import glyphDelegation from "@/data/benchmark/glyph-delegation.svg?raw"
 import glyphAvailability from "@/data/benchmark/glyph-availability.svg?raw"
@@ -184,24 +182,6 @@ function Stat({
     </div>
   )
 }
-
-const VIEWERS = [
-  ["Structures", "PDB, mmCIF, PDBQT, GRO", "3D structure"],
-  ["Molecules", "SDF, MOL2, XYZ, SMILES", "3D model or 2D depiction"],
-  ["Sequences", "FASTA", "Sequence or multiple alignment"],
-  ["Reads and variants", "FASTQ, VCF, BED, GFF, SAM", "Quality, variant and interval summaries"],
-  ["Single cell", "H5AD, Loom", "Dimensions, metadata, embeddings"],
-  ["Mass spectrometry", "mzML", "Spectrum metadata"],
-  ["Tables", "CSV, TSV, JSONL", "Schema, filters, distributions"],
-  ["Documents", "PDF, Markdown, LaTeX, Jupyter", "Reader, editor with preview, notebook"],
-] as const
-
-const SETTINGS = [
-  ["Research effort", ["Normal", "Ultra"], "Depth of work and scrutiny"],
-  ["Delegation", ["Off", "Low", "Auto", "High"], "How often the lead uses workers"],
-  ["Independence", ["Interactive", "Balanced", "Independent"], "When the agent stops to ask"],
-  ["Permissions", ["Ask always", "Ask risky", "Full access"], "Which actions need approval"],
-] as const
 
 export default function Benchmark() {
   useMeta({
@@ -436,54 +416,6 @@ export default function Benchmark() {
               with their provenance.
             </Figure>
 
-            <Section id="ide" glyph={glyphInterface}>
-              An IDE for science
-            </Section>
-            <p>
-              A research result is rarely a paragraph. It is a table, a structure, a figure, a set of variants. So
-              OpenScience is a workspace, the same in the desktop app and the browser: papers, code, notebooks, a LaTeX
-              editor, a terminal, and 3D protein and genomics viewers sit next to the agent, built around the files a
-              project produces. Each turn shows the answer in full and, folded beneath it, everything the agent did to
-              get there: the files it read, the searches, commands, edits and delegations, in order.
-            </p>
-          </article>
-
-          <figure data-slot="demo-figure">
-            <Workspace />
-          </figure>
-
-          <article data-slot="paper" data-continues="">
-            <p data-slot="figure-caption">
-              <span data-slot="fl">Figure 10.</span>
-              The workspace. A session and its trace beside the project's files, notebooks, structures and terminal; the
-              same in the desktop app and the browser.
-            </p>
-
-            <p>Scientific files open in viewers made for them, so the output can be checked where it lands.</p>
-            <table data-slot="booktabs">
-              <caption>Table 1. What opens in the workspace.</caption>
-              <thead>
-                <tr>
-                  <th>Data</th>
-                  <th>Formats</th>
-                  <th>View</th>
-                </tr>
-              </thead>
-              <tbody>
-                {VIEWERS.map(([data, formats, view]) => (
-                  <tr key={data}>
-                    <td>{data}</td>
-                    <td data-slot="fmt">{formats}</td>
-                    <td>{view}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p>
-              A finished figure or table can be saved as a Result, an immutable copy with its own record, and{" "}
-              <em>Undo from here</em> returns a conversation to an earlier point to try a different analysis.
-            </p>
-
             <Section id="agent" glyph={glyphAgent}>
               An agent built for scientific work
             </Section>
@@ -494,7 +426,7 @@ export default function Benchmark() {
               of the library comes from other groups: 180 skills from K-Dense, 79 from Orchestra Research, and more from
               Hugging Face, Anthropic and NVIDIA BioNeMo.
             </p>
-            <Figure n={11} svg={skillsSvg}>
+            <Figure n={10} svg={skillsSvg}>
               The skill library, one square per skill, grouped by category and coloured by field.
             </Figure>
             <p>
@@ -504,7 +436,7 @@ export default function Benchmark() {
               host, a Slurm or PBS cluster, or Modal as durable jobs that outlive the conversation. Each remote dispatch
               needs your approval.
             </p>
-            <Figure n={12} svg={connectorsSvg}>
+            <Figure n={11} svg={connectorsSvg}>
               The {N.connectors_total} database connectors, grouped by domain.
             </Figure>
 
@@ -520,13 +452,13 @@ export default function Benchmark() {
               reported as a finding.
             </p>
             <p>
-              Figure 13 shows one Terminal-Bench Science run, <code>{N.raster_task}</code>: calibrate a four-state
+              Figure 12 shows one Terminal-Bench Science run, <code>{N.raster_task}</code>: calibrate a four-state
               aquifer model, identify miscalibrated devices, forecast all four states and design a pump-and-treat
               intervention. The lead brought in <code>{N.raster_workers[0]}</code>, <code>{N.raster_workers[1]}</code>{" "}
               and <code>{N.raster_workers[2]}</code> workers. The run took {N.raster_hours} hours and passed the task's
               verifier.
             </p>
-            <Figure n={13} svg={rasterSvg}>
+            <Figure n={12} svg={rasterSvg}>
               Tool calls over time in one run, one row per session, labelled with the brief the lead wrote.
             </Figure>
 
@@ -555,32 +487,9 @@ export default function Benchmark() {
             <p>
               OpenScience is released under Apache 2.0. It works with your own API keys (22 provider SDKs are bundled),
               with local models through Ollama or LM Studio, or with <a href="/ace">Ace</a>, the pay-as-you-go service
-              we run. Usage through your own keys or a local model is never billed through Ace. Four settings control
-              how the agent works:
+              we run. Usage through your own keys or a local model is never billed through Ace.
             </p>
-            <table data-slot="booktabs">
-              <caption>Table 2. Per-conversation settings.</caption>
-              <thead>
-                <tr>
-                  <th>Setting</th>
-                  <th>Options</th>
-                  <th>Controls</th>
-                </tr>
-              </thead>
-              <tbody>
-                {SETTINGS.map(([setting, options, controls]) => (
-                  <tr key={setting}>
-                    <td>{setting}</td>
-                    <td data-slot="opts">
-                      {options.map((option) => (
-                        <span key={option}>{option}</span>
-                      ))}
-                    </td>
-                    <td>{controls}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
             <p>
               Install the <a href="/download">desktop app</a>, or use the terminal:
             </p>

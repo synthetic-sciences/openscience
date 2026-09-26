@@ -419,6 +419,9 @@ pre {
     color: var(--color-text-inverted);
     text-decoration: none;
   }
+  [data-slot="button-light"][data-slot-spacing] {
+    margin-top: 40px;
+  }
   [data-slot="button-light"] {
     background: transparent;
     color: var(--color-text-strong);
@@ -964,7 +967,32 @@ pre {
     [data-component="benchmark"] {
       display: flex;
       flex-direction: column;
-      gap: 24px;
+      gap: 14px;
+
+      /* The score under each figure, in the accent, with its margin. */
+      [data-slot="figure-stat"] {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-top: 6px;
+        border-top: 1px solid var(--color-border-weak);
+        padding-top: 14px;
+        strong {
+          color: var(--color-accent);
+          font-size: 1.9rem;
+          line-height: 1;
+          letter-spacing: -0.015em;
+          small {
+            font-size: 0.5em;
+            color: var(--color-text-weak);
+            margin-left: 2px;
+          }
+        }
+        span {
+          color: var(--color-text-weak);
+          font-size: var(--text-small);
+        }
+      }
       width: 100%;
       min-width: 0;
 
@@ -979,20 +1007,18 @@ pre {
         }
       }
       > span {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-        flex-wrap: wrap;
+        display: block;
         line-height: 150%;
         color: var(--color-text-weak);
+
+        [data-slot="fig"] {
+          margin-right: 10px;
+        }
 
         strong {
           color: var(--color-text-strong);
         }
-        small {
-          flex-basis: 100%;
-          color: var(--color-text-weak);
-        }
+
         /* The benchmark's own page; internal benchmarks have no link. */
         a {
           color: var(--color-text-strong);

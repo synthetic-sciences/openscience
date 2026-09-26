@@ -89,9 +89,6 @@
       font-style: italic;
     }
   }
-  [data-slot="paper"][data-continues] {
-    padding-top: 1.6rem;
-  }
 
   /* The section glyph, drawn in the accent at the right of each h2. */
   [data-slot="glyph"] {
@@ -319,8 +316,7 @@
     max-width: 540px;
     margin: 0 auto;
   }
-  figcaption,
-  [data-slot="figure-caption"] {
+  figcaption {
     font-size: 0.78rem;
     line-height: 1.55;
     color: var(--ink-2);
@@ -329,17 +325,6 @@
   [data-slot="fl"] {
     color: var(--accent);
     margin-right: 0.3rem;
-  }
-
-  /* The workspace demo spans the frame, as on the front page. */
-  [data-slot="demo-figure"] {
-    margin: 0;
-    [data-component="demo"] {
-      width: 100%;
-    }
-  }
-  [data-slot="figure-caption"] {
-    margin: 0.7rem 0 1.6rem;
   }
 
   /* Tables, set as booktabs. */

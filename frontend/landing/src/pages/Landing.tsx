@@ -7,7 +7,7 @@ import Header from "@/components/Header"
 import { useMeta } from "@/components/Meta"
 import { ProviderRow } from "@/components/ProviderMark"
 import Workspace from "@/components/Workspace"
-import { BENCHMARKS, BENCHMARK_MODEL, FORTHCOMING } from "@/data/benchmarks"
+import { BENCHMARKS } from "@/data/benchmarks"
 import { NUMBERS } from "@/data/benchmark"
 import { DOCS, GITHUB, LICENSE, SYNTHETIC_SCIENCES, docs } from "@/data/links"
 
@@ -260,14 +260,8 @@ export default function Landing() {
               <h3>The #1 scientific agent</h3>
               <div>
                 <p>
-                  OpenScience leads every public benchmark for scientific agents we have run. With a {BENCHMARK_MODEL}{" "}
-                  lead it solves <strong>{NUMBERS.tbs_pct}%</strong> of Terminal-Bench Science, {NUMBERS.tbs_margin}{" "}
-                  points over Codex with the same model; <strong>{NUMBERS.tb4_pct}%</strong> of the science tasks in
-                  Terminal-Bench 4.0, {NUMBERS.tb4_margin} over Claude Code; and averages{" "}
-                  <strong>{NUMBERS.bio_mean}</strong> on BiomniBench-DA, {NUMBERS.bio_margin} over{" "}
-                  {NUMBERS.bio_other_short}. {FORTHCOMING.slice(0, -1).join(", ")} and{" "}
-                  {FORTHCOMING[FORTHCOMING.length - 1]} are running now. Every figure, trace and method is on the{" "}
-                  <a href="/benchmark">benchmark page</a>.
+                  OpenScience leads every public benchmark for scientific agents we have run. Each runs in its native
+                  environment with its own verifier or judge, and is compared with the benchmark's public leaderboard.
                 </p>
               </div>
               <div data-component="benchmarks">
@@ -275,7 +269,7 @@ export default function Landing() {
                   <BenchmarkFigure key={benchmark.id} benchmark={benchmark} index={index + 1} />
                 ))}
               </div>
-              <a href="/benchmark" data-slot="button-light" style={{ marginTop: "40px" }}>
+              <a href="/benchmark" data-slot="button-light" data-slot-spacing="">
                 <span>Read the benchmark report</span>
                 <Arrow />
               </a>
