@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "إجراء تعديلات",
   "ui.sessionTurn.status.runningCommands": "تشغيل الأوامر",
   "ui.sessionTurn.status.thinking": "تفكير",
+  "ui.sessionTurn.status.noOutput": "لا يوجد ناتج من النموذج بعد",
+  "ui.sessionTurn.status.noNewOutput": "لا يوجد ناتج جديد من النموذج",
   "ui.sessionTurn.status.gatheringThoughts": "جمع الأفكار",
   "ui.sessionTurn.progress.connecting": "جارٍ الاتصال بـ {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "لا يزال الاتصال بـ {{model}} جارياً ({{seconds}} ث)",

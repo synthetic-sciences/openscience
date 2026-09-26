@@ -299,6 +299,25 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **A response that dies before any output recovers on its own.** One
+  Extra-high turn on the managed gateway got its first byte, then nothing,
+  and read as "Thinking" for eighteen minutes; left alone it would have
+  failed at twenty-five. The gateway relays keepalives and ends a silent
+  stream itself, so its ten-minute deadline no longer grows with reasoning
+  effort. A request that times out before any model output reached the page
+  is sent once more as a new request (the provider may bill both), and after
+  two minutes without output the turn's status says "No output from the
+  model yet" instead of "Thinking". A running tool keeps the status calm.
+- **A headless run prints the turn a finished worker woke.** When the
+  worker's report was answered while `openscience run` was still reading an
+  earlier idle, the run judged nothing owed and exited with that turn's
+  events unprinted. It now reads on until the stream reaches the root's
+  newest message.
+- **A message sent while a turn is working no longer appears twice.** The
+  server renumbers a message whose id would sort below a step the running
+  turn started after the send, and the transcript kept the composer's
+  placeholder beside the stored copy until the session was reopened. The
+  placeholder now gives way to the stored message.
 - **Deliverables listed under a destination are looked for there.** "Save
   the results to `/root/results/`." or "Create `/root/results` with these
   artifacts:" followed by bare names owes those names inside that directory;

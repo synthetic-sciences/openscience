@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "編集を実行中",
   "ui.sessionTurn.status.runningCommands": "コマンドを実行中",
   "ui.sessionTurn.status.thinking": "思考中",
+  "ui.sessionTurn.status.noOutput": "モデルからの出力はまだありません",
+  "ui.sessionTurn.status.noNewOutput": "モデルからの新しい出力がありません",
   "ui.sessionTurn.status.gatheringThoughts": "考えをまとめています",
   "ui.sessionTurn.progress.connecting": "{{model}} に接続中…",
   "ui.sessionTurn.progress.stillConnecting": "{{model}} にまだ接続中（{{seconds}}秒）",

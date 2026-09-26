@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Wprowadzanie zmian",
   "ui.sessionTurn.status.runningCommands": "Uruchamianie poleceń",
   "ui.sessionTurn.status.thinking": "Myślenie",
+  "ui.sessionTurn.status.noOutput": "Model nie zwrócił jeszcze danych",
+  "ui.sessionTurn.status.noNewOutput": "Brak nowych danych od modelu",
   "ui.sessionTurn.status.gatheringThoughts": "Zbieranie myśli",
   "ui.sessionTurn.progress.connecting": "Łączenie z {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "Nadal trwa łączenie z {{model}} ({{seconds}}s)",

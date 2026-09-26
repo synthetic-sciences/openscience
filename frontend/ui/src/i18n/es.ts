@@ -22,6 +22,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Realizando ediciones",
   "ui.sessionTurn.status.runningCommands": "Ejecutando comandos",
   "ui.sessionTurn.status.thinking": "Pensando",
+  "ui.sessionTurn.status.noOutput": "Aún no hay salida del modelo",
+  "ui.sessionTurn.status.noNewOutput": "No hay salida nueva del modelo",
   "ui.sessionTurn.status.gatheringThoughts": "Recopilando pensamientos",
   "ui.sessionTurn.progress.connecting": "Conectando con {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "Todavía conectando con {{model}} ({{seconds}}s)",

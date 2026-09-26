@@ -57,11 +57,30 @@ export function progressStatus(progress: SessionRequestProgress | undefined, now
   }
 }
 
+/** How long a request may go without model output before the header stops
+ * calling the wait thinking. Healthy first output lands within two minutes
+ * even on long prompts; one request that died after its first byte read as
+ * "Thinking" for eighteen minutes. */
+export const HEADER_SILENCE_MS = 120_000
+
 /** The phases the header names while a turn runs. A retry countdown and a
- * conflict wait change what the reader might do next; every other phase — the
- * access check, the connect, a body that has gone quiet — reads as thinking,
- * with the elapsed clock beside it and the request detail one hover away. */
-export function headerProgress(progress: SessionRequestProgress | undefined, now: number): ProgressStatus | undefined {
-  if (progress?.phase !== "retry_wait" && progress?.phase !== "conflict_wait") return
-  return progressStatus(progress, now)
+ * conflict wait change what the reader might do next, and so does a request
+ * silent past `HEADER_SILENCE_MS`: the reader may stop and resend. Anything
+ * shorter — the access check, the connect, a brief pause — reads as
+ * thinking, with the elapsed clock beside it and the request detail one hover
+ * away. A running tool holds the stream open without model output; that is
+ * work, not silence, so `tool` keeps a quiet stream calm. */
+export function headerProgress(
+  progress: SessionRequestProgress | undefined,
+  now: number,
+  tool = false,
+): ProgressStatus | undefined {
+  if (progress?.phase === "retry_wait" || progress?.phase === "conflict_wait") return progressStatus(progress, now)
+  if (progress?.phase === "connecting" || progress?.phase === "waiting_first_token") {
+    if (progress.elapsedMs + Math.max(0, now - progress.since) < HEADER_SILENCE_MS) return
+    return { key: "ui.sessionTurn.status.noOutput", params: {} }
+  }
+  if (progress?.phase !== "streaming" || tool || progress.lastOutputAt === undefined) return
+  if (now - progress.lastOutputAt < HEADER_SILENCE_MS) return
+  return { key: "ui.sessionTurn.status.noNewOutput", params: {} }
 }

@@ -359,14 +359,20 @@ export async function execute(input: RunInput): Promise<number> {
       .status()
       .then((result) => result.data?.[sessionID]?.type === "busy")
       .catch(() => false)
+  // The newest root message the stream has delivered, or a part of.
+  let seen = ""
   // A detached result is written to the root as a user message at once, even
   // mid-turn, and a loop then answers it. So the root owes a turn while it is
   // busy or while any of its user messages has no reply: a worker quicker than
   // the turn that started it has already left the pending set when that turn
-  // goes idle, with its report still to be read.
+  // goes idle, with its report still to be read. An idle read late can also
+  // describe a root that has since run and finished that turn; while the
+  // stream has not reached the root's newest message, its events are still
+  // queued behind the idle, and the turn's own idle ends the run.
   const turnOwed = async () => {
     if (await rootBusy()) return true
     const messages = (await sdk.session.messages({ sessionID }).catch(() => undefined))?.data ?? []
+    if ((messages.at(-1)?.info.id ?? "") > seen) return true
     const answered = new Set(messages.flatMap((item) => (item.info.role === "assistant" ? [item.info.parentID] : [])))
     return messages.some((item) => item.info.role === "user" && !answered.has(item.info.id))
   }
@@ -402,6 +408,7 @@ export async function execute(input: RunInput): Promise<number> {
           continue
         }
         started = true
+        if (part.messageID > seen) seen = part.messageID
 
         // The wake for a compute job arrives in this session as a synthetic
         // text part naming the job: it is the signal that the job is no longer
@@ -544,6 +551,7 @@ export async function execute(input: RunInput): Promise<number> {
 
       if (event.type === "message.updated") {
         const info = event.properties.info
+        if (info.sessionID === sessionID && info.id > seen) seen = info.id
         if (info.role !== "assistant" || info.sessionID === sessionID) continue
         if (input.workers === false || !(await related(info.sessionID))) continue
         const record = child(info.sessionID)

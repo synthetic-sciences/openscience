@@ -365,8 +365,8 @@ describe("SessionProcessor.providerFailureAction", () => {
     })
     // Not a retry of the same key, but the step may go once more as a new
     // request; a dispatched or sealed verdict may not.
-    expect(SessionRetry.resubmittable(error)).toBe(true)
-    expect(SessionRetry.resubmittable(wrap(body))).toBe(true)
+    expect(SessionRetry.resubmittable(error, { output: true })).toBe(true)
+    expect(SessionRetry.resubmittable(wrap(body), { output: true })).toBe(true)
   })
 
   test("a provider that never answered is resubmitted once; one that stalled mid-response is not", () => {
@@ -376,8 +376,15 @@ describe("SessionProcessor.providerFailureAction", () => {
         isRetryable: false,
         metadata: { code: "provider_request_timeout", dispatch_state: "outcome_unknown", action: "resubmit", phase },
       }).toObject()
-    expect(SessionRetry.resubmittable(timeout("connect"))).toBe(true)
-    expect(SessionRetry.resubmittable(timeout("stream"))).toBe(false)
+    expect(SessionRetry.resubmittable(timeout("connect"), { output: false })).toBe(true)
+    expect(SessionRetry.resubmittable(timeout("stream"), { output: true })).toBe(false)
+    // A body that went silent before any model output reached the page has
+    // nothing to keep; the configured output deadline and a total cap stay
+    // terminal either way.
+    expect(SessionRetry.resubmittable(timeout("stream"), { output: false })).toBe(true)
+    expect(SessionRetry.resubmittable(timeout("first_event"), { output: false })).toBe(true)
+    expect(SessionRetry.resubmittable(timeout("output"), { output: false })).toBe(false)
+    expect(SessionRetry.resubmittable(timeout("total"), { output: false })).toBe(false)
     // Still not a retry of the same request under the ordinary policy.
     expect(SessionRetry.retryable(timeout("connect"))).toBeUndefined()
   })
@@ -394,11 +401,12 @@ describe("SessionProcessor.providerFailureAction", () => {
         isRetryable: false,
         responseBody: JSON.stringify({ error: { code, type: code, message: "verdict" } }),
       }).toObject()
-      expect(SessionRetry.resubmittable(error)).toBe(false)
+      expect(SessionRetry.resubmittable(error, { output: false })).toBe(false)
     }
     expect(
       SessionRetry.resubmittable(
         new MessageV2.APIError({ message: "Bad Gateway", statusCode: 502, isRetryable: true }).toObject(),
+        { output: false },
       ),
     ).toBe(false)
   })

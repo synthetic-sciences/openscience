@@ -23,6 +23,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "กำลังแก้ไข",
   "ui.sessionTurn.status.runningCommands": "กำลังเรียกใช้คำสั่ง",
   "ui.sessionTurn.status.thinking": "กำลังคิด",
+  "ui.sessionTurn.status.noOutput": "ยังไม่มีเอาต์พุตจากโมเดล",
+  "ui.sessionTurn.status.noNewOutput": "ไม่มีเอาต์พุตใหม่จากโมเดล",
   "ui.sessionTurn.status.gatheringThoughts": "รวบรวมความคิด",
   "ui.sessionTurn.progress.connecting": "กำลังเชื่อมต่อกับ {{model}}…",
   "ui.sessionTurn.progress.stillConnecting": "ยังคงเชื่อมต่อกับ {{model}} ({{seconds}} วินาที)",
