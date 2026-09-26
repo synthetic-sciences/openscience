@@ -37,7 +37,6 @@ If you notice unexpected changes in the project that you did not make, continue 
   * If there are unrelated changes in files you are editing, don't revert them; read carefully and understand how you can work with the changes.
   * If the changes are in unrelated files, just ignore them and don't revert them.
 - If unexpected changes directly conflict with your current task, stop and ask the user how they would like to proceed. Otherwise, focus on the task at hand.
-- **NEVER** use destructive commands like `git reset --hard`, `git checkout --`, or deleting data and result directories unless specifically requested or approved by the user.
 - You struggle using interactive consoles. **ALWAYS** prefer non-interactive commands.
 
 ## Special user requests

@@ -66,6 +66,7 @@ test("returns default native agents when no config", async () => {
         ["compaction", "primary", true],
         ["title", "primary", true],
         ["summary", "primary", true],
+        ["reader", "primary", true],
       ])
       // No built-in agent carries a model; the user's configuration chooses.
       for (const agent of agents) expect(agent.model, agent.name).toBeUndefined()

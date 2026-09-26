@@ -12,6 +12,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SPECIALIST from "./prompt/specialist.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
+import PROMPT_READER from "./prompt/reader.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { PermissionNext } from "@/permission/next"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
@@ -306,8 +307,7 @@ export namespace Agent {
         name: "data",
         label: "data specialist",
         focus: "computational workflows: pipelines, data processing, coding, visualization, and cloud compute",
-        description:
-          "Data specialist for pipelines, data processing, coding, visualization, and cloud compute; the general execution worker.",
+        description: "Data specialist for pipelines, data processing, coding, visualization, and cloud compute.",
         color: "#0ea5e9",
         skills: ["data-engineering", "coding", "visualization", "cloud-compute"],
         tools: ["r"],
@@ -367,6 +367,21 @@ export namespace Agent {
           user,
         ),
         prompt: PROMPT_SUMMARY,
+      },
+      reader: {
+        name: "reader",
+        mode: "primary",
+        options: {},
+        native: true,
+        hidden: true,
+        permission: PermissionNext.merge(
+          defaults,
+          PermissionNext.fromConfig({
+            "*": "deny",
+          }),
+          user,
+        ),
+        prompt: PROMPT_READER,
       },
     }
 

@@ -30,7 +30,9 @@ the logs and the metrics outlive the shell.
    up; never plan work for compute the user does not have.
 2. **Local shell for seconds, kernel for interactive state, job for everything else.** A
    command that may exceed a few minutes, needs a GPU, or must survive a disconnect goes
-   through `compute_job start`, then `compute_job wait`; never a shell `sleep` loop.
+   through `compute_job start`; a job that settles within the dispatch's grace returns its
+   outcome and output tail in that step, a longer one wakes you when it ends. Never a shell
+   `sleep` loop, and no `wait` while other work can proceed.
 3. **Size and price before dispatch.** Estimate wall-clock from a short local or scaled-down
    run, choose the smallest instance that fits memory and time, and state the estimate
    (provider, GPU, duration, price) in the approval. Remote jobs are approved against an

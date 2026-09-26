@@ -65,9 +65,10 @@ ledger, and wakes this session with a "Study update" whenever there is news.
   created; its runs then dispatch without a card each.
 - Keep up to the study's concurrency live, and keep at least three ideas queued so a free
   slot never waits on you; propose in batches when the queue thins.
-- When runs finish within a few minutes, stay in the turn: `compute_job wait` for the run,
-  record it, start the next. Wake-ups are for runs that outlast a turn. While a long run is
-  live, implement the next idea rather than idling.
+- When runs finish within a few minutes, stay in the turn: a run that settles within the
+  dispatch's grace comes back with its outcome in that step, otherwise one `compute_job
+  wait` for it; record it, start the next. Wake-ups are for runs that outlast a turn. While
+  a long run is live, implement the next idea rather than idling.
 - When a "Study update" reports a run ended, read its numbers with `experiments compare`
   (or `experiments series` when the curve matters), decide keep or revert against the
   baseline and the best, and record the verdict with `study record`: the analysis, a

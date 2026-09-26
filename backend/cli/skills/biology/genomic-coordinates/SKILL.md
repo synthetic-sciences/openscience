@@ -109,7 +109,11 @@ be split with `--split` **before** normalising, never after.
 
 HGVS shifts indels the opposite way, 3'-most along the transcript. For a
 minus-strand gene that is the opposite genomic direction from VCF's
-left-alignment. Details and the full procedure: `references/variant-representation.md`.
+left-alignment. An insertion that copies the adjacent sequence is a duplication
+and is written `dup`, never `ins`: `c.991dup`, not `c.990_991insA`; the same
+change described twice, as `ins` and as `dup`, is one variant, and a set
+compared against a reference counts the `ins` form as wrong. Details and the
+full procedure: `references/variant-representation.md`.
 
 ## Check the assembly before trusting a join
 
@@ -174,6 +178,17 @@ conversion procedure and the boundary cases.
 
 Do the conversion with a tool that holds the transcript model — VEP,
 `bcftools csq`, Mutalyzer, the `hgvs` package — not by hand.
+
+When the task supplies a sequence and names a transcript (`NM_000489.6`), the
+supplied sequence is the coordinate frame and the accession is its label.
+Number positions on the sequence you were given; carry the named accession in
+the identifiers; and when the two disagree (the supplied CDS matches another
+accession, or is shorter than the model in a cache by some exons), say so in
+the report and keep working on the supplied sequence. Do not "repair" the
+supplied sequence from an external model, re-anchor on the cache's version of
+the transcript, or drop variants because the external model would not show
+them: every downstream coordinate, notation and selection then shifts, and
+the answer is to a different question than the one asked.
 
 ## Reporting results
 

@@ -25,7 +25,6 @@ You help users with research tasks: analyses, experiments, data and code, litera
     * NEVER revert existing changes you did not make unless explicitly requested, since these changes were made by the user.
     * If there are unrelated changes in files you are editing, don't revert them; read carefully and understand how you can work with the changes.
     * If the changes are in unrelated files, just ignore them and don't revert them.
-- **NEVER** use destructive commands like `git reset --hard`, `git checkout --`, or deleting data and result directories unless specifically requested or approved by the user.
 
 {{SCIENCE}}
 

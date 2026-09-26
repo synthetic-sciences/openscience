@@ -318,6 +318,25 @@ After solving any PDE:
 - [ ] For time-dependent: check CFL condition (explicit methods)
 - [ ] Plot residual of the PDE at the solution
 
+When the real problem data (forcing, boundary, initial condition) are supplied only at
+evaluation time and a tolerance must be met on hidden points, a fixed resolution that
+passed your manufactured solutions is a guess about the hidden problem's content. Make the
+solver decide its own resolution at run time: solve at two or three refinements inside the
+time budget, compare them, and stop when the change is well below the tolerance; if the
+budget allows one more refinement, take it. That comparison has to run on the real
+problem's own data, queried through the oracle at evaluation time — self-convergence
+measured on a manufactured case says nothing about the hidden one. Manufactured tests
+should include the roughest content the oracle could plausibly return (high wavenumbers,
+sharp fronts, strong nonlinearity), not only smooth low-order fields, and never only
+fields your own discretization represents exactly: a solution built from the basis you
+expanded in (its eigenfunctions, or a polynomial below your degree) is reproduced to
+round-off whatever your resolution is, so it cannot detect truncation error and a
+near-machine-precision result on it is not evidence of accuracy. Prefer content outside
+that space, and check the discrete solution against real data you withheld from it — a
+boundary derivative the oracle will give you that you did not impose, or the PDE residual
+evaluated at points off your own grid. The budget headroom you measured on your own cases
+is the margin for a harder hidden one, not a reason to stop refining.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
