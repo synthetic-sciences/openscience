@@ -308,6 +308,11 @@ public 50 the old detector named an example's `samples.csv` and the input
   is sent once more as a new request (the provider may bill both), and after
   two minutes without output the turn's status says "No output from the
   model yet" instead of "Thinking". A running tool keeps the status calm.
+- **A headless run prints the turn a finished worker woke.** When the
+  worker's report was answered while `openscience run` was still reading an
+  earlier idle, the run judged nothing owed and exited with that turn's
+  events unprinted. It now reads on until the stream reaches the root's
+  newest message.
 - **A message sent while a turn is working no longer appears twice.** The
   server renumbers a message whose id would sort below a step the running
   turn started after the send, and the transcript kept the composer's
