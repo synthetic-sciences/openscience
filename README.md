@@ -126,6 +126,16 @@ your request
 
 The [capability map](https://openscience.sh/docs/#/openscience/capabilities), [Explore tools](https://openscience.sh/docs/#/openscience/explore-tools) and the [skills directory](https://openscience.sh/docs/#/openscience/skill-library) list what is available and how to set it up.
 
+## Benchmarks
+
+| Benchmark                                     |   OpenScience | Counted as      |
+| --------------------------------------------- | ------------: | --------------- |
+| Terminal-Bench Science (70 tasks)             |  53/70 (75.7) | best of up to 3 |
+| BiomniBench-DA (public 50)                    |          82.2 | best of 3       |
+| Terminal-Bench 4.0, science subset (14 tasks) | 0.714 (10/14) | best of 3       |
+
+GPT-6 Astra and GPT-6 Sol on Harbor, with each benchmark's native environments, verifiers and judge. The results, with the trace of every counted trial, are in [benchmarks-openscience](https://github.com/synthetic-sciences/benchmarks-openscience).
+
 ## Model access
 
 | Option            | Setup                                         | Cost                                                   |
