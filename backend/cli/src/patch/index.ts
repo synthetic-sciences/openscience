@@ -152,6 +152,14 @@ export namespace Patch {
           } else if (changeLine.startsWith("+")) {
             // Add line - only in new
             newLines.push(changeLine.substring(1))
+          } else if (changeLine === "") {
+            // A blank line is a context line whose prefix was lost. It must
+            // stay legal, because a hunk is allowed to end before the next
+            // header with one.
+          } else {
+            // Dropping an unprefixed line silently removes the model's only
+            // disambiguator, and the hunk then matches somewhere else.
+            throw new Error(`Invalid patch line, expected a leading ' ', '-' or '+': ${changeLine}`)
           }
 
           i++

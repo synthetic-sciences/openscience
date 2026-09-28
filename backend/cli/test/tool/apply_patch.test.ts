@@ -3,6 +3,7 @@ import path from "path"
 import crypto from "node:crypto"
 import * as fs from "fs/promises"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
+import { Patch } from "../../src/patch"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { FileTrash } from "../../src/file/trash"
@@ -922,5 +923,66 @@ describe("tool.apply_patch legacy session authority", () => {
         expect(await FileTrash.list(Instance.project.id)).toEqual([])
       },
     })
+  })
+})
+
+describe("tool.apply_patch malformed hunks", () => {
+  test("an update section with no @@ hunk is rejected instead of reported as edited", async () => {
+    await using fixture = await tmpdir({ git: true })
+    const { ctx } = makeCtx()
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "a.py")
+        const before = "def f():\n    old\n"
+        await fs.writeFile(target, before, "utf-8")
+        // Without an @@ header there is no chunk, so the update would rewrite
+        // the file with its own contents and still report success.
+        const patchText = "*** Begin Patch\n*** Update File: a.py\n-    old\n+    new\n*** End Patch"
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("apply_patch verification failed")
+        expect(await fs.readFile(target, "utf-8")).toBe(before)
+      },
+    })
+  })
+
+  test("a hunk line with no prefix is rejected instead of dropped", () => {
+    // The line is the model's only disambiguator. Dropping it silently
+    // reinterprets the patch, so the parse has to refuse it instead.
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: a.py",
+      "@@ def second():",
+      "-    old",
+      "+    new",
+      "# belongs to the second block",
+      "*** End Patch",
+    ].join("\n")
+    expect(() => Patch.parsePatch(patchText)).toThrow("expected a leading ' ', '-' or '+'")
+  })
+
+  test("an indented hunk line is still a context line, with its indentation kept", () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: a.py",
+      "@@",
+      "    alpha",
+      "+    beta",
+      "*** End Patch",
+    ].join("\n")
+    expect(() => Patch.parsePatch(patchText)).not.toThrow()
+  })
+
+  test("a blank line inside a hunk is still accepted", () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: a.py",
+      "@@",
+      " alpha",
+      "+beta",
+      "",
+      " omega",
+      "*** End Patch",
+    ].join("\n")
+    expect(() => Patch.parsePatch(patchText)).not.toThrow()
   })
 })

@@ -326,6 +326,12 @@ public 50 the old detector named an example's `samples.csv` and the input
   read from `{file:prompt.md}` lost half of every `$$` (display math became
   inline math), and `$&`, `` $` `` or `$'` in the file were replaced with
   parts of the config value. The file's text is now inserted verbatim.
+- **A malformed patch is refused instead of being half-applied.** An update
+  section with no `@@` header rewrote the file with its own bytes and still
+  reported it as edited, and a hunk line that lost its leading space or sign was
+  dropped — which removed the only thing telling one block from another and let
+  the hunk match somewhere else entirely. Both are now rejected with the reason,
+  and a blank line inside a hunk is still accepted.
 - **A slash command keeps the dollar signs you typed.** `$ARGUMENTS` was
   substituted with a string replacement, so `$$` collapsed to `$` (display math
   became inline math), `$&` came back as the placeholder itself and `$'`

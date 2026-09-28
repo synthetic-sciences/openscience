@@ -540,6 +540,14 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
         }
 
         case "update": {
+          if (hunk.chunks.length === 0) {
+            // No @@ header means no chunk, so deriving new contents would
+            // rewrite the file with its own bytes and still report it edited.
+            // Nothing was changed, and the model must be told so.
+            throw new Error(
+              `apply_patch verification failed: ${filePath}: update section has no @@ hunk; no files were changed`,
+            )
+          }
           const approved = await readApprovedFile(filePath).catch((error) => {
             throw new Error(`apply_patch verification failed: Failed to read file to update: ${filePath}: ${error}`)
           })
