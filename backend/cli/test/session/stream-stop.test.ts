@@ -153,3 +153,20 @@ test.each(["quiet-response", "active-tool"])(
   },
   15_000,
 )
+
+test("Stop clears a stale busy status when no run is active", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    init: trustProject,
+    fn: async () => {
+      const session = await Session.create({ title: "Stopped run" })
+      SessionStatus.set(session.id, { type: "busy" })
+      expect(SessionPrompt.activeController(session.id)).toBeUndefined()
+
+      const response = await SessionRoutes().request(`/${session.id}/abort`, { method: "POST" })
+      expect(response.status).toBe(200)
+      expect(SessionStatus.get(session.id)).toEqual({ type: "idle" })
+    },
+  })
+})

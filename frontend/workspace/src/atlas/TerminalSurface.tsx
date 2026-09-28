@@ -115,7 +115,15 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
 
   const autostart = { requested: false }
   createEffect(() => {
-    if (autostart.requested || !available() || !terminal.ready() || terminal.all().length || state.starting) return
+    if (
+      autostart.requested ||
+      !available() ||
+      !terminal.ready() ||
+      !terminal.shouldAutoStart() ||
+      terminal.all().length ||
+      state.starting
+    )
+      return
     if (!authority.allowed()) return
     autostart.requested = true
     launch()

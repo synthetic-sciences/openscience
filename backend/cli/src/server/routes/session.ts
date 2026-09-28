@@ -533,10 +533,13 @@ export const SessionRoutes = lazy(() =>
         await Session.assertDirectory(sessionID)
         const source = c.req.header("x-openscience-abort-source") === "runner_timeout" ? "runner_timeout" : "user"
         const controller = SessionPrompt.activeController(sessionID)
+        let inactive = false
         try {
           const result = await RuntimeEvents.requestCancel({ sessionID, source })
+          inactive = result.status === "inactive"
           if (!controller && result.status === "requested") {
-            await RuntimeEvents.cancel({ sessionID, runID: result.runID, source })
+            const cancelled = await RuntimeEvents.cancel({ sessionID, runID: result.runID, source })
+            inactive = cancelled.status === "cancelled" || cancelled.status === "inactive"
           }
         } catch (error) {
           log.error("failed to record runtime cancellation", { sessionID, source, error })
@@ -544,7 +547,10 @@ export const SessionRoutes = lazy(() =>
           // Keep the runtime active while abort-aware tools and the assistant
           // message settle. Their events must commit before RuntimeEvents.fail
           // turns the durable cancellation request into the terminal event.
+          // A stale busy status can outlive its run; Stop should clear it when
+          // the durable journal confirms that no owner remains.
           if (controller) SessionPrompt.cancel(sessionID, controller)
+          else if (inactive) SessionStatus.set(sessionID, { type: "idle" })
         }
         return c.json(true)
       },

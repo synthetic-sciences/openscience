@@ -51,6 +51,7 @@ function createProjectTerminalSession(
     createStore<{
       active?: string
       all: LocalPTY[]
+      autoStartSuppressed?: boolean
     }>({
       all: [],
     }),
@@ -145,6 +146,7 @@ function createProjectTerminalSession(
 
   return {
     has: (id: string) => store.all.some((pty) => pty.id === id),
+    shouldAutoStart: () => !store.autoStartSuppressed,
     refresh,
     ready: () => persistenceReady() && hydrated(),
     all: createMemo(() => Object.values(store.all)),
@@ -188,6 +190,7 @@ function createProjectTerminalSession(
             return newAll
           })
           setStore("active", id)
+          setStore("autoStartSuppressed", false)
           return newTerminal
         })
         .catch((e) => {
@@ -261,6 +264,9 @@ function createProjectTerminalSession(
     async close(id: string) {
       batch(() => {
         const filtered = store.all.filter((x) => x.id !== id)
+        // An explicit last-tab close must survive a pane remount; otherwise
+        // TerminalSurface autostarts a replacement PTY and blocks updates.
+        if (!filtered.length) setStore("autoStartSuppressed", true)
         if (store.active === id) {
           const index = store.all.findIndex((f) => f.id === id)
           const next = index > 0 ? index - 1 : 0
@@ -346,6 +352,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     return {
       ready: () => workspace().ready(),
+      shouldAutoStart: () => workspace().shouldAutoStart(),
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: (opts?: { title?: string }) => workspace().new(opts),
