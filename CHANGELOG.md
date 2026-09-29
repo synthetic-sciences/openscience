@@ -320,6 +320,11 @@ public 50 the old detector named an example's `samples.csv` and the input
   SDK sent the project directory in a request header as is, and a path such as
   `C:\Users\Пользователь\...` is not a valid header value, so the app failed at
   startup. The directory is now percent-encoded, as the newer client already did.
+- **Entering a session no longer rewinds a running conversation's text.** While
+  the agent was streaming, a snapshot taken as you arrived could overwrite what
+  had already arrived, and a message deleted mid-stream could reappear. The check
+  meant to prevent that was reading its change list under the wrong key.
+
 - **Code search works again, and a failed search reads as an error.** Exa
   retired the code-context tool `codesearch` called, so every search returned
   "Tool get_code_context_exa not found" as if it were the answer. The tool now

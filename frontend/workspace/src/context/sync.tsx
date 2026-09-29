@@ -42,6 +42,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
 
     const loadMessages = async (input: {
       directory: string
+      streamDirectory: string
       client: typeof sdk.client
       store: Store
       setStore: Setter
@@ -56,7 +57,10 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
       // SSE keeps streaming while this request is in flight. Entities it
       // changes meanwhile are newer than the response bytes and must win;
       // otherwise entering a streaming session rolled its text backwards.
-      const startedAt = globalSync.transcript.revision(input.directory, input.sessionID)
+      // The ledger is written under the physical directory the event stream
+      // publishes, while `directory` above is the route scope, so read it
+      // through the stream's own key or the guard never sees a change.
+      const startedAt = globalSync.transcript.revision(input.streamDirectory, input.sessionID)
       await retry(() => input.client.session.messages({ sessionID: input.sessionID, limit: input.limit }))
         .then((messages) => {
           const items = (messages.data ?? []).filter((x) => !!x?.info?.id)
@@ -64,7 +68,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             .map((x) => x.info)
             .filter((m) => !!m?.id)
             .sort((a, b) => a.id.localeCompare(b.id))
-          const changes = globalSync.transcript.changesSince(input.directory, input.sessionID, startedAt)
+          const changes = globalSync.transcript.changesSince(input.streamDirectory, input.sessionID, startedAt)
           const live = input.store.message[input.sessionID] ?? []
           const next = mergeHydratedMessages(input.preserveMessages?.length ? input.preserveMessages : live, incoming, {
             preserveCached: !!input.preserveMessages?.length,
@@ -195,6 +199,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const messagesReq = plan.loadMessages
             ? loadMessages({
                 directory,
+                streamDirectory: sdk.directory,
                 client,
                 store,
                 setStore,
@@ -328,6 +333,7 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
             const currentLimit = meta.limit[key] ?? chunk
             await loadMessages({
               directory,
+              streamDirectory: sdk.directory,
               client,
               store,
               setStore,
