@@ -316,6 +316,9 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **Shell scripts and git hooks keep LF line endings on Windows checkouts.**
+  With Git for Windows' default `core.autocrlf=true` they were checked out with
+  CRLF and failed under bash with `$'\r': command not found`.
 - **Code search works again, and a failed search reads as an error.** Exa
   retired the code-context tool `codesearch` called, so every search returned
   "Tool get_code_context_exa not found" as if it were the answer. The tool now

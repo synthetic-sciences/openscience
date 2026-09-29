@@ -3,3 +3,6 @@
 *.sh text eol=lf
 /install text eol=lf
 /frontend/landing/public/install text eol=lf
+/frontend/landing/public/install-desktop text eol=lf
+/tooling/repo/release text eol=lf
+/.husky/* text eol=lf
