@@ -1,4 +1,5 @@
 import type { Hooks, Plugin } from "@synsci/plugin"
+import { TokenUsage } from "@synsci/util/token-usage"
 import { Config } from "@/config/config"
 import { Session } from "@/session"
 import { HarnessState } from "./state"
@@ -60,7 +61,9 @@ export namespace Cost {
     for (const message of messages) {
       if (message.info.role !== "assistant") continue
       cost += message.info.cost ?? 0
-      tokens += message.info.tokens.input + message.info.tokens.output + message.info.tokens.reasoning
+      // A reasoning model's reasoning tokens are a subset of its output, not
+      // an extra quantity; `reasoning` is not added on top of `output`.
+      tokens += TokenUsage.uncached(message.info.tokens)
     }
     return { cost, tokens }
   }
@@ -87,7 +90,7 @@ export const CostUnit: Plugin = async () => {
       if (part.type !== "step-finish") return
       const spend = await Cost.attribute(part.sessionID, part.cost)
       spend.cost += part.cost
-      spend.tokens += part.tokens.input + part.tokens.output + part.tokens.reasoning
+      spend.tokens += TokenUsage.uncached(part.tokens)
     },
     // The running figure is for the workspace, which shows it live; the model
     // hears about spend once, when the soft ceiling is reached. A line that

@@ -447,14 +447,37 @@ export namespace ExecutionHistory {
       })
 
     const count = new Map<string, number>()
+    // Reserve every ordinal that has already been handed out before assigning
+    // one of our own. The journal is the authority: a kernel run that is still
+    // queued or running exists only there, and a run recorded without an
+    // ordinal — a local bash run, say — must not claim a number the journal
+    // already gave it. The agent reads `sequence` as "execution N of this
+    // session", so a duplicate makes two records contradict each other.
+    const reserved = new Map<string, Set<number>>()
+    const reserve = (session: string, sequence: number) => {
+      const taken = reserved.get(session) ?? new Set<number>()
+      taken.add(sequence)
+      reserved.set(session, taken)
+    }
+    for (const record of durable) reserve(record.session_id, record.sequence)
+    for (const run of runs) {
+      const stored = Sequence.safeParse(run.meta?.executionSequence)
+      if (!stored.success) continue
+      reserve(run.sessionID ?? value(run.provenance?.identity.session_id) ?? "unknown", stored.data)
+    }
     const completed = runs.map((run) => {
       const envelope = run.provenance!
       const kernel = value(envelope.environment.kernel)
       const kernelID = kernel?.id
       const session = run.sessionID ?? value(envelope.identity.session_id) ?? "unknown"
       const storedSequence = Sequence.safeParse(run.meta?.executionSequence)
-      const sequence = storedSequence.success ? storedSequence.data : (count.get(session) ?? 0) + 1
-      count.set(session, sequence)
+      let sequence = storedSequence.success ? storedSequence.data : (count.get(session) ?? 0) + 1
+      if (!storedSequence.success) {
+        const taken = reserved.get(session)
+        while (taken?.has(sequence)) sequence += 1
+      }
+      // Monotone, so a journal ordinal seen later cannot rewind the counter.
+      count.set(session, Math.max(count.get(session) ?? 0, sequence))
       const started = time(envelope.timestamps.started_at)
       const completed = time(envelope.timestamps.completed_at)
       const files = envelope.outputs.items.flatMap((item) => {

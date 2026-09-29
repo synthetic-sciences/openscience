@@ -47,6 +47,15 @@ describe("Patch namespace", () => {
       },
     )
 
+    test("drops a CRLF blank line that ends a hunk", () => {
+      const result = Patch.parsePatch(
+        "*** Begin Patch\r\n*** Update File: a.txt\r\n@@\r\n-one\r\n+ONE\r\n\r\n*** End Patch\r\n",
+      )
+      expect(result.hunks).toHaveLength(1)
+      const hunk = result.hunks[0]
+      expect(hunk.type === "update" && hunk.chunks.map((chunk) => chunk.old_lines.length)).toEqual([1])
+    })
+
     test("should parse simple add file patch", () => {
       const patchText = `*** Begin Patch
 *** Add File: test.txt

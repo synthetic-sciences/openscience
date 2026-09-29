@@ -106,6 +106,37 @@ test("a process that restarts mid-session picks the count up from the transcript
   })
 })
 
+test("reasoning is counted once, since the provider already includes it in output", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      await Session.updateMessage({
+        id: "msg_r1",
+        sessionID: session.id,
+        role: "assistant",
+        parentID: "msg_user",
+        mode: "research",
+        agent: "research",
+        path: { cwd: tmp.path, root: tmp.path },
+        cost: 1,
+        // TokenUsage.total: `output` already includes reasoning, so a call
+        // billed 1,000 in and 2,000 out is 3,000 tokens even though 1,500 of
+        // those were reasoning tokens.
+        tokens: { input: 1_000, output: 2_000, reasoning: 1_500, cache: { read: 0, write: 0 } },
+        modelID: "m",
+        providerID: "p",
+        time: { created: 1, completed: 2 },
+      })
+      const unit = await CostUnit({} as PluginInput)
+      const output = { lines: [] as string[], status: [] as string[] }
+      await unit["env.lines"]!({ sessionID: session.id, model: {} as never }, output)
+      expect(HarnessState.get(session.id).spend.tokens).toBe(3_000)
+    },
+  })
+})
+
 test("a worker's steps bill the lead that delegated to it, live and from the transcript", async () => {
   await using tmp = await tmpdir({ config: { harness: { cost: { max_usd: 5 } } } })
   await Instance.provide({

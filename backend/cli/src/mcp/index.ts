@@ -801,6 +801,18 @@ export namespace MCP {
       }
     }
 
+    // The config schema accepts an empty command so that one incomplete entry
+    // cannot stop the whole file from loading; it fails here, before a launch.
+    if (mcp.type === "local" && !mcp.command[0]?.trim()) {
+      const error = `Local MCP server "${key}" has an empty \`command\`. Set it to the program and its arguments, for example ["npx", "-y", "my-mcp-server"].`
+      log.error("local mcp command is empty", { key, command: mcp.command })
+      return {
+        mcpClient: undefined,
+        status: { status: "failed" as const, error },
+        releaseUpdate: undefined,
+      }
+    }
+
     log.info("found", { key, type: mcp.type })
     let mcpClient: MCPClient | undefined
     let status: Status | undefined = undefined

@@ -217,8 +217,31 @@ export namespace ShellRisk {
     return value.replaceAll("\\", "/")
   }
 
+  /** Exact option match, including the `name=value` form. A hit here only ever
+   *  makes a command *allowed*, so it has to mean the option the model actually
+   *  wrote and nothing wider. */
   function has(args: string[], ...values: string[]) {
     return args.some((arg) => values.includes(arg) || values.some((value) => arg.startsWith(`${value}=`)))
+  }
+
+  /** GNU tools parse options with getopt_long, which accepts any unambiguous
+   *  prefix of a long option: `sed --in-p` edits in place, `sort --outp` writes
+   *  its output file and `tar --to-c 'cmd'` runs cmd per extracted file. Only
+   *  the name before `=` is compared, so the `name=value` form abbreviates too.
+   *  A short option is never an abbreviation, so those and exact long options
+   *  keep the plain match; only a long option is widened. No case folding,
+   *  because `--noEmit` is not `--noemit`; that is only safe to skip here, where
+   *  a hit makes a command risky and over-refusing is the direction to err in. A
+   *  prefix that is itself a real option — `git diff --text`, `tar
+   *  --checkpoint`, `eslint --f` — is refused rather than resolved. */
+  function reaches(args: string[], ...values: string[]) {
+    return (
+      has(args, ...values) ||
+      args.some((arg) => {
+        const name = arg.split("=", 1)[0]
+        return name.length > 2 && name.startsWith("--") && values.some((value) => value.startsWith(name))
+      })
+    )
   }
 
   function lex(source: string): Token[] | Result {
@@ -349,8 +372,8 @@ export namespace ShellRisk {
     const command = args[index]?.toLowerCase()
     const rest = args.slice(index + 1)
     if (!command) return risky("git subcommand is missing")
-    if (has(rest, "--output")) return risky("git output file mutation")
-    if (has(rest, "--ext-diff", "--textconv")) return risky("git external formatter can execute commands")
+    if (reaches(rest, "--output")) return risky("git output file mutation")
+    if (reaches(rest, "--ext-diff", "--textconv")) return risky("git external formatter can execute commands")
     if (
       [
         "status",
@@ -419,9 +442,9 @@ export namespace ShellRisk {
   }
 
   function checker(command: string, args: string[]): Result {
-    if (command === "eslint" && has(args, "--fix", "--fix-dry-run")) return risky("eslint fix mutates files")
+    if (command === "eslint" && reaches(args, "--fix", "--fix-dry-run")) return risky("eslint fix mutates files")
     if (command === "prettier" && !has(args, "--check")) return risky("prettier without --check can mutate files")
-    if (command === "biome" && has(args, "--write", "--fix", "--unsafe")) return risky("biome write mutates files")
+    if (command === "biome" && reaches(args, "--write", "--fix", "--unsafe")) return risky("biome write mutates files")
     if (command === "tsc" && !has(args, "--noEmit")) return risky("tsc may emit files")
     return contained(`local ${command} check`)
   }
@@ -512,18 +535,18 @@ export namespace ShellRisk {
       return buildTool(command, args)
     }
     if (command === "sed")
-      return has(args, "--in-place") || args.some((arg) => /^-[^-]*i/.test(arg))
+      return reaches(args, "--in-place") || args.some((arg) => /^-[^-]*i/.test(arg))
         ? risky("sed in-place edit")
         : contained("read-only sed filter")
     if (command === "sort")
-      return has(args, "-o", "--output") || args.some((arg) => /^-o.+/.test(arg))
+      return reaches(args, "-o", "--output") || args.some((arg) => /^-o.+/.test(arg))
         ? risky("sort output file mutation")
         : contained("read-only sort filter")
     if (command === "unzip")
       return has(args, "-l", "--list") ? contained("archive listing") : risky("archive extraction")
     if (command === "tar") {
       if (
-        has(args, "--checkpoint-action", "--to-command", "--use-compress-program") ||
+        reaches(args, "--checkpoint-action", "--to-command", "--use-compress-program") ||
         args.some((arg) => arg === "-I" || arg.startsWith("-I"))
       ) {
         return risky("archive helper can execute another command")
@@ -539,7 +562,7 @@ export namespace ShellRisk {
         : risky("archive operation is not a read-only listing")
     }
     if (command === "date") {
-      if (has(args, "-s", "--set") || args.some((arg) => !arg.startsWith("-") && !arg.startsWith("+"))) {
+      if (reaches(args, "-s", "--set") || args.some((arg) => !arg.startsWith("-") && !arg.startsWith("+"))) {
         return risky("date arguments may change system time")
       }
       return contained("read-only date inspection")
@@ -550,7 +573,7 @@ export namespace ShellRisk {
         : risky("hostname arguments may change system identity")
     }
     if (command === "file") {
-      return has(args, "--compile") || args.some((arg) => /^-[^-]*C/.test(arg))
+      return reaches(args, "--compile") || args.some((arg) => /^-[^-]*C/.test(arg))
         ? risky("file compilation writes a magic database")
         : contained("read-only file inspection")
     }

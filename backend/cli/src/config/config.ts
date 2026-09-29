@@ -1516,11 +1516,13 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   export const global = lazy(async () => {
+    // Same order as CONFIG_FILES: openscience.json merges last, and
+    // globalConfigFile writes it in preference to the jsonc when both exist.
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
-      mergeDeep(await loadFile(path.join(Global.Path.config, "openscience.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "openscience.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "openscience.json"))),
     )
 
     const legacy = path.join(Global.Path.config, "config")
@@ -1532,7 +1534,9 @@ export namespace Config {
       })
         .then(async (mod) => {
           const { provider, model, ...rest } = mod.default
-          const files = ["config.json", "openscience.json", "openscience.jsonc"].map((name) =>
+          // Same order as the merge above, so a migration that rewrites
+          // config.json carries the same values the live loader would pick.
+          const files = ["config.json", "openscience.jsonc", "openscience.json"].map((name) =>
             path.join(Global.Path.config, name),
           )
           await CredentialLifecycle.serialized(async () => {
@@ -1876,32 +1880,35 @@ export namespace Config {
     return CredentialLifecycle.mutate("mcp-config.project-update", write)
   }
 
+  // Both writers pick the plain json file over its jsonc sibling because the
+  // loaders merge json last: a save into the jsonc while both exist would be
+  // shadowed on the next read. A fresh config is still created as jsonc.
   function globalConfigFile() {
-    const candidates = ["openscience.jsonc", "openscience.json", "config.json"].map((file) =>
+    const candidates = ["openscience.json", "openscience.jsonc", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
     )
     for (const file of candidates) {
       if (existsSync(file)) return file
     }
-    return candidates[0]
+    return path.join(Global.Path.config, "openscience.jsonc")
   }
 
   function projectConfigFile() {
     const candidates = [
-      path.join(Instance.worktree, "openscience.jsonc"),
       path.join(Instance.worktree, "openscience.json"),
-      path.join(Instance.worktree, ".openscience", "openscience.jsonc"),
+      path.join(Instance.worktree, "openscience.jsonc"),
       path.join(Instance.worktree, ".openscience", "openscience.json"),
+      path.join(Instance.worktree, ".openscience", "openscience.jsonc"),
       // legacy pre-rename names: keep writing to an existing project config
-      path.join(Instance.worktree, "synsc.jsonc"),
       path.join(Instance.worktree, "synsc.json"),
-      path.join(Instance.worktree, ".synsc", "synsc.jsonc"),
+      path.join(Instance.worktree, "synsc.jsonc"),
       path.join(Instance.worktree, ".synsc", "synsc.json"),
+      path.join(Instance.worktree, ".synsc", "synsc.jsonc"),
     ]
     for (const file of candidates) {
       if (existsSync(file)) return file
     }
-    return candidates[0]
+    return path.join(Instance.worktree, "openscience.jsonc")
   }
 
   function isRecord(value: unknown): value is Record<string, unknown> {

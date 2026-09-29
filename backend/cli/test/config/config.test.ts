@@ -569,6 +569,51 @@ test("update() persists to a project config read path (survives a reload)", asyn
   })
 })
 
+test("a project save survives a reload when openscience.json and openscience.jsonc both exist", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      const provider = (baseURL: string) => ({ local: { name: "Local", options: { baseURL } } })
+      await writeConfig(dir, { model: "stale/jsonc", provider: provider("http://jsonc/v1") }, "openscience.jsonc")
+      await writeConfig(dir, { model: "stale/json", provider: provider("http://json/v1") })
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: () => Config.update({ model: "saved/update" }),
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Config.get()).model).toBe("saved/update")
+      await Config.setProvider("local", { name: "Local", options: { baseURL: "http://saved/v1" } }, "project")
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Config.get()).provider?.local?.options?.baseURL).toBe("http://saved/v1")
+    },
+  })
+})
+
+test("a project save still goes to openscience.jsonc when it is the only file", async () => {
+  await using tmp = await tmpdir({
+    init: (dir) => Bun.write(path.join(dir, "openscience.jsonc"), '{\n  // keep me\n  "model": "old/model"\n}\n'),
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: () => Config.update({ model: "saved/model" }),
+  })
+  expect(await Bun.file(path.join(tmp.path, "openscience.json")).exists()).toBe(false)
+  expect(await Bun.file(path.join(tmp.path, "openscience.jsonc")).text()).toContain("// keep me")
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect((await Config.get()).model).toBe("saved/model")
+    },
+  })
+})
+
 test("gets config directories", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({

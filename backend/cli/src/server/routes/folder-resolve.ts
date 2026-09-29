@@ -20,6 +20,8 @@ import { spawn } from "child_process"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
+import { fileURLToPath } from "url"
+import { iife } from "@synsci/util/iife"
 import { lazy } from "@synsci/util/lazy"
 import { projectSelection } from "../project-selection"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
@@ -83,10 +85,37 @@ async function listDirectory(dir: string): Promise<ListResult> {
   }
 }
 
-function expandPath(input: unknown): string {
+/** A `file://` URL to a local path. `fileURLToPath` gives "C:\x" and
+ * "\\server\share" on Windows and decodes multi-byte escapes; a stray percent
+ * is escaped first because it throws there. It still throws on a remote host
+ * off Windows and on an encoded slash, and Bun returns "" for an escape that is
+ * not UTF-8, so those fall back to the decoded pathname with anything
+ * undecodable left as written. */
+function fromFileUrl(raw: string): string {
+  const url = new URL(raw.replace(/%(?![0-9a-f]{2})/gi, "%25"))
+  const direct = iife(() => {
+    try {
+      return fileURLToPath(url)
+    } catch {
+      return ""
+    }
+  })
+  if (direct) return direct
+  const decoded = url.pathname.replace(/(?:%[0-9a-f]{2})+/gi, (escapes) => {
+    try {
+      return decodeURIComponent(escapes)
+    } catch {
+      return escapes
+    }
+  })
+  // "/C:/rest" is the URL spelling of "C:\rest"; elsewhere it is a real path.
+  return process.platform === "win32" && /^\/[a-z]:[\\/]/i.test(decoded) ? decoded.slice(1) : decoded
+}
+
+export function expandPath(input: unknown): string {
   const raw = String(input ?? "").trim()
   if (!raw) return ""
-  const withoutFileUrl = raw.startsWith("file://") ? decodeURIComponent(new URL(raw).pathname) : raw
+  const withoutFileUrl = raw.startsWith("file://") ? fromFileUrl(raw) : raw
   if (withoutFileUrl === "~") return HOME
   if (withoutFileUrl.startsWith("~/")) return path.join(HOME, withoutFileUrl.slice(2))
   return path.resolve(withoutFileUrl)

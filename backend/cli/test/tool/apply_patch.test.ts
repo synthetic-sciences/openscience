@@ -369,6 +369,33 @@ describe("tool.apply_patch freeform", () => {
     })
   })
 
+  test("renames a file when the update carries no hunk", async () => {
+    // The tool description allows an update "optionally with a rename", so a
+    // `Move to` with no `@@` below it is valid input and has to keep working:
+    // there is no change line here for the malformed-shape check to trip on.
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        try {
+          const original = path.join(fixture.path, "a.txt")
+          await fs.writeFile(original, "keep me\n", "utf-8")
+
+          const patchText = "*** Begin Patch\n*** Update File: a.txt\n*** Move to: b.txt\n*** End Patch"
+          await execute({ patchText }, ctx)
+
+          const moved = path.join(fixture.path, "b.txt")
+          await expect(fs.readFile(original, "utf-8")).rejects.toThrow()
+          expect(await fs.readFile(moved, "utf-8")).toBe("keep me\n")
+        } finally {
+          await Instance.dispose()
+        }
+      },
+    })
+  })
+
   test("refuses to move over an existing destination", async () => {
     await using fixture = await tmpdir()
     const { ctx } = makeCtx()
@@ -645,6 +672,133 @@ describe("tool.apply_patch freeform", () => {
           ),
         )
         expect(await fs.readFile(target, "utf-8")).toBe("line1\nline2\n")
+      },
+    })
+  })
+
+  test("rejects an update section that has no hunk header", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "a.py")
+        await fs.writeFile(target, "    old\n", "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: a.py\n-    old\n+    new\n*** End Patch"
+
+        await expect(execute({ patchText }, ctx)).rejects.toThrow()
+        expect(await fs.readFile(target, "utf-8")).toBe("    old\n")
+      },
+    })
+  })
+
+  test("rejects a hunk line that lost its prefix", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "notes.txt")
+        await fs.writeFile(target, "one\ntwo\nthree\n", "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: notes.txt\n@@\n-one\n+ONE\ntwo\n+extra\n*** End Patch"
+
+        await expect(execute({ patchText }, ctx)).rejects.toThrow()
+        expect(await fs.readFile(target, "utf-8")).toBe("one\ntwo\nthree\n")
+      },
+    })
+  })
+
+  test("applies a hunk followed by a blank line before End Patch", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "notes.txt")
+        await fs.writeFile(target, "one\ntwo\n", "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: notes.txt\n@@\n-one\n+ONE\n\n\n*** End Patch"
+        await execute({ patchText }, ctx)
+
+        expect(await fs.readFile(target, "utf-8")).toBe("ONE\ntwo\n")
+      },
+    })
+  })
+
+  test("applies sections separated by blank lines", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        await fs.writeFile(path.join(fixture.path, "a.txt"), "alpha\n", "utf-8")
+        await fs.writeFile(path.join(fixture.path, "b.txt"), "beta\n", "utf-8")
+
+        const patchText = [
+          "*** Begin Patch",
+          "*** Update File: a.txt",
+          "@@",
+          "-alpha",
+          "+ALPHA",
+          "",
+          "*** Update File: b.txt",
+          "@@",
+          "-beta",
+          "+BETA",
+          "",
+          "*** Add File: c.txt",
+          "+gamma",
+          "*** End Patch",
+        ].join("\n")
+        await execute({ patchText }, ctx)
+
+        expect(await fs.readFile(path.join(fixture.path, "a.txt"), "utf-8")).toBe("ALPHA\n")
+        expect(await fs.readFile(path.join(fixture.path, "b.txt"), "utf-8")).toBe("BETA\n")
+        expect(await fs.readFile(path.join(fixture.path, "c.txt"), "utf-8")).toBe("gamma\n")
+      },
+    })
+  })
+
+  test("reads an empty line inside a hunk as blank context", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "m.txt")
+        await fs.writeFile(target, "a\nb\nx\na\n\nb\n", "utf-8")
+
+        // Only the second `b` sits below a blank line; dropping the blank would
+        // anchor the hunk on the first one.
+        const patchText = "*** Begin Patch\n*** Update File: m.txt\n@@\n a\n\n-b\n+B\n*** End Patch"
+        await execute({ patchText }, ctx)
+
+        expect(await fs.readFile(target, "utf-8")).toBe("a\nb\nx\na\n\nB\n")
+      },
+    })
+  })
+
+  test("rejects an update section with neither a hunk nor a move", async () => {
+    await using fixture = await tmpdir()
+    const { ctx } = makeCtx()
+
+    await Instance.provide({
+      directory: fixture.path,
+      fn: async () => {
+        const target = path.join(fixture.path, "a.txt")
+        await fs.writeFile(target, "keep\n", "utf-8")
+
+        const patchText = "*** Begin Patch\n*** Update File: a.txt\n\n*** End Patch"
+
+        await expect(execute({ patchText }, ctx)).rejects.toThrow("no @@ hunk")
+        expect(await fs.readFile(target, "utf-8")).toBe("keep\n")
       },
     })
   })

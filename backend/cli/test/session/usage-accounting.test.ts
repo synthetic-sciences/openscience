@@ -52,6 +52,90 @@ describe("Session.getUsage cost/token accounting", () => {
     })
   }
 
+  test("a route that bills reasoning outside output folds it back in", () => {
+    // `@ai-sdk/google` maps outputTokens to candidatesTokenCount, reasoning to
+    // thoughtsTokenCount and totalTokens to Gemini's own totalTokenCount, which
+    // counts the 100 thinking tokens the 500 leaves out.
+    const gemini = (): any => ({ ...model(), api: { id: "gemini-3-pro", npm: "@ai-sdk/google" } })
+    const result = Session.getUsage({
+      model: gemini(),
+      usage: {
+        inputTokens: 1_000,
+        outputTokens: 500,
+        reasoningTokens: 100,
+        cachedInputTokens: 200,
+        totalTokens: 1_600,
+      } as any,
+      metadata: { google: {} } as any,
+    })
+    expect(result.tokens).toEqual({
+      input: 800,
+      output: 600,
+      reasoning: 100,
+      cache: { read: 200, write: 0 },
+    })
+    expect(TokenUsage.uncached(result.tokens)).toBe(1_400)
+    expect(TokenUsage.total(result.tokens)).toBe(1_600)
+    expect(result.cost).toBeCloseTo((800 * 3 + 600 * 15 + 200 * 0.3) / 1_000_000, 8)
+  })
+
+  test("xAI chat completions fold reasoning in, xAI Responses do not", () => {
+    // Both come through `@ai-sdk/xai`, which passes the API's own
+    // total_tokens. Chat's completion_tokens leaves reasoning out; the
+    // Responses output_tokens (grok-4.5) already has it.
+    const grok = (id: string): any => ({ ...model(), api: { id, npm: "@ai-sdk/xai" } })
+    const chat = Session.getUsage({
+      model: grok("grok-4"),
+      usage: { inputTokens: 12, outputTokens: 1, reasoningTokens: 228, totalTokens: 241 } as any,
+    })
+    expect(chat.tokens.output).toBe(229)
+    expect(chat.tokens.reasoning).toBe(228)
+
+    const responses = Session.getUsage({
+      model: grok("grok-4.5"),
+      usage: { inputTokens: 1_000, outputTokens: 538, reasoningTokens: 123, totalTokens: 1_538 } as any,
+    })
+    expect(responses.tokens.output).toBe(538)
+    expect(responses.tokens.reasoning).toBe(123)
+    expect(TokenUsage.uncached(responses.tokens)).toBe(1_538)
+    expect(responses.cost).toBeCloseTo((1_000 * 3 + 538 * 15) / 1_000_000, 8)
+
+    // xAI sometimes reports cached tokens beside a smaller input count, and
+    // its total then covers them; that alone must not read as reasoning.
+    const exclusive = Session.getUsage({
+      model: grok("grok-4.5"),
+      usage: {
+        inputTokens: 4_142,
+        cachedInputTokens: 4_328,
+        outputTokens: 254,
+        reasoningTokens: 100,
+        totalTokens: 8_724,
+      } as any,
+    })
+    expect(exclusive.tokens.output).toBe(254)
+  })
+
+  test("an OpenAI-compatible route keeps its inclusive output untouched", () => {
+    // OpenAI, DeepSeek, OpenRouter and the rest already report outputTokens
+    // with reasoning inside it and a total of input plus output, so folding
+    // again would double count.
+    const openai = (): any => ({ ...model(), api: { id: "gpt-6-astra", npm: "@ai-sdk/openai" } })
+    const result = Session.getUsage({
+      model: openai(),
+      usage: {
+        inputTokens: 1_000,
+        outputTokens: 500,
+        reasoningTokens: 100,
+        cachedInputTokens: 0,
+        totalTokens: 1_500,
+      } as any,
+      metadata: { openai: {} } as any,
+    })
+    expect(result.tokens.output).toBe(500)
+    expect(result.tokens.reasoning).toBe(100)
+    expect(TokenUsage.uncached(result.tokens)).toBe(1_500)
+  })
+
   test("the native OpenAI route bills a GPT-5.6+ prompt's uncached remainder as the implicit cache write", () => {
     const astra = (): any => ({
       providerID: "openai",
