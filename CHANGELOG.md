@@ -319,6 +319,15 @@ public 50 the old detector named an example's `samples.csv` and the input
 - **Shell scripts and git hooks keep LF line endings on Windows checkouts.**
   With Git for Windows' default `core.autocrlf=true` they were checked out with
   CRLF and failed under bash with `$'\r': command not found`.
+- **The desktop app starts when your profile path has non-ASCII characters.** The
+  SDK sent the project directory in a request header as is, and a path such as
+  `C:\Users\Пользователь\...` is not a valid header value, so the app failed at
+  startup. The directory is now percent-encoded, as the newer client already did.
+- **Entering a session no longer rewinds a running conversation's text.** While
+  the agent was streaming, a snapshot taken as you arrived could overwrite what
+  had already arrived, and a message deleted mid-stream could reappear. The check
+  meant to prevent that was reading its change list under the wrong key.
+
 - **Code search works again, and a failed search reads as an error.** Exa
   retired the code-context tool `codesearch` called, so every search returned
   "Tool get_code_context_exa not found" as if it were the answer. The tool now
@@ -404,6 +413,13 @@ public 50 the old detector named an example's `samples.csv` and the input
   projects yet", so opening a folder whose record already existed minted a
   second identity for it and left its history stranded under the old one. The
   failure now surfaces instead of quietly forking the project.
+- **A fuzzy edit no longer deletes the indentation it matched.** When a model
+  re-quoted a line with slightly different internal spacing, the edit matched the
+  whole line, and the replacement had been written for the text that was quoted
+  rather than the padding around it — so an indented statement was replaced at
+  column 0 and the file stopped parsing. The edit now applies where the model
+  looked, at the indentation the file already had; a deliberate outdent is
+  unaffected.
 - **A slash command keeps the dollar signs you typed.** `$ARGUMENTS` was
   substituted with a string replacement, so `$$` collapsed to `$` (display math
   became inline math), `$&` came back as the placeholder itself and `$'`

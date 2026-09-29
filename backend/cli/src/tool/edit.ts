@@ -636,6 +636,8 @@ export function replace(content: string, oldString: string, newString: string, r
   }
 
   let notFound = true
+  const indent = (value: string) => /^[ \t]*/.exec(value)?.[0] ?? ""
+  const quoted = indent(oldString).length
 
   for (const replacer of [
     SimpleReplacer,
@@ -648,18 +650,32 @@ export function replace(content: string, oldString: string, newString: string, r
     ContextAwareReplacer,
     MultiOccurrenceReplacer,
   ]) {
-    for (const search of replacer(content, oldString)) {
+    for (const candidate of replacer(content, oldString)) {
+      // A fuzzy candidate can span leading whitespace the model never quoted,
+      // and the replacement was written for the text it did quote. Substituting
+      // the whole candidate would delete that padding and turn valid code into
+      // an IndentationError. Slicing off only the padding the candidate added
+      // keeps the search anchored on text the model actually wrote, where
+      // trimStart would also eat a leading newline, and re-indenting every
+      // replacement line holds a multi-line block at one depth instead of
+      // landing its first line at the file's depth and the rest at the quoted
+      // one. Compared against the quoted text rather than the replacement, so
+      // a deliberate outdent still applies.
+      const leading = indent(candidate)
+      const pad = leading.slice(0, Math.max(0, leading.length - quoted))
+      const search = candidate.slice(pad.length)
+      const replacement = pad ? newString.replaceAll("\n", `\n${pad}`) : newString
       const index = content.indexOf(search)
       if (index === -1) continue
       notFound = false
       if (replaceAll) {
-        // A string replacement still expands `$$`, `$&`, `$\`` and `$'`; the
+        // A string replacement still expands `$$`, `$&`, $`` and $'; the
         // model's text is literal, exactly as in the single-match branch.
-        return content.split(search).join(newString)
+        return content.split(search).join(replacement)
       }
       const lastIndex = content.lastIndexOf(search)
       if (index !== lastIndex) continue
-      return content.substring(0, index) + newString + content.substring(index + search.length)
+      return content.substring(0, index) + replacement + content.substring(index + search.length)
     }
   }
 
