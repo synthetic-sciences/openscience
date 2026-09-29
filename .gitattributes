@@ -1,0 +1,5 @@
+# Shell scripts keep LF on every checkout. With core.autocrlf=true (the Git for Windows
+# default) they would get CRLF and fail under bash with "$'\r': command not found".
+*.sh text eol=lf
+/install text eol=lf
+/frontend/landing/public/install text eol=lf
