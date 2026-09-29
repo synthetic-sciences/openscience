@@ -316,6 +316,10 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **The desktop app starts when your profile path has non-ASCII characters.** The
+  SDK sent the project directory in a request header as is, and a path such as
+  `C:\Users\Пользователь\...` is not a valid header value, so the app failed at
+  startup. The directory is now percent-encoded, as the newer client already did.
 - **Code search works again, and a failed search reads as an error.** Exa
   retired the code-context tool `codesearch` called, so every search returned
   "Tool get_code_context_exa not found" as if it were the answer. The tool now
