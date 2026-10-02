@@ -884,7 +884,7 @@ jobs:
         run: |
           if [[ "$OPENSCIENCE_DESKTOP_SIGNED" == "true" ]]; then
             # Repeated extensions must precede --config so electron-builder keeps the array.
-            bun run --cwd frontend/desktop electron-builder -c.win.signExts=.dll -c.win.signExts=.node --config electron-builder.mjs --publish never --${{ matrix.target }} --${{ matrix.arch }}
+            (cd frontend/desktop && bunx electron-builder -c.win.signExts=.dll -c.win.signExts=.node --config electron-builder.mjs --publish never --${{ matrix.target }} --${{ matrix.arch }})
           else
             bun run --cwd frontend/desktop dist -- --${{ matrix.target }} --${{ matrix.arch }}
           fi
