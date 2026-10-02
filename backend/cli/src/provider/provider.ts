@@ -3400,7 +3400,8 @@ export namespace Provider {
     }
 
     const providers = Object.values(available)
-    const configured = (p: Info) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)
+    const configured = (p: Info) =>
+      !Object.keys(cfg.provider ?? {}).length || Object.keys(cfg.provider ?? {}).includes(p.id)
     const candidates = providers.filter((p) => configured(p))
     const provider = candidates.find((p) => Object.keys(p.models).length > 0) ?? candidates[0]
     if (!provider) throw new Error(NO_PROVIDER_HINT)

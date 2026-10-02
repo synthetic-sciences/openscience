@@ -1089,13 +1089,14 @@ test("parseModel handles model IDs with slashes", () => {
   expect(result.modelID).toBe("anthropic/claude-3-opus")
 })
 
-test("defaultModel returns first available model when no config set", async () => {
+test.each([undefined, {}])("defaultModel finds available models with empty provider config %j", async (provider) => {
   await using tmp = await tmpdir({
     init: async (dir) => {
       await Bun.write(
         path.join(dir, "openscience.json"),
         JSON.stringify({
           $schema: "https://syntheticsciences.ai/config.json",
+          provider,
         }),
       )
     },
