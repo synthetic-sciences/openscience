@@ -76,3 +76,22 @@ test("a partly-indented line lands back at the file's depth", () => {
     ["def f():", "    if a:", "            return 42", ""].join("\n"),
   )
 })
+
+test("a whitespace-only match that resolves to nothing is not replaced", () => {
+  // A fuzzy replacer can return a candidate that is only whitespace, and
+  // dropping the padding it added leaves an empty search. An empty search
+  // matches at index 0 and then split("") breaks the content into single
+  // characters, so replaceAll wedged the replacement between every one of
+  // them: a 12-byte file came back as 23 bytes of X, and the tool reported a
+  // successful edit. These files contain no spaces at all, so "not found" is
+  // also the honest answer.
+  for (const old of ["  ", " ", "\t"]) {
+    expect(() => replace("alpha\n\nbeta\n", old, "X", true)).toThrow()
+  }
+})
+
+test("a whitespace match that is really there is still replaced", () => {
+  // The guard is about the search coming out empty, not about whitespace being
+  // forbidden: one genuine run of two spaces is still a legitimate edit.
+  expect(replace("alpha\n  \nbeta\n", "  ", "X", true)).toBe("alpha\nX\nbeta\n")
+})

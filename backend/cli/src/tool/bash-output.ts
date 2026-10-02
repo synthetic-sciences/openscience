@@ -66,6 +66,7 @@ export namespace BashOutput {
     private hitBytes = false
     private bytes = 0
     private lines = 0
+    private incomplete = false
     private sink: FileSink | undefined
     private ended = false
     private dropping: "line" | "pem" | undefined
@@ -93,14 +94,16 @@ export namespace BashOutput {
         this.flush(true)
         if (this.sink) await this.sink.end()
       }
+      const lines = this.lines + Number(this.incomplete)
+      const previewLines = this.previewLines + Number(!!this.preview && !this.preview.endsWith("\n"))
       const removed = this.hitBytes
         ? { count: this.bytes - this.previewBytes, unit: "bytes" as const }
-        : { count: this.lines - this.previewLines, unit: "lines" as const }
+        : { count: lines - previewLines, unit: "lines" as const }
       return {
         preview: this.preview,
         truncated: this.previewClosed,
         bytes: this.bytes,
-        lines: this.lines,
+        lines,
         removed,
         tail: this.previewClosed ? this.tail() : "",
       }
@@ -217,6 +220,7 @@ export namespace BashOutput {
       const newlines = count(text, "\n")
       this.bytes += size
       this.lines += newlines
+      this.incomplete = !text.endsWith("\n")
       if (this.sink) {
         this.sink.write(text)
         this.keepTail(text)
@@ -230,7 +234,8 @@ export namespace BashOutput {
         return
       }
       const fits =
-        this.previewBytes + size <= this.options.maxBytes && this.previewLines + newlines < this.options.maxLines
+        this.previewBytes + size <= this.options.maxBytes &&
+        this.previewLines + newlines + Number(this.incomplete) <= this.options.maxLines
       if (fits) {
         this.preview += text
         this.previewBytes += size
@@ -269,7 +274,7 @@ export namespace BashOutput {
           this.hitBytes = true
           break
         }
-        if (next >= 0 && lines + 1 >= lineBudget) break
+        if (lines + 1 > lineBudget) break
         bytes += size
         lines += next >= 0 ? 1 : 0
         end = stop

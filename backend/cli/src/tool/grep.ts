@@ -79,6 +79,8 @@ export const GrepTool = Tool.define("grep", {
     const args = [
       "-nH",
       "--hidden",
+      // Stabilize traversal before the bounded reader chooses the result set.
+      "--sort=path",
       "--no-messages",
       "--max-columns",
       String(MAX_LINE_LENGTH),
@@ -156,7 +158,7 @@ export const GrepTool = Tool.define("grep", {
       })
     }
 
-    matches.sort((a, b) => b.modTime - a.modTime)
+    matches.sort((a, b) => b.modTime - a.modTime || a.path.localeCompare(b.path) || a.lineNum - b.lineNum)
 
     const truncated = collected.stopped || matches.length > MAX_MATCHES
     const finalMatches = truncated ? matches.slice(0, MAX_MATCHES) : matches

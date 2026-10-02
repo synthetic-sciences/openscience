@@ -38,6 +38,34 @@ describe("BashOutput.Capture", () => {
     expect(sink.opened).toBe(0)
   })
 
+  test("output of exactly the line limit keeps every line", async () => {
+    // The line test was a strict `<` while the byte test beside it was `<=`, so
+    // the effective limit was one line short of the advertised one: a command
+    // printing exactly maxLines lines lost its last line, was reported as
+    // truncated, and had its whole output copied to a second file.
+    await using sink = await scratch()
+    const options = { redact: identity, maxBytes: 1024, maxLines: 5, open: () => sink.open() }
+
+    const exact = new BashOutput.Capture(options)
+    exact.write("l1\nl2\nl3\nl4\nl5\n")
+    expect(await exact.end()).toMatchObject({
+      preview: "l1\nl2\nl3\nl4\nl5\n",
+      truncated: false,
+      lines: 5,
+      removed: { count: 0, unit: "lines" },
+    })
+
+    // One line over still truncates, and now reports the one line it dropped
+    // rather than two.
+    const over = new BashOutput.Capture(options)
+    over.write("l1\nl2\nl3\nl4\nl5\nl6\n")
+    expect(await over.end()).toMatchObject({
+      preview: "l1\nl2\nl3\nl4\nl5\n",
+      truncated: true,
+      removed: { count: 1, unit: "lines" },
+    })
+  })
+
   test("streams the full redacted output to the owned file once the preview overflows", async () => {
     await using sink = await scratch()
     const redact = (text: string) => text.replaceAll("sk-secret1234", "[REDACTED]")
@@ -48,8 +76,11 @@ describe("BashOutput.Capture", () => {
 
     expect(summary.truncated).toBe(true)
     expect(summary.lines).toBe(lines)
-    expect(summary.removed).toEqual({ count: lines - 99, unit: "lines" })
-    expect(summary.preview.split("\n")).toHaveLength(100)
+    // The preview holds the full 100-line budget, not 99: the line test was a
+    // strict `<` while the byte test beside it was `<=`, so the old expectation
+    // below was recording the off-by-one this suite now pins.
+    expect(summary.removed).toEqual({ count: lines - 100, unit: "lines" })
+    expect(summary.preview.split("\n")).toHaveLength(101)
     expect(summary.preview).not.toContain("sk-secret1234")
     expect(sink.opened).toBe(1)
     const saved = await sink.text()
@@ -227,4 +258,22 @@ describe("BashOutput.Capture", () => {
     expect(grown).toBeLessThan(8 * 1024 * 1024)
     expect((await fs.stat(sink.file)).size).toBe(chunk.length * chunks)
   })
+})
+
+test("the final unterminated line consumes the same budget across chunks", async () => {
+  for (const chunks of [["a\nb\nc"], ["a\n", "b\n", "c"], ["a\nb\nc\n"]]) {
+    await using sink = await scratch()
+    const capture = new BashOutput.Capture({ redact: identity, maxBytes: 1024, maxLines: 2, open: () => sink.open() })
+    for (const chunk of chunks) capture.write(chunk)
+    expect(await capture.end()).toMatchObject({
+      preview: "a\nb\n",
+      lines: 3,
+      truncated: true,
+      removed: { count: 1, unit: "lines" },
+    })
+  }
+  await using sink = await scratch()
+  const capture = new BashOutput.Capture({ redact: identity, maxBytes: 1024, maxLines: 2, open: () => sink.open() })
+  capture.write("a\nb")
+  expect(await capture.end()).toMatchObject({ preview: "a\nb", lines: 2, truncated: false })
 })

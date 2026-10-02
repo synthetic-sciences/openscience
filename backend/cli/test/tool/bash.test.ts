@@ -11,6 +11,7 @@ import { SessionFilesystem } from "../../src/session/filesystem"
 import { Shell } from "../../src/shell/shell"
 import { Config } from "../../src/config/config"
 import { Filesystem } from "../../src/util/filesystem"
+import { Tool } from "../../src/tool/tool"
 
 async function context() {
   const session = await executionSession()
@@ -622,4 +623,29 @@ describe("tool.bash truncation", () => {
 
 test("a command with no timeout given runs for at most twenty minutes by default", () => {
   expect(DEFAULT_BASH_TIMEOUT_MS).toBe(20 * 60_000)
+})
+
+test("a timeout of zero is refused instead of removing the only bound", async () => {
+  // `timeout > 0` is what arms the timer, so a zero used to pass validation and
+  // then run the command with no timer at all — and because `0 ?? default` is 0,
+  // the twenty-minute default did not cover for it either.
+  const bash = await BashTool.init()
+  const call = (timeout: unknown) => Tool.validate("bash", bash, { command: "sleep 1", description: "Wait", timeout })
+  expect(call(0).success).toBe(false)
+  expect(call(-1).success).toBe(false)
+  expect(call(Number.NaN).success).toBe(false)
+  expect(call(1200).success).toBe(true)
+  expect(call(undefined).success).toBe(true)
+})
+
+test("direct execution refuses zero before running the command", async () => {
+  await Instance.provide({
+    directory: projectRoot,
+    fn: async () => {
+      const bash = await BashTool.init()
+      await expect(
+        bash.execute({ command: "echo should-not-run", description: "Timeout check", timeout: 0 }, await context()),
+      ).rejects.toThrow("No command was run.")
+    },
+  })
 })

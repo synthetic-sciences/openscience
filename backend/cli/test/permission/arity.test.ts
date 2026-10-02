@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test"
+import { Wildcard } from "../../src/util/wildcard"
 import { BashArity } from "../../src/permission/arity"
 
 test("arity 1 - unknown commands default to first token", () => {
@@ -30,4 +31,18 @@ test("edge cases", () => {
   expect(BashArity.prefix([])).toEqual([])
   expect(BashArity.prefix(["single"])).toEqual(["single"])
   expect(BashArity.prefix(["git"])).toEqual(["git"])
+})
+
+test("flags before a subcommand keep a literal scope through the approved command", () => {
+  for (const [approved, other] of [
+    [["git", "--no-pager", "log"], "git --no-pager status"],
+    [["npm", "--prefix", "/x", "run", "dev"], "npm --prefix /x run build"],
+    [["docker", "--config", "run", "ps"], "docker --config run exec"],
+    [["npm", "run", "--silent", "dev"], "npm run --silent build"],
+  ] as const) {
+    const scope = BashArity.prefix([...approved]).join(" ") + "*"
+    expect(Wildcard.match(approved.join(" "), scope)).toBe(true)
+    expect(Wildcard.match(other, scope)).toBe(false)
+  }
+  expect(BashArity.prefix(["git", "log", "--oneline"])).toEqual(["git", "log"])
 })
