@@ -43,6 +43,12 @@ Common declared formats include FASTA, PDB, CIF, and SDF, depending on the datab
 
 ## Validate the retrieved material
 
+### Find a simulation tool with BioSimulators
+
+Search `biosimulators` for `SBML CVODE`, `KISAO:0000019`, `CellML`, `NeuroML`, or `BNGL`. Combined model-format and algorithm queries match a single supported capability. Search results include versioned identifiers, so fetching a selected result preserves its version.
+
+Fetch `tellurium` for its latest registry record or `tellurium/2.2.10` for an exact version. The record describes supported formats, algorithms, and installation metadata; this connector does not execute simulations. No API key is required. Enable **Genomics and biology** in Network settings if the source needs approval.
+
 | Material | Checks to request |
 | --- | --- |
 | Sequence | Organism, accession/version, alphabet, length, record count. |

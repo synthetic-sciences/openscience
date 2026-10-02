@@ -15,7 +15,7 @@ These are built-in database connections. Use [Connectors and MCP](/openscience/c
 
 | Source and documentation | Identifier | Records and uses | Declared formats |
 | --- | --- | --- | --- |
-| [BioSimulators](https://biosimulators.org) | `biosimulators` | Simulation tools by name, KiSAO algorithm, or model format. Public registry lookup; does not run simulations. | Structured record |
+| [BioSimulators](https://biosimulators.org) | `biosimulators` | Find simulation tools by name, KiSAO algorithm, or model format (SBML, CellML, NeuroML, BNGL). Registry lookup only. | Structured record |
 | [KEGG](https://www.kegg.jp) | `kegg` | KEGG pathway maps, modules, orthologs, compounds, and reactions. | `fasta` |
 | [Reactome](https://reactome.org) | `reactome` | Curated biological pathways, reactions, and molecular events. | Structured record |
 | [WikiPathways](https://www.wikipathways.org) | `wikipathways` | Community-curated biological pathways across many species. | Structured record |
@@ -92,8 +92,6 @@ These are built-in database connections. Use [Connectors and MCP](/openscience/c
 ## How to search and fetch
 
 Choose a source above and ask for a bounded query. Select an identifier from the results, then request a structured record or one of that source's declared formats. See [Database workflows](/openscience/database-workflows) for complete examples, output checks, and source-error handling.
-
-For BioSimulators, try `SBML CVODE`, `KISAO:0000019`, `CellML`, `NeuroML`, or `BNGL`. Fetch `tellurium` for its latest registry record or `tellurium/2.2.10` for an exact version. Search results include a versioned identifier so fetching a result preserves that version. No API key is required; enable **Genomics and biology** in Network settings if the source needs approval.
 
 ## Check source records
 
