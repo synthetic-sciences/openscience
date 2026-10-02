@@ -382,14 +382,21 @@ export namespace SessionCompaction {
   /** The text of a typed request as the person wrote it, bounded to an
    * excerpt that keeps the opening ask and the closing instructions. */
   export function requestText(message: MessageV2.WithParts, max = REQUEST_EXCERPT_CHARS) {
+    if (max <= 0) return ""
     const text = message.parts
       .flatMap((part) => (part.type === "text" && !part.synthetic && !part.ignored ? [part.text] : []))
       .join("\n")
       .trim()
     if (text.length <= max) return text
     const tail = Math.floor(max / 4)
-    const omitted = text.length - (max - tail)
-    return `${text.slice(0, max - tail).trimEnd()}\n[… ${omitted.toLocaleString("en-US")} characters omitted …]\n${text.slice(-tail).trimStart()}`
+    // The excerpt quotes a head and a tail, so counting only the head the marker
+    // overstates the request by everything the tail keeps, and the trims drop the
+    // whitespace on both cuts on top. This count is the summarizer's only evidence
+    // of how large the request was, so it has to be the characters really gone.
+    const head = text.slice(0, max - tail).trimEnd()
+    const foot = tail > 0 ? text.slice(-tail).trimStart() : ""
+    const omitted = text.length - head.length - foot.length
+    return `${head}\n[… ${omitted.toLocaleString("en-US")} characters omitted …]\n${foot}`
   }
 
   /** The largest request a compaction pins verbatim. A pinned request rides

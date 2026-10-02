@@ -235,6 +235,9 @@ export namespace SessionLoopState {
    * carry no request text, so they must not push the real prompt out of the
    * window a long tool loop routes tools and skills from. */
   export function externalPrompts(messages: MessageV2.WithParts[], limit = 4, tail = 8_000) {
+    // slice(-0) is slice(0), which keeps the whole prompt, so a zero bound has
+    // to be answered before the slice instead of by it.
+    if (limit <= 0 || tail <= 0) return ""
     return messages
       .filter(external)
       .slice(-limit)
