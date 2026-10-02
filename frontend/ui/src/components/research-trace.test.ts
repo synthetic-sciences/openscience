@@ -288,6 +288,16 @@ describe("delegation summaries", () => {
     expect(formatTaskDuration(7_800)).toBe("7.8s")
     expect(formatTaskDuration(125_000)).toBe("2m 5s")
   })
+
+  test("never prints a 60 in the smaller unit", () => {
+    // The remainder was rounded while the larger unit was floored, so a value
+    // within half a second of the next minute printed an impossible "1m 60s".
+    expect(formatTaskDuration(119_999)).toBe("1m 59s")
+    expect(formatTaskDuration(3_599_999)).toBe("59m 59s")
+    expect(formatTaskDuration(7_199_999)).toBe("1h 59m")
+    // The same input through the ticking counter, which floors throughout.
+    expect(elapsedLabel(119_999)).toBe("1m 59s")
+  })
 })
 
 describe("parseTaskHandoff", () => {
