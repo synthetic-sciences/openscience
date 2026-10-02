@@ -6,6 +6,7 @@ import { ExecutionAuthority } from "../../src/project/execution"
 import { Project } from "../../src/project/project"
 import { ProjectTrust } from "../../src/project/trust"
 import { Pty } from "../../src/pty"
+import { Shell } from "../../src/shell/shell"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { KernelRuntime } from "../../src/science/kernel/registry"
 import { Server } from "../../src/server/server"
@@ -399,3 +400,62 @@ test("terminals follow the selected connected working folder and explicit scratc
     },
   })
 })
+
+test.skipIf(process.platform === "win32")(
+  "Claude launcher runs the installed command once in the selected folder",
+  async () => {
+    await using project = await tmpdir({ git: true })
+    await using folder = await tmpdir()
+    await using profile = await tmpdir()
+    const shell = Shell.preferred()
+    if (!/\/(zsh|bash)$/.test(shell)) return
+    const script = `${profile.path}/bin/claude`
+    await Bun.write(
+      script,
+      "#!/bin/sh\npwd > .claude-launch-test.tmp\nmv .claude-launch-test.tmp .claude-launch-test\nprintf 'CLI_LAUNCHED\\n'\n",
+    )
+    await Bun.$`chmod +x ${script}`.quiet()
+    const config = `export PATH='${profile.path}/bin':$PATH\n`
+    await Bun.write(`${profile.path}/.zprofile`, config)
+    await Bun.write(`${profile.path}/.bash_profile`, config)
+    const previous = { HOME: process.env.HOME, ZDOTDIR: process.env.ZDOTDIR }
+    process.env.HOME = profile.path
+    process.env.ZDOTDIR = profile.path
+    try {
+      await Instance.provide({
+        directory: project.path,
+        fn: async () => {
+          const session = await Session.create({})
+          await SessionFilesystem.grant({
+            sessionID: session.id,
+            path: folder.path,
+            access: "write",
+            scope: "session",
+            source: "api",
+          })
+          const terminal = await Pty.create({ sessionID: session.id, program: "claude" })
+          try {
+            expect(terminal.title).toBe("Claude Code")
+            expect(terminal.program).toBe("claude")
+            expect(terminal.cwd).toBe(folder.path)
+            const marker = `${folder.path}/.claude-launch-test`
+            for (let attempt = 0; attempt < 100 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(50)
+            expect((await Bun.file(marker).text()).trim().split("\n")).toEqual([folder.path])
+            expect(Pty.get(terminal.id)?.status).toBe("running")
+            expect(Pty.CreateInput.safeParse({ sessionID: session.id, program: "claude; injected" }).success).toBe(
+              false,
+            )
+          } finally {
+            await Pty.remove(terminal.id)
+            await Session.remove(session.id)
+          }
+        },
+      })
+    } finally {
+      for (const key of ["HOME", "ZDOTDIR"] as const) {
+        if (previous[key] === undefined) delete process.env[key]
+        else process.env[key] = previous[key]
+      }
+    }
+  },
+)

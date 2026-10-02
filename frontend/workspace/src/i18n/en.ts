@@ -1,4 +1,7 @@
 export const dict = {
+  "terminal.claude.open": "Open Claude Code",
+  "terminal.claude.description":
+    "Run the installed Claude CLI in your working folder using its own login and permissions",
   "settings.shell.title": "Settings",
   "settings.shell.sections": "Settings sections",
   "settings.shell.back": "Back",

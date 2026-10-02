@@ -1,6 +1,7 @@
 import { createEffect, createMemo, For, on, Show, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { preloadTerminal, Terminal, type TerminalController, type TerminalSearchResult } from "@/components/terminal"
+import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useTerminal } from "@/context/terminal"
 import {
@@ -21,6 +22,7 @@ const EMPTY_RESULT: TerminalSearchResult = { current: 0, total: 0 }
 
 export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
   preloadTerminal()
+  const language = useLanguage()
   const sdk = useSDK()
   const terminal = useTerminal()
   const authority = useExecutionAuthority("terminal")
@@ -72,7 +74,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
     ),
   )
 
-  const launch = () => {
+  const launch = (program?: "claude") => {
     if (!available() || state.starting) return
     if (!authority.allowed()) {
       setState("error", authority.message() ?? "This session cannot start a terminal.")
@@ -80,7 +82,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
     }
     setState({ starting: true, connecting: true, error: "" })
     void terminal
-      .new()
+      .new({ program })
       .then(() => setState("error", ""))
       .catch((cause: unknown) => {
         setState({
@@ -175,7 +177,7 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
                 <p>Start a clean shell in this session. Open another tab only when you need parallel work.</p>
                 <button
                   type="button"
-                  onClick={launch}
+                  onClick={() => launch()}
                   disabled={state.starting || !authority.allowed()}
                   title={authority.message()}
                   data-modal-initial-focus
@@ -215,7 +217,18 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
               <button
                 type="button"
                 class="terminal-surface__new"
-                onClick={launch}
+                onClick={() => launch("claude")}
+                disabled={!available() || state.starting || !authority.allowed()}
+                title={authority.message() ?? language.t("terminal.claude.description")}
+                aria-label={language.t("terminal.claude.open")}
+              >
+                <IconTerminal size={12} strokeWidth={1.5} />
+                <span>Claude Code</span>
+              </button>
+              <button
+                type="button"
+                class="terminal-surface__new"
+                onClick={() => launch()}
                 disabled={!available() || state.starting || !authority.allowed()}
                 title={authority.message() ?? "New terminal"}
                 aria-label={state.starting ? "Starting terminal" : "New terminal"}

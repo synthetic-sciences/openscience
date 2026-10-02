@@ -3187,6 +3187,7 @@ export class Pty extends HeyApiClient {
       directory?: string
       sessionID: string
       title?: string
+      program?: "claude"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3198,6 +3199,7 @@ export class Pty extends HeyApiClient {
             { in: "query", key: "directory" },
             { in: "body", key: "sessionID" },
             { in: "body", key: "title" },
+            { in: "body", key: "program" },
           ],
         },
       ],

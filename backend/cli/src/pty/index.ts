@@ -34,6 +34,7 @@ export namespace Pty {
     .object({
       id: Identifier.schema("pty"),
       title: z.string(),
+      program: z.literal("claude").optional(),
       command: z.string(),
       args: z.array(z.string()),
       cwd: z.string(),
@@ -50,6 +51,7 @@ export namespace Pty {
   export const CreateInput = z.object({
     sessionID: z.string().startsWith("ses_"),
     title: z.string().optional(),
+    program: z.literal("claude").optional(),
   })
 
   export type CreateInput = z.infer<typeof CreateInput>
@@ -253,7 +255,8 @@ export namespace Pty {
 
         const info = {
           id,
-          title: input.title || `Terminal ${id.slice(-4)}`,
+          title: input.title || (input.program === "claude" ? "Claude Code" : `Terminal ${id.slice(-4)}`),
+          program: input.program,
           command,
           args,
           cwd,
@@ -272,6 +275,9 @@ export namespace Pty {
         }
         sessions.set(id, session)
         handedOff = true
+        // Fixed input is queued only for an explicitly selected user terminal.
+        // The login shell resolves the CLI using the user’s own setup.
+        if (input.program === "claude") ptyProcess.write("claude\r")
         void Bus.publish(Event.Created, { info })
         return info
       } finally {

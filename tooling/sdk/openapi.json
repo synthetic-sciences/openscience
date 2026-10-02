@@ -26876,6 +26876,10 @@
                   },
                   "title": {
                     "type": "string"
+                  },
+                  "program": {
+                    "type": "string",
+                    "const": "claude"
                   }
                 },
                 "required": [
@@ -60398,6 +60402,10 @@
           },
           "title": {
             "type": "string"
+          },
+          "program": {
+            "type": "string",
+            "const": "claude"
           },
           "command": {
             "type": "string"

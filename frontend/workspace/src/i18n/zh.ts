@@ -3,6 +3,8 @@ import { dict as en } from "./en"
 type Keys = keyof typeof en
 
 export const dict = {
+  "terminal.claude.open": "打开 Claude Code",
+  "terminal.claude.description": "在工作目录中运行已安装的 Claude CLI，使用其自身的登录信息和权限",
   "settings.shell.title": "设置",
   "settings.shell.sections": "设置分类",
   "settings.shell.back": "后退",

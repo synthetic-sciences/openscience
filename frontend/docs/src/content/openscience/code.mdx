@@ -40,6 +40,16 @@ Use Control+backtick to open or close the terminal and Control+Shift+backtick fo
 
 Confirm the working directory and selected environment before running a command. The terminal's environment need not contain every package available to the agent's Python or R analysis environment.
 
+## Use Claude Code with its own login
+
+Choose **Claude Code** beside **New** in the Terminal panel to launch your installed `claude` command in the selected working folder. This opens the interactive CLI: Claude handles its own login, streaming output, tool approvals, and conversation history. It uses your Claude account, without requiring an Anthropic API key in OpenScience.
+
+Install [Claude Code](https://code.claude.com/docs/en/setup) on the machine running the workspace first. If the shell reports `claude: command not found`, install it there or fix that shell's PATH, then run `claude` in the same tab. Follow the CLI's sign-in instructions if you are not logged in.
+
+Use Claude's interruption controls to stop a response and `/exit` to return to the shell. Run `claude --continue` to continue the most recent conversation in that folder, or `claude --resume` to choose a conversation. Closing the terminal stops its processes; reconnecting starts a new CLI process and does not automatically replay a prompt. The research chat's model selection is independent of this terminal session.
+
+Claude Code launched here has the same normal local-terminal access as a command you type yourself. OpenScience's research-agent tools continue to use their configured sandbox. On a remote workspace, install and sign in to Claude on that server.
+
 ## Keep version control deliberate
 
 Ask OpenScience to inspect the working tree before modifying an existing repository. Describe whether you want a local change, commit, branch, or pull request, and which actions require your review.

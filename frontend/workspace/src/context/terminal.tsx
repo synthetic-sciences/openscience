@@ -8,6 +8,7 @@ import { Persist, persisted } from "@/utils/persist"
 export type LocalPTY = {
   id: string
   title: string
+  program?: "claude"
   titleNumber: number
   /** Session whose execution authority created this project terminal. */
   sessionID?: string
@@ -78,6 +79,7 @@ function createProjectTerminalSession(
             ...remembered,
             id: pty.id,
             title: pty.title,
+            program: pty.program,
             titleNumber: remembered?.titleNumber ?? numberFromTitle(pty.title) ?? index + 1,
             sessionID: pty.sessionID,
           } satisfies LocalPTY
@@ -149,7 +151,7 @@ function createProjectTerminalSession(
     ready: () => persistenceReady() && hydrated(),
     all: createMemo(() => Object.values(store.all)),
     active: createMemo(() => store.active),
-    new(opts?: { title?: string }) {
+    new(opts?: { title?: string; program?: "claude" }) {
       const session = currentSession()
       if (!session || session === "new") {
         return Promise.reject(new Error("Create or open a session before starting a terminal."))
@@ -172,7 +174,8 @@ function createProjectTerminalSession(
       return client.pty
         .create({
           sessionID: session,
-          title: opts?.title ?? `Terminal ${nextNumber}`,
+          title: opts?.title ?? (opts?.program === "claude" ? "Claude Code" : `Terminal ${nextNumber}`),
+          program: opts?.program,
         })
         .then((pty) => {
           const id = pty.data?.id
@@ -180,6 +183,7 @@ function createProjectTerminalSession(
           const newTerminal = {
             id,
             title: pty.data?.title ?? "Terminal",
+            program: pty.data?.program,
             titleNumber: nextNumber,
             sessionID: pty.data?.sessionID ?? session,
           }
@@ -221,6 +225,7 @@ function createProjectTerminalSession(
       const clone = await client.pty.create({
         sessionID: session,
         title: pty.title,
+        program: pty.program,
       })
       if (!clone.data) throw new Error("The server did not return a replacement terminal.")
 
@@ -228,6 +233,7 @@ function createProjectTerminalSession(
       const replacement = {
         id: clone.data.id,
         title: clone.data.title ?? pty.title,
+        program: clone.data.program,
         titleNumber: pty.titleNumber,
         sessionID: clone.data.sessionID ?? session,
       }
@@ -348,7 +354,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: (opts?: { title?: string }) => workspace().new(opts),
+      new: (opts?: { title?: string; program?: "claude" }) => workspace().new(opts),
       update: (pty: Partial<LocalPTY> & { id: string }) => owner(pty.id).update(pty),
       clone: (id: string) => owner(id).clone(id),
       open: (id: string) => owner(id).open(id),

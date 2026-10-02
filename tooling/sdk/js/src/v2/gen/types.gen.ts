@@ -1237,6 +1237,7 @@ export type EventSessionError = {
 export type Pty = {
   id: string
   title: string
+  program?: "claude"
   command: string
   args: Array<string>
   cwd: string
@@ -10923,6 +10924,7 @@ export type PtyCreateData = {
   body?: {
     sessionID: string
     title?: string
+    program?: "claude"
   }
   path?: never
   query?: {
