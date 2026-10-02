@@ -198,7 +198,7 @@
    an outer surface, while the controls retain their own quiet input fill. */
 .models-provider-key-form {
   display: grid;
-  grid-template-columns: minmax(170px, 0.65fr) minmax(220px, 1fr) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
   gap: var(--models-gap-2);
   padding: 10px var(--models-gap-3);
@@ -212,6 +212,11 @@
   min-width: 0;
   flex-direction: column;
   gap: var(--models-gap-1);
+}
+
+.models-provider-key-form .models-save-key {
+  grid-column: 1 / -1;
+  justify-self: end;
 }
 
 .models-provider-select {

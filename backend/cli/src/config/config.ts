@@ -2058,7 +2058,7 @@ export namespace Config {
       const parsed = parseConfig(protectedText, filepath)
       global.reset()
       if (scope === "global") {
-        await disposeGlobalInstances({ strict: target[0] === "mcp" })
+        await disposeGlobalInstances({ strict: target[0] === "mcp", preserveInstances: target[0] === "provider" })
       } else {
         await Instance.dispose({ strict: target[0] === "mcp" })
       }

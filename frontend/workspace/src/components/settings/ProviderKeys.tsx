@@ -1,4 +1,6 @@
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { McpUrl } from "@synsci/util/mcp-url"
+import { For, Show, createMemo } from "solid-js"
+import { createStore, produce } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { Select } from "@synsci/ui/select"
@@ -67,10 +69,23 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
   const providers = useProviders()
   const dialog = useDialog()
   const language = useLanguage()
-  const [provider, setProvider] = createSignal<string>(MODEL_PROVIDERS[0].id)
-  const [key, setKey] = createSignal("")
-  const [adding, setAdding] = createSignal(false)
-  const [saving, setSaving] = createSignal(false)
+  const [form, setForm] = createStore({
+    provider: MODEL_PROVIDERS[0].id as string,
+    key: "",
+    adding: false,
+    saving: false,
+    baseURL: "",
+    api: "responses" as "responses" | "chat",
+  })
+  const selectProvider = (id: string) => {
+    const options = sync.data.config.provider?.[id]?.options
+    setForm({
+      provider: id,
+      key: "",
+      baseURL: options?.baseURL ?? "",
+      api: options?.api === "chat" ? "chat" : "responses",
+    })
+  }
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const connected = createMemo(() =>
     providers
@@ -84,52 +99,79 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
     void sync.refreshProviders().catch((error) => props.onError?.(language.t(failed, { reason: reason(error) })))
   }
   const save = async () => {
-    const value = key().trim()
-    if (!value || saving()) return
+    const value = form.key.trim()
+    if (!value || form.saving) return
     // An Ace key is a Wallet credential, not a provider key: say where it goes
     // instead of letting the server's refusal explain it.
     if (/^(?:osk_|thk_|thk-)/.test(value)) {
       props.onError?.(language.t("settings.providerKeys.aceKey"))
       return
     }
-    setSaving(true)
+    if (form.baseURL.trim()) {
+      const url = URL.canParse(form.baseURL.trim()) ? new URL(form.baseURL.trim()) : undefined
+      if (
+        !url ||
+        McpUrl.networkProblem(url, "Base URL", true) ||
+        url.search ||
+        url.hash ||
+        /\/(?:responses|chat\/completions|messages)\/?$/.test(url.pathname)
+      ) {
+        props.onError?.(language.t("settings.providerKeys.invalidURL"))
+        return
+      }
+    }
+    setForm("saving", true)
     props.onError?.(undefined)
     try {
-      await sdk.client.auth.set({ providerID: provider(), auth: { type: "api", key: value } })
-      setKey("")
-      setAdding(false)
+      await sdk.client.auth.connection({ providerID: form.provider, key: value, baseURL: form.baseURL, api: form.api })
+      sync.set(
+        "config",
+        produce((config) => {
+          config.provider ??= {}
+          config.provider[form.provider] ??= {}
+          const provider = config.provider[form.provider]
+          provider.options ??= {}
+          const base = form.baseURL.trim().replace(/\/+$/, "")
+          if (base) provider.options.baseURL = base
+          else delete provider.options.baseURL
+          if (form.provider === "openai") provider.options.api = form.api
+        }),
+      )
+      setForm("key", "")
+      setForm("adding", false)
       // The credential is on disk now. Re-enable the form before rebuilding
-      // the large provider catalog; auth.set already invalidates the server's
+      // the large provider catalog; auth.connection already invalidates the server's
       // provider map, so disposing every workspace here only added latency.
-      setSaving(false)
+      setForm("saving", false)
       refreshAfterSave("settings.providerKeys.saved.reloadFailed")
     } catch (error) {
-      props.onError?.(reason(error))
+      props.onError?.(language.t("settings.providerKeys.saveFailed"))
     } finally {
-      setSaving(false)
+      setForm("saving", false)
     }
   }
 
   const remove = async (providerID: string) => {
-    if (saving()) return
+    if (form.saving) return
     const label = MODEL_PROVIDER_LABELS[providerID] ?? providerID
     const confirmed = await confirmDialog(dialog, {
+      cancelLabel: language.t("common.cancel"),
       title: language.t("settings.providerKeys.remove.title", { provider: label }),
       message: language.t("settings.providerKeys.remove.message"),
       confirmLabel: language.t("settings.providerKeys.remove.confirm"),
       danger: true,
     })
     if (!confirmed) return
-    setSaving(true)
+    setForm("saving", true)
     props.onError?.(undefined)
     try {
       await sdk.client.auth.remove({ providerID })
-      setSaving(false)
+      setForm("saving", false)
       refreshAfterSave("settings.providerKeys.removed.reloadFailed")
     } catch (error) {
       props.onError?.(reason(error))
     } finally {
-      setSaving(false)
+      setForm("saving", false)
     }
   }
 
@@ -151,20 +193,21 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
             type="button"
             size="small"
             variant="secondary"
-            aria-expanded={adding()}
+            aria-expanded={form.adding}
             aria-controls="models-add-provider-key"
-            disabled={saving()}
+            disabled={form.saving}
             onClick={() => {
-              if (adding()) setKey("")
-              setAdding((open) => !open)
+              if (form.adding) setForm("key", "")
+              else selectProvider(form.provider)
+              setForm("adding", (open) => !open)
             }}
           >
-            {adding() ? language.t("common.cancel") : language.t("settings.providerKeys.add")}
+            {form.adding ? language.t("common.cancel") : language.t("settings.providerKeys.add")}
           </Button>
         </span>
       </div>
 
-      <Show when={adding()}>
+      <Show when={form.adding}>
         <form
           id="models-add-provider-key"
           class="settings-provider-key-form models-provider-key-form"
@@ -180,11 +223,11 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                 aria-label={language.t("settings.providerKeys.field.provider.ariaLabel")}
                 class="models-provider-options"
                 options={[...MODEL_PROVIDERS]}
-                current={modelProvider(provider())}
+                current={modelProvider(form.provider)}
                 value={(item) => item.id}
                 label={(item) => item.label}
-                disabled={saving()}
-                onSelect={(item) => item && setProvider(item.id)}
+                disabled={form.saving}
+                onSelect={(item) => item && selectProvider(item.id)}
                 variant="secondary"
                 size="small"
                 triggerVariant="settings"
@@ -201,21 +244,63 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
               type="password"
               autocomplete="off"
               spellcheck={false}
-              disabled={saving()}
-              value={key()}
-              onInput={(event) => setKey(event.currentTarget.value)}
-              placeholder={modelProvider(provider()).placeholder}
+              disabled={form.saving}
+              value={form.key}
+              onInput={(event) => setForm("key", event.currentTarget.value)}
+              placeholder={modelProvider(form.provider).placeholder}
               class="settings-field settings-provider-key models-key-input"
             />
           </label>
+          <label class="models-key-field">
+            <span class="text-12-medium text-text-weak">{language.t("settings.providerKeys.baseURL")}</span>
+            <input
+              type="url"
+              autocomplete="off"
+              spellcheck={false}
+              disabled={form.saving}
+              value={form.baseURL}
+              onInput={(event) => setForm("baseURL", event.currentTarget.value)}
+              placeholder={
+                form.provider === "anthropic" ? "https://api.anthropic.com/v1" : "https://api.example.com/v1"
+              }
+              class="settings-field models-key-input"
+            />
+            <span class="text-12-regular text-text-weak">{language.t("settings.providerKeys.baseURL.help")}</span>
+          </label>
+          <Show
+            when={form.provider === "openai"}
+            fallback={
+              <span class="text-12-regular text-text-weak">
+                {language.t(
+                  form.provider === "anthropic"
+                    ? "settings.providerKeys.anthropicProtocol"
+                    : "settings.providerKeys.providerProtocol",
+                )}
+              </span>
+            }
+          >
+            <label class="models-key-field">
+              <span class="text-12-medium text-text-weak">{language.t("settings.providerKeys.protocol")}</span>
+              <select
+                class="settings-field models-key-input"
+                value={form.api}
+                disabled={form.saving}
+                onChange={(event) => setForm("api", event.currentTarget.value === "chat" ? "chat" : "responses")}
+              >
+                <option value="responses">OpenAI Responses</option>
+                <option value="chat">OpenAI Chat Completions</option>
+              </select>
+              <span class="text-12-regular text-text-weak">{language.t("settings.providerKeys.protocol.help")}</span>
+            </label>
+          </Show>
           <Button
             class="settings-panel-action models-primary-action models-save-key"
             type="submit"
             size="small"
             variant="primary"
-            disabled={saving() || !key().trim()}
+            disabled={form.saving || !form.key.trim()}
           >
-            {saving() ? language.t("settings.saving") : language.t("settings.providerKeys.save")}
+            {form.saving ? language.t("settings.saving") : language.t("settings.providerKeys.save")}
           </Button>
         </form>
       </Show>
@@ -257,7 +342,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
                       class="settings-panel-action settings-panel-action--quiet models-secondary-action"
                       size="small"
                       variant="secondary"
-                      disabled={saving()}
+                      disabled={form.saving}
                       onClick={() => void remove(item.id)}
                     >
                       {language.t("settings.providerKeys.remove")}
@@ -269,7 +354,7 @@ export function ProviderKeys(props: { onError?: (error: string | undefined) => v
           </For>
         </div>
       </Show>
-      <Show when={connected().length === 0 && !adding()}>
+      <Show when={connected().length === 0 && !form.adding}>
         <p class="models-provider-empty" role="status">
           {language.t("settings.providerKeys.empty")}
         </p>

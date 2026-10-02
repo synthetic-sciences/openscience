@@ -1,3 +1,5 @@
+import { ConnectorFormError } from "./form-error"
+
 export function parseConnectorCommand(input: string): string[] {
   const state = {
     quote: "",
@@ -45,8 +47,8 @@ export function parseConnectorCommand(input: string): string[] {
     state.started = true
   }
 
-  if (state.escape) throw new Error("Command cannot end with an unfinished escape")
-  if (state.quote) throw new Error(`Command has an unclosed ${state.quote} quote`)
+  if (state.escape) throw new ConnectorFormError("settings.validation.escape")
+  if (state.quote) throw new ConnectorFormError("settings.validation.quote", { quote: state.quote })
   push()
   return result
 }

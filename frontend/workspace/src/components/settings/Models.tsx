@@ -1,3 +1,4 @@
+import { useLanguage } from "@/context/language"
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
@@ -20,6 +21,7 @@ import {
 import { resolveModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
 import { ModelRateDetails } from "./ModelRateDetails"
 import { CodexConnection } from "./CodexConnection"
+import { SearchConnections } from "./SearchConnections"
 import { ProviderKeys } from "./ProviderKeys"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 import { FilterMenu, PanelBody, PanelHeader, PanelScroll, RowCopy, SearchInput, Section, steady } from "./_shared"
@@ -87,14 +89,18 @@ function takeModelGroups<T>(groups: OptionGroup<T>[], limit: number): OptionGrou
   return result
 }
 
-const scopes: Array<{ id: Scope; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "reasoning", label: "Reasoning" },
-  { id: "latest", label: "Latest" },
-  { id: "long", label: "Long context" },
+const scopes: Array<{
+  id: Scope
+  label: "settings.models.all" | "settings.models.reasoning" | "settings.models.latest" | "settings.models.long"
+}> = [
+  { id: "all", label: "settings.models.all" },
+  { id: "reasoning", label: "settings.models.reasoning" },
+  { id: "latest", label: "settings.models.latest" },
+  { id: "long", label: "settings.models.long" },
 ]
 
 export default function Models() {
+  const language = useLanguage()
   const sync = useGlobalSync()
   const sdk = useGlobalSDK()
   const models = useModels()
@@ -208,7 +214,7 @@ export default function Models() {
     const total = filtered().length
     setRenderLimit(Math.min(24, total))
   })
-  const [notice, setNotice] = createSignal("Pinned models appear first. Hidden models stay out of the picker.")
+  const [notice, setNotice] = createSignal<string>()
   const pinnedCount = createMemo(() => options().filter((model) => model.pinned).length)
   const visibleCount = createMemo(() => options().filter((model) => model.visible).length)
   const workerOptions = createMemo<WorkerOption[]>(() => {
@@ -249,12 +255,12 @@ export default function Models() {
         ? ({
             value: `saved:${modelRouteValue(selected)}`,
             label: modelDisplayName(selected.modelID, selected.providerID, selected.modelID),
-            provider: `Saved · ${selected.providerID}`,
+            provider: language.t("settings.models.saved", { provider: selected.providerID }),
             providerLogo: selected.providerID,
             model: selected,
           } satisfies WorkerOption)
         : undefined
-    return [{ value: "inherit", label: "Same as conversation" }, ...(saved ? [saved] : []), ...routes]
+    return [{ value: "inherit", label: language.t("settings.models.inherit") }, ...(saved ? [saved] : []), ...routes]
   })
   const workerSelection = createMemo(() => {
     const selected = preferences()?.delegation_worker_model ?? undefined
@@ -288,16 +294,16 @@ export default function Models() {
   const togglePin = (model: Option) => {
     if (model.pinned) {
       models.pinned.toggle(model.key)
-      setNotice(`${model.label} unpinned.`)
+      setNotice(language.t("settings.models.unpinned", { model: model.label }))
       return
     }
     const result = models.pinned.toggle(model.key)
     if (result.limited) {
-      setNotice("Three models are already pinned. Unpin one before adding another.")
+      setNotice(language.t("settings.models.pinLimit"))
       return
     }
     if (result.pinned) models.setVisibility(model.key, true)
-    setNotice(`${model.label} pinned.`)
+    setNotice(language.t("settings.models.pinned", { model: model.label }))
   }
 
   const setComposerVisibility = (model: Option, checked: boolean) => {
@@ -305,15 +311,20 @@ export default function Models() {
     models.setVisibility(model.key, checked)
     setNotice(
       checked
-        ? `${model.label} shown in the composer.`
-        : `${model.label} hidden${model.pinned ? " and unpinned" : ""}.`,
+        ? language.t("settings.models.shown", { model: model.label })
+        : language.t(model.pinned ? "settings.models.hiddenUnpinned" : "settings.models.hidden", {
+            model: model.label,
+          }),
     )
   }
 
   return (
     <div class="settings-models-panel h-full min-h-0">
       <PanelScroll>
-        <PanelHeader title="Models" description="Your connections, and which models appear while you work." />
+        <PanelHeader
+          title={language.t("settings.models.heading")}
+          description={language.t("settings.models.description")}
+        />
         <PanelBody>
           <Show when={error()}>
             <div role="alert" class="settings-alert text-12-regular" data-tone="critical">
@@ -322,22 +333,26 @@ export default function Models() {
           </Show>
           <Section
             id="model-connections"
-            title="Connections"
-            description="Your subscriptions, provider keys, and local runtimes on this machine."
+            title={language.t("settings.models.connections")}
+            description={language.t("settings.models.connectionsDescription")}
           >
             <div class="settings-card models-connections-card">
               <CodexConnection onError={setError} />
               <ProviderKeys onError={setError} />
+              <SearchConnections />
             </div>
           </Section>
 
-          <Section id="model-preferences" title="Model preferences">
+          <Section id="model-preferences" title={language.t("settings.models.preferences")}>
             <div class="settings-card settings-defaults-card models-preferences-card">
               <div class="settings-row models-preference-row">
-                <RowCopy title="Worker model" description="Used for delegated research." />
+                <RowCopy
+                  title={language.t("settings.models.worker")}
+                  description={language.t("settings.models.workerDescription")}
+                />
                 <div class="models-worker-control">
                   <Select
-                    aria-label="Worker model"
+                    aria-label={language.t("settings.models.worker")}
                     options={workerOptions()}
                     current={workerSelection()}
                     value={(option) => option.value}
@@ -367,8 +382,11 @@ export default function Models() {
               </div>
               <div class="settings-row models-preference-row">
                 <RowCopy
-                  title="Composer models"
-                  description={`${visibleCount()} visible · ${pinnedCount()}/3 pinned for quick access`}
+                  title={language.t("settings.models.composer")}
+                  description={language.t("settings.models.composerDescription", {
+                    visible: visibleCount(),
+                    pinned: pinnedCount(),
+                  })}
                 />
                 <Button
                   class="settings-panel-action models-secondary-action"
@@ -378,27 +396,27 @@ export default function Models() {
                   aria-controls="composer-model-catalog"
                   onClick={() => setCatalogOpen((open) => !open)}
                 >
-                  {catalogOpen() ? "Done" : "Edit"}
+                  {language.t(catalogOpen() ? "settings.models.done" : "settings.models.edit")}
                 </Button>
               </div>
             </div>
             <Show when={catalogOpen()}>
               <div id="composer-model-catalog" class="models-catalog-disclosure">
                 <p class="models-catalog-notice text-12-regular text-text-weak" aria-live="polite">
-                  {notice()}
+                  {notice() ?? language.t("settings.models.notice")}
                 </p>
                 <div class="models-catalog-toolbar">
                   <SearchInput
                     value={query()}
                     onInput={setQuery}
-                    placeholder="Search models"
-                    ariaLabel="Filter models"
+                    placeholder={language.t("settings.models.search")}
+                    ariaLabel={language.t("settings.models.filter")}
                   />
                   <FilterMenu
-                    options={scopes}
+                    options={scopes.map((scope) => ({ ...scope, label: language.t(scope.label) }))}
                     value={scope()}
                     onSelect={(value) => setScope(value as Scope)}
-                    ariaLabel="Model filter"
+                    ariaLabel={language.t("settings.models.filterLabel")}
                   />
                 </div>
                 <div class="settings-card settings-model-catalog">
@@ -424,7 +442,9 @@ export default function Models() {
                                   <span class="flex min-w-0 items-center gap-2">
                                     <strong class="truncate text-14-medium text-text-strong">{model.label}</strong>
                                     <Show when={model.latest}>
-                                      <span class="shrink-0 text-12-regular text-text-weak">Latest</span>
+                                      <span class="shrink-0 text-12-regular text-text-weak">
+                                        {language.t("settings.models.latest")}
+                                      </span>
                                     </Show>
                                   </span>
                                   <span class="truncate text-12-regular text-text-weak">
@@ -438,7 +458,7 @@ export default function Models() {
                                     })}
                                   </span>
                                   <details class="models-rate-details text-12-regular text-text-weak">
-                                    <summary>Rates and limits</summary>
+                                    <summary>{language.t("settings.models.rates")}</summary>
                                     <For each={model.routes}>
                                       {(route) => (
                                         <ModelRateDetails
@@ -462,8 +482,13 @@ export default function Models() {
                                   class="settings-icon-action"
                                   data-pinned={model.pinned ? "true" : undefined}
                                   aria-pressed={model.pinned}
-                                  aria-label={`${model.pinned ? "Unpin" : "Pin"} ${model.label}`}
-                                  title={model.pinned ? "Remove from quick models" : "Pin to quick models"}
+                                  aria-label={language.t(
+                                    model.pinned ? "settings.models.unpin" : "settings.models.pin",
+                                    { model: model.label },
+                                  )}
+                                  title={language.t(
+                                    model.pinned ? "settings.models.unpinTitle" : "settings.models.pinTitle",
+                                  )}
                                   onClick={() => togglePin(model)}
                                 >
                                   <Icon name={model.pinned ? "pin-filled" : "pin"} size="small" />
@@ -473,7 +498,7 @@ export default function Models() {
                                   checked={model.visible}
                                   onChange={(checked) => setComposerVisibility(model, checked)}
                                 >
-                                  {`Show ${model.label} in composer`}
+                                  {language.t("settings.models.show", { model: model.label })}
                                 </Switch>
                               </div>
                             </div>
@@ -484,16 +509,18 @@ export default function Models() {
                   </For>
                   <Show when={options().length === 0}>
                     <p class="models-catalog-empty" role="status">
-                      No models are available yet. Connect an access route or refresh your providers.
+                      {language.t("settings.models.empty")}
                     </p>
                   </Show>
                   <Show when={options().length > 0 && filtered().length === 0}>
-                    <p class="px-4 py-6 text-center text-12-regular text-text-weak">No models match this filter.</p>
+                    <p class="px-4 py-6 text-center text-12-regular text-text-weak">
+                      {language.t("settings.models.noMatch")}
+                    </p>
                   </Show>
                   <Show when={renderLimit() < filtered().length}>
                     <div class="models-catalog-progress" role="status">
                       <span>
-                        Showing {renderLimit()} of {filtered().length}
+                        {language.t("settings.models.progress", { count: renderLimit(), total: filtered().length })}
                       </span>
                       <Button
                         class="settings-panel-action models-secondary-action"
@@ -501,7 +528,7 @@ export default function Models() {
                         variant="secondary"
                         onClick={() => setRenderLimit((current) => Math.min(filtered().length, current + 24))}
                       >
-                        Show more
+                        {language.t("settings.models.more")}
                       </Button>
                     </div>
                   </Show>

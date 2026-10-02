@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
+import { ConnectorFormError } from "./form-error"
+import { dict as zh } from "@/i18n/zh"
+import { resolveTemplate } from "@solid-primitives/i18n"
 import {
   blankConnectorForm,
   buildConnectorConfig,
@@ -196,4 +198,17 @@ describe("Connector Settings form behavior", () => {
       }),
     ).toEqual({ icon: "console", label: "Local process" })
   })
+})
+
+test("connector validation can be presented in Chinese with localized field names", () => {
+  try {
+    buildConnectorConfig({ ...blankConnectorForm("remote"), url: "https://mcp.example.org", headers: "[]" })
+    throw new Error("invalid headers accepted")
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectorFormError)
+    if (!(error instanceof ConnectorFormError)) throw error
+    expect(resolveTemplate(zh[error.key], { ...error.values, label: zh["settings.validation.headers"] })).toBe(
+      "请求头必须是 JSON 对象",
+    )
+  }
 })

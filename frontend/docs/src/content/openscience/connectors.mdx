@@ -85,3 +85,17 @@ Services can require subscriptions, paid API usage, or organization approval. Th
 For a remote connection, check the endpoint, authorization, and account access. For a local connection, run its documented startup command in a terminal to check installation errors.
 
 If a connection is saved but off, enable it. If it is connected but has no relevant tool, inspect the service's actual capabilities rather than assuming the missing action exists.
+
+## Search MCP examples
+
+For [Exa's official MCP](https://github.com/exa-labs/exa-mcp-server), add a **Remote** connection with URL `https://mcp.exa.ai/mcp?tools=web_search_exa,web_fetch_exa`. Set authentication to **Off** when supplying your own API key header, then enter Headers as a JSON object:
+
+`{"x-api-key": "YOUR_EXA_API_KEY"}`
+
+Keep the tool-selection query you need; the server's current Tools list is authoritative. Do not put the key in an `exaApiKey` query parameter.
+
+For [Tavily's official MCP](https://github.com/tavily-ai/tavily-mcp), use `https://mcp.tavily.com/mcp`, authentication **Off**, and a header:
+
+`{"Authorization": "Bearer YOUR_TAVILY_API_KEY"}`
+
+Replace these placeholders in the form, save, inspect the server's Tools list, then request one small search. A connection or successful tool listing does not verify search quota. A 401 or invalid-key error means reconnect or replace the credential; a 403 means check account/tool permissions; a 429 or usage-limit error means check that service's quota, billing, and retry guidance. Changing the model API key does not repair an external search account.

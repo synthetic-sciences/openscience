@@ -1,3 +1,4 @@
+import { ConnectorFormError } from "./form-error"
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Select } from "@synsci/ui/select"
@@ -64,6 +65,21 @@ export default function Connectors() {
   const platform = usePlatform()
   const server = useServer()
   const language = useLanguage()
+  const message = (error: unknown) =>
+    error instanceof ConnectorFormError
+      ? language.t(error.key, {
+          ...error.values,
+          ...(error.values.label
+            ? {
+                label: language.t(
+                  error.values.label === "Environment"
+                    ? "settings.validation.environment"
+                    : "settings.validation.headers",
+                ),
+              }
+            : {}),
+        })
+      : rawMessage(error)
 
   const [status, setStatus] = createSignal<Record<string, McpStatus>>({})
   const [details, setDetails] = createSignal<Record<string, McpInspection>>({})
@@ -228,6 +244,7 @@ export default function Connectors() {
     const key = `row:${name}`
     if (busy(key)) return
     const confirmed = await confirmDialog(dialog, {
+      cancelLabel: language.t("common.cancel"),
       title: language.t("settings.connectors.remove.title", { name }),
       message: language.t("settings.connectors.remove.message"),
       confirmLabel: language.t("settings.connectors.action.remove"),
@@ -376,6 +393,7 @@ export default function Connectors() {
     const key = `row:${name}`
     if (busy(key)) return
     const confirmed = await confirmDialog(dialog, {
+      cancelLabel: language.t("common.cancel"),
       title: language.t("settings.connectors.disconnect.title", { name }),
       message: language.t("settings.connectors.disconnect.message"),
       confirmLabel: language.t("common.disconnect"),
@@ -1294,7 +1312,7 @@ function ConnectorForm(props: {
   )
 }
 
-function message(err: unknown) {
+function rawMessage(err: unknown) {
   return err instanceof Error ? err.message : String(err)
 }
 

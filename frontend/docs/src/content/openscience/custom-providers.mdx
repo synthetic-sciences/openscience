@@ -120,3 +120,19 @@ Active remote responses keep running because keepalives and streamed private rea
 This allows twenty minutes without new readable output. Set an individual option to `false` to disable that deadline. Disabling `timeout` does not disable the other deadlines. These settings cannot extend limits imposed by the service itself.
 
 Review partial results before retrying a timed-out request. Your service may already have processed part of it. A request that timed out before any model output arrived is sent once more automatically as a new request; the service may bill both.
+
+## Set a Base URL in Models
+
+In **Customize → Models → Connections → Add key**, select the provider, enter its key, and set **Base URL**. This overrides that provider's endpoint globally; it does not create a separate model catalog. Custom model IDs still belong in a provider block as shown above.
+
+For **OpenAI**, choose **Responses** or **Chat Completions** to match the service. The SDK appends `/responses` or `/chat/completions`; an ordinary base is `https://models.example.org/v1`. For **Anthropic**, the SDK uses Messages and appends `/messages`, so include `/v1` in the base. Azure's OpenAI v1 endpoint can be used with OpenAI Responses and the full `https://RESOURCE.services.ai.azure.com/openai/v1` base. Use the deployment name as the model ID. Saving the form does not verify that a deployment exists or that the service supports a model's tools and reasoning controls.
+
+Leave Base URL blank to remove the saved override and use the provider default or its environment setting. HTTPS is required except for loopback HTTP during local development. Credentials belong in the key field, never in the URL.
+
+## Search is a separate connection
+
+The **Research and web search** section reports whether `research_search` has Firecrawl or Ace configured. Add a Firecrawl key in **Customize → Credentials**, or connect Ace in **Wallet**. Configured credentials do not prove remaining quota or successful access.
+
+`literature`, `webfetch`, and scientific database tools work independently of model-provider search features, subject to their own source credentials and network permissions. Reuse an existing search MCP in **Customize → Connectors** and inspect its actual Tools list. See [search MCP setup](/openscience/connectors#search-mcp-examples).
+
+Selecting a Responses-compatible endpoint does not enable provider-hosted web search. OpenScience does not automatically inject a provider's `web_search` tool into custom Responses requests. Use the built-in research tools or an explicit MCP search connection instead.

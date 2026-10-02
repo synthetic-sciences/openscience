@@ -1337,8 +1337,8 @@ export namespace Provider {
       const baseURL = Env.get("OPENAI_BASE_URL")
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
+        async getModel(sdk: ReturnType<typeof createOpenAI>, modelID: string, options?: Record<string, unknown>) {
+          return options?.api === "chat" ? sdk.chat(modelID) : sdk.responses(modelID)
         },
         options: baseURL && !hasManagedProxyPath(baseURL) ? { baseURL } : {},
       }
@@ -2678,7 +2678,7 @@ export namespace Provider {
         continue
       }
       const result = await fn(data)
-      if (result && (result.autoload || providers[providerID])) {
+      if (result && (result.autoload || providers[providerID] || configProviders.some(([id]) => id === providerID))) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
         const opts = result.options ?? {}
         // A loader-reported source wins; otherwise use "custom" only for a

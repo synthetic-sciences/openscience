@@ -1,3 +1,4 @@
+import { ConnectorFormError } from "./form-error"
 import type { Config } from "@synsci/sdk/v2/client"
 import { McpUrl } from "@synsci/util/mcp-url"
 import { formatConnectorCommand, parseConnectorCommand } from "./connector-command"
@@ -205,7 +206,7 @@ function restoreRecord(value: Record<string, string> | undefined, previous: Reco
     Object.entries(value).map(([key, entry]) => {
       if (entry !== MASK) return [key, entry]
       const stored = previous?.[key]
-      if (stored === undefined) throw new Error(`Replace the masked value for ${key} before saving`)
+      if (stored === undefined) throw new ConnectorFormError("settings.validation.masked", { key })
       return [key, stored]
     }),
   )
@@ -214,10 +215,17 @@ function restoreRecord(value: Record<string, string> | undefined, previous: Reco
 function parseRecord(text: string, label: string) {
   const trimmed = text.trim()
   if (!trimmed) return undefined
-  const parsed = JSON.parse(trimmed)
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} must be a JSON object`)
+  const parsed = (() => {
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      throw new ConnectorFormError("settings.validation.json", { label })
+    }
+  })()
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new ConnectorFormError("settings.validation.object", { label })
   for (const [key, value] of Object.entries(parsed)) {
-    if (typeof value !== "string") throw new Error(`${label}.${key} must be a string`)
+    if (typeof value !== "string") throw new ConnectorFormError("settings.validation.string", { label, key })
   }
   return parsed as Record<string, string>
 }
@@ -225,12 +233,12 @@ function parseRecord(text: string, label: string) {
 export function buildConnectorConfig(state: ConnectorFormState): ConfiguredMcp {
   const timeout = state.timeout.trim() ? Number(state.timeout) : undefined
   if (timeout !== undefined && (!Number.isInteger(timeout) || timeout <= 0)) {
-    throw new Error("Timeout must be a positive whole number of milliseconds")
+    throw new ConnectorFormError("settings.validation.timeout")
   }
   const enabled = state.previous?.enabled ?? (state.initiallyDisabled ? false : undefined)
   if (state.type === "local") {
     const command = parseConnectorCommand(state.command)
-    if (command.length === 0) throw new Error("Command is required")
+    if (command.length === 0) throw new ConnectorFormError("settings.validation.command")
     const previous = state.previous?.type === "local" ? state.previous : undefined
     const environment = restoreRecord(parseRecord(state.env, "Environment"), previous?.environment)
     return {
@@ -241,16 +249,16 @@ export function buildConnectorConfig(state: ConnectorFormState): ConfiguredMcp {
       ...(timeout ? { timeout } : {}),
     }
   }
-  if (!URL.canParse(state.url.trim())) throw new Error("Remote URL is invalid")
+  if (!URL.canParse(state.url.trim())) throw new ConnectorFormError("settings.validation.remote")
   const problem = McpUrl.endpointProblem(state.url.trim())
-  if (problem) throw new Error(problem)
+  if (problem) throw new ConnectorFormError("settings.validation.remote", {}, problem)
   const previous = state.previous?.type === "remote" ? state.previous : undefined
   const headers = restoreRecord(parseRecord(state.headers, "Headers"), previous?.headers)
   const oauth = typeof previous?.oauth === "object" ? previous.oauth : undefined
   const secret = state.clientSecret.trim() === MASK ? oauth?.clientSecret : state.clientSecret.trim()
-  if (state.oauth === "client" && !state.clientId.trim()) throw new Error("OAuth client ID is required")
+  if (state.oauth === "client" && !state.clientId.trim()) throw new ConnectorFormError("settings.validation.clientId")
   if (state.oauth === "client" && state.requireClientSecret && !secret)
-    throw new Error("OAuth client secret is required")
+    throw new ConnectorFormError("settings.validation.clientSecret")
   return {
     type: "remote",
     url: state.url.trim(),

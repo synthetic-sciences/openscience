@@ -15,6 +15,7 @@ import {
 import { SettingsNavContext } from "./settings/nav"
 import { SettingsPanelStack } from "./settings/panel-stack"
 import { settingsApi } from "./settings/api"
+import { useLanguage } from "@/context/language"
 import { useGlobalSDK } from "@/context/global-sdk"
 
 // Scoped to the settings dialog only. Gives shared primitives and legacy
@@ -1638,6 +1639,7 @@ const SettingsAccountFooter: Component<{ version?: string; onOpen: () => void }>
 }
 
 export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) => {
+  const language = useLanguage()
   const platform = usePlatform()
   const dialog = useDialog()
   const initial = findPanel(props.initial ?? DEFAULT_PANEL)
@@ -1745,7 +1747,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
     <>
       <style>{SETTINGS_STYLES}</style>
       <Dialog
-        title="Settings"
+        title={language.t("settings.shell.title")}
         action={<span aria-hidden="true" />}
         size="x-large"
         class="settings-dialog"
@@ -1756,11 +1758,11 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
           <nav
             ref={nav}
             class="settings-nav"
-            aria-label="Settings sections"
+            aria-label={language.t("settings.shell.sections")}
             data-mobile-open={navOpen() ? "true" : undefined}
             data-dialog-escape-scope={navOpen() ? "true" : undefined}
           >
-            <div class="settings-nav__title">Settings</div>
+            <div class="settings-nav__title">{language.t("settings.shell.title")}</div>
             <button
               type="button"
               ref={navTrigger}
@@ -1770,15 +1772,19 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
               onClick={() => setNavOpen((value) => !value)}
             >
               <Icon name={current().icon} size="small" />
-              <span>{current().title}</span>
+              <span>{language.t(`settings.shell.panel.${current().id}`)}</span>
               <Icon name="chevron-down" size="small" classList={{ "rotate-180": navOpen() }} />
             </button>
             <div id="settings-section-menu" class="settings-nav__sections" ref={navSections}>
               <For each={SETTINGS_SECTIONS}>
                 {(section) => (
-                  <div class="settings-nav__section" role="group" aria-label={section.label}>
+                  <div
+                    class="settings-nav__section"
+                    role="group"
+                    aria-label={language.t(`settings.shell.group.${section.id}`)}
+                  >
                     <div class="settings-nav__label" aria-hidden="true">
-                      {section.label}
+                      {language.t(`settings.shell.group.${section.id}`)}
                     </div>
                     <For each={SETTINGS_PANELS.filter((p) => p.section === section.id)}>
                       {(panel) => (
@@ -1794,7 +1800,7 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
                           aria-current={current().id === panel.id ? "page" : undefined}
                         >
                           <Icon name={panel.icon} size="normal" class="flex-shrink-0" />
-                          <span class="truncate">{panel.title}</span>
+                          <span class="truncate">{language.t(`settings.shell.panel.${panel.id}`)}</span>
                         </button>
                       )}
                     </For>
@@ -1810,26 +1816,37 @@ export const DialogSettings: Component<{ initial?: SettingsPanelId }> = (props) 
             {/* Header */}
             <header class="settings-main__header">
               <div class="flex items-center gap-1 min-w-0">
-                <IconButton icon="arrow-left" variant="ghost" disabled={!canBack()} onClick={back} aria-label="Back" />
+                <IconButton
+                  icon="arrow-left"
+                  variant="ghost"
+                  disabled={!canBack()}
+                  onClick={back}
+                  aria-label={language.t("settings.shell.back")}
+                />
                 <IconButton
                   icon="arrow-right"
                   variant="ghost"
                   disabled={!canForward()}
                   onClick={forward}
-                  aria-label="Forward"
+                  aria-label={language.t("settings.shell.forward")}
                 />
               </div>
               <div class="settings-main__context" aria-live="polite">
-                <span>{current().title}</span>
+                <span>{language.t(`settings.shell.panel.${current().id}`)}</span>
               </div>
               <div class="flex items-center gap-1 flex-shrink-0">
                 <IconButton
                   icon={expanded() ? "collapse" : "expand"}
                   variant="ghost"
                   onClick={() => setExpanded((v) => !v)}
-                  aria-label={expanded() ? "Collapse" : "Expand"}
+                  aria-label={language.t(expanded() ? "settings.shell.collapse" : "settings.shell.expand")}
                 />
-                <IconButton icon="close" variant="ghost" onClick={() => dialog.close()} aria-label="Close" />
+                <IconButton
+                  icon="close"
+                  variant="ghost"
+                  onClick={() => dialog.close()}
+                  aria-label={language.t("common.close")}
+                />
               </div>
             </header>
 

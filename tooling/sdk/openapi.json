@@ -24597,6 +24597,101 @@
         ]
       }
     },
+    "/settings/search": {
+      "get": {
+        "operationId": "settings.search",
+        "summary": "Research search configuration",
+        "description": "Whether research_search has a configured Firecrawl or Ace credential. Does not verify quota, network permissions, or provider availability.",
+        "responses": {
+          "200": {
+            "description": "Search setup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "configured"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.search({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/auth/{providerID}/connection": {
+      "put": {
+        "operationId": "auth.connection",
+        "summary": "Save a provider credential and API endpoint",
+        "responses": {
+          "200": {
+            "description": "Saved connection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "providerID",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "baseURL": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "api": {
+                    "default": "responses",
+                    "type": "string",
+                    "enum": [
+                      "responses",
+                      "chat"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.auth.connection({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/auth/{providerID}/onboarding": {
       "put": {
         "operationId": "auth.onboarding",

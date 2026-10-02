@@ -18,6 +18,7 @@ export async function credentialChange(input: {
   write: () => Promise<unknown>
   refresh: () => Promise<unknown>
   done: string
+  reloadNotice?: (done: string, reason: string) => string
 }): Promise<{ ok: boolean; notice?: string }> {
   const failed = await input.write().then(
     () => undefined,
@@ -29,7 +30,9 @@ export async function credentialChange(input: {
     () => ({ ok: true }),
     (error) => ({
       ok: true,
-      notice: `${input.done}, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
+      notice:
+        input.reloadNotice?.(input.done, reason(error)) ??
+        `${input.done}, but the model list could not be reloaded (${reason(error)}). It will catch up on the next refresh.`,
     }),
   )
 }

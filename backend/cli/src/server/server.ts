@@ -68,6 +68,8 @@ import { CredentialLifecycle } from "../credentials/lifecycle"
 import { CredentialTeardown } from "../credentials/teardown"
 import { DataRootBarrier } from "../global/data-root-barrier"
 import { OnboardingAuthRoutes } from "./routes/onboarding-auth"
+import { SearchSettingsRoutes } from "./routes/settings/search"
+import { ProviderConnectionRoutes } from "./routes/provider-connection"
 import { AccountRoutes } from "./routes/account"
 import { BillingSettingsRoutes } from "./routes/settings/billing"
 import { WalletSettingsRoutes } from "./routes/settings/wallet"
@@ -289,6 +291,11 @@ export namespace Server {
         .route("/settings/scientific-tools", ScientificToolsSettingsRoutes())
         .route("/settings/billing", BillingSettingsRoutes())
         .route("/settings/wallet", WalletSettingsRoutes())
+        .route("/settings/search", SearchSettingsRoutes())
+        .route(
+          "/auth",
+          ProviderConnectionRoutes(() => Provider.invalidate()),
+        )
         .route(
           "/auth",
           OnboardingAuthRoutes({

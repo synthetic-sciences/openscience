@@ -10154,6 +10154,46 @@ export type SettingsWalletGetResponses = {
 
 export type SettingsWalletGetResponse = SettingsWalletGetResponses[keyof SettingsWalletGetResponses]
 
+export type SettingsSearchData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/search"
+}
+
+export type SettingsSearchResponses = {
+  /**
+   * Search setup
+   */
+  200: {
+    configured: boolean
+  }
+}
+
+export type SettingsSearchResponse = SettingsSearchResponses[keyof SettingsSearchResponses]
+
+export type AuthConnectionData = {
+  body?: {
+    key?: string
+    baseURL?: string
+    api?: "responses" | "chat"
+  }
+  path: {
+    providerID: string
+  }
+  query?: never
+  url: "/auth/{providerID}/connection"
+}
+
+export type AuthConnectionResponses = {
+  /**
+   * Saved connection
+   */
+  200: boolean
+}
+
+export type AuthConnectionResponse = AuthConnectionResponses[keyof AuthConnectionResponses]
+
 export type AuthOnboardingData = {
   body?: ApiAuth
   path: {
