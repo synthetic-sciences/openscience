@@ -96,6 +96,6 @@
     "xdg-basedir": "5.1.0",
     "yargs": "18.1.0",
     "zod": "catalog:",
-    "zod-to-json-schema": "3.24.5"
+    "zod-to-json-schema": "3.25.2"
   }
 }
