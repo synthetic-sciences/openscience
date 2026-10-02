@@ -324,6 +324,8 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
+
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
 
 - **Security: a remote MCP server's refresh token and client secret are only
