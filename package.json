@@ -73,8 +73,8 @@
   "devDependencies": {
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
-    "prettier": "3.9.8",
-    "turbo": "2.11.2"
+    "prettier": "3.9.9",
+    "turbo": "2.11.5"
   },
   "dependencies": {
     "@synsci/script": "workspace:*",
