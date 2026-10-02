@@ -55,6 +55,13 @@ test("fromConfig - expands $HOME without trailing slash", () => {
   expect(result).toEqual([{ permission: "external_directory", pattern: os.homedir(), action: "allow" }])
 })
 
+test("fromConfig - does not expand a different variable that starts with $HOME", () => {
+  // "$HOMEevil" names another variable. Expanding it minted a grant for a path
+  // beside the home directory that the user never wrote.
+  const result = PermissionNext.fromConfig({ external_directory: { $HOMEevil: "allow" } })
+  expect(result).toEqual([{ permission: "external_directory", pattern: "$HOMEevil", action: "allow" }])
+})
+
 test("fromConfig - does not expand tilde in middle of path", () => {
   const result = PermissionNext.fromConfig({ external_directory: { "/some/~/path": "allow" } })
   expect(result).toEqual([{ permission: "external_directory", pattern: "/some/~/path", action: "allow" }])

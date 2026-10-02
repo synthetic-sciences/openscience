@@ -38,6 +38,25 @@ const close = (value: string, start: number, target: string) => {
   return -1
 }
 
+/** An image description may hold balanced brackets, so the first `]` that closes it
+ * is the one outside every unescaped pair, not the first one in the text. */
+const description = (value: string, start: number) => {
+  const cursor = { value: start }
+  const depth = { value: 0 }
+  while (cursor.value < value.length) {
+    const char = value[cursor.value]!
+    if (!escaped(value, cursor.value)) {
+      if (char === "[") depth.value += 1
+      if (char === "]") {
+        if (depth.value === 0) return cursor.value
+        depth.value -= 1
+      }
+    }
+    cursor.value += 1
+  }
+  return -1
+}
+
 const destination = (value: string, start: number): Destination | undefined => {
   const cursor = { value: start }
   while (/\s/.test(value[cursor.value] ?? "")) cursor.value += 1
@@ -148,7 +167,7 @@ export function markdownImages(source: string): MarkdownImage[] {
         cursor.value += 1
         continue
       }
-      const altEnd = close(value, cursor.value + 2, "]")
+      const altEnd = description(value, cursor.value + 2)
       if (altEnd < 0) break
       const alt = value.slice(cursor.value + 2, altEnd)
       const next = altEnd + 1

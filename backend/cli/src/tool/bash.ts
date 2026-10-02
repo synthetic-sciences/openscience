@@ -194,6 +194,7 @@ export const BashTool = Tool.define("bash", async () => {
       command: z.string().trim().min(1).describe("The command to execute"),
       timeout: z
         .number()
+        .positive()
         .describe(
           "Timeout in milliseconds; default 20 minutes. Give a longer one for a build or run you know takes longer, or use the durable job tool.",
         )
@@ -225,7 +226,10 @@ export const BashTool = Tool.define("bash", async () => {
       const target = path.isAbsolute(requested) ? requested : path.resolve(workspace, requested)
       const cwd = (await Filesystem.canonical(target)) ?? path.resolve(target)
       const contained = (value: string) => writable.some((root) => Filesystem.contains(root, value))
-      if (params.timeout !== undefined && params.timeout < 0) {
+      // `timeout > 0` is what arms the timer below, so a zero passed
+      // validation and then removed the only bound on the command while the
+      // twenty-minute default never got a chance to apply.
+      if (params.timeout !== undefined && !(params.timeout > 0)) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT

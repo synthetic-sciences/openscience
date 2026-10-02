@@ -767,6 +767,52 @@ describe("session.compaction.buildHandoffPrompt", () => {
     expect(excerpt).not.toContain("synthetic")
     expect(SessionCompaction.requestText({ ...message, parts: message.parts.slice(1) })).toBe("")
   })
+  test("the omitted count is the characters the excerpt really drops, tail and trimmed whitespace included", () => {
+    // The excerpt is the kept head, a marker line, and the kept tail. Whatever the
+    // marker line reports plus whatever the excerpt still quotes has to add back up
+    // to the request: the count is the summarizer's only evidence of the request size.
+    const quoted = (request: string, max?: number) => {
+      const excerpt = SessionCompaction.requestText(
+        { info: { id: "u", role: "user" }, parts: [{ type: "text", text: request }] } as unknown as MessageV2.WithParts,
+        max,
+      )
+      const lines = excerpt.split("\n")
+      const marker = lines.findIndex((line) => line.includes("characters omitted"))
+      // The newlines around the marker belong to the excerpt, not to the request.
+      const kept = lines.slice(0, marker).join("\n") + lines.slice(marker + 1).join("\n")
+      const omitted = Number(lines[marker].match(/([\d,]+) characters omitted/)?.[1].replace(/,/g, ""))
+      return { omitted, total: kept.length + omitted, request: request.length }
+    }
+    // Both cuts land inside a run of x, so the trims drop nothing and the count is
+    // the whole request less the head and the tail, not less the head alone.
+    const plain = `Fit the model.\n${"x".repeat(50_000)}\nReport AP.`
+    expect(quoted(plain)).toEqual({ omitted: 48_026, total: 50_026, request: 50_026 })
+    // Whitespace lands on both cut boundaries, so the honest count is neither the
+    // request less max nor the request less the head: trimEnd drops 4 at the head
+    // and trimStart drops 200 at the tail, on top of the tail itself.
+    const padded = `${"H".repeat(1496)}    ${"b".repeat(50_000)}${" ".repeat(600)}${"T".repeat(300)}`
+    expect(quoted(padded)).toEqual({ omitted: 50_604, total: 52_400, request: 52_400 })
+    // A request that fits is quoted whole, with no marker to miscount.
+    expect(
+      SessionCompaction.requestText({
+        info: { id: "u", role: "user" },
+        parts: [{ type: "text", text: "Train the model." }],
+      } as unknown as MessageV2.WithParts),
+    ).toBe("Train the model.")
+  })
+})
+
+test("a tiny request excerpt keeps only the requested characters", () => {
+  const message = {
+    info: { id: "u", role: "user" },
+    parts: [{ type: "text", text: "abcdef" }],
+  } as unknown as MessageV2.WithParts
+  expect(SessionCompaction.requestText(message, 0)).toBe("")
+  for (const max of [1, 2, 3]) {
+    expect(SessionCompaction.requestText(message, max)).toBe(
+      `${"abcdef".slice(0, max)}\n[… ${6 - max} characters omitted …]\n`,
+    )
+  }
 })
 
 describe("session.compaction.persistHandoff", () => {

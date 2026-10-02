@@ -1277,9 +1277,14 @@ export namespace MessageV2 {
   /** Cut a tool result to `max` characters, keeping its head and tail. */
   export function capOutput(text: string, max: number | undefined) {
     if (max === undefined || text.length <= max) return text
+    if (max <= 0) return ""
     const tail = Math.floor(max / 5)
-    const omitted = text.length - (max - tail)
-    return `${text.slice(0, max - tail).trimEnd()}\n[… ${omitted.toLocaleString("en-US")} characters of this result omitted for the handoff …]\n${text.slice(-tail).trimStart()}`
+    const head = text.slice(0, max - tail).trimEnd()
+    const kept = tail > 0 ? text.slice(-tail).trimStart() : ""
+    // Both slices reach the model and the trims drop boundary whitespace, so the count is
+    // what the handoff no longer carries — the head length alone over-reports it.
+    const omitted = text.length - head.length - kept.length
+    return `${head}\n[… ${omitted.toLocaleString("en-US")} characters of this result omitted for the handoff …]\n${kept}`
   }
 
   export const DUPLICATE_OUTPUT =

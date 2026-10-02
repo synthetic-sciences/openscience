@@ -247,6 +247,7 @@ export function findFilesystemGrant(
 export function requestedFolder(target: string) {
   const file = normalizeFilePath(target)
   const index = file.lastIndexOf("/")
-  if (index <= 0) return file
+  if (index < 0) return file
+  if (index === 0 || (index === 2 && /^[a-z]:/i.test(file))) return file.slice(0, index + 1)
   return file.slice(0, index)
 }

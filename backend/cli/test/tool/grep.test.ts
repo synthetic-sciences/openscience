@@ -257,3 +257,27 @@ describe("tool.grep failure message", () => {
     expect(searchFailure(undefined, "")).toBe("Search failed: Some paths could not be searched.")
   })
 })
+
+test("bounded searches retain the same paths even beyond an overshoot window", async () => {
+  await using tmp = await tmpdir()
+  const names = Array.from({ length: 1_200 }, (_, index) => `f${String(index).padStart(4, "0")}.txt`)
+  const when = new Date(1_700_000_000_000)
+  for (const name of names.toReversed()) {
+    const file = path.join(tmp.path, name)
+    await Bun.write(file, "needle")
+    await fs.utimes(file, when, when)
+  }
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const grep = await GrepTool.init()
+      const first = await grep.execute({ pattern: "needle", path: tmp.path }, ctx)
+      const second = await grep.execute({ pattern: "needle", path: tmp.path }, ctx)
+      expect(first.metadata).toMatchObject({ matches: 100, truncated: true })
+      expect(second.output).toBe(first.output)
+      expect([...first.output.matchAll(/f\d{4}\.txt:/g)].map((match) => match[0])).toEqual(
+        names.slice(0, 100).map((name) => `${name}:`),
+      )
+    },
+  })
+})

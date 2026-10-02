@@ -3,7 +3,12 @@ export namespace BashArity {
     for (let len = tokens.length; len > 0; len--) {
       const prefix = tokens.slice(0, len).join(" ")
       const arity = ARITY[prefix]
-      if (arity !== undefined) return tokens.slice(0, arity)
+      if (arity !== undefined) {
+        const scope = tokens.slice(0, arity)
+        // Without an option schema its value cannot be distinguished from a
+        // subcommand. Keep the full command instead of granting every use of a flag.
+        return scope.slice(1).some((token) => token.startsWith("-")) ? tokens : scope
+      }
     }
     if (tokens.length === 0) return []
     return tokens.slice(0, 1)

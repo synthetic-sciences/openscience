@@ -17,7 +17,16 @@ describe("remote file previews", () => {
     expect(remotePreview("weights.ckpt")).toBeUndefined()
     expect(remotePreview("data.h5ad")).toBeUndefined()
     expect(remotePreview("archive.tar.gz")).toBeUndefined()
-    expect(remotePreview("mystery")).toBeUndefined()
+  })
+
+  // A Volume is full of names with no extension -- LICENSE, Makefile, CODEOWNERS --
+  // and the viewer reads those as text, so refusing them downloads a 2 KB file
+  // instead of showing it. The cap still applies to them.
+  test("previews a dotless name the viewer reads as text", () => {
+    expect(remotePreview("LICENSE")).toBe("text")
+    expect(remotePreview("Makefile")).toBe("text")
+    expect(remotePreview("Dockerfile")).toBe("text")
+    expect(remotePreview("LICENSE", REMOTE_PREVIEW_LIMIT + 1)).toBeUndefined()
   })
 
   // Volume files are fetched whole -- the route has no range support -- so the

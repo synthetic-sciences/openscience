@@ -4,6 +4,7 @@ import {
   containsFilePath,
   findFilesystemGrant,
   parseFilesystemSnapshot,
+  requestedFolder,
   sessionFilesystemRoot,
   workingFilesystemRoot,
   type FilesystemSnapshot,
@@ -334,6 +335,17 @@ describe("filesystem source isolation", () => {
 
     expect(connectedFilesystemGrants(readOnly).map((grant) => grant.id)).toEqual(["fsg_read"])
     expect(workingFilesystemRoot(readOnly)).toBeUndefined()
+  })
+
+  // A file sitting at a root has no directory part before its separator, so
+  // truncating at the last "/" left the file itself (or a bare drive letter) as
+  // the folder, and the explorer then asked the server for that.
+  test("names the root itself as the folder of a file that sits at one", () => {
+    expect(requestedFolder("/notes.md")).toBe("/")
+    expect(requestedFolder("work/notes.md")).toBe("work")
+    expect(requestedFolder("C:\\notes.md")).toBe("c:/")
+    expect(requestedFolder("C:/work/notes.md")).toBe("c:/work")
+    expect(requestedFolder("/work/notes.md")).toBe("/work")
   })
 
   test("treats the filesystem root as containing its descendants", () => {

@@ -176,4 +176,23 @@ describe("mzML inspection", () => {
     ])
     expect(result.times).toEqual([0.5, 0.8])
   })
+
+  test("reports the scan time range for a run with more scans than the engine takes as arguments", () => {
+    const scans = 700_000
+    const spectra = Array.from(
+      { length: scans },
+      (_, index) =>
+        `<spectrum id="scan=${index + 1}"><cvParam accession="MS:1000016" name="scan start time" value="${index + 1}"/></spectrum>`,
+    ).join("\n")
+
+    const result = parseBiologicalFile(
+      "mzml",
+      `<mzML><run id="deep"><spectrumList count="${scans}">${spectra}</spectrumList></run></mzML>`,
+    )
+
+    if (result.format !== "mzml") throw new Error("wrong parser")
+    expect(result.range).toEqual({ start: 1, end: scans })
+    expect(result.times).toHaveLength(10_000)
+    expect(result.truncated).toBe(true)
+  })
 })

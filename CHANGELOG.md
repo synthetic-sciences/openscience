@@ -9,12 +9,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ## Unreleased
 
 - Keep legacy home configuration below canonical user and project settings, preserve inline overrides, and push the selected repository branch to its own tracked destination.
+- Scientific helpers correct GC content within the requested codon window and target band, report unusable CFSE channels clearly, and match BRENDA transformation keywords consistently across letter case. GPU inventory gives unnamed devices a readable fallback label.
 
 - Fix duration day/minute boundaries, file directory and extension labels, and payload-size rounding. Unknown payload sizes now display clearly. Background queues process undefined items, reject invalid concurrency, and release timeout timers when an operation fails.
 
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
 ### Changed
+
+- Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.
 
 - **The scanpy and AnnData skills keep raw counts in a layer.** Their workflows
   now save counts to `layers["counts"]` before normalizing, while `adata.raw`
@@ -41,6 +44,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   labels and calmer count cards, with the numbers unchanged.
 
 ### Added
+
+- Session handoffs report the characters actually omitted, account for retained tails and trimmed whitespace, and honor zero or tiny excerpt limits. Command argument hints now list numbered placeholders in numeric order.
 
 - **An NMR compound-inference skill.** `nmr-compound-inference` reads 1D ¹H or
   ¹³C spectra (Bruker, NMRPipe or two-column text) with nmrglue, plots them with a
@@ -319,6 +324,8 @@ public 50 the old detector named an example's `samples.csv` and the input
   worker that exists.
 
 ### Fixed
+
+- Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
 
 - **Security: a remote MCP server's refresh token and client secret are only
   ever sent to the authorization server that issued them.** Before, every token
@@ -1145,6 +1152,8 @@ public 50 the old detector named an example's `samples.csv` and the input
   needs, newest-eligible first.
 - **Hosted Boltz-2 and OpenFold3 runs finish instead of ending in "status polling returned non-terminal HTTP 404".** NVIDIA's Boltz-2 NIM always answers `pae: null` and `pde: null` (deprecated in its JSON response), and OpenFold3 answers `iptm_score: null` for a single-chain input, which has no interface to score. The output schemas rejected both, so every completed result was discarded, no artifacts were written, and the run fell through to a status route that answers 404 for these synchronous NIMs. Both nulls now parse. A response NVIDIA marks fulfilled that still fails its output schema is reported as that, naming the offending fields (paths and types, never response values), and is no longer polled.
 - **An approval says what it is for.** Asking to run Python, R or a shell command showed a card that read "Approval required" twice, over a code cell folded shut, so the most common request in the app asked for a decision about code you could not see. The card now names it ("Run Python code", with the step's title and length, or "Run a shell command" with the command), and the cell's source stays open for as long as the request is.
+
+- File previews handle extensionless text files, balanced brackets in figure labels, Windows path casing, and files at filesystem roots. CSV previews skip blank lines while retaining quoted empty records, and large mzML runs compute scan ranges without overflowing the argument stack.
 
 ## v2.0.115 – v2.0.119 — 2026-09-17
 

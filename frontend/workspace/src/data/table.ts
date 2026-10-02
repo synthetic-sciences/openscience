@@ -28,7 +28,7 @@ const scalar = (value: unknown) => {
 
 function delimited(text: string, delimiter: string) {
   const rows: string[][] = []
-  const state = { index: 0, cell: "", row: [] as string[], quoted: false }
+  const state = { index: 0, cell: "", row: [] as string[], quoted: false, started: false }
   const pushCell = () => {
     state.row.push(state.cell)
     state.cell = ""
@@ -37,6 +37,7 @@ function delimited(text: string, delimiter: string) {
     pushCell()
     rows.push(state.row)
     state.row = []
+    state.started = false
   }
 
   while (state.index < text.length) {
@@ -59,6 +60,7 @@ function delimited(text: string, delimiter: string) {
     }
     if (char === '"' && state.cell === "") {
       state.quoted = true
+      state.started = true
       state.index += 1
       continue
     }
@@ -68,14 +70,16 @@ function delimited(text: string, delimiter: string) {
       continue
     }
     if (char === "\n" || char === "\r") {
-      pushRow()
+      // A blank line carries no cell, and the last push below is already
+      // guarded against one, so the row would otherwise be an all-empty entry.
+      if (state.started || state.cell || state.row.length) pushRow()
       state.index += char === "\r" && next === "\n" ? 2 : 1
       continue
     }
     state.cell += char
     state.index += 1
   }
-  if (state.cell || state.row.length) pushRow()
+  if (state.started || state.cell || state.row.length) pushRow()
   return rows
 }
 

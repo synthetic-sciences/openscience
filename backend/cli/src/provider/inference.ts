@@ -15,7 +15,12 @@ export namespace Inference {
   function local(value: unknown) {
     if (typeof value !== "string" || !value) return false
     try {
-      const host = new URL(value).hostname.toLowerCase().replace(/^\[|\]$/g, "")
+      // "localhost:11434/v1" parses with the scheme "localhost:", so the
+      // hostname never came out as "localhost". LocalProvider.normalizeBaseURL
+      // accepts a missing scheme, so this has to agree or the same endpoint
+      // reads as local there and as a cloud key here.
+      const absolute = /^https?:\/\//i.test(value) ? value : `http://${value}`
+      const host = new URL(absolute).hostname.toLowerCase().replace(/^\[|\]$/g, "")
       return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1"
     } catch {
       return false

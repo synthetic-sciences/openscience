@@ -105,7 +105,10 @@ export namespace ManagedPricing {
       if (!MANAGED_OPENROUTER_MODEL_SET.has(model.id) || model.available === false) continue
       const pricing = metadata(model.pricing, model.hosting_provider, model.upstream_provider)
       if (!pricing) continue
-      const first = model.pricing.tiers.find((tier) => !tier.min_input_tokens)
+      // Token counts start at 1, so an explicit min of 1 is the base tier and
+      // means the same as omitting it. Looking it up by falsiness missed that
+      // spelling and dropped the whole model out of the catalog.
+      const first = model.pricing.tiers.find((tier) => (tier.min_input_tokens ?? 1) === 1)
       if (!first || (first.input === 0 && first.output === 0)) continue
       const cost = (tier: z.infer<typeof Tier>) => ({
         input: tier.input,
@@ -114,16 +117,19 @@ export namespace ManagedPricing {
       })
       const tiers = (prices: z.infer<typeof Tier>[]) =>
         prices
-          .map((tier, index) => ({
+          .map((tier) => ({
             ...tier,
-            threshold: prices[index - 1]?.max_input_tokens ?? (tier.min_input_tokens ?? 1) - 1,
+            // A tier applies from its own min. The previous tier's max is the
+            // same number only when the catalog is contiguous, and preferring it
+            // charged a tier's rate from as early as the tier above ended.
+            threshold: (tier.min_input_tokens ?? 1) - 1,
           }))
           .filter((tier) => tier.min_input_tokens !== undefined && tier.threshold > 0)
           .map((tier) => ({ ...cost(tier), threshold: tier.threshold }))
           .sort((a, b) => a.threshold - b.threshold)
       const fast = model.fast_mode_details
       const transport = fast?.transport
-      const premium = fast?.pricing?.tiers.find((tier) => !tier.min_input_tokens)
+      const premium = fast?.pricing?.tiers.find((tier) => (tier.min_input_tokens ?? 1) === 1)
       // Priority is served by OpenRouter's reviewed endpoints, OpenAI's own API
       // beside an Azure-hosted standard tier, or xAI's priority processing.
       // Gemini and Bedrock hosts have no such tier, so their models never

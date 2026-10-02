@@ -76,7 +76,27 @@ describe("tabular data model", () => {
     ).toBe('name,note\nA,plain\nB,"comma, quote "" and\nnewline"\n')
   })
 
+  test("a blank line in delimited input is not a row", () => {
+    const table = parseTable("csv", "id,name\n1,a\n\n2,b\n")
+
+    expect(table.rows).toEqual([
+      ["1", "a"],
+      ["2", "b"],
+    ])
+    expect(table.totalRows).toBe(2)
+  })
+
   test("rejects non-tabular JSON with a useful error", () => {
     expect(() => parseTable("json", '{"nested":{"value":1}}')).toThrow("array of records")
   })
+})
+
+test("empty quoted records remain rows while blank physical lines are skipped", () => {
+  for (const newline of ["\n", "\r\n"]) {
+    for (const ending of ["", newline]) {
+      const table = parseTable("csv", `name${newline}${newline}""${newline}value${newline}""${ending}`)
+      expect(table.rows).toEqual([[""], ["value"], [""]])
+      expect(table.totalRows).toBe(3)
+    }
+  }
 })

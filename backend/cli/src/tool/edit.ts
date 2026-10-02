@@ -664,6 +664,12 @@ export function replace(content: string, oldString: string, newString: string, r
       const leading = indent(candidate)
       const pad = leading.slice(0, Math.max(0, leading.length - quoted))
       const search = candidate.slice(pad.length)
+      // An empty search matches at index 0 and then splits the content into
+      // single characters, so replaceAll would interleave the replacement
+      // between every one of them. A fuzzy replacer can return a candidate
+      // that is nothing but whitespace, and slicing off the padding it added
+      // can leave nothing behind.
+      if (!search) continue
       const replacement = pad ? newString.replaceAll("\n", `\n${pad}`) : newString
       const index = content.indexOf(search)
       if (index === -1) continue

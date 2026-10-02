@@ -45,12 +45,22 @@ export namespace JsonStore {
       return await parse(filepath)
     } catch (error) {
       const backup = `${filepath}.corrupt-${process.pid}`
-      await fs.copyFile(filepath, backup).catch(() => {})
+      // The copy can fail where the read failed: a store that is a directory, a
+      // read-only volume, a full disk. Claiming a backup that was never written
+      // is the worst possible thing to say here, because the message goes on to
+      // tell the user to remove the only copy of their credentials.
+      const backedUp = await fs.copyFile(filepath, backup).then(
+        () => true,
+        () => false,
+      )
       const reason = error instanceof Error ? error.message : String(error)
       throw new Error(
         `${filepath} exists but could not be parsed (${reason}). ` +
           `Refusing to overwrite it — that would discard every other entry. ` +
-          `The unmodified file was backed up to ${backup}; repair or remove ${filepath} and retry.`,
+          (backedUp
+            ? `The unmodified file was backed up to ${backup}; repair or remove ${filepath} and retry.`
+            : `No copy of it could be made either, so this file is the only copy — do not delete it. ` +
+              `Repair it in place, or move it aside yourself once you have another copy.`),
       )
     }
   }
