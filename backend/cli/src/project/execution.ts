@@ -131,19 +131,33 @@ export namespace ExecutionAuthority {
       Vcs.metadataRoot(),
     ])
     const backend = Sandbox.describe()
-    const sandbox = {
-      enabled: access.sandbox.enabled,
-      network: access.sandbox.network,
-      allowWrite: access.sandbox.allowWrite,
-      onUnavailable: access.sandbox.onUnavailable,
-      requireProjectTrust: access.sandbox.requireProjectTrust,
-      backend: backend.backend,
-      available: backend.available,
-      enforced: access.sandbox.enabled && backend.available,
-    }
+    // PTYs are opened and operated by the user. Agent shell commands and
+    // kernels have distinct capabilities and retain their execution policy.
+    const terminal = input.capability === "terminal"
+    const sandbox = terminal
+      ? {
+          enabled: false,
+          network: "allow" as const,
+          allowWrite: [],
+          onUnavailable: "allow" as const,
+          requireProjectTrust: false,
+          backend: "none" as const,
+          available: backend.available,
+          enforced: false,
+        }
+      : {
+          enabled: access.sandbox.enabled,
+          network: access.sandbox.network,
+          allowWrite: access.sandbox.allowWrite,
+          onUnavailable: access.sandbox.onUnavailable,
+          requireProjectTrust: access.sandbox.requireProjectTrust,
+          backend: backend.backend,
+          available: backend.available,
+          enforced: access.sandbox.enabled && backend.available,
+        }
     const unavailable = sandbox.enabled && !sandbox.available && sandbox.onUnavailable === "error"
     const untrusted = !trust.canExecuteProjectCode
-    const needsTrust = sandbox.requireProjectTrust || !routine.has(input.capability) || !sandbox.enforced
+    const needsTrust = !terminal && (sandbox.requireProjectTrust || !routine.has(input.capability) || !sandbox.enforced)
     const reason = unavailable ? "sandbox_unavailable" : untrusted && needsTrust ? "project_untrusted" : "allowed"
     const mode = reason !== "allowed" ? "read_only" : sandbox.enforced ? "sandboxed" : "host"
     const message =

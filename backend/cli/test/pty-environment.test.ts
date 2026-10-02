@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { terminalArgs, terminalEnv } from "@/pty/environment"
+import { terminalArgs, terminalEnv, terminalPath } from "@/pty/environment"
 
 test("project terminals do not inherit the parent macOS terminal session", () => {
   const env = terminalEnv(
@@ -18,9 +18,9 @@ test("project terminals do not inherit the parent macOS terminal session", () =>
     "workstation.local",
   )
 
-  expect(env.PATH).toBe("/usr/bin:/bin")
+  expect(env.PATH.split(":").slice(0, 2)).toEqual(["/usr/bin", "/bin"])
   expect(env.TERM).toBe("xterm-256color")
-  expect(env.HISTFILE).toBe("/dev/null")
+  expect(env.HISTFILE).toBeUndefined()
   expect(env.SHELL_SESSIONS_DISABLE).toBe("1")
   expect(env.OPENSCIENCE_PROJECT_ID).toBe("project_1")
   expect(env.OPENSCIENCE_SESSION_ID).toBe("ses_1")
@@ -51,10 +51,27 @@ test("project terminals show the current workspace folder in common shell prompt
   )
 })
 
-test("interactive shells start clean without restored sessions or user bootstrap output", () => {
-  expect(terminalArgs("/bin/zsh")).toEqual(["-d", "-f", "+m", "-i"])
-  expect(terminalArgs("/bin/bash")).toEqual(["--noprofile", "--norc", "-i"])
-  expect(terminalArgs("/usr/local/bin/fish")).toEqual(["--no-config", "--interactive"])
+test("interactive shells load login configuration for installed commands", () => {
+  expect(terminalArgs("/bin/zsh")).toEqual(["-l", "-i"])
+  expect(terminalArgs("/bin/bash")).toEqual(["--login", "-i"])
+  expect(terminalArgs("/usr/local/bin/fish")).toEqual(["--login", "--interactive"])
   expect(terminalArgs("/bin/dash")).toEqual(["-i"])
   expect(terminalArgs("nu")).toEqual([])
+})
+
+test("GUI terminal PATH finds user installers without dropping or reordering existing entries", () => {
+  const env = { HOME: "/home/researcher", PATH: "/custom/bin:/usr/bin:/bin" }
+  const entries = terminalPath(env, "darwin").split(":")
+  expect(entries.slice(0, 3)).toEqual(["/custom/bin", "/usr/bin", "/bin"])
+  expect(entries).toContain("/home/researcher/.local/bin")
+  expect(entries).toContain("/home/researcher/.bun/bin")
+  expect(entries).toContain("/opt/homebrew/bin")
+  expect(new Set(entries).size).toBe(entries.length)
+  expect(
+    terminalPath(
+      { USERPROFILE: "C:\\Users\\Researcher", APPDATA: "C:\\Users\\Researcher\\AppData\\Roaming", Path: "C:\\Windows" },
+      "win32",
+    ).split(";"),
+  ).toContain("C:\\Users\\Researcher\\AppData\\Roaming\\npm")
+  expect(terminalArgs("C:\\Program Files\\Git\\bin\\bash.exe")).toEqual(["--login", "-i"])
 })

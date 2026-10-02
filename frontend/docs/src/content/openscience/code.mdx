@@ -32,6 +32,10 @@ Ask for a diff and validation results before using the updated analysis. Keep ch
 
 Open **Terminal** in the project or use **Open project terminal** from the command palette. You can run commands yourself while following the research conversation.
 
+New terminals open in the selected **Working folder**, or in session scratch when you explicitly select scratch. With no connected folder, they open in the project directory. Existing terminals keep their current directory when you change the selection; open a new tab to use the new folder.
+
+This is your normal local shell, with your login configuration, installed commands, credentials, and operating-system permissions. Commands such as `claude`, `git`, and your package managers can use their usual files and network connections. On a remote OpenScience server, the terminal runs on that server. The research agent's shell commands and Python/R kernels continue to use the agent's sandbox and approval settings.
+
 Use Control+backtick to open or close the terminal and Control+Shift+backtick for a new terminal when available. See [Keyboard shortcuts](/openscience/keyboard-shortcuts).
 
 Confirm the working directory and selected environment before running a command. The terminal's environment need not contain every package available to the agent's Python or R analysis environment.

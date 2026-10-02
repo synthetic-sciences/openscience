@@ -105,23 +105,23 @@ async function scenario(kind: "pty" | "biology", action: "trust" | "filesystem" 
     expect(entry.project_id).toBe(setup.projectID)
     expect(entry.session_id).toBe(setup.sessionID)
     expect(entry.authority_generation).toHaveLength(64)
-    // The fixture explicitly enables the trusted global sandbox because this
-    // scenario validates containment teardown rather than Full access.
-    expect(entry.sandboxed).toBe(true)
+    // User PTYs use the host; agent biology processes remain sandboxed. Both
+    // still require durable ownership and descendant teardown.
+    expect(entry.sandboxed).toBe(kind !== "pty")
     expect(await AuthorityProcessLedger.owns(entry.pid, entry.identity)).toBe(true)
     expect(await AuthorityProcessLedger.owns(entry.descendant.pid, entry.descendant.identity)).toBe(true)
     expect(entry.descendant.pgid).not.toBe(entry.pid)
     // A double-fork reparents to host init without a sandbox. Inside
     // bubblewrap it reparents to the namespace init, whose host PID remains a
     // descendant of the durable outer leader.
-    if (process.platform === "linux" && entry.sandboxed) expect(entry.descendant.ppid).not.toBe(1)
+    if (process.platform === "linux") expect(entry.descendant.ppid).not.toBe(1)
     else expect(entry.descendant.ppid).toBe(1)
 
     owner.kill("SIGKILL")
     await owner.exited
     // Both fixtures ignore terminal hangup, so any death below must come from
     // the platform containment rather than directly from the killed server.
-    const contained = process.platform === "darwin" || (process.platform === "linux" && entry.sandboxed)
+    const contained = process.platform === "darwin" || process.platform === "linux"
     if (contained) {
       // The macOS responsibility supervisor and Linux bubblewrap namespace
       // observe owner death asynchronously. Prove their causal teardown to a

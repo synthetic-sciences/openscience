@@ -36,6 +36,9 @@ function latchLinuxControl(): LinuxControl {
     // supervisor's sole native watcher without an externally visible gap.
     for (const listener of inherited) process.removeListener(candidate, listener as (...args: unknown[]) => void)
     process.on(candidate, () => {
+      // The interactive shell owns PTY interrupts; the supervisor must stay
+      // alive until the shell exits or the owning server requests teardown.
+      if (candidate === "SIGINT" && process.stdin.isTTY) return
       if (signal) return
       signal = candidate
       request?.(candidate)

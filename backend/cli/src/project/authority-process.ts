@@ -449,7 +449,7 @@ export namespace AuthorityProcessLedger {
     }
 
     if (
-      entry.kind === "kernel" &&
+      (entry.kind === "kernel" || (entry.kind === "pty" && entry.containment === "linux_subreaper_v1")) &&
       (entry.containment === "linux_subreaper_v1" || entry.containment === "darwin_responsibility_v1")
     ) {
       const live = await owns(entry.pid, entry.identity)

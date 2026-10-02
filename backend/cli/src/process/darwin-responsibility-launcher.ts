@@ -147,7 +147,11 @@ export namespace DarwinResponsibilityLauncher {
     // project code. TERM/HUP only record a control request; this responsibility
     // root remains alive to reap. SIGINT remains a payload-only interrupt and
     // is delivered once if it arrives just before the payload is spawned.
-    process.on("SIGINT", () => forward("SIGINT"))
+    // A PTY delivers Ctrl+C to its foreground process group itself. Forwarding
+    // again would interrupt the shell twice while it is taking ownership.
+    process.on("SIGINT", () => {
+      if (!process.stdin.isTTY) forward("SIGINT")
+    })
     for (const signal of ["SIGHUP", "SIGTERM"] as const) {
       process.on(signal, () => {
         if (teardownSignal) return
@@ -185,13 +189,11 @@ export namespace DarwinResponsibilityLauncher {
         env: process.env,
         shell: shell === "1" ? true : shell === "0" ? false : shell,
         stdio: "inherit",
-        // Keep the responsibility supervisor out of the payload's process
-        // group. Callers signal the registered supervisor group; if the
-        // payload shared it, it would receive that signal once from the
-        // kernel and a second time from the forwarding handler below.
-        // Responsibility ownership is independent of POSIX process groups,
-        // so a new payload session preserves exact descendant containment.
-        detached: true,
+        // Interactive shells must inherit the controlling terminal to claim
+        // its foreground process group and support job control. Responsibility
+        // ownership still contains their descendants independently of groups.
+        // Pipe-based runtimes keep a separate session for signal forwarding.
+        detached: !process.stdin.isTTY,
       })
     } catch (error) {
       await reapOwned()

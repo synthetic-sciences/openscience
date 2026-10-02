@@ -9,6 +9,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 ## Unreleased
 
 - Add OpenAI GPT-6.1 Sol with Responses tool calling, supported reasoning efforts, current pricing, and Fast mode.
+- Open terminals in the selected working folder and load login shell setup so installed commands such as Claude Code are discoverable, including when the desktop app launches from Finder. User-operated terminals use normal local-shell access; agent commands and kernels retain their sandbox.
 
 - Windows desktop releases now sign the installer, app, bundled CLI, and native libraries with Inkvell Inc., and verify trusted, timestamped signatures before publication.
 

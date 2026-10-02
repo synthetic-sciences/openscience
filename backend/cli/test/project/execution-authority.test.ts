@@ -50,15 +50,15 @@ test("session execution authority is inspectable through the project route", asy
   expect(response.status).toBe(200)
   const decision = ExecutionAuthority.Decision.parse(await response.json())
   expect(decision).toMatchObject({
-    allowed: Sandbox.available(),
-    reason: Sandbox.available() ? "allowed" : "sandbox_unavailable",
+    allowed: true,
+    reason: "allowed",
     capability: "terminal",
-    mode: Sandbox.available() ? "sandboxed" : "read_only",
+    mode: "host",
     projectID: project.project.id,
     sessionID,
     sandbox: {
-      enabled: true,
-      enforced: Sandbox.available(),
+      enabled: false,
+      enforced: false,
       requireProjectTrust: false,
     },
   })
@@ -77,9 +77,10 @@ test("session execution authority is inspectable through the project route", asy
   expect(ExecutionAuthority.Decision.parse(persisted).scratch).toBeUndefined()
 })
 
-test("untrusted projects run routine terminals, shells, and kernels only in an enforced sandbox", async () => {
+test("user terminals are independent of the enforced agent shell and kernel sandbox", async () => {
   await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
+  await using outside = await tmpdir()
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
@@ -90,7 +91,7 @@ test("untrusted projects run routine terminals, shells, and kernels only in an e
       const decision = await ExecutionAuthority.decide({
         projectID: Instance.project.id,
         sessionID: session.id,
-        capability: "terminal",
+        capability: "shell",
       })
 
       expect(decision).toMatchObject({
@@ -121,7 +122,9 @@ test("untrusted projects run routine terminals, shells, and kernels only in an e
         language: "python" as const,
       }
       if (!Sandbox.available()) {
-        await expect(Pty.create({ sessionID: session.id })).rejects.toBeInstanceOf(ExecutionAuthority.DeniedError)
+        const terminal = await Pty.create({ sessionID: session.id })
+        expect(terminal.authority.mode).toBe("host")
+        await Pty.remove(terminal.id)
         await expect(
           bash.execute(
             {
@@ -141,7 +144,24 @@ test("untrusted projects run routine terminals, shells, and kernels only in an e
 
       const terminal = await Pty.create({ sessionID: session.id })
       try {
-        expect(terminal.authority).toMatchObject({ allowed: true, mode: "sandboxed", sandbox: { enforced: true } })
+        expect(terminal.authority).toMatchObject({
+          allowed: true,
+          mode: "host",
+          sandbox: { enabled: false, enforced: false, network: "allow" },
+        })
+        const marker = path.join(outside.path, "user-terminal-config")
+        Pty.write(terminal.id, `printf user-terminal > '${marker}'\r`)
+        for (let attempt = 0; attempt < 500 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(20)
+        expect(await Bun.file(marker).text()).toBe("user-terminal")
+        const denied = await bash.execute(
+          {
+            command: `printf agent-shell > '${marker}'`,
+            description: "Check agent sandbox outside the project",
+          },
+          context(session.id),
+        )
+        expect(denied.metadata.exit).not.toBe(0)
+        expect(await Bun.file(marker).text()).toBe("user-terminal")
         const result = await bash.execute(
           {
             command: `printf spawned > ${JSON.stringify(shellMarker)}`,
@@ -299,8 +319,7 @@ test("authority generations change with trust and filesystem revisions", async (
   })
 })
 
-test("trusted terminal derives its process contract from the owning session", async () => {
-  if (!Sandbox.available()) return
+test("user terminal derives its ownership and teardown from the owning session", async () => {
   await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({
@@ -326,11 +345,11 @@ test("trusted terminal derives its process contract from the owning session", as
           authority: {
             allowed: true,
             capability: "terminal",
-            mode: "sandboxed",
+            mode: "host",
             sandbox: {
-              enabled: true,
-              enforced: true,
-              network: "deny",
+              enabled: false,
+              enforced: false,
+              network: "allow",
             },
           },
           status: "running",
@@ -342,6 +361,41 @@ test("trusted terminal derives its process contract from the owning session", as
         await Pty.remove(terminal.id)
       }
       expect(Pty.list()).toEqual([])
+    },
+  })
+})
+
+test("terminals follow the selected connected working folder and explicit scratch choice", async () => {
+  await using _sandbox = await sandboxedExecution()
+  await using project = await tmpdir({ git: true })
+  await using folder = await tmpdir()
+  await Instance.provide({
+    directory: project.path,
+    fn: async () => {
+      const session = await Session.create({})
+      await SessionFilesystem.grant({
+        sessionID: session.id,
+        path: folder.path,
+        access: "write",
+        scope: "session",
+        source: "api",
+      })
+      const connected = await Pty.create({ sessionID: session.id })
+      try {
+        expect(connected.cwd).toBe(folder.path)
+        expect(connected.authority.workspace).toBe(folder.path)
+      } finally {
+        await Pty.remove(connected.id)
+      }
+      await SessionFilesystem.setWorkingRoot(session.id, "scratch")
+      const scratch = await Pty.create({ sessionID: session.id })
+      try {
+        expect(scratch.cwd).toBe(await SessionFilesystem.workspace(session.id))
+        expect(scratch.cwd).not.toBe(folder.path)
+      } finally {
+        await Pty.remove(scratch.id)
+      }
+      await Session.remove(session.id)
     },
   })
 })
