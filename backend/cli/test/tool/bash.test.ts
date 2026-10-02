@@ -623,3 +623,45 @@ describe("tool.bash truncation", () => {
 test("a command with no timeout given runs for at most twenty minutes by default", () => {
   expect(DEFAULT_BASH_TIMEOUT_MS).toBe(20 * 60_000)
 })
+
+describe("tool.bash timeout validation", () => {
+  test("refuses a timeout of zero instead of running the command unbounded", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        // `sleep 1` outlives a zero timeout only if the guard lets it through;
+        // the rejection is the assertion, not the error text.
+        await expect(
+          bash.execute({ command: "sleep 1", description: "Wait", timeout: 0 }, await context()),
+        ).rejects.toThrow("Invalid timeout value: 0")
+      },
+    })
+  })
+
+  test("refuses a negative timeout", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        await expect(
+          bash.execute({ command: "echo hello", description: "Echo hello", timeout: -1 }, await context()),
+        ).rejects.toThrow("Invalid timeout value: -1")
+      },
+    })
+  })
+
+  test("accepts a positive timeout and runs the command", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        const bash = await BashTool.init()
+        const result = await bash.execute(
+          { command: "echo hello", description: "Echo hello", timeout: 60_000 },
+          await context(),
+        )
+        expect(result.output).toContain("hello")
+      },
+    })
+  })
+})

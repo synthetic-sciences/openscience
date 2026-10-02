@@ -225,7 +225,9 @@ export const BashTool = Tool.define("bash", async () => {
       const target = path.isAbsolute(requested) ? requested : path.resolve(workspace, requested)
       const cwd = (await Filesystem.canonical(target)) ?? path.resolve(target)
       const contained = (value: string) => writable.some((root) => Filesystem.contains(root, value))
-      if (params.timeout !== undefined && params.timeout < 0) {
+      // Zero survives `??` and then fails the `timeout > 0` arm below, so the
+      // command would run unbounded while this guard claims to have checked it.
+      if (params.timeout !== undefined && params.timeout <= 0) {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
       const timeout = params.timeout ?? DEFAULT_TIMEOUT

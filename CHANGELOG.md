@@ -210,6 +210,15 @@ public 50 the old detector named an example's `samples.csv` and the input
 - **First-run setup takes a Google (Gemini) key, and counts what is already connected.** **Connect your models** and `openscience init` list Google beside Anthropic, OpenAI and OpenRouter. A provider the runtime already reaches (a key in your environment such as `GOOGLE_GENERATIVE_AI_API_KEY`, a key stored earlier, a local endpoint) shows as connected, and the step no longer warns **No model connected yet** or offers **Continue without a model** when one is. The managed Ace route does not count as a model of your own.
 - **The desktop app installs its command-line tool.** **Customize → General → Command line tool** links `~/.openscience/bin/openscience` to the app's own copy and adds that folder to your shell's startup file the way the standalone installer does, so `openscience` in a new terminal opens the running app. The row says whether the tool is installed and on your PATH, and shows the line to add when it is not. On every launch the app re-points a link of its own that names a moved or reinstalled bundle; it never creates a link you did not ask for and never replaces an `openscience` it did not create. `openscience uninstall` run from that link removes the link and the PATH line. The Linux AppImage runs from a temporary mount and cannot be linked, so the row says to use the standalone installer there; Windows is unchanged.
 
+### Fixed
+
+- **A bash `timeout` of 0 no longer runs the command with no timeout at all.** The
+  guard only rejected a negative value, and `0` then passed it, survived the `??`
+  against the twenty-minute default, and failed the `timeout > 0` arm that arms
+  the kill timer — so the command ran until it exited on its own. A non-positive
+  timeout is now refused, which is what the guard's own error message already
+  said it did.
+
 ### Changed
 
 - **The landing page preview fits inside the page borders.** The Ace model table now matches the current Synthetic Sciences managed catalog, including GPT-6, Claude Opus 5.5, and MiMo V2.6 Pro.
