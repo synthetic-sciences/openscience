@@ -65,10 +65,15 @@ function hostedScientificLabel(id: string) {
 }
 
 export function formatApprovalBytes(value: number) {
+  // The exact count is the point of this label, so a value that cannot be
+  // counted is named as such instead of being formatted into "NaN bytes".
+  if (!Number.isFinite(value)) return "unknown size"
   const bytes = Math.max(0, Math.trunc(value))
   const exact = new Intl.NumberFormat("en-US").format(bytes)
-  if (!Number.isFinite(value) || bytes < 1024) return `${exact} bytes`
-  if (bytes < 1024 * 1024) return `${Number((bytes / 1024).toFixed(1))} KB (${exact} bytes)`
+  if (bytes < 1024) return `${exact} bytes`
+  // Choose the unit using the rounded display value, while retaining the exact byte count.
+  if (bytes < 1024 * 1024 && Number((bytes / 1024).toFixed(1)) < 1024)
+    return `${Number((bytes / 1024).toFixed(1))} KB (${exact} bytes)`
   return `${Number((bytes / (1024 * 1024)).toFixed(1))} MB (${exact} bytes)`
 }
 

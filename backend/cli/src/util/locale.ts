@@ -54,8 +54,10 @@ export namespace Locale {
       const minutes = Math.floor((input % 3600000) / 60000)
       return `${hours}h ${minutes}m`
     }
-    const hours = Math.floor(input / 3600000)
-    const days = Math.floor((input % 3600000) / 86400000)
+    const days = Math.floor(input / 86400000)
+    // The remainder inside the current day, not inside the current hour: the
+    // operands were swapped, so days always came out zero and hours unbounded.
+    const hours = Math.floor((input % 86400000) / 3600000)
     return `${days}d ${hours}h`
   }
 

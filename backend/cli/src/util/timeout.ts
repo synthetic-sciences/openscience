@@ -1,9 +1,9 @@
 export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timeout: NodeJS.Timeout
   return Promise.race([
-    promise.then((result) => {
+    // Rejected operations must release the timer that keeps the process alive.
+    promise.finally(() => {
       clearTimeout(timeout)
-      return result
     }),
     new Promise<never>((_, reject) => {
       timeout = setTimeout(() => {
