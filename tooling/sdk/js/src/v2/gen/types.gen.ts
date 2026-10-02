@@ -2006,6 +2006,10 @@ export type ProviderConfig = {
   blacklist?: Array<string>
   options?: {
     apiKey?: string
+    /**
+     * Keep saved connection settings inactive without a credential.
+     */
+    requiresCredential?: boolean
     baseURL?: string
     /**
      * Shell command whose stdout is a short-lived bearer token. Sent as 'Authorization: Bearer <token>' on every request and re-minted automatically before the token's JWT exp (or every request for a non-JWT token). Use for providers behind rotating/SSO-minted credentials.

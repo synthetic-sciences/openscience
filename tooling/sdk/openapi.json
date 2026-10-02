@@ -62127,6 +62127,10 @@
               "apiKey": {
                 "type": "string"
               },
+              "requiresCredential": {
+                "description": "Keep saved connection settings inactive without a credential.",
+                "type": "boolean"
+              },
               "baseURL": {
                 "type": "string"
               },

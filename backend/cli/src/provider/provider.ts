@@ -2717,6 +2717,11 @@ export namespace Provider {
       }
 
       const auth = authEntries[providerID]
+      // Saved endpoint preferences survive key removal, but cannot authenticate a connection.
+      if (provider.options.requiresCredential && !auth && !effectiveKey(provider) && !provider.options.tokenCommand) {
+        delete providers[providerID]
+        continue
+      }
       // An explicit OAuth record is the credential authority. Strip any stale
       // retired token or proxy values before constructing its SDK request.
       if (auth?.type === "oauth") {
@@ -3031,6 +3036,7 @@ export namespace Provider {
       const s = await state()
       const provider = s.providers[model.providerID]
       const options = { ...provider.options }
+      delete options.requiresCredential
 
       if (
         provider.source === "managed" &&

@@ -1203,6 +1203,10 @@ export namespace Config {
       options: z
         .object({
           apiKey: z.string().optional(),
+          requiresCredential: z
+            .boolean()
+            .optional()
+            .describe("Keep saved connection settings inactive without a credential."),
           baseURL: z.string().optional(),
           tokenCommand: z
             .string()

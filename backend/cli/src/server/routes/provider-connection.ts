@@ -33,6 +33,7 @@ export async function saveProviderConnection(id: string, input: z.infer<typeof P
     const previous = Config.Info.parse(parse((await Config.getGlobalRaw()).content)).provider?.[id]
     const credential = await Auth.get(id)
     const options = { ...previous?.options }
+    options.requiresCredential = true
     if (input.baseURL) options.baseURL = input.baseURL.replace(/\/+$/, "")
     else delete options.baseURL
     if (id === "openai") options.api = input.api
