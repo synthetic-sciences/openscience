@@ -10,6 +10,7 @@ import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import { normalizeServerUrl } from "@/context/server"
 import {
   hasDesktopUpdateCapability,
+  remoteWorkspace,
   resolveDefaultServerUrl,
   resolveDesktopServerUrl,
   resolveServerRoute,
@@ -19,7 +20,11 @@ import { waitForUpdatedServer, type UpdateHealth } from "@/utils/update-restart"
 import { updateError, UpdateRefused } from "@/utils/update-error"
 
 const DEFAULT_SERVER_URL_KEY = "openscience.settings.dat:defaultServerUrl"
-const desktopUrl = resolveDesktopServerUrl(location.search, window.location.origin)
+const remote = remoteWorkspace(location.search, {
+  getItem: (key) => sessionStorage.getItem(key),
+  setItem: (key, value) => sessionStorage.setItem(key, value),
+})
+const desktopUrl = remote ? window.location.origin : resolveDesktopServerUrl(location.search, window.location.origin)
 const desktopUpdateAvailable = Boolean(desktopUrl && hasDesktopUpdateCapability(location.search))
 
 const stored = () => {
@@ -83,6 +88,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 
 const platform: Platform = {
   platform: desktopUrl ? "desktop" : "web",
+  openWorkspace: window.openscienceDesktop?.openWorkspace,
   version: import.meta.env.VITE_OPENSCIENCE_VERSION || pkg.version,
   openLink(url: string) {
     window.open(url, "_blank", "noopener,noreferrer")
@@ -119,7 +125,7 @@ const platform: Platform = {
       })
       .catch(() => undefined)
   },
-  openDirectoryPickerDialog: (options) => openNativeDirectoryPicker(options, openscienceFetch),
+  openDirectoryPickerDialog: remote ? undefined : (options) => openNativeDirectoryPicker(options, openscienceFetch),
   checkUpdate: async (options) => {
     const query = options?.refresh ? "?refresh=1" : ""
     const url = resolveServerRoute(`/settings/updates${query}`, server(), window.location.origin)

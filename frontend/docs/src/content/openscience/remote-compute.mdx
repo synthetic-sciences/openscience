@@ -17,6 +17,26 @@ Open **Customize → Compute** to prepare resources for work that needs more tim
 
 Use [Compute jobs](/openscience/jobs) for the lifecycle after connection.
 
+## Open an existing project through SSH
+
+For interactive access to the server's existing files and environment, open a **remote workspace** from the desktop server selector. Compute host registration above remains the job-dispatch workflow.
+
+1. Install a current OpenScience runtime on the trusted remote host and start it on loopback:
+   ```bash
+   openscience serve --port 4096
+   ```
+2. Keep an SSH tunnel running on your computer:
+   ```bash
+   ssh -N -L 127.0.0.1:14096:127.0.0.1:4096 lab-host
+   ```
+3. In the local desktop window, open the server selector, add `http://127.0.0.1:14096`, and choose **Open workspace**. Review the exact address in the desktop confirmation.
+4. A separate window opens the remote runtime's own workspace. Choose an existing project, or create a project and connect an absolute source-folder path **on the remote host** using the in-app folder picker. Files are used in place; no project copy is made on your laptop.
+5. Choose that source folder as the working folder. File edits, agent tools, and user terminals run on the remote runtime. Its installed environments, credentials, permissions, and sandbox apply. Large datasets stay on that host.
+
+Keep the tunnel and remote runtime running for the window's lifetime. If the tunnel disconnects, restore it and reload the workspace page. The window title includes the server address; the desktop Window menu returns you to your local workspace.
+
+This workflow checks `/global/health` before opening. Redirects, insecure non-loopback HTTP addresses, URLs containing credentials, and unhealthy runtimes are refused. A runtime requiring separate HTTP authentication is not yet supported by this desktop opener; use its authenticated browser workspace. The remote window has isolated browser storage and no local desktop bridge. The local workspace's CSP remains unchanged.
+
 ## Connect Modal
 
 1. Open the Modal section in Compute.

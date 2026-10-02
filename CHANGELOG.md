@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Open trusted remote runtimes and SSH tunnels in isolated desktop workspace windows, keeping files, events, and terminals on the selected server without broadening the local workspace connection policy.
+
 - Add a keyless BioSimulators registry connector for simulator, KiSAO algorithm, and model-format searches, with version-specific record retrieval.
 - Add custom model Base URLs and OpenAI protocol selection, separate research-search setup status, and complete Chinese connection/form validation messages.
 

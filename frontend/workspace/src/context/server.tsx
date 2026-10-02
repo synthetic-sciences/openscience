@@ -239,13 +239,13 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       setState("active", url)
     }
 
-    function add(input: string) {
+    function add(input: string, activate = true) {
       const url = normalizeServerUrl(input)
       if (!url) return
 
       const fallback = normalizeServerUrl(props.defaultUrl)
       if (fallback && url === fallback) {
-        setState("active", url)
+        if (activate) setState("active", url)
         return
       }
 
@@ -253,7 +253,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
         if (!store.list.includes(url)) {
           setStore("list", store.list.length, url)
         }
-        setState("active", url)
+        if (activate) setState("active", url)
       })
     }
 

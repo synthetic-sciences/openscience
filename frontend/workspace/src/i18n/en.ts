@@ -115,6 +115,9 @@ export const dict = {
   "settings.validation.quote": "Command has an unclosed {{quote}} quote",
   "settings.validation.environment": "Environment",
   "settings.validation.headers": "Headers",
+  "dialog.server.desktop.description":
+    "Open a trusted remote workspace in a separate window. For SSH, keep your tunnel running and enter its loopback URL. Remote compute hosts are for job dispatch; this connection opens the server’s files and environment.",
+  "dialog.server.desktop.open": "Open workspace",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",

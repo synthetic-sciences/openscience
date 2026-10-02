@@ -115,6 +115,9 @@ export const dict = {
   "settings.validation.quote": "命令中的 {{quote}} 引号未闭合",
   "settings.validation.environment": "环境变量",
   "settings.validation.headers": "请求头",
+  "dialog.server.desktop.description":
+    "在独立窗口中打开受信任的远程工作区。如通过 SSH 连接，请保持隧道运行并输入本机回环地址。远程计算主机用于派发任务；工作区连接则直接使用服务器上的文件和环境。",
+  "dialog.server.desktop.open": "打开工作区",
   "command.category.suggested": "建议",
   "command.category.view": "视图",
   "command.category.project": "项目",

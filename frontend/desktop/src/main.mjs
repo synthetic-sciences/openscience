@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { randomBytes, createHash } from "node:crypto"
 import { execFile, spawn } from "node:child_process"
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
@@ -6,7 +6,7 @@ import { createServer } from "node:http"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
-import { app, BrowserWindow, dialog, Menu, nativeTheme, session, shell } from "electron"
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from "electron"
 import {
   apply as applyUpdate,
   current as currentUpdate,
@@ -29,10 +29,14 @@ import { servicePort } from "./service-port.mjs"
 import { logsDirectory, rotateLogs } from "./log-path.mjs"
 import { readAppearance, resolveAppearance, saveAppearance, splashQuery, sweepAppearance } from "./appearance.mjs"
 
+import { workspaceOrigin, workspaceHealth, workspaceNavigation } from "./remote-workspace.mjs"
+
 const execute = promisify(execFile)
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..")
 const splashPage = fileURLToPath(new URL("./splash/splash.html", import.meta.url))
 const windows = new Set()
+const remoteWindows = new Set()
+const connectingWindows = new Set()
 // The only web permissions the workspace uses; every other request (camera,
 // microphone, geolocation, MIDI, ...) is denied without prompting.
 const permissions = new Set(["clipboard-read", "clipboard-sanitized-write", "fullscreen", "notifications"])
@@ -959,8 +963,15 @@ function applicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-async function createWindow() {
+async function createWindow(remote) {
   if (!state.address) return
+  const origin = remote ? workspaceOrigin(remote) : new URL(state.address).origin
+  const remoteSession = remote
+    ? session.fromPartition(`persist:workspace-${createHash("sha256").update(origin).digest("hex")}`)
+    : undefined
+  remoteSession?.setPermissionRequestHandler((contents, permission, callback, details) => {
+    callback(permissions.has(permission) && workspaceNavigation(details?.requestingUrl || contents.getURL(), origin))
+  })
   const window = new BrowserWindow({
     width: 1440,
     height: 940,
@@ -973,11 +984,21 @@ async function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      ...(remoteSession
+        ? { session: remoteSession }
+        : { preload: fileURLToPath(new URL("./preload.cjs", import.meta.url)) }),
     },
   })
   windows.add(window)
+  if (remote) remoteWindows.add(window)
   window.once("ready-to-show", () => window.show())
-  window.on("page-title-updated", dock)
+  window.on("page-title-updated", (event, title) => {
+    if (remote) {
+      event.preventDefault()
+      window.setTitle(`${new URL(origin).host} — ${title}`)
+    }
+    dock()
+  })
   window.on("focus", dock)
   window.on("close", () => void rememberAppearance(window))
   // The workspace repaints <meta name="theme-color"> with the background token
@@ -988,6 +1009,7 @@ async function createWindow() {
   window.webContents.on("did-change-theme-color", () => void rememberAppearance(window))
   window.on("closed", () => {
     windows.delete(window)
+    remoteWindows.delete(window)
     if (!state.exiting) dock()
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
@@ -995,16 +1017,23 @@ async function createWindow() {
     return { action: "deny" }
   })
   window.webContents.on("will-navigate", (event, url) => {
-    if (localNavigation(url)) return
+    if (workspaceNavigation(url, origin)) return
     event.preventDefault()
     external(url)
   })
   window.webContents.on("will-redirect", (event, url) => {
-    if (localNavigation(url)) return
+    if (workspaceNavigation(url, origin)) return
     event.preventDefault()
     external(url)
   })
-  await window.loadURL(`${state.address}/?desktop=1${state.updateAddress ? "&desktop-update=1" : ""}`)
+  try {
+    await window.loadURL(
+      `${origin}/?desktop=1${remote ? "&remote-workspace=1" : state.updateAddress ? "&desktop-update=1" : ""}`,
+    )
+  } catch (error) {
+    window.destroy()
+    throw error
+  }
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
     const mounted = await window.webContents
@@ -1022,6 +1051,38 @@ async function createWindow() {
 
 const lock = app.requestSingleInstanceLock()
 if (!lock) app.exit(0)
+
+ipcMain.handle("openscience:open-workspace", async (event, value) => {
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  if (
+    !owner ||
+    !windows.has(owner) ||
+    remoteWindows.has(owner) ||
+    event.senderFrame !== event.sender.mainFrame ||
+    !localNavigation(event.senderFrame.url)
+  ) {
+    throw new Error("Only the local workspace can open a remote workspace")
+  }
+  if (connectingWindows.has(owner)) throw new Error("A workspace connection is already being opened")
+  connectingWindows.add(owner)
+  try {
+    const target = await workspaceHealth(value)
+    const result = await dialog.showMessageBox(owner, {
+      type: "question",
+      buttons: ["Open workspace", "Cancel"],
+      defaultId: 1,
+      cancelId: 1,
+      message: `Open workspace at ${target.origin}?`,
+      detail:
+        "This window will use that server's files, tools, and accounts. Only connect to an OpenScience runtime you trust. Your local workspace stays open.",
+    })
+    if (result.response !== 0 || owner.isDestroyed()) return false
+    await createWindow(target.origin)
+    return true
+  } finally {
+    connectingWindows.delete(owner)
+  }
+})
 
 app.on("second-instance", () => {
   void createWindow()

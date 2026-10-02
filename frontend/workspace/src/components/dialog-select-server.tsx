@@ -16,7 +16,7 @@ import { Tooltip } from "@synsci/ui/tooltip"
 import { showToast } from "@synsci/ui/toast"
 import "./dialog-select-server.css"
 
-type ServerStatus = { healthy: boolean; version?: string }
+type ServerStatus = { healthy: boolean | undefined; version?: string }
 
 function serverVersionLabel(value: string) {
   return value.trim().toLocaleLowerCase() === "local" ? "Local" : value
@@ -54,6 +54,10 @@ interface EditRowProps {
 }
 
 async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>): Promise<ServerStatus> {
+  // A remote runtime is checked by the desktop main process only when the
+  // user opens it. The local renderer keeps its same-origin CSP.
+  if (platform.openWorkspace && URL.canParse(url) && new URL(url).origin !== window.location.origin)
+    return { healthy: undefined }
   const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
   const sdk = createOpenScienceClient({
     baseUrl: url,
@@ -217,7 +221,9 @@ export function DialogSelectServer() {
     },
     { initialValue: null },
   )
-  const canDefault = createMemo(() => !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl)
+  const canDefault = createMemo(
+    () => !platform.openWorkspace && !!platform.getDefaultServerUrl && !!platform.setDefaultServerUrl,
+  )
 
   const looksComplete = (value: string) => {
     const normalized = normalizeServerUrl(value)
@@ -328,7 +334,25 @@ export function DialogSelectServer() {
     onCleanup(() => clearInterval(interval))
   })
 
+  const openWorkspace = async (value: string) => {
+    const opened = await platform.openWorkspace!(value)
+    if (opened) server.add(value, false)
+    return opened
+  }
+
   async function select(value: string, persist?: boolean) {
+    if (platform.openWorkspace && new URL(value).origin !== window.location.origin) {
+      try {
+        if (await openWorkspace(value)) dialog.close()
+      } catch (error) {
+        showToast({
+          variant: "error",
+          title: language.t("dialog.server.add.error"),
+          description: error instanceof Error ? error.message : String(error),
+        })
+      }
+      return
+    }
     if (!persist && store.status[value]?.healthy === false) return
     dialog.close()
     if (persist) {
@@ -381,6 +405,19 @@ export function DialogSelectServer() {
 
     setStore("addServer", { adding: true, error: "" })
 
+    if (platform.openWorkspace) {
+      try {
+        if (await openWorkspace(normalized)) {
+          resetAdd()
+          dialog.close()
+        }
+      } catch (error) {
+        setStore("addServer", { error: error instanceof Error ? error.message : String(error) })
+      } finally {
+        setStore("addServer", { adding: false })
+      }
+      return
+    }
     const result = await checkHealth(normalized, platform)
     if (disposed) return
     setStore("addServer", { adding: false })
@@ -410,6 +447,19 @@ export function DialogSelectServer() {
 
     setStore("editServer", { busy: true, error: "" })
 
+    if (platform.openWorkspace) {
+      try {
+        if (await openWorkspace(normalized)) {
+          if (original !== server.url) server.remove(original)
+          resetEdit()
+        }
+      } catch (error) {
+        setStore("editServer", { error: error instanceof Error ? error.message : String(error) })
+      } finally {
+        setStore("editServer", { busy: false })
+      }
+      return
+    }
     const result = await checkHealth(normalized, platform)
     if (disposed) return
     setStore("editServer", { busy: false })
@@ -455,7 +505,9 @@ export function DialogSelectServer() {
   return (
     <Dialog
       title={language.t("dialog.server.title")}
-      description={language.t("dialog.server.description")}
+      description={language.t(
+        platform.openWorkspace ? "dialog.server.desktop.description" : "dialog.server.description",
+      )}
       class="server-dialog"
       fit
       transition
@@ -512,7 +564,9 @@ export function DialogSelectServer() {
                       saveLabel={
                         store.addServer.adding
                           ? language.t("dialog.server.add.checking")
-                          : language.t("dialog.server.add.button")
+                          : language.t(
+                              platform.openWorkspace ? "dialog.server.desktop.open" : "dialog.server.add.button",
+                            )
                       }
                       cancelLabel={language.t("dialog.server.action.cancel")}
                       onChange={handleAddChange}

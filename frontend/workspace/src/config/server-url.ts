@@ -51,3 +51,15 @@ export function resolveServerRoute(path: string, server: string, pageOrigin: str
   const target = new URL(server, pageOrigin)
   return target.origin === pageOrigin ? path : new URL(path, target).toString()
 }
+
+/** Keep a remote window's folder picker server-backed after client navigation
+ * drops its launch query and the user reloads that session page. */
+export function remoteWorkspace(search: string, storage: Pick<Storage, "getItem" | "setItem">) {
+  const selected = new URLSearchParams(search).get("remote-workspace") === "1"
+  try {
+    if (selected) storage.setItem("openscience.remote-workspace", "1")
+    return selected || storage.getItem("openscience.remote-workspace") === "1"
+  } catch {
+    return selected
+  }
+}

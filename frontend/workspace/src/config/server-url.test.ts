@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   hasDesktopUpdateCapability,
+  remoteWorkspace,
   resolveDefaultServerUrl,
   resolveDesktopServerUrl,
   resolveServerRoute,
@@ -84,4 +85,13 @@ describe("resolveServerRoute", () => {
       "http://127.0.0.1:4096/settings/updates?refresh=1",
     )
   })
+})
+
+test("remote windows retain server folder selection after navigating and reloading", () => {
+  sessionStorage.clear()
+  expect(remoteWorkspace("", sessionStorage)).toBe(false)
+  expect(remoteWorkspace("?desktop=1&remote-workspace=1", sessionStorage)).toBe(true)
+  expect(remoteWorkspace("", sessionStorage)).toBe(true)
+  sessionStorage.clear()
+  expect(remoteWorkspace("?desktop=1", sessionStorage)).toBe(false)
 })

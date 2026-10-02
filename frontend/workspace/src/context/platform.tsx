@@ -63,6 +63,9 @@ export type Platform = {
   /** Load recent OpenScience release notes on demand in Settings */
   listUpdates?(): Promise<Array<{ version: string; name: string; notes: string; publishedAt?: string; url: string }>>
 
+  /** Open an explicitly selected runtime in an isolated desktop window. */
+  openWorkspace?(url: string): Promise<boolean>
+
   /** Fetch override */
   fetch?: typeof fetch
 

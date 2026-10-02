@@ -11,5 +11,6 @@ interface ImportMeta {
 }
 
 interface Window {
+  openscienceDesktop?: { openWorkspace(url: string): Promise<boolean> }
   __OPENSCIENCE_BASE_URL__?: string
 }
