@@ -259,6 +259,8 @@ export function formatTaskDuration(value?: number) {
   if (value === undefined) return undefined
   if (value < 1_000) return `${Math.round(value)}ms`
   if (value < 60_000) return `${(value / 1_000).toFixed(value < 10_000 ? 1 : 0)}s`
-  if (value < 3_600_000) return `${Math.floor(value / 60_000)}m ${Math.round((value % 60_000) / 1_000)}s`
-  return `${Math.floor(value / 3_600_000)}h ${Math.round((value % 3_600_000) / 60_000)}m`
+  // Floor both halves. Rounding the remainder reaches 60 and prints a duration
+  // that does not exist, where the ticking counter above floors throughout.
+  if (value < 3_600_000) return `${Math.floor(value / 60_000)}m ${Math.floor((value % 60_000) / 1_000)}s`
+  return `${Math.floor(value / 3_600_000)}h ${Math.floor((value % 3_600_000) / 60_000)}m`
 }
