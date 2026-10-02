@@ -8,11 +8,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.
-
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
 ### Changed
+
+- Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.
 
 - **The scanpy and AnnData skills keep raw counts in a layer.** Their workflows
   now save counts to `layers["counts"]` before normalizing, while `adata.raw`
