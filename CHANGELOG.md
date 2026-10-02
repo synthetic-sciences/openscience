@@ -8,8 +8,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Session handoffs report the characters actually omitted, account for retained tails and trimmed whitespace, and honor zero or tiny excerpt limits. Command argument hints now list numbered placeholders in numeric order.
-
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
 ### Changed
@@ -39,6 +37,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
   labels and calmer count cards, with the numbers unchanged.
 
 ### Added
+
+- Session handoffs report the characters actually omitted, account for retained tails and trimmed whitespace, and honor zero or tiny excerpt limits. Command argument hints now list numbered placeholders in numeric order.
 
 - **An NMR compound-inference skill.** `nmr-compound-inference` reads 1D ¹H or
   ¹³C spectra (Bruker, NMRPipe or two-column text) with nmrglue, plots them with a
