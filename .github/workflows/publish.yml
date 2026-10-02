@@ -830,6 +830,17 @@ jobs:
         if: matrix.signing == 'windows' && needs.version.outputs.windows_signing != 'true'
         shell: bash
         run: echo "::warning::Windows Artifact Signing is not configured for this repository; ${{ matrix.asset }} is published unsigned."
+      - name: Load Windows signature verifier
+        if: matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true'
+        shell: bash
+        env:
+          RELEASE_SOURCE: ${{ needs.version.outputs.source }}
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
+        run: |
+          if [[ "$WORKFLOW_SOURCE" != "$RELEASE_SOURCE" ]]; then
+            git fetch origin "$WORKFLOW_SOURCE" --depth=1
+            git show "$WORKFLOW_SOURCE:tooling/repo/verify-windows-signatures.ps1" > tooling/repo/verify-windows-signatures.ps1
+          fi
       - name: Authenticate Windows signer
         if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0

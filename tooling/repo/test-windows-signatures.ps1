@@ -47,6 +47,26 @@ try {
     Import-Certificate -FilePath $public -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
     Set-AuthenticodeSignature -LiteralPath $script -Certificate $certificate -HashAlgorithm SHA256 | Out-Null
     Assert-Rejected $script 'OpenScience Signing Test' 'Missing signature timestamp'
+
+    # A new embedded signature does not change the hash used by the OS catalog.
+    # Reproduce PowerShell selecting Microsoft while our embedded signer differs.
+    $catalogued = @('d3dcompiler_47.dll', 'kernel32.dll', 'ntdll.dll') | ForEach-Object { Join-Path "$env:windir/System32" $_ } | Where-Object {
+        (Get-AuthenticodeSignature -LiteralPath $_).SignatureType -eq 'Catalog'
+    } | Select-Object -First 1
+    if (-not $catalogued) { throw 'A catalog-signed Windows DLL is required for this regression test' }
+    $fixture = Join-Path $directory 'catalogued.dll'
+    Copy-Item -LiteralPath $catalogued -Destination $fixture
+    $sdk = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+    $tool = Get-ChildItem -Path "$sdk/*/x64/signtool.exe" -File | Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+    if ($null -eq $tool) { throw 'Windows SDK SignTool is required for this regression test' }
+    & $tool.FullName sign /s My /sha1 $certificate.Thumbprint /fd SHA256 $fixture
+    if ($LASTEXITCODE -ne 0) { throw 'Could not sign the catalog regression fixture' }
+    if ((Get-AuthenticodeSignature -LiteralPath $fixture).SignatureType -ne 'Catalog') { throw 'The regression fixture must retain its OS catalog signature' }
+    Assert-Rejected $fixture 'OpenScience Signing Test' 'Invalid embedded Authenticode signature or timestamp'
+    & $tool.FullName timestamp /tr 'http://timestamp.acs.microsoft.com' /td SHA256 $fixture
+    if ($LASTEXITCODE -ne 0) { throw 'Could not timestamp the catalog regression fixture' }
+    & $verifier -Files $fixture -Publisher 'OpenScience Signing Test'
+    Assert-Rejected $fixture 'Wrong Publisher Inc.' 'Unexpected publisher'
     Write-Output 'Windows signature verification checks passed'
 }
 finally {
