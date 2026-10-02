@@ -61,7 +61,7 @@
     "igv": "^3.8.4",
     "katex": "^0.17.0",
     "luxon": "catalog:",
-    "molstar": "^5.10.1",
+    "molstar": "^5.12.0",
     "pdfjs-dist": "6.3.289",
     "remeda": "catalog:",
     "shiki": "catalog:",
