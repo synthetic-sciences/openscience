@@ -24,7 +24,12 @@ function withStorage<T>(items: Map<string, string>, fn: () => T): T {
   try {
     return fn()
   } finally {
+    // `original` is undefined when `localStorage` is not an own property of
+    // globalThis, which is the usual case. Skipping the restore then left the
+    // throwing getter installed for every later test file in the run, because
+    // the suite shares globals. Delete the property we added instead.
     if (original) Object.defineProperty(globalThis, "localStorage", original)
+    else Reflect.deleteProperty(globalThis, "localStorage")
   }
 }
 
