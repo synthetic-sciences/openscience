@@ -81,6 +81,8 @@ Each unit delivers one piece of context at a precise point in the loop and can b
 
 Global configuration supplies defaults; project configuration can override project-specific settings. Options are combined, so adding a project setting does not mean every global setting is removed.
 
+Legacy configuration files in `~/.synsc/` and `~/.openscience/` load before the canonical user configuration and project files. An explicit `OPENSCIENCE_CONFIG_DIR` isolates configuration discovery from these legacy home folders. `OPENSCIENCE_CONFIG_CONTENT` overrides file-based settings, including project customization folders; administrator policy still applies last.
+
 Some executable project customizations require approval before they become active, and administrator policy can restrict available settings. If a value seems ignored, check the setting in Customize and the applicable project or administrator configuration.
 
 Use explicit per-run flags such as `--model` when you need to override a default for a single terminal request.

@@ -285,11 +285,16 @@ async function commit(directory: string, message: unknown) {
 async function push(directory: string, branch: unknown) {
   if (!directory) throw new Error("directory required")
   const current = assertSafeBranch(branch || (await git(["branch", "--show-current"], directory).then((x) => x.out)))
-  const upstream = await git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], directory)
-    .then((x) => x.out)
-    .catch(() => "")
-  // An explicit refspec after `--` leaves git nothing to read as an option.
-  const args = upstream ? ["push"] : ["push", "-u", "origin", "--", `refs/heads/${current}:refs/heads/${current}`]
+  const ref = `refs/heads/${current}`
+  const upstream = await git(
+    ["for-each-ref", "--format=%(upstream:remotename)%00%(upstream:remoteref)", ref],
+    directory,
+  )
+  const [remote, target] = upstream.out.split("\0")
+  // Resolve the selected branch's destination and pass both refs explicitly:
+  // a bare push follows the checked-out branch and push.default instead.
+  const args =
+    remote && target ? ["push", "--", remote, `${ref}:${target}`] : ["push", "-u", "--", "origin", `${ref}:${ref}`]
   const result = await gitPublish(args, directory)
   return { pushed: true, output: result.out || result.err }
 }
