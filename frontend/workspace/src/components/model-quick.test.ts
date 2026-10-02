@@ -28,6 +28,7 @@ describe("curated composer models", () => {
     ])
 
     expect(rows.map((row) => row.key)).toEqual([
+      "openai/gpt-6-1-sol",
       "openai/gpt-6-sol",
       "openai/gpt-6-astra",
       "openai/gpt-6-luna",
@@ -40,6 +41,7 @@ describe("curated composer models", () => {
       "google/gemini-3-6-flash",
     ])
     expect(rows.map((row) => row.kind)).toEqual([
+      "unavailable",
       "choice",
       "unavailable",
       "choice",
@@ -78,8 +80,8 @@ describe("curated composer models", () => {
     expect(rows.slice(0, 4).map((row) => row.key)).toEqual([
       "anthropic/claude-opus-5-5",
       "google/gemini-3-6-flash",
+      "openai/gpt-6-1-sol",
       "openai/gpt-6-sol",
-      "openai/gpt-6-astra",
     ])
   })
 

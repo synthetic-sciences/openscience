@@ -36,6 +36,7 @@ const GLM_PROVIDER_ALIASES = new Set(["zai", "opencode-go", "zai-coding-plan", "
 /** Ordered product roster for the composer. Missing entries are presentation-
  * only placeholders; this list never fabricates a callable provider route. */
 export const COMPOSER_MODEL_ROSTER = [
+  { key: "openai/gpt-6-1-sol", label: "6.1 Sol", provider: "openai" },
   { key: "openai/gpt-6-sol", label: "6 Sol", provider: "openai" },
   { key: "openai/gpt-6-astra", label: "6 Astra", provider: "openai" },
   { key: "openai/gpt-6-luna", label: "6 Luna", provider: "openai" },
@@ -51,6 +52,7 @@ export const COMPOSER_MODEL_ROSTER = [
 // Keep the release's broader frontier defaults intact; the composer roster
 // above only controls ordering and passive unavailable placeholders.
 export const FRONTIER_MODELS: ReadonlySet<string> = new Set([
+  "openai/gpt-6-1-sol",
   "openai/gpt-6-astra",
   "openai/gpt-6-sol",
   "openai/gpt-6-sol-pro",

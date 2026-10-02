@@ -24,6 +24,18 @@ import {
 } from "./model-catalog"
 
 describe("frontier model canonicalization", () => {
+  test("Sol 6.1 is visible without replacing the earlier Sol or inventing an access route", () => {
+    const sol = { id: "gpt-6.1-sol", provider: { id: "openai" } }
+    const previous = { id: "gpt-6-sol", provider: { id: "openai" } }
+    expect(isFrontier({ providerID: "openai", modelID: sol.id })).toBe(true)
+    expect(modelDisplayName(sol.id, "openai", sol.id)).toBe("6.1 Sol")
+    expect(groupModelRoutes({ models: [sol, previous] })).toHaveLength(2)
+    expect(routableModelKey({ providerID: "openai", modelID: sol.id }, () => false)).toEqual({
+      providerID: "openai",
+      modelID: sol.id,
+    })
+  })
+
   test("Astra groups native, subscription, and managed identities without changing the selected route", () => {
     const models = [
       { id: "gpt-6-astra", provider: { id: "openai" } },
@@ -252,6 +264,7 @@ describe("frontier model canonicalization", () => {
 
   test("uses the requested composer roster and normalizes GLM provider aliases", () => {
     expect(COMPOSER_MODEL_ROSTER.map((model) => model.label)).toEqual([
+      "6.1 Sol",
       "6 Sol",
       "6 Astra",
       "6 Luna",

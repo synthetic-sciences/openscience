@@ -21,6 +21,7 @@ function catalog(id: "openai" | "anthropic") {
 test("new native model contracts survive an absent or stale model catalog", () => {
   for (const [providerID, id, context, output] of [
     ["openai", "gpt-6-astra", 1_050_000, 128_000],
+    ["openai", "gpt-6.1-sol", 1_050_000, 128_000],
     ["anthropic", "claude-fable-5-1", 1_000_000, 128_000],
   ] as const) {
     const source = catalog(providerID)
@@ -80,59 +81,62 @@ test("Astra API and Codex options preserve their distinct defaults and valid eff
   }
 })
 
-test("native Astra actually uses Responses with tools, selected max, replay and no rejected sampling fields", async () => {
-  const requests: { path: string; body: Record<string, unknown> }[] = []
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    async fetch(request) {
-      requests.push({ path: new URL(request.url).pathname, body: await request.json() })
-      return Response.json({ error: { message: "offline wire capture" } }, { status: 400 })
-    },
-  })
-  await using tmp = await tmpdir({
-    config: { provider: { openai: { options: { apiKey: "fixture", baseURL: `${server.url}v1` } } } },
-  })
-  try {
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        Provider.invalidate()
-        const model = await Provider.getModel("openai", "gpt-6-astra")
-        const options = {
-          ...ProviderTransform.options({ model, sessionID: "fixture" }),
-          ...ProviderTransform.variants(model).max,
-          logprobs: true,
-        }
-        await generateText({
-          model: await Provider.getLanguage(model),
-          prompt: "Use probe",
-          tools: { probe: tool({ inputSchema: z.object({ value: z.string() }) }) },
-          providerOptions: ProviderTransform.providerOptions(model, options),
-          temperature: 0.9,
-          topP: 0.8,
-          maxOutputTokens: 128,
-          maxRetries: 0,
-        }).catch(() => undefined)
-        expect(requests).toHaveLength(1)
-        expect(requests[0].path).toBe("/v1/responses")
-        expect(requests[0].body).toMatchObject({
-          model: "gpt-6-astra",
-          max_output_tokens: 128,
-          reasoning: { effort: "max", summary: "detailed" },
-          tools: [{ type: "function", name: "probe" }],
-        })
-        expect(requests[0].body.include).toContain("reasoning.encrypted_content")
-        expect(requests[0].body.include).not.toContain("message.output_text.logprobs")
-        for (const field of ["temperature", "top_p", "logprobs", "top_logprobs"])
-          expect(requests[0].body[field]).toBeUndefined()
+test.each(["gpt-6-astra", "gpt-6.1-sol"])(
+  "native %s uses Responses with tools, max, replay and no rejected sampling fields",
+  async (id) => {
+    const requests: { path: string; body: Record<string, unknown> }[] = []
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        requests.push({ path: new URL(request.url).pathname, body: await request.json() })
+        return Response.json({ error: { message: "offline wire capture" } }, { status: 400 })
       },
     })
-  } finally {
-    Provider.invalidate()
-    server.stop(true)
-  }
-})
+    await using tmp = await tmpdir({
+      config: { provider: { openai: { options: { apiKey: "fixture", baseURL: `${server.url}v1` } } } },
+    })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          Provider.invalidate()
+          const model = await Provider.getModel("openai", id)
+          const options = {
+            ...ProviderTransform.options({ model, sessionID: "fixture" }),
+            ...ProviderTransform.variants(model).max,
+            logprobs: true,
+          }
+          await generateText({
+            model: await Provider.getLanguage(model),
+            prompt: "Use probe",
+            tools: { probe: tool({ inputSchema: z.object({ value: z.string() }) }) },
+            providerOptions: ProviderTransform.providerOptions(model, options),
+            temperature: 0.9,
+            topP: 0.8,
+            maxOutputTokens: 128,
+            maxRetries: 0,
+          }).catch(() => undefined)
+          expect(requests).toHaveLength(1)
+          expect(requests[0].path).toBe("/v1/responses")
+          expect(requests[0].body).toMatchObject({
+            model: id,
+            max_output_tokens: 128,
+            reasoning: { effort: "max", summary: "detailed" },
+            tools: [{ type: "function", name: "probe" }],
+          })
+          expect(requests[0].body.include).toContain("reasoning.encrypted_content")
+          expect(requests[0].body.include).not.toContain("message.output_text.logprobs")
+          for (const field of ["temperature", "top_p", "logprobs", "top_logprobs"])
+            expect(requests[0].body[field]).toBeUndefined()
+        },
+      })
+    } finally {
+      Provider.invalidate()
+      server.stop(true)
+    }
+  },
+)
 
 test("native Fable sends adaptive thinking, high/default and max, and documented binding controls without touching earlier models", async () => {
   const requests: { path: string; headers: Headers; body: Record<string, unknown> }[] = []
@@ -354,4 +358,34 @@ test("native Fable streams supplied reasoning and progress verbatim, retaining s
     Provider.invalidate()
     server.stop(true)
   }
+})
+
+test("Sol 6.1 preserves its API defaults, small-task effort and all pricing tiers", () => {
+  const model = Provider.fromModelsDevProvider(catalog("openai")).models["gpt-6.1-sol"]
+  expect(Provider.isCodexOAuthModel(model.id)).toBe(false)
+  expect(ProviderTransform.options({ model, sessionID: "fixture" })).toMatchObject({
+    reasoningEffort: "medium",
+    reasoningSummary: "detailed",
+    include: ["reasoning.encrypted_content"],
+  })
+  expect(ProviderTransform.smallOptions(model)).toEqual({ reasoningEffort: "low" })
+  expect(Object.keys(ProviderTransform.variants({ ...model, reasoningOptions: undefined }))).toEqual([
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ])
+  expect(model.cost).toMatchObject({
+    input: 2,
+    output: 10,
+    cache: { read: 0.1, write: 2.5 },
+    tiers: [{ input: 4, output: 15, cache: { read: 0.2, write: 5 }, threshold: 272_000 }],
+  })
+  expect(model.modes?.fast?.cost).toMatchObject({
+    input: 4,
+    output: 20,
+    cache: { read: 0.2, write: 5 },
+    tiers: [{ input: 8, output: 30, cache: { read: 0.4, write: 10 }, threshold: 272_000 }],
+  })
 })

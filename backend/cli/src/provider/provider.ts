@@ -751,6 +751,30 @@ export namespace Provider {
     options: {},
   } satisfies ModelsDev.Model
 
+  const SOL61 = {
+    id: "gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    family: "gpt",
+    release_date: "2026-09-29",
+    knowledge: "2026-04-30",
+    provider: { npm: "@ai-sdk/openai" },
+    attachment: true,
+    reasoning: true,
+    reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }],
+    temperature: false,
+    tool_call: true,
+    cost: {
+      input: 2,
+      output: 10,
+      cache_read: 0.1,
+      cache_write: 2.5,
+      tiers: [{ input: 4, output: 15, cache_read: 0.2, cache_write: 5, tier: { type: "context", size: 272_000 } }],
+    },
+    limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+    modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+    options: {},
+  } satisfies ModelsDev.Model
+
   const FABLE51 = {
     id: "claude-fable-5-1",
     name: "Claude Fable 5.1",
@@ -1072,8 +1096,8 @@ export namespace Provider {
     }
   }
 
-  export function normalizeAstraRequestBody(value: Record<string, unknown>) {
-    if (value.model !== "gpt-6-astra") return value
+  export function normalizeOpenAIReasoningRequestBody(value: Record<string, unknown>) {
+    if (value.model !== "gpt-6-astra" && value.model !== "gpt-6.1-sol") return value
     const body = { ...value }
     for (const key of ["temperature", "top_p", "logprobs", "top_logprobs"]) delete body[key]
     if (Array.isArray(body.include)) {
@@ -2124,7 +2148,7 @@ export namespace Provider {
     // class) but models.dev's snapshot can lag a launch, so the direct route
     // would lose the tier the Ace route offers for the same model.
     const openai: NonNullable<Model["modes"]> =
-      provider.id === "openai" && /^gpt-6-(?:astra|sol|luna)$/.test(model.id) && !direct.fast
+      provider.id === "openai" && /^gpt-(?:6-(?:astra|sol|luna)|6\.1-sol)$/.test(model.id) && !direct.fast
         ? { fast: priority() }
         : {}
     const result = provider.id === "openrouter" ? openrouter : { ...direct, ...xai, ...openai }
@@ -2234,7 +2258,7 @@ export namespace Provider {
   export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
     const reviewed =
       provider.id === "openai"
-        ? [ASTRA]
+        ? [ASTRA, SOL61]
         : provider.id === "anthropic"
           ? [FABLE51]
           : provider.id === "openrouter"
@@ -3091,7 +3115,7 @@ export namespace Provider {
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
         // IDs are only re-attached for Azure with store=true
         if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
-          const body = normalizeAstraRequestBody(JSON.parse(opts.body as string))
+          const body = normalizeOpenAIReasoningRequestBody(JSON.parse(opts.body as string))
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
           if (!keepIds && Array.isArray(body.input)) {
