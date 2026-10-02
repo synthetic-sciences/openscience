@@ -24,14 +24,24 @@ export function getFilename(path: string | undefined) {
 export function getDirectory(path: string | undefined) {
   if (!path) return ""
   const trimmed = path.replace(/[\/\\]+$/, "")
+  // A lone "/" trims away entirely, but it is still the root.
+  if (trimmed === "") return "/"
   const parts = trimmed.split(/[\/\\]/)
+  // A bare filename has no parent, and an empty slice joined to "/" would
+  // report the filesystem root instead.
+  if (parts.length <= 1) return ""
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
 export function getFileExtension(path: string | undefined) {
   if (!path) return ""
-  const parts = path.split(".")
-  return parts[parts.length - 1]
+  // Only the filename carries an extension: a dot in a directory name, or in
+  // an earlier path segment, is not one.
+  const base = getFilename(path)
+  const dot = base.lastIndexOf(".")
+  // A leading dot marks a dotfile, not an extension, and no dot means none.
+  if (dot <= 0) return ""
+  return base.slice(dot + 1)
 }
 
 export function getFilenameTruncated(path: string | undefined, maxLength: number = 20) {
