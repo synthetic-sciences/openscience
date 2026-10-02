@@ -8,8 +8,6 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
-
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
 ### Changed
@@ -317,6 +315,8 @@ public 50 the old detector named an example's `samples.csv` and the input
   worker that exists.
 
 ### Fixed
+
+- Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
 
 - **Security: a remote MCP server's refresh token and client secret are only
   ever sent to the authorization server that issued them.** Before, every token
