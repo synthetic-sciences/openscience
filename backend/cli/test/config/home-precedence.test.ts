@@ -10,9 +10,13 @@ for (const layer of ["home", "canonical", "project", "hidden", "inline", "explic
     const project = path.join(tmp.path, "project")
     const canonical = path.join(tmp.path, "config", "openscience")
     const write = (directory: string, model: string) =>
-      Bun.write(path.join(directory, "openscience.json"), JSON.stringify({ model }))
+      Bun.write(
+        path.join(directory, "openscience.json"),
+        JSON.stringify({ model, command: { example: { template: model } } }),
+      )
     await write(path.join(home, ".synsc"), "legacy")
     await write(path.join(home, ".openscience"), "home")
+    await Bun.write(path.join(home, ".openscience", "command", "example.md"), "home")
     await Bun.write(path.join(project, "README.md"), "fixture")
     if (layer !== "home") await write(canonical, "canonical")
     if (["project", "hidden", "inline"].includes(layer)) await write(project, "project")
@@ -27,7 +31,8 @@ for (const layer of ["home", "canonical", "project", "hidden", "inline", "explic
         `import { Config } from ${JSON.stringify(config)};
        import { Instance } from ${JSON.stringify(instance)};
        await Instance.provide({ directory: ${JSON.stringify(project)}, fn: async () => {
-         console.log(JSON.stringify({ model: (await Config.get()).model }));
+         const config = await Config.get();
+         console.log(JSON.stringify({ model: config.model, template: config.command.example.template }));
        }}); process.exit(0);`,
       ],
       {
@@ -39,7 +44,8 @@ for (const layer of ["home", "canonical", "project", "hidden", "inline", "explic
           OPENSCIENCE_DATA_DIR: path.join(tmp.path, "data"),
           OPENSCIENCE_CONFIG: "",
           OPENSCIENCE_CONFIG_DIR: layer === "explicit" ? path.join(tmp.path, "explicit") : "",
-          OPENSCIENCE_CONFIG_CONTENT: layer === "inline" ? JSON.stringify({ model: "inline" }) : "",
+          OPENSCIENCE_CONFIG_CONTENT:
+            layer === "inline" ? JSON.stringify({ model: "inline", command: { example: { template: "inline" } } }) : "",
           OPENSCIENCE_DISABLE_PROJECT_CONFIG: "false",
           XDG_CONFIG_HOME: path.join(tmp.path, "config"),
           XDG_CACHE_HOME: path.join(tmp.path, "cache"),
@@ -56,6 +62,6 @@ for (const layer of ["home", "canonical", "project", "hidden", "inline", "explic
       child.exited,
     ])
     expect(code, error).toBe(0)
-    expect(JSON.parse(output.trim())).toEqual({ model: layer })
+    expect(JSON.parse(output.trim())).toEqual({ model: layer, template: layer })
   })
 }

@@ -131,6 +131,15 @@ export namespace Config {
         result = mergeConfigConcatArrays(result, config)
         execution = mergeConfigConcatArrays(execution, config)
       }
+      const commands = await loadCommand(dir)
+      const agents = mergeDeep(await loadAgent(dir), await loadMode(dir))
+      const plugins = await loadPlugin(dir)
+      result.command = mergeDeep(result.command ?? {}, commands)
+      result.agent = mergeDeep(result.agent ?? {}, agents)
+      result.plugin = [...(result.plugin ?? []), ...plugins]
+      execution.command = mergeDeep(execution.command ?? {}, commands)
+      execution.agent = mergeDeep(execution.agent ?? {}, agents)
+      execution.plugin = [...(execution.plugin ?? []), ...plugins]
     }
 
     // Global user config overrides remote config
@@ -189,11 +198,9 @@ export namespace Config {
     }
 
     for (const dir of unique(directories)) {
+      if (homeSet.has(path.resolve(dir))) continue
       const local = projectSet.has(path.resolve(dir))
-      if (
-        !homeSet.has(path.resolve(dir)) &&
-        (dir.endsWith(".openscience") || dir.endsWith(".synsc") || dir === Flag.OPENSCIENCE_CONFIG_DIR)
-      ) {
+      if (dir.endsWith(".openscience") || dir.endsWith(".synsc") || dir === Flag.OPENSCIENCE_CONFIG_DIR) {
         for (const file of CONFIG_FILES) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           const config = await loadFile(path.join(dir, file))
