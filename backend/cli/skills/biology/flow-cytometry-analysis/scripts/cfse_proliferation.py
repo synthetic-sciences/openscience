@@ -434,11 +434,17 @@ def main():
     print(f"  Events: {len(cfse_values):,}")
 
     # Remove non-positive values before log transform
-    positive_mask = cfse_values > 0
+    positive_mask = np.isfinite(cfse_values) & (cfse_values > 0)
     n_removed = np.sum(~positive_mask)
     if n_removed > 0:
-        print(f"  Removed {n_removed:,} non-positive events before log transform.")
+        print(f"  Removed {n_removed:,} non-positive or non-finite events before log transform.")
     cfse_positive = cfse_values[positive_mask]
+    if cfse_positive.size == 0:
+        print(
+            f"ERROR: No finite positive events in channel '{channel_label}' to log transform.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Log10 transform
     cfse_log = np.log10(cfse_positive)

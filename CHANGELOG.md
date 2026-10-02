@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Scientific helpers correct GC content within the requested codon window and target band, report unusable CFSE channels clearly, and match BRENDA transformation keywords consistently across letter case. GPU inventory gives unnamed devices a readable fallback label.
+
 - Fix duration day/minute boundaries, file directory and extension labels, and payload-size rounding. Unknown payload sizes now display clearly. Background queues process undefined items, reject invalid concurrency, and release timeout timers when an operation fails.
 
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
