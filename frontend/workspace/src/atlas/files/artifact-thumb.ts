@@ -89,6 +89,9 @@ export function thumbKind(version: StoredArtifactVersion): ThumbKind {
   if (version.size > PREVIEW_LIMIT) return "binary"
   if (["csv", "tsv", "jsonl"].includes(ext)) return "table"
   if (ext === "ipynb") return "notebook"
-  if (generic(version.mimeType)) return LANG[ext] ? "text" : "binary"
+  // A name with no extension is never evidence of a binary format: the store
+  // records a Makefile or LICENSE as a byte stream and the viewer previews both
+  // as text, so calling it binary here painted a chip it then refused to open.
+  if (generic(version.mimeType)) return LANG[ext] || !ext ? "text" : "binary"
   return textual(version.mimeType) ? "text" : "binary"
 }

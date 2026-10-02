@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { PREVIEW_LIMIT, extension, thumbKind, thumbLanguage } from "./artifact-thumb"
+import { resolveViewer } from "./viewer-registry"
 import { STORED_ARTIFACT_PREVIEW_LIMIT } from "@/artifacts/bytes"
 import type { StoredArtifactVersion } from "@/artifacts/store"
 
@@ -25,6 +26,18 @@ describe("artifact thumbnails", () => {
   test("lets the extension win over a generic byte stream", () => {
     expect(thumbKind(version({ filename: "train.py" }))).toBe("text")
     expect(thumbKind(version({ filename: "model.safetensors" }))).toBe("binary")
+  })
+
+  // A dotless Makefile, Dockerfile or LICENSE is the same story with no
+  // extension left to key on. The viewer already resolves all three to text, so
+  // the grid has to agree with it or it shows a binary chip it cannot open.
+  test("reads a dotless name as text, the way the viewer does", () => {
+    for (const filename of ["Makefile", "Dockerfile", "LICENSE"]) {
+      expect(thumbKind(version({ filename }))).toBe("text")
+      expect(resolveViewer({ name: filename, mimeType: "application/octet-stream" }).kind).toBe("text")
+    }
+    // A preview is still bounded, dotless or not.
+    expect(thumbKind(version({ filename: "Makefile", size: PREVIEW_LIMIT + 1 }))).toBe("binary")
   })
 
   test("dispatches on MIME type when it says something", () => {

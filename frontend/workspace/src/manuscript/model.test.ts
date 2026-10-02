@@ -92,6 +92,22 @@ Body`).bibliographies,
     )
   })
 
+  test("shares a Windows volume prefix across drive-letter and folder case", () => {
+    // The server spells a Windows volume in lower case, so the shared prefix must compare
+    // case-insensitively or the figure reference escapes the manuscript's own folder.
+    const reference = relativeArtifactPath("C:\\Data\\Paper\\manuscript.md", "c:/data/paper/figures/f1.png")
+    expect(reference).toBe("figures/f1.png")
+    expect(resolveReferencePath("C:\\Data\\Paper\\manuscript.md", reference)).toBe("C:/Data/Paper/figures/f1.png")
+    expect(figureMarkdown("Figure 1", "C:\\Data\\Paper\\manuscript.md", "c:/data/paper/figures/f1.png")).toBe(
+      "![Figure 1](figures/f1.png)",
+    )
+    // A case-sensitive volume keeps `Paper` and `paper` apart: they are sibling folders.
+    expect(relativeArtifactPath("/work/Paper/manuscript.md", "/work/paper/figures/f1.png")).toBe(
+      "../paper/figures/f1.png",
+    )
+    expect(relativeArtifactPath("/work/Paper/manuscript.md", "/work/Paper/Figures/f1.png")).toBe("Figures/f1.png")
+  })
+
   test("rewrites local preview images through the file server without touching remote assets", () => {
     const markdown = [
       "![Local](../figures/result%20plot.svg)",
@@ -129,6 +145,26 @@ Body`).bibliographies,
     expect(rewritten).toContain("![Reference](/raw?path=figures%2Freference.png)")
     expect(rewritten).toContain("`![Code](../figures/code.png)`")
     expect(rewritten).toContain("![Fence](../figures/fence.png)")
+  })
+
+  test("rewrites bracketed alt text and leaves unbalanced brackets alone", () => {
+    const markdown = [
+      "![Figure [a] b](../figures/bracketed.png)",
+      "![outer ![inner](../figures/inner.png)](../figures/outer.png)",
+      "![Reference [a] b][bracket]",
+      "[bracket]: ../figures/bracket.png",
+      "![Unbalanced ] b](../figures/unbalanced.png)",
+    ].join("\n")
+    const rewritten = rewritePreviewImages(
+      markdown,
+      "reports/paper.md",
+      (path) => `/raw?path=${encodeURIComponent(path)}`,
+    )
+
+    expect(rewritten).toContain("![Figure [a\\] b](/raw?path=figures%2Fbracketed.png)")
+    expect(rewritten).toContain("![outer ![inner\\](../figures/inner.png)](/raw?path=figures%2Fouter.png)")
+    expect(rewritten).toContain("![Reference [a\\] b](/raw?path=figures%2Fbracket.png)")
+    expect(rewritten).toContain("![Unbalanced ] b](../figures/unbalanced.png)")
   })
 
   test("preserves CRLF offsets and ignores reference definitions inside code blocks", () => {

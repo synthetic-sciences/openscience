@@ -395,6 +395,15 @@ function parseMzml(text: string): MzmlFile {
     text.matchAll(/(?:accession="MS:1000016"|name="scan start time")[^>]*\bvalue="([\d.]+)"/gi),
     (match) => Number(match[1]),
   ).filter(Number.isFinite)
+  // A busy run reports more scan times than the engine accepts as call arguments, so fold the bounds in one pass.
+  const span = times.reduce(
+    (bounds, time) => {
+      if (time < bounds.start) bounds.start = time
+      if (time > bounds.end) bounds.end = time
+      return bounds
+    },
+    { start: Infinity, end: -Infinity },
+  )
   return {
     format: "mzml",
     run: text.match(/<run\b[^>]*\bid="([^"]+)"/i)?.[1] ?? "",
@@ -402,7 +411,7 @@ function parseMzml(text: string): MzmlFile {
     chromatograms,
     levels,
     times: times.slice(0, LIMIT),
-    range: times.length ? { start: Math.min(...times), end: Math.max(...times) } : undefined,
+    range: times.length ? span : undefined,
     truncated: times.length > LIMIT,
   }
 }

@@ -44,7 +44,6 @@ export function remoteMime(filename: string): string | undefined {
  */
 export function remotePreview(filename: string, size?: number): RemotePreview | undefined {
   if (size !== undefined && size > REMOTE_PREVIEW_LIMIT) return undefined
-  if (!extension(filename)) return undefined
   const viewer = resolveViewer({ name: filename })
   if (viewerUsesText(viewer)) return "text"
   if (viewer.kind === "image") return "image"

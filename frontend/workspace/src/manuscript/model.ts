@@ -60,14 +60,19 @@ export function parseBibtex(source: string): Citation[] {
 }
 
 export function relativeArtifactPath(manuscript: string, artifact: string): string {
-  const manuscriptDrive = /^([A-Za-z]:)[\\/]/.exec(manuscript)?.[1]?.toLowerCase()
-  const artifactDrive = /^([A-Za-z]:)[\\/]/.exec(artifact)?.[1]?.toLowerCase()
+  const volume = /^([A-Za-z]:)[\\/]/
+  const manuscriptDrive = volume.exec(manuscript)?.[1]?.toLowerCase()
+  const artifactDrive = volume.exec(artifact)?.[1]?.toLowerCase()
   if (manuscriptDrive && artifactDrive && manuscriptDrive !== artifactDrive) {
     throw new Error("A manuscript cannot reference a figure from another drive")
   }
   const from = cleanPath(manuscript).split("/").slice(0, -1)
   const target = cleanPath(artifact).split("/")
-  const shared = from.findIndex((part, index) => part !== target[index])
+  // A Windows volume is case-insensitive, so `c:\data\paper` names the same folders as
+  // `C:\Data\Paper` and the shared prefix survives the server's spelling. A POSIX volume
+  // is not, and there `Paper` and `paper` are two different folders.
+  const fold = manuscriptDrive || artifactDrive ? (part: string) => part.toLowerCase() : (part: string) => part
+  const shared = from.findIndex((part, index) => fold(part) !== fold(target[index] ?? ""))
   const common = shared < 0 ? Math.min(from.length, target.length) : shared
   const parents = Array.from({ length: from.length - common }, () => "..")
   const relative = [...parents, ...target.slice(common)].join("/")
