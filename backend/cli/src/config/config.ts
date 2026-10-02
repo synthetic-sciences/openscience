@@ -114,6 +114,25 @@ export namespace Config {
       }
     }
 
+    // Legacy home files are defaults beneath canonical user and project config.
+    const homeDirectories = Flag.OPENSCIENCE_CONFIG_DIR
+      ? []
+      : await Array.fromAsync(
+          Filesystem.up({
+            targets: [".synsc", ".openscience"],
+            start: Global.Path.home,
+            stop: Global.Path.home,
+          }),
+        )
+    const homeSet = new Set(homeDirectories.map((dir) => path.resolve(dir)))
+    for (const dir of homeDirectories) {
+      for (const file of CONFIG_FILES) {
+        const config = await loadFile(path.join(dir, file))
+        result = mergeConfigConcatArrays(result, config)
+        execution = mergeConfigConcatArrays(execution, config)
+      }
+    }
+
     // Global user config overrides remote config
     const user = await global()
     result = mergeConfigConcatArrays(result, user)
@@ -137,14 +156,6 @@ export namespace Config {
       }
     }
 
-    // Inline config content has highest precedence
-    if (Flag.OPENSCIENCE_CONFIG_CONTENT) {
-      const inline = JSON.parse(Flag.OPENSCIENCE_CONFIG_CONTENT)
-      result = mergeConfigConcatArrays(result, inline)
-      execution = mergeConfigConcatArrays(execution, inline)
-      log.debug("loaded custom config from OPENSCIENCE_CONFIG_CONTENT")
-    }
-
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
@@ -164,23 +175,12 @@ export namespace Config {
         ).toReversed()
       : []
     const projectSet = new Set(projectDirectories.map((dir) => path.resolve(dir)))
-    const homeDirectories = Flag.OPENSCIENCE_CONFIG_DIR
-      ? []
-      : await Array.fromAsync(
-          Filesystem.up({
-            targets: [".openscience", ".synsc"],
-            start: Global.Path.home,
-            stop: Global.Path.home,
-          }),
-        )
     const directories = [
+      ...homeDirectories,
       Global.Path.config,
       // Only scan project .openscience/ directories when project discovery is enabled
       // (".synsc" is the pre-rename name, still honored)
       ...projectDirectories,
-      // An explicit config root is an isolation boundary. Do not also discover
-      // legacy ~/.openscience configuration from the normal user home.
-      ...homeDirectories,
     ]
 
     if (Flag.OPENSCIENCE_CONFIG_DIR) {
@@ -190,7 +190,10 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       const local = projectSet.has(path.resolve(dir))
-      if (dir.endsWith(".openscience") || dir.endsWith(".synsc") || dir === Flag.OPENSCIENCE_CONFIG_DIR) {
+      if (
+        !homeSet.has(path.resolve(dir)) &&
+        (dir.endsWith(".openscience") || dir.endsWith(".synsc") || dir === Flag.OPENSCIENCE_CONFIG_DIR)
+      ) {
         for (const file of CONFIG_FILES) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           const config = await loadFile(path.join(dir, file))
@@ -217,6 +220,14 @@ export namespace Config {
         execution.agent = mergeDeep(execution.agent, modes)
         execution.plugin = [...(execution.plugin ?? []), ...plugins]
       }
+    }
+
+    // Inline config content has highest precedence
+    if (Flag.OPENSCIENCE_CONFIG_CONTENT) {
+      const inline = JSON.parse(Flag.OPENSCIENCE_CONFIG_CONTENT)
+      result = mergeConfigConcatArrays(result, inline)
+      execution = mergeConfigConcatArrays(execution, inline)
+      log.debug("loaded custom config from OPENSCIENCE_CONFIG_CONTENT")
     }
 
     // Load managed config files LAST (highest priority) - enterprise admin-controlled.
