@@ -1,0 +1,354 @@
+[
+  {
+    "id": "neuron",
+    "name": "NEURON",
+    "version": "8.0.2",
+    "description": "Empirically-based simulator for modeling neurons and networks of neurons.",
+    "algorithms": [
+      {
+        "id": "cvode",
+        "name": "C-language Variable-coefficient Ordinary Differential Equation solver",
+        "kisaoId": {
+          "id": "KISAO_0000019",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_9004",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_3971",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_9005",
+            "namespace": "EDAM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "bionetgen",
+    "name": "BioNetGen",
+    "version": "2.8.0",
+    "description": "BioNetGen is an open-source software package for rule-based modeling of complex biochemical systems.",
+    "algorithms": [
+      {
+        "id": "ode",
+        "name": "CVODE",
+        "kisaoId": {
+          "id": "KISAO_0000019",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_3972",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "ssa",
+        "name": "Stochastic simulation algorithm",
+        "kisaoId": {
+          "id": "KISAO_0000029",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_3972",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "pla",
+        "name": "Partitioned Leaping Algorithm",
+        "kisaoId": {
+          "id": "KISAO_0000524",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_3972",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "nf",
+        "name": "Network-free simulation",
+        "kisaoId": {
+          "id": "KISAO_0000263",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": null,
+            "id": "format_3972",
+            "namespace": "EDAM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "opencor",
+    "name": "OpenCOR",
+    "version": "2021-10-05",
+    "description": "Open source cross-platform modelling environment",
+    "algorithms": [
+      {
+        "id": "cvode",
+        "name": "C-language Variable-coefficient Ordinary Differential Equation solver",
+        "kisaoId": {
+          "id": "KISAO_0000019",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "forward-euler",
+        "name": "forward euler",
+        "kisaoId": {
+          "id": "KISAO_0000030",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "rk4",
+        "name": "fourth-order Runge-Kutta",
+        "kisaoId": {
+          "id": "KISAO_0000032",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "rk2",
+        "name": "second-order Runge-Kutta",
+        "kisaoId": {
+          "id": "KISAO_0000381",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "heun",
+        "name": "Heun",
+        "kisaoId": {
+          "id": "KISAO_0000301",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      },
+      {
+        "id": "kinsol",
+        "name": "KINSOL",
+        "kisaoId": {
+          "id": "KISAO_0000282",
+          "namespace": "KISAO"
+        },
+        "modelFormats": [
+          {
+            "supportedFeatures": [],
+            "version": "1.0",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          },
+          {
+            "supportedFeatures": [],
+            "version": "1.1",
+            "id": "format_3240",
+            "namespace": "EDAM"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "tellurium",
+    "name": "tellurium",
+    "version": "2.2.10",
+    "description": "tellurium is a Python-based environment for model building, simulation, and analysis that facilitates reproducibility of models in systems and synthetic biology.",
+    "algorithms": [
+      {
+        "id": "cvode",
+        "name": "C-language Variable-coefficient Ordinary Differential Equation solver",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000019"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      },
+      {
+        "id": "euler",
+        "name": "Forward Euler method",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000030"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      },
+      {
+        "id": "runge_kutta_4",
+        "name": "Runge-Kutta fourth order method",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000032"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      },
+      {
+        "id": "runge_kutta_45",
+        "name": "Fehlberg method",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000086"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      },
+      {
+        "id": "gillespie",
+        "name": "Gillespie direct method of the Stochastic Simulation Algorithm (SSA)",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000029"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      },
+      {
+        "id": "nleq2",
+        "name": "Newton-type method for solveing non-linear (NL) equations (EQ)",
+        "kisaoId": {
+          "namespace": "KISAO",
+          "id": "KISAO_0000569"
+        },
+        "modelFormats": [
+          {
+            "namespace": "EDAM",
+            "id": "format_2585",
+            "version": null,
+            "supportedFeatures": []
+          }
+        ]
+      }
+    ]
+  }
+]

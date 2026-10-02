@@ -14,7 +14,7 @@ import path from "node:path"
 import { registry } from "../src/science/connectors"
 import { outcomeFor, formatBytes } from "../src/science/connectors/fetch-outcome"
 
-// Copied from PROTOTYPE-fetch-repl.ts, which carries all 42 entries.
+// Representative public identifiers for each bundled connector.
 const SAMPLE: Record<string, string> = {
   uniprot: "P04637",
   "rcsb-pdb": "6LU7",
@@ -37,6 +37,7 @@ const SAMPLE: Record<string, string> = {
   gtopdb: "4139",
   surechembl: "1",
   chebi: "CHEBI:15377",
+  biosimulators: "tellurium/2.2.10",
   reactome: "R-HSA-68886",
   kegg: "hsa:7157",
   "string-db": "9606.ENSP00000269305",

@@ -111,6 +111,7 @@ export namespace Network {
         "rest.kegg.jp",
         "string-db.org",
         "reactome.org",
+        "biosimulators.org",
         "api.platform.opentargets.org",
         "wikipathways.org",
       ],

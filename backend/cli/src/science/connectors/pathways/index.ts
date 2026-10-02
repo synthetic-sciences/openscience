@@ -8,6 +8,7 @@
  * shared `connectors/index.ts`.
  */
 import type { Connector } from "../types"
+import { biosimulators } from "./biosimulators"
 import { reactome } from "./reactome"
 import { kegg } from "./kegg"
 import { stringdb } from "./string-db"
@@ -17,8 +18,17 @@ import { wikipathways } from "./wikipathways"
 import { opentargets } from "./opentargets"
 
 /** All pathway/interaction connectors in this batch, in catalog order. */
-const pathwayConnectors: Connector[] = [reactome, kegg, stringdb, biogrid, intact, wikipathways, opentargets]
+const pathwayConnectors: Connector[] = [
+  biosimulators,
+  reactome,
+  kegg,
+  stringdb,
+  biogrid,
+  intact,
+  wikipathways,
+  opentargets,
+]
 
-export { reactome, kegg, stringdb, biogrid, intact, wikipathways, opentargets }
+export { biosimulators, reactome, kegg, stringdb, biogrid, intact, wikipathways, opentargets }
 
 export default pathwayConnectors

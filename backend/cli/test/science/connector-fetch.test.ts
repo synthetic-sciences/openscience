@@ -40,17 +40,17 @@ describe("connector fetch conformance", () => {
   const connectors = registry.all()
 
   test("the registry is fully populated", () => {
-    expect(connectors.length).toBe(42)
+    expect(connectors.length).toBe(43)
   })
 
-  test("exactly 40 fixture files are present", () => {
+  test("exactly 41 fixture files are present", () => {
     const files = readdirSync(FIXTURES).filter((f) => f.endsWith(".json"))
-    expect(files.length).toBe(40)
+    expect(files.length).toBe(41)
   })
 
   // Each fixture is one connector's REAL recorded response. Replaying it through
   // outcomeFor is what makes these 5.3MB load-bearing: it proves the sentinel
-  // logic classifies 40 genuine API shapes correctly, which is the risk
+  // logic classifies 41 genuine API shapes correctly, which is the risk
   // fetch-outcome.ts calls load-bearing -- a false-positive found/error sentinel
   // turning a real record into a phantom miss.
   for (const c of connectors) {
