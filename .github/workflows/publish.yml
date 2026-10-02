@@ -837,6 +837,30 @@ jobs:
           client-id: ${{ secrets.WINDOWS_SIGNING_CLIENT_ID }}
           tenant-id: ${{ secrets.WINDOWS_SIGNING_TENANT_ID }}
           allow-no-subscriptions: true
+      - name: Sign bundled Windows runtime
+        if: steps.existing.outputs.found != 'true' && matrix.signing == 'windows' && needs.version.outputs.windows_signing == 'true'
+        shell: pwsh
+        env:
+          OPENSCIENCE_DESKTOP_SIDECAR: ${{ github.workspace }}/${{ matrix.sidecar }}
+          WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT: ${{ vars.WINDOWS_SIGNING_ACCOUNT }}
+          WINDOWS_SIGNING_PROFILE: ${{ vars.WINDOWS_SIGNING_PROFILE }}
+          WINDOWS_SIGNING_PUBLISHER: ${{ vars.WINDOWS_SIGNING_PUBLISHER }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # electron-builder does not traverse resources/sidecar when signing the app.
+          # Sign the verified source binary before it is copied into the installer.
+          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
+          Install-Module -Name TrustedSigning -MinimumVersion 0.5.0 -Force -Repository PSGallery -Scope CurrentUser
+          Invoke-TrustedSigning `
+            -Endpoint $env:WINDOWS_SIGNING_ENDPOINT `
+            -CodeSigningAccountName $env:WINDOWS_SIGNING_ACCOUNT `
+            -CertificateProfileName $env:WINDOWS_SIGNING_PROFILE `
+            -Files $env:OPENSCIENCE_DESKTOP_SIDECAR `
+            -FileDigest SHA256 `
+            -TimestampRfc3161 'http://timestamp.acs.microsoft.com' `
+            -TimestampDigest SHA256
+          & ./tooling/repo/verify-windows-signatures.ps1 -Files $env:OPENSCIENCE_DESKTOP_SIDECAR -Publisher $env:WINDOWS_SIGNING_PUBLISHER
       - name: Make sidecar executable
         if: steps.existing.outputs.found != 'true' && matrix.target != 'win'
         shell: bash
