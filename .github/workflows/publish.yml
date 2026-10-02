@@ -850,7 +850,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           # electron-builder does not traverse resources/sidecar when signing the app.
           # Sign the verified source binary before it is copied into the installer.
-          Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope CurrentUser
           Install-Module -Name TrustedSigning -MinimumVersion 0.5.0 -Force -Repository PSGallery -Scope CurrentUser
           Invoke-TrustedSigning `
             -Endpoint $env:WINDOWS_SIGNING_ENDPOINT `
