@@ -117,6 +117,18 @@ def validate_by_template(rows: List[Dict[str, Any]], template: Dict[str, Any]) -
     recommended_fields = set(schema.get("recommended_fields", []))
     field_types = schema.get("field_types", {})
 
+    # Every template the CLI advertises needs a structural validator here, or
+    # its rows are only checked for field presence. `custom` is deliberately
+    # absent: it is the escape hatch where the caller defines the shape, so
+    # there is no structure to enforce beyond its declared `data` field.
+    template_type = template.get("type")
+    validator = _TEMPLATE_VALIDATORS.get(template_type)
+    if validator is None and template_type != "custom":
+        print(
+            f"⚠️ No structural validator for template type '{template_type}'. "
+            "Only the declared required and typed fields were checked."
+        )
+
     for i, row in enumerate(rows):
         # Check required fields
         if not all(field in row for field in required_fields):
@@ -131,22 +143,15 @@ def validate_by_template(rows: List[Dict[str, Any]], template: Dict[str, Any]) -
                     return False
 
         # Template-specific validation
-        if template["type"] == "chat":
-            if not _validate_chat_format(row, i):
-                return False
-        elif template["type"] == "classification":
-            if not _validate_classification_format(row, i):
-                return False
-        elif template["type"] == "tabular":
-            if not _validate_tabular_format(row, i):
-                return False
+        if validator is not None and not validator(row, i):
+            return False
 
         # Warn about missing recommended fields
         missing_recommended = recommended_fields - set(row.keys())
         if missing_recommended:
             print(f"Row {i}: Recommended to include: {missing_recommended}")
 
-    print(f"✓ Validated {len(rows)} examples for {template['type']} dataset")
+    print(f"✓ Validated {len(rows)} examples for {template_type} dataset")
     return True
 
 
@@ -227,6 +232,56 @@ def _validate_tabular_format(row: Dict[str, Any], row_index: int) -> bool:
         return False
 
     return True
+
+
+def _validate_qa_format(row: Dict[str, Any], row_index: int) -> bool:
+    """
+    Validate qa-specific format.
+
+    The template declares `answer` as "string|array", a union the generic
+    field_types pass cannot check, so both shapes are enforced here.
+    """
+    question = row.get("question")
+    if not isinstance(question, str) or not question.strip():
+        print(f"Row {row_index}: 'question' must be a non-empty string")
+        return False
+
+    answer = row.get("answer")
+    if isinstance(answer, str):
+        if not answer.strip():
+            print(f"Row {row_index}: 'answer' must not be empty")
+            return False
+    elif isinstance(answer, list):
+        if not answer or not all(isinstance(item, str) and item.strip() for item in answer):
+            print(f"Row {row_index}: 'answer' list must hold non-empty strings")
+            return False
+    else:
+        print(f"Row {row_index}: 'answer' must be a string or a list of strings")
+        return False
+
+    return True
+
+
+def _validate_completion_format(row: Dict[str, Any], row_index: int) -> bool:
+    """Validate completion-specific format."""
+    for field in ("prompt", "completion"):
+        value = row.get(field)
+        if not isinstance(value, str) or not value.strip():
+            print(f"Row {row_index}: '{field}' must be a non-empty string")
+            return False
+
+    return True
+
+
+# Every template offered by `--template` that has a fixed structure. `custom`
+# is intentionally not listed: the caller defines its own shape.
+_TEMPLATE_VALIDATORS = {
+    "chat": _validate_chat_format,
+    "classification": _validate_classification_format,
+    "tabular": _validate_tabular_format,
+    "qa": _validate_qa_format,
+    "completion": _validate_completion_format,
+}
 
 
 def validate_training_data(rows: List[Dict[str, Any]], template_name: str = "chat") -> bool:
