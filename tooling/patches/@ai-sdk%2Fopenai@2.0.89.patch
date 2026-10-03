@@ -23,9 +23,18 @@ index 9754c0afb02f570ace9c58c3fb973764d1104925..259e666a9d8235450c25dc104946247f
      safetyIdentifier?: string | null | undefined;
      serviceTier?: "default" | "auto" | "flex" | "priority" | null | undefined;
 diff --git a/dist/index.js b/dist/index.js
-index ba86783033e3fa24faf7c919374d548316f2cd1f..a681310b6a2ee7c69f1b0947acf0e8e784001c87 100644
+index ba86783033e3fa24faf7c919374d548316f2cd1f..8e9d4b5e08e937702985d36676bf5663d57f8a8d 100644
 --- a/dist/index.js
 +++ b/dist/index.js
+@@ -55,7 +55,7 @@ var openaiFailedResponseHandler = (0, import_provider_utils.createJsonErrorRespo
+ // src/openai-language-model-capabilities.ts
+ function getOpenAILanguageModelCapabilities(modelId) {
+   const supportsFlexProcessing = modelId.startsWith("o3") || modelId.startsWith("o4-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-chat");
+-  const supportsPriorityProcessing = modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
++  const supportsPriorityProcessing = modelId === "gpt-6.1-sol" || modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
+   const isReasoningModel = !(modelId.startsWith("gpt-3") || modelId.startsWith("gpt-4") || modelId.startsWith("chatgpt-4o") || modelId.startsWith("gpt-5-chat"));
+   const supportsNonReasoningParameters = modelId.startsWith("gpt-5.1") || modelId.startsWith("gpt-5.2");
+   const systemMessageMode = isReasoningModel ? "developer" : "system";
 @@ -2983,6 +2983,7 @@ var openaiResponsesProviderOptionsSchema = (0, import_provider_utils22.lazyValid
         * an error.
         */
@@ -51,9 +60,18 @@ index ba86783033e3fa24faf7c919374d548316f2cd1f..a681310b6a2ee7c69f1b0947acf0e8e7
              summary: openaiOptions.reasoningSummary
            }
 diff --git a/dist/index.mjs b/dist/index.mjs
-index a740f1650ff7cf157bd5b7dc78b1256e5a204292..f9ca1b66e78fa0a86e5941f5a5927401e8c0fcac 100644
+index a740f1650ff7cf157bd5b7dc78b1256e5a204292..ebbe7e179e49cba2027d59bd3ba197e28934f620 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
+@@ -42,7 +42,7 @@ var openaiFailedResponseHandler = createJsonErrorResponseHandler({
+ // src/openai-language-model-capabilities.ts
+ function getOpenAILanguageModelCapabilities(modelId) {
+   const supportsFlexProcessing = modelId.startsWith("o3") || modelId.startsWith("o4-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-chat");
+-  const supportsPriorityProcessing = modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
++  const supportsPriorityProcessing = modelId === "gpt-6.1-sol" || modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
+   const isReasoningModel = !(modelId.startsWith("gpt-3") || modelId.startsWith("gpt-4") || modelId.startsWith("chatgpt-4o") || modelId.startsWith("gpt-5-chat"));
+   const supportsNonReasoningParameters = modelId.startsWith("gpt-5.1") || modelId.startsWith("gpt-5.2");
+   const systemMessageMode = isReasoningModel ? "developer" : "system";
 @@ -3054,6 +3054,7 @@ var openaiResponsesProviderOptionsSchema = lazyValidator9(
         * an error.
         */
@@ -79,9 +97,18 @@ index a740f1650ff7cf157bd5b7dc78b1256e5a204292..f9ca1b66e78fa0a86e5941f5a5927401
              summary: openaiOptions.reasoningSummary
            }
 diff --git a/dist/internal/index.js b/dist/internal/index.js
-index d191a78cd4874889239b15b1ec131f65a1cd9e41..18a4a89c031cac5e374d512b09e45b133f666cc7 100644
+index d191a78cd4874889239b15b1ec131f65a1cd9e41..58ea882e244385028bd33ae98e4dcc97717dca38 100644
 --- a/dist/internal/index.js
 +++ b/dist/internal/index.js
+@@ -77,7 +77,7 @@ var openaiFailedResponseHandler = (0, import_provider_utils.createJsonErrorRespo
+ // src/openai-language-model-capabilities.ts
+ function getOpenAILanguageModelCapabilities(modelId) {
+   const supportsFlexProcessing = modelId.startsWith("o3") || modelId.startsWith("o4-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-chat");
+-  const supportsPriorityProcessing = modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
++  const supportsPriorityProcessing = modelId === "gpt-6.1-sol" || modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
+   const isReasoningModel = !(modelId.startsWith("gpt-3") || modelId.startsWith("gpt-4") || modelId.startsWith("chatgpt-4o") || modelId.startsWith("gpt-5-chat"));
+   const supportsNonReasoningParameters = modelId.startsWith("gpt-5.1") || modelId.startsWith("gpt-5.2");
+   const systemMessageMode = isReasoningModel ? "developer" : "system";
 @@ -3052,6 +3052,7 @@ var openaiResponsesProviderOptionsSchema = (0, import_provider_utils22.lazyValid
         * an error.
         */
@@ -107,9 +134,18 @@ index d191a78cd4874889239b15b1ec131f65a1cd9e41..18a4a89c031cac5e374d512b09e45b13
              summary: openaiOptions.reasoningSummary
            }
 diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
-index d3959d8bd4fe137d32202b871ed6a354a4606492..13d04619d91985ec6d88835fe45efe6e66f49663 100644
+index d3959d8bd4fe137d32202b871ed6a354a4606492..26efa327ffc1b9154f23385b511272f8aaab0c3f 100644
 --- a/dist/internal/index.mjs
 +++ b/dist/internal/index.mjs
+@@ -34,7 +34,7 @@ var openaiFailedResponseHandler = createJsonErrorResponseHandler({
+ // src/openai-language-model-capabilities.ts
+ function getOpenAILanguageModelCapabilities(modelId) {
+   const supportsFlexProcessing = modelId.startsWith("o3") || modelId.startsWith("o4-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-chat");
+-  const supportsPriorityProcessing = modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
++  const supportsPriorityProcessing = modelId === "gpt-6.1-sol" || modelId.startsWith("gpt-4") || modelId.startsWith("gpt-5-mini") || modelId.startsWith("gpt-5") && !modelId.startsWith("gpt-5-nano") && !modelId.startsWith("gpt-5-chat") || modelId.startsWith("o3") || modelId.startsWith("o4-mini");
+   const isReasoningModel = !(modelId.startsWith("gpt-3") || modelId.startsWith("gpt-4") || modelId.startsWith("chatgpt-4o") || modelId.startsWith("gpt-5-chat"));
+   const supportsNonReasoningParameters = modelId.startsWith("gpt-5.1") || modelId.startsWith("gpt-5.2");
+   const systemMessageMode = isReasoningModel ? "developer" : "system";
 @@ -3091,6 +3091,7 @@ var openaiResponsesProviderOptionsSchema = lazyValidator12(
         * an error.
         */

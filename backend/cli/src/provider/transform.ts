@@ -563,7 +563,7 @@ export namespace ProviderTransform {
   // ladder in sync with the OAuth model catalog rather than deriving it from a
   // release date or inheriting API-only `none`/`minimal` values.
   function codexOAuthEfforts(id: string): string[] | undefined {
-    if (id === "gpt-6-astra") return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
+    if (id === "gpt-6-astra" || id === "gpt-6.1-sol") return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
     if (/^gpt-5[.-]6-(?:sol|terra)$/.test(id)) {
       return [...WIDELY_SUPPORTED_EFFORTS, "xhigh", "max"]
     }

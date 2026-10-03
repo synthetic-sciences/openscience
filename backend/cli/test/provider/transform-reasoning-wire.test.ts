@@ -46,26 +46,37 @@ async function send(language: any, providerOptions: Record<string, any>) {
 }
 
 describe("reasoning options serialize onto provider request bodies", () => {
-  test("Codex OAuth max reaches the OpenAI Responses wire shape", async () => {
-    const target = model({
-      id: "gpt-5.6-sol",
-      providerID: "openai-codex",
-      api: { id: "gpt-5.6-sol", url: "https://chatgpt.com/backend-api/codex", npm: "@ai-sdk/openai" },
-    })
-    const selected = ProviderTransform.variants(target).max
-    const options = mergeDeep(ProviderTransform.options({ model: target, sessionID, providerOptions: {} }), selected)
-    const wire = recorder()
-    const sdk = createOpenAI({ apiKey: "test", baseURL: "https://codex.test/v1", fetch: wire.fetch })
+  test.each(["gpt-5.6-sol", "gpt-6.1-sol"])(
+    "Codex OAuth %s max and Fast reach the Responses wire shape",
+    async (id) => {
+      const target = model({
+        id,
+        providerID: "openai-codex",
+        api: { id, url: "https://chatgpt.com/backend-api/codex", npm: "@ai-sdk/openai" },
+        modes: { fast: { provider: { body: { service_tier: "priority" } } } },
+      })
+      const selected = ProviderTransform.variants(target).max
+      const options = mergeDeep(ProviderTransform.options({ model: target, sessionID, providerOptions: {} }), selected)
+      const wire = recorder()
+      const sdk = createOpenAI({ apiKey: "test", baseURL: "https://codex.test/v1", fetch: wire.fetch })
 
-    await send(sdk.responses(target.api.id), ProviderTransform.providerOptions(target, options))
+      await send(sdk.responses(target.api.id), ProviderTransform.providerOptions(target, options))
+      await send(
+        sdk.responses(target.api.id),
+        ProviderTransform.providerOptions(target, { ...options, ...ProviderTransform.tier(target, "fast").options }),
+      )
 
-    expect(wire.bodies).toHaveLength(1)
-    expect(wire.bodies[0]).toMatchObject({
-      store: false,
-      include: ["reasoning.encrypted_content"],
-      reasoning: { effort: "max", summary: "detailed" },
-    })
-  })
+      expect(wire.bodies).toHaveLength(2)
+      expect(wire.bodies[0].service_tier).toBeUndefined()
+      expect(wire.bodies[1]).toMatchObject({
+        model: id,
+        service_tier: "priority",
+        store: false,
+        include: ["reasoning.encrypted_content"],
+        reasoning: { effort: "max", summary: "detailed" },
+      })
+    },
+  )
 
   test("xAI Responses leaves the native high default implicit and sends selected medium", async () => {
     const target = model({

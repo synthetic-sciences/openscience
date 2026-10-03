@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
+
 - Removing a saved provider key now disconnects the provider while preserving its endpoint and protocol preferences for reconnection.
 
 - Open trusted remote runtimes and SSH tunnels in isolated desktop workspace windows, keeping files, events, and terminals on the selected server without broadening the local workspace connection policy.

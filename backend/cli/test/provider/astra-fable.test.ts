@@ -362,7 +362,7 @@ test("native Fable streams supplied reasoning and progress verbatim, retaining s
 
 test("Sol 6.1 preserves its API defaults, small-task effort and all pricing tiers", () => {
   const model = Provider.fromModelsDevProvider(catalog("openai")).models["gpt-6.1-sol"]
-  expect(Provider.isCodexOAuthModel(model.id)).toBe(false)
+  expect(Provider.isCodexOAuthModel(model.id)).toBe(true)
   expect(ProviderTransform.options({ model, sessionID: "fixture" })).toMatchObject({
     reasoningEffort: "medium",
     reasoningSummary: "detailed",

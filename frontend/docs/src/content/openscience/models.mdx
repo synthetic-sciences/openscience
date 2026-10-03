@@ -97,6 +97,12 @@ Open the context indicator for the latest request's token breakdown and the sess
 
 The token breakdown separates ordinary input, cache reads, cache writes, and output when reported by the model service. Cache writes are counted once in the total. A reported request charge takes precedence over an estimate from the token rates. Ace applies the same rounding to each reported request charge as Wallet settlement; provider-key costs retain the provider's reported precision.
 
+### GPT-6.1 Sol with ChatGPT
+
+After connecting ChatGPT in **Customize → Models**, choose **6.1 Sol** and its **ChatGPT** access route. The CLI model ID is `openai-codex/gpt-6.1-sol`. It offers **Low, Medium, High, Extra high, and Max** reasoning, plus **Fast** mode. Usage counts against your ChatGPT/Codex allowance; the API-key route remains available separately.
+
+Access depends on OpenAI's rollout and your plan or workspace settings. Enterprise and Edu administrators must enable the model. See [OpenAI's current model availability](https://learn.chatgpt.com/docs/models#gpt-61-sol).
+
 ### GPT-6 Astra and Claude Fable 5.1
 
 Both models offer **Low, Medium, High, Extra high, and Max** effort. Their transport contracts remain distinct:

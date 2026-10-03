@@ -244,6 +244,18 @@ describe("new model reasoning effort contracts", () => {
       "max",
     ])
     expect(Object.keys(ProviderTransform.variants(codex("gpt-5.5")))).toEqual(["low", "medium", "high", "xhigh"])
+    expect(Object.keys(ProviderTransform.variants(codex("gpt-6.1-sol")))).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ])
+    expect(ProviderTransform.options({ model: codex("gpt-6.1-sol"), sessionID, providerOptions: {} })).toMatchObject({
+      reasoningEffort: "medium",
+      reasoningSummary: "detailed",
+      include: ["reasoning.encrypted_content"],
+    })
     expect(ProviderTransform.variants(codex("gpt-5.6-sol")).none).toBeUndefined()
     expect(ProviderTransform.variants(codex("gpt-5.6-sol")).ultra).toBeUndefined()
 

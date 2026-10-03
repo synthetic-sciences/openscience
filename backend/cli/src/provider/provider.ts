@@ -632,6 +632,7 @@ export namespace Provider {
   // while current snapshots preserve the upstream ids.
   const CODEX_MODEL_IDS = new Set([
     "gpt-6-astra",
+    "gpt-6.1-sol",
     "gpt-5.6-sol",
     "gpt-5-6-sol",
     "gpt-5.6-terra",
@@ -651,7 +652,7 @@ export namespace Provider {
   }
 
   function codexOAuthModes(modelID: string) {
-    if (!/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
+    if (modelID !== "gpt-6.1-sol" && !/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
     return {
       fast: {
         provider: {
