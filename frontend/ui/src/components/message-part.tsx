@@ -1001,6 +1001,21 @@ function RemoteComputeTool(props: ToolProps) {
       <Show when={typeof job()?.id === "string" ? (job()!.id as string) : undefined}>
         {(id) => <ComputeJobDetails id={id()} />}
       </Show>
+      {/* The Modal plan travels under `compute` (ModalTool); compute_job carries it
+          inside `compute_job`. Only the former renders here. */}
+      <Show
+        when={
+          props.metadata.compute && typeof props.metadata.compute === "object"
+            ? (props.metadata.compute as Record<string, unknown>)
+            : undefined
+        }
+      >
+        {(plan) => (
+          <div data-component="tool-output" data-scrollable>
+            <Markdown text={`\`\`\`json\n${JSON.stringify(plan(), null, 2)}\n\`\`\``} />
+          </div>
+        )}
+      </Show>
       <Show when={typeof props.input.command === "string" ? props.input.command : undefined}>
         {(command) => (
           <div data-component="tool-output" data-scrollable>
@@ -1079,39 +1094,6 @@ ToolRegistry.register({
             <summary>Load details</summary>
             <pre>{JSON.stringify({ input: props.input, metadata: props.metadata }, null, 2)}</pre>
           </details>
-        </Show>
-        <Show when={props.output}>
-          {(output) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={output()} />
-            </div>
-          )}
-        </Show>
-      </BasicTool>
-    )
-  },
-})
-
-ToolRegistry.register({
-  name: "modal",
-  render(props) {
-    const plan = () => props.metadata.compute
-    return (
-      <BasicTool
-        {...props}
-        icon="mcp"
-        trigger={{
-          title: props.title || (props.status === "pending" ? "Review Modal job" : "Modal job"),
-          subtitle: props.input.name,
-          args: [props.input.gpu || "none"],
-        }}
-      >
-        <Show when={plan()}>
-          {(value) => (
-            <div data-component="tool-output" data-scrollable>
-              <Markdown text={`\`\`\`json\n${JSON.stringify(value(), null, 2)}\n\`\`\``} />
-            </div>
-          )}
         </Show>
         <Show when={props.output}>
           {(output) => (

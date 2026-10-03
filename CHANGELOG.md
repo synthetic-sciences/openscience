@@ -32,6 +32,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
+- **A Modal call shows its live job panel again.** `modal` and `compute_job`
+  share one renderer. Registering `modal` a second time let the later
+  plan-card win, so the current-job panel and the GPU/status line were
+  unreachable for every Modal job.
+
 ### Changed
 
 - Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.

@@ -2817,6 +2817,43 @@ test("compute dispatch stays labeled as a historical snapshot and suppresses GPU
   expect("metadata" in receipt.state && receipt.state.metadata).toMatchObject({ job: { status: "queued" } })
 })
 
+test("a Modal call reaches the same live job panel as compute_job instead of a bare plan dump", async () => {
+  const receipt: ToolPart = {
+    id: "prt_modal_snapshot",
+    sessionID,
+    messageID: "msg_0002",
+    type: "tool",
+    tool: "modal",
+    callID: "call_modal",
+    state: {
+      status: "completed",
+      input: { name: "Final churn ensemble", gpu: "T4", action: "start" },
+      title: "Modal job: Final churn ensemble",
+      output: "Dispatched Modal job job_1. Status queued.",
+      // What ModalTool emits: the plan under `compute`, the job under `job`.
+      metadata: {
+        compute: { provider: "modal", name: "Final churn ensemble", gpu: "T4", timeout_minutes: 25 },
+        job: { id: "job_1", status: "running" },
+      },
+      time: { start: 1, end: 2 },
+    },
+  }
+  const host = mount(() => parts.Part({ part: receipt, message: assistant(2) }), empty(), {
+    loadComputeJob: (id) =>
+      Promise.resolve({ id, name: "Final churn ensemble", command: "python final.py", status: "running" }),
+  })
+  // The dispatched job is summarized on the row, exactly as compute_job does it.
+  await settle()
+  expect(host.querySelector('[data-slot="basic-tool-tool-subtitle"]')?.textContent).toBe("T4 · running at dispatch")
+  // And the live panel behind "View current job" is reachable, not only for compute_job.
+  host.querySelector<HTMLElement>('[data-component="tool-trigger"]')!.click()
+  await settle()
+  const toggle = [...host.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("View current job"),
+  )
+  expect(toggle).toBeTruthy()
+})
+
 test("unavailable file checks stay explicit and can recover without offering unverified output", async () => {
   const message = assistant(3000)
   const patch: Part = {
