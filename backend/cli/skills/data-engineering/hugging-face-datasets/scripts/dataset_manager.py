@@ -16,6 +16,7 @@ Version: 2.0.0
 
 Usage:
     uv run dataset_manager.py init --repo_id username/dataset-name
+    uv run dataset_manager.py init --repo_id username/dataset-name --public
     uv run dataset_manager.py quick_setup --repo_id username/dataset-name --template chat
     uv run dataset_manager.py add_rows --repo_id username/dataset-name --rows_json '[{"messages": [...]}]'
     uv run dataset_manager.py stats --repo_id username/dataset-name
@@ -429,7 +430,23 @@ if __name__ == "__main__":
     # Init command
     init_parser = subparsers.add_parser("init", help="Initialize a new dataset")
     init_parser.add_argument("--repo_id", required=True, help="Repository ID (user/repo_name)")
-    init_parser.add_argument("--private", action="store_true", help="Make repository private")
+    # Repositories are private unless --public is passed. --private is kept so
+    # existing callers keep working; it is now the default rather than the only
+    # way to get a private repository.
+    visibility = init_parser.add_mutually_exclusive_group()
+    visibility.add_argument(
+        "--private",
+        dest="private",
+        action="store_true",
+        default=None,
+        help="Create a private repository (the default)",
+    )
+    visibility.add_argument(
+        "--public",
+        dest="private",
+        action="store_false",
+        help="Create a public repository",
+    )
 
     # Config command
     config_parser = subparsers.add_parser("config", help="Setup dataset config")
@@ -496,7 +513,10 @@ if __name__ == "__main__":
         print("Warning: HF_TOKEN environment variable not set.")
 
     if args.command == "init":
-        init_dataset(args.repo_id, token=token, private=args.private)
+        # An unset flag means no preference, so fall back to init_dataset's own
+        # private-by-default rather than reading absence as "publish me".
+        private = True if args.private is None else args.private
+        init_dataset(args.repo_id, token=token, private=private)
     elif args.command == "config":
         define_config(args.repo_id, system_prompt=args.system_prompt, token=token)
     elif args.command == "add_rows":
