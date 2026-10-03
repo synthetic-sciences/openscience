@@ -898,7 +898,16 @@ export namespace KernelRuntime {
     const paths = await Storage.list(prefix)
     await Promise.all(
       paths.map(async (path) => {
-        const value = Persisted.safeParse(await Storage.read<unknown>(path))
+        // A record deleted or truncated between Storage.list and Storage.read
+        // must not discard every other record in the project. hydrate() already
+        // absorbs exactly this read failing; without the same guard here one
+        // unreadable file rejected the whole Promise.all, so releaseProject and
+        // removeSession — which await this first — released nothing at all.
+        const stored = await Storage.read<unknown>(path).catch((error) => {
+          if (Storage.NotFoundError.isInstance(error)) return
+          throw error
+        })
+        const value = Persisted.safeParse(stored)
         if (!value.success || value.data.identity.projectID !== projectID) return
         if (sessionID && value.data.identity.sessionID !== sessionID) return
         if (!managers.has(value.data.identity.language)) return
