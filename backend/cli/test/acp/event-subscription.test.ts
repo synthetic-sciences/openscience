@@ -368,6 +368,46 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("replays a session whose todowrite history is not valid JSON", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, updates, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/openscience-acp-test"
+
+        const sessionID = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        sdk.session.messages = async () => ({
+          data: [
+            {
+              info: { role: "assistant", sessionID },
+              parts: [
+                {
+                  type: "tool",
+                  callID: "call_replay",
+                  tool: "todowrite",
+                  state: {
+                    status: "completed",
+                    input: {},
+                    output: "not json",
+                    title: "todowrite",
+                    metadata: {},
+                  },
+                },
+              ],
+            },
+          ],
+        })
+
+        await agent.loadSession({ sessionId: sessionID, cwd, mcpServers: [] } as any)
+
+        expect(updates.get(sessionID)).toContain("tool_call_update")
+        stop()
+      },
+    })
+  })
+
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
