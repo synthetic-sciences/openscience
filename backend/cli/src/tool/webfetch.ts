@@ -1114,28 +1114,25 @@ async function streamDownload(response: Response, target: DownloadTarget, initia
   }
 }
 
-async function extractTextFromHTML(html: string) {
+export async function extractTextFromHTML(html: string) {
   let text = ""
-  let skipContent = false
+  // Depth of the skipped elements currently open. Counting depth rather than
+  // holding a boolean keeps text flowing once a skipped element closes, and
+  // keeps nested markup such as <noscript><p>..</p></noscript> skipped.
+  let skipped = 0
 
   const rewriter = new HTMLRewriter()
     .on("script, style, noscript, iframe, object, embed", {
-      element() {
-        skipContent = true
-      },
-      text() {
-        // Skip text content inside these elements
+      element(element) {
+        skipped++
+        element.onEndTag(() => {
+          skipped--
+        })
       },
     })
     .on("*", {
-      element(element) {
-        // Reset skip flag when entering other elements
-        if (!["script", "style", "noscript", "iframe", "object", "embed"].includes(element.tagName)) {
-          skipContent = false
-        }
-      },
       text(input) {
-        if (!skipContent) {
+        if (skipped === 0) {
           text += input.text
         }
       },
