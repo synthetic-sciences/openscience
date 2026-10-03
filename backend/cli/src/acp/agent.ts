@@ -91,6 +91,22 @@ export namespace ACP {
     return getNewContent(content, diff)
   }
 
+  function parseTodoOutput(output: string) {
+    let raw: unknown
+    try {
+      raw = JSON.parse(output)
+    } catch (error) {
+      log.error("could not parse todowrite output as JSON", { error })
+      return undefined
+    }
+    const parsed = z.array(Todo.Info).safeParse(raw)
+    if (!parsed.success) {
+      log.error("failed to parse todo output", { error: parsed.error })
+      return undefined
+    }
+    return parsed.data
+  }
+
   export async function init({ sdk: _sdk }: { sdk: OpenScienceClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
@@ -329,14 +345,14 @@ export namespace ACP {
                 }
 
                 if (part.tool === "todowrite") {
-                  const parsedTodos = z.array(Todo.Info).safeParse(JSON.parse(part.state.output))
-                  if (parsedTodos.success) {
+                  const todos = parseTodoOutput(part.state.output)
+                  if (todos) {
                     await this.connection
                       .sessionUpdate({
                         sessionId,
                         update: {
                           sessionUpdate: "plan",
-                          entries: parsedTodos.data.map((todo) => {
+                          entries: todos.map((todo) => {
                             const status: PlanEntry["status"] =
                               todo.status === "cancelled" ? "completed" : (todo.status as PlanEntry["status"])
                             return {
@@ -350,8 +366,6 @@ export namespace ACP {
                       .catch((error) => {
                         log.error("failed to send session update for todo", { error })
                       })
-                  } else {
-                    log.error("failed to parse todo output", { error: parsedTodos.error })
                   }
                 }
 

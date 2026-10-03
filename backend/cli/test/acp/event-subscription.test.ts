@@ -368,6 +368,48 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("completes a todowrite tool call whose output is not valid JSON", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, updates, stop } = createFakeAgent()
+        const cwd = "/tmp/openscience-acp-test"
+
+        const sessionID = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              part: {
+                sessionID,
+                messageID: "msg_1",
+                callID: "call_1",
+                type: "tool",
+                tool: "todowrite",
+                state: {
+                  status: "completed",
+                  input: {},
+                  output: "the model narrated instead of emitting json",
+                  title: "todowrite",
+                  metadata: {},
+                },
+              },
+            },
+          } as any,
+        })
+
+        await waitFor(() => (updates.get(sessionID) ?? []).includes("tool_call_update"))
+
+        expect(updates.get(sessionID)).toContain("tool_call_update")
+        expect(updates.get(sessionID)).not.toContain("plan")
+        stop()
+      },
+    })
+  })
+
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
