@@ -342,6 +342,11 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **Adding or updating an MCP server returns one status shape.** `MCP.add`
+  answered with the whole status map on the paths that connect, but with a
+  single status object on the path where the server could not be created, so a
+  caller reading the status of the server it just added found nothing.
+
 - Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
 
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.

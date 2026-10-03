@@ -739,7 +739,10 @@ export namespace MCP {
     return commands
   }
 
-  export async function add(name: string, mcp: Config.Mcp) {
+  export async function add(
+    name: string,
+    mcp: Config.Mcp,
+  ): Promise<{ status: Record<string, Status> }> {
     const s = await state()
     const result = await create(name, mcp)
     if (!result) {
@@ -748,8 +751,11 @@ export namespace MCP {
         error: "unknown error",
       }
       s.status[name] = status
+      // The whole status map, keyed by server name, on every path: a caller
+      // reading result.status.status found nothing here while reading a single
+      // status off the map, and the route's own 200 schema is a record.
       return {
-        status,
+        status: s.status,
       }
     }
     try {
