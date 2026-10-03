@@ -342,6 +342,12 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **A renamed provider web-search tool streams under its own name.** The
+  call announced the tool under that name but emitted it under the default,
+  so it could not be routed back to the registered tool, and the streaming
+  path disagreed with the non-streaming one. Every site now resolves the
+  name the same way.
+
 - Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
 
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
