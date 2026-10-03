@@ -1,4 +1,5 @@
 import { Server } from "../../server/server"
+import { TerminalKey } from "../../pty/key"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { DESKTOP_STOP_DEADLINE_MS, STOP_DEADLINE_MS, stopServer } from "../server-stop"
@@ -20,6 +21,9 @@ export const ServeCommand = cmd({
   describe: "starts a headless openscience server",
   handler: async (args) => {
     const opts = await resolveNetworkOptions(args)
+    // The desktop app hands over the code its window will open with. Read it
+    // before anything can spawn, and drop it from this process's environment.
+    await TerminalKey.adoptDesktopCode().catch(() => false)
     const server = Server.listen(opts)
     using parent = DesktopParent.watch()
     // Only the app's own sidecar advertises itself. A terminal `openscience

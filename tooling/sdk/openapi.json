@@ -26897,6 +26897,91 @@
         ]
       }
     },
+    "/pty/key": {
+      "post": {
+        "operationId": "pty.key.exchange",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Exchange a terminal launch code",
+        "description": "Trade the one-time code a launcher put in the workspace URL for the HttpOnly cookie that lets this browser open the person's own shell.",
+        "responses": {
+          "200": {
+            "description": "Whether the code was accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 32,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.pty.key.exchange({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "pty.key.forget",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Forget terminal keys",
+        "description": "Revoke every browser's terminal key. New terminals stay sandboxed until a launcher opens the workspace again.",
+        "responses": {
+          "200": {
+            "description": "Keys forgotten",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.pty.key.forget({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty/{ptyID}": {
       "get": {
         "operationId": "pty.get",
@@ -60407,6 +60492,21 @@
             "type": "string",
             "const": "claude"
           },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "host",
+              "sandboxed"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "policy",
+              "not_local",
+              "no_key"
+            ]
+          },
           "command": {
             "type": "string"
           },
@@ -60651,6 +60751,7 @@
         "required": [
           "id",
           "title",
+          "mode",
           "command",
           "args",
           "cwd",
@@ -62799,6 +62900,20 @@
           },
           "sandbox": {
             "$ref": "#/components/schemas/SandboxConfig"
+          },
+          "terminal": {
+            "description": "The Terminal tab. Agent commands always keep their sandbox.",
+            "type": "object",
+            "properties": {
+              "mode": {
+                "description": "host (default): a terminal opened from your launcher is your own login shell. sandboxed: every terminal uses the agent's sandbox.",
+                "type": "string",
+                "enum": [
+                  "host",
+                  "sandboxed"
+                ]
+              }
+            }
           },
           "tools": {
             "type": "object",

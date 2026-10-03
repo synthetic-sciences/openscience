@@ -261,6 +261,8 @@ import type {
   PtyCreateResponses,
   PtyGetErrors,
   PtyGetResponses,
+  PtyKeyExchangeResponses,
+  PtyKeyForgetResponses,
   PtyListResponses,
   PtyRemoveErrors,
   PtyRemoveResponses,
@@ -3157,6 +3159,62 @@ export class Project2 extends HeyApiClient {
   }
 }
 
+export class Key extends HeyApiClient {
+  /**
+   * Forget terminal keys
+   *
+   * Revoke every browser's terminal key. New terminals stay sandboxed until a launcher opens the workspace again.
+   */
+  public forget<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "directory" }] }])
+    return (options?.client ?? this.client).delete<PtyKeyForgetResponses, unknown, ThrowOnError>({
+      url: "/pty/key",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Exchange a terminal launch code
+   *
+   * Trade the one-time code a launcher put in the workspace URL for the HttpOnly cookie that lets this browser open the person's own shell.
+   */
+  public exchange<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      code: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "code" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PtyKeyExchangeResponses, unknown, ThrowOnError>({
+      url: "/pty/key",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Pty extends HeyApiClient {
   /**
    * List PTY sessions
@@ -3346,6 +3404,11 @@ export class Pty extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _key?: Key
+  get key(): Key {
+    return (this._key ??= new Key({ client: this.client }))
   }
 }
 

@@ -2,6 +2,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { type IPty } from "bun-pty"
 import z from "zod"
+import { NamedError } from "@synsci/util/error"
 import { Identifier } from "../id/id"
 import { Log } from "../util/log"
 import type { WSContext } from "hono/ws"
@@ -14,6 +15,8 @@ import { AuthorityProcessLedger } from "@/project/authority-process"
 import { Sandbox } from "@/sandbox/sandbox"
 import { OpenScience } from "@/openscience"
 import { terminalArgs, terminalEnv } from "./environment"
+import { TerminalMode } from "./mode"
+import { Config } from "@/config/config"
 import { Replay } from "./replay"
 import { WindowsJobLauncher } from "@/process/windows-job-launcher"
 import { Filesystem } from "@/util/filesystem"
@@ -35,6 +38,10 @@ export namespace Pty {
       id: Identifier.schema("pty"),
       title: z.string(),
       program: z.literal("claude").optional(),
+      /** `host` = the person's own login shell; `sandboxed` = the agent's sandbox. */
+      mode: z.enum(["host", "sandboxed"]),
+      /** Why a terminal is sandboxed: `policy`, `not_local` or `no_key`. */
+      reason: z.enum(["policy", "not_local", "no_key"]).optional(),
       command: z.string(),
       args: z.array(z.string()),
       cwd: z.string(),
@@ -55,6 +62,9 @@ export namespace Pty {
   })
 
   export type CreateInput = z.infer<typeof CreateInput>
+
+  /** A request for something only the person's own shell can do. */
+  export const KeyRequiredError = NamedError.create("PtyKeyRequiredError", z.object({ message: z.string() }))
 
   export const UpdateInput = z.object({
     title: z.string().optional(),
@@ -80,6 +90,8 @@ export namespace Pty {
     process: IPty
     buffer: Replay.Ring
     subscribers: Map<WSContext, boolean>
+    /** A host terminal is the person's shell: only a keyed client may attach. */
+    host: boolean
     releaseUpdate: () => void
   }
 
@@ -113,10 +125,29 @@ export namespace Pty {
     return state().get(id)?.info
   }
 
-  export async function create(input: CreateInput) {
+  /** The mode a terminal created for this caller gets. */
+  export async function mode(caller: { key: boolean }) {
+    return TerminalMode.decide({
+      setting: (await Config.get()).terminal?.mode,
+      key: caller.key,
+      local: TerminalMode.local(),
+    })
+  }
+
+  export async function create(input: CreateInput, caller: { key: boolean } = { key: false }) {
     const id = Identifier.create("pty", false)
     const command = Shell.preferred()
-    const args = terminalArgs(command)
+    const decision = await mode(caller)
+    const host = decision.mode === "host"
+    if (input.program === "claude" && !host) {
+      throw new KeyRequiredError({
+        message:
+          decision.reason === "no_key"
+            ? "Claude Code runs in your own shell. Open OpenScience from your launcher to use it here."
+            : "Claude Code runs in your own shell, which this terminal is not allowed to use.",
+      })
+    }
+    const args = terminalArgs(command, decision.mode)
     const spawn = await pty()
     return AuthoritySignal.exclusive(async () => {
       const releaseUpdate = UpdateQuiescence.enter("pty")
@@ -126,6 +157,7 @@ export namespace Pty {
           projectID: Instance.project.id,
           sessionID: input.sessionID,
           capability: "terminal",
+          operator: host ? "person" : undefined,
         })
         const project = authority.directory ?? Instance.directory
         const filesystem = await SessionFilesystem.snapshot(input.sessionID)
@@ -139,15 +171,18 @@ export namespace Pty {
             : authority.workspace
         // Do not inject OpenScience's provider credential overlay into a user
         // shell. Its own login files and credential helpers remain available.
-        const source = {
-          ...OpenScience.filterEnvForKernel(process.env),
-          ...Object.fromEntries(
-            ["USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOMEDRIVE", "HOMEPATH", "SSH_AUTH_SOCK", "ZDOTDIR"]
-              .filter((key) => process.env[key] !== undefined)
-              .map((key) => [key, process.env[key]!]),
-          ),
-        }
-        const env = terminalEnv(source, Instance.project.id, input.sessionID, command)
+        // A sandboxed terminal gets only the runtime discovery agents get.
+        const source = host
+          ? {
+              ...OpenScience.filterEnvForKernel(process.env),
+              ...Object.fromEntries(
+                ["USERPROFILE", "APPDATA", "LOCALAPPDATA", "HOMEDRIVE", "HOMEPATH", "SSH_AUTH_SOCK", "ZDOTDIR"]
+                  .filter((key) => process.env[key] !== undefined)
+                  .map((key) => [key, process.env[key]!]),
+              ),
+            }
+          : OpenScience.kernelEnv(process.env)
+        const env = terminalEnv(source, Instance.project.id, input.sessionID, command, undefined, decision.mode)
         const sandbox = Sandbox.wrapArgv({
           file: command,
           args,
@@ -163,7 +198,7 @@ export namespace Pty {
           args: sandbox.args,
           linuxOwner: owner ? { pid: process.pid, identity: owner } : undefined,
         })
-        log.info("creating session", { id, cmd: command, args, cwd })
+        log.info("creating session", { id, cmd: command, args, cwd, mode: decision.mode, reason: decision.reason })
 
         const ptyProcess = (() => {
           try {
@@ -257,6 +292,8 @@ export namespace Pty {
           id,
           title: input.title || (input.program === "claude" ? "Claude Code" : `Terminal ${id.slice(-4)}`),
           program: input.program,
+          mode: decision.mode,
+          reason: decision.reason,
           command,
           args,
           cwd,
@@ -271,6 +308,7 @@ export namespace Pty {
           process: ptyProcess,
           buffer: earlyBuffer,
           subscribers: new Map(),
+          host,
           releaseUpdate,
         }
         sessions.set(id, session)
@@ -337,10 +375,18 @@ export namespace Pty {
     }
   }
 
-  export function connect(id: string, ws: WSContext) {
+  /** Close code for a host terminal reached without the person's key. */
+  export const KEY_REQUIRED = 4401
+
+  export function connect(id: string, ws: WSContext, caller: { key: boolean } = { key: false }) {
     const session = state().get(id)
     if (!session) {
       ws.close()
+      return
+    }
+    if (session.host && !caller.key) {
+      log.warn("refused keyless connection to a host terminal", { id })
+      ws.close(KEY_REQUIRED, "This terminal belongs to the window that opened it")
       return
     }
     log.info("client connected to session", { id })

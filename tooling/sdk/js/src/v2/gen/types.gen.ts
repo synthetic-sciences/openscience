@@ -1238,6 +1238,8 @@ export type Pty = {
   id: string
   title: string
   program?: "claude"
+  mode: "host" | "sandboxed"
+  reason?: "policy" | "not_local" | "no_key"
   command: string
   args: Array<string>
   cwd: string
@@ -2333,6 +2335,15 @@ export type Config = {
   layout?: LayoutConfig
   permission?: PermissionConfig
   sandbox?: SandboxConfig
+  /**
+   * The Terminal tab. Agent commands always keep their sandbox.
+   */
+  terminal?: {
+    /**
+     * host (default): a terminal opened from your launcher is your own login shell. sandboxed: every terminal uses the agent's sandbox.
+     */
+    mode?: "host" | "sandboxed"
+  }
   tools?: {
     [key: string]: boolean
   }
@@ -10954,6 +10965,44 @@ export type PtyCreateResponses = {
 }
 
 export type PtyCreateResponse = PtyCreateResponses[keyof PtyCreateResponses]
+
+export type PtyKeyForgetData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty/key"
+}
+
+export type PtyKeyForgetResponses = {
+  /**
+   * Keys forgotten
+   */
+  200: boolean
+}
+
+export type PtyKeyForgetResponse = PtyKeyForgetResponses[keyof PtyKeyForgetResponses]
+
+export type PtyKeyExchangeData = {
+  body?: {
+    code: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/pty/key"
+}
+
+export type PtyKeyExchangeResponses = {
+  /**
+   * Whether the code was accepted
+   */
+  200: boolean
+}
+
+export type PtyKeyExchangeResponse = PtyKeyExchangeResponses[keyof PtyKeyExchangeResponses]
 
 export type PtyRemoveData = {
   body?: never

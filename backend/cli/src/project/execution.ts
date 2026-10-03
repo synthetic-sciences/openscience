@@ -116,6 +116,8 @@ export namespace ExecutionAuthority {
     projectID?: string
     sessionID: string
     capability: Capability
+    /** Set only after the server verified a person's terminal key. */
+    operator?: "person"
   }): Promise<Decision> {
     if (input.projectID !== undefined && input.projectID !== Instance.project.id) {
       throw new Project.MismatchError({
@@ -131,9 +133,10 @@ export namespace ExecutionAuthority {
       Vcs.metadataRoot(),
     ])
     const backend = Sandbox.describe()
-    // PTYs are opened and operated by the user. Agent shell commands and
-    // kernels have distinct capabilities and retain their execution policy.
-    const terminal = input.capability === "terminal"
+    // A terminal proven to be opened by the person (TerminalKey) is their own
+    // shell. Any other terminal request, which may come from an agent process
+    // that reached the local server, keeps the agent's execution policy.
+    const terminal = input.capability === "terminal" && input.operator === "person"
     const sandbox = terminal
       ? {
           enabled: false,
@@ -251,6 +254,7 @@ export namespace ExecutionAuthority {
     projectID?: string
     sessionID: string
     capability: Capability
+    operator?: "person"
   }): Promise<Decision> {
     const result = await decide(input)
     if (result.allowed) return result

@@ -1460,6 +1460,17 @@ export namespace Config {
       layout: Layout.optional().describe("@deprecated Always uses stretch layout."),
       permission: Permission.optional(),
       sandbox: Sandbox.optional().describe("OS-level execution sandbox for the agent's shell commands."),
+      terminal: z
+        .object({
+          mode: z
+            .enum(["host", "sandboxed"])
+            .optional()
+            .describe(
+              "host (default): a terminal opened from your launcher is your own login shell. sandboxed: every terminal uses the agent's sandbox.",
+            ),
+        })
+        .optional()
+        .describe("The Terminal tab. Agent commands always keep their sandbox."),
       tools: z.record(z.string(), z.boolean()).optional(),
       enterprise: z
         .object({

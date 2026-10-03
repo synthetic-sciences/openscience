@@ -9,6 +9,10 @@ export type LocalPTY = {
   id: string
   title: string
   program?: "claude"
+  /** `host` = the person's own shell; `sandboxed` = the agent's sandbox. */
+  mode?: "host" | "sandboxed"
+  /** Why a terminal is sandboxed (`policy`, `not_local`, `no_key`). */
+  reason?: "policy" | "not_local" | "no_key"
   titleNumber: number
   /** Session whose execution authority created this project terminal. */
   sessionID?: string
@@ -19,6 +23,12 @@ export type LocalPTY = {
 }
 
 const MAX_TERMINAL_PROJECTS = 20
+
+/** The server's own words for a refused terminal, when it gave any. */
+function refusal(error: unknown) {
+  const data = (error as { data?: { message?: unknown } } | undefined)?.data
+  return typeof data?.message === "string" && data.message ? data.message : "OpenScience could not start the terminal."
+}
 
 type TerminalSession = ReturnType<typeof createProjectTerminalSession>
 
@@ -80,6 +90,8 @@ function createProjectTerminalSession(
             id: pty.id,
             title: pty.title,
             program: pty.program,
+            mode: pty.mode,
+            reason: pty.reason,
             titleNumber: remembered?.titleNumber ?? numberFromTitle(pty.title) ?? index + 1,
             sessionID: pty.sessionID,
           } satisfies LocalPTY
@@ -178,12 +190,15 @@ function createProjectTerminalSession(
           program: opts?.program,
         })
         .then((pty) => {
+          if (pty.error) throw new Error(refusal(pty.error))
           const id = pty.data?.id
           if (!id) return
           const newTerminal = {
             id,
             title: pty.data?.title ?? "Terminal",
             program: pty.data?.program,
+            mode: pty.data?.mode,
+            reason: pty.data?.reason,
             titleNumber: nextNumber,
             sessionID: pty.data?.sessionID ?? session,
           }
@@ -227,6 +242,7 @@ function createProjectTerminalSession(
         title: pty.title,
         program: pty.program,
       })
+      if (clone.error) throw new Error(refusal(clone.error))
       if (!clone.data) throw new Error("The server did not return a replacement terminal.")
 
       const active = store.active === pty.id
@@ -234,6 +250,8 @@ function createProjectTerminalSession(
         id: clone.data.id,
         title: clone.data.title ?? pty.title,
         program: clone.data.program,
+        mode: clone.data.mode,
+        reason: clone.data.reason,
         titleNumber: pty.titleNumber,
         sessionID: clone.data.sessionID ?? session,
       }

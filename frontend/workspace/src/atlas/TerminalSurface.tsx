@@ -20,6 +20,13 @@ import "@/atlas/TerminalSurface.css"
 
 const EMPTY_RESULT: TerminalSearchResult = { current: 0, total: 0 }
 
+/** Why this terminal is the agent's sandboxed shell rather than the person's own. */
+export function sandboxNote(reason?: "policy" | "not_local" | "no_key") {
+  if (reason === "no_key") return "Sandboxed shell. Open OpenScience from your launcher to use your own shell here."
+  if (reason === "not_local") return "Your own shell is only available when OpenScience runs on this computer."
+  if (reason === "policy") return "Terminals use the agent's sandbox in this installation."
+}
+
 export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
   preloadTerminal()
   const language = useLanguage()
@@ -134,6 +141,14 @@ export function TerminalSurface(props: { active?: boolean } = {}): JSX.Element {
               <IconRefresh size={12} strokeWidth={1.5} />
               {state.starting ? "Retrying…" : "Try again"}
             </button>
+          </div>
+        )}
+      </Show>
+
+      <Show when={available() ? sandboxNote(active()?.reason) : undefined}>
+        {(note) => (
+          <div class="terminal-surface__authority" role="status">
+            {note()}
           </div>
         )}
       </Show>

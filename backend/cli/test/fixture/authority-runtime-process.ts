@@ -145,7 +145,7 @@ await Instance.provide({
       const descendantFile = descendantFileArg
       if (!descendantFile) throw new Error("Missing PTY descendant marker path")
       process.env.SHELL = shell
-      const terminal = await Pty.create({ sessionID, title: "orphan" })
+      const terminal = await Pty.create({ sessionID, title: "orphan" }, { key: true })
       const entry = await ledger("pty")
       const descendantPID = await hostPID(entry, Number(await waitText(descendantFile)))
       const descendantIdentity = await AuthorityProcessLedger.identity(descendantPID)

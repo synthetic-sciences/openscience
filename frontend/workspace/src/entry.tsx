@@ -5,6 +5,7 @@ import { Platform, PlatformProvider, type DesktopUpdateState } from "@/context/p
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
 import { openscienceFetch } from "@/utils/openscience-fetch"
+import { exchangeTerminalCode, takeTerminalCode } from "@/utils/terminal-key"
 import { URLS } from "@/config/urls"
 import { openNativeDirectoryPicker } from "@/utils/native-picker"
 import { normalizeServerUrl } from "@/context/server"
@@ -216,13 +217,26 @@ const platform: Platform = {
   fetch: openscienceFetch,
 }
 
-render(
-  () => (
-    <PlatformProvider value={platform}>
-      <AppBaseProviders>
-        <AppInterface defaultUrl={desktopUrl} />
-      </AppBaseProviders>
-    </PlatformProvider>
+// Spend a launcher's terminal code before the first terminal can start, so a
+// tab restored on load already opens the person's own shell.
+const terminalCode = takeTerminalCode(window.location, window.history)
+const terminalKey = terminalCode
+  ? exchangeTerminalCode({
+      code: terminalCode,
+      url: resolveServerRoute("/pty/key", server(), window.location.origin),
+      fetch: openscienceFetch,
+    })
+  : Promise.resolve(false)
+
+void terminalKey.then(() =>
+  render(
+    () => (
+      <PlatformProvider value={platform}>
+        <AppBaseProviders>
+          <AppInterface defaultUrl={desktopUrl} />
+        </AppBaseProviders>
+      </PlatformProvider>
+    ),
+    root!,
   ),
-  root!,
 )

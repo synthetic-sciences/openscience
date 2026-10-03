@@ -34,7 +34,9 @@ Open **Terminal** in the project or use **Open project terminal** from the comma
 
 New terminals open in the selected **Working folder**, or in session scratch when you explicitly select scratch. With no connected folder, they open in the project directory. Existing terminals keep their current directory when you change the selection; open a new tab to use the new folder.
 
-This is your normal local shell, with your login configuration, installed commands, credentials, and operating-system permissions. Commands such as `claude`, `git`, and your package managers can use their usual files and network connections. On a remote OpenScience server, the terminal runs on that server. The research agent's shell commands and Python/R kernels continue to use the agent's sandbox and approval settings.
+This is your normal local shell, with your login configuration, installed commands, credentials, and operating-system permissions. Commands such as `claude`, `git`, and your package managers can use their usual files and network connections. The research agent's shell commands and Python/R kernels continue to use the agent's sandbox and approval settings.
+
+Your own shell is available in a window that `openscience`, `openscience web`, or the desktop app opened for you. The launcher hands that window a one-time code, which it trades for a private browser cookie, so a command run by the agent cannot open your shell through the local server. Other windows, a copied link, and servers configured with `OPENSCIENCE_AUTH_TOKEN` get a sandboxed terminal with a note explaining why; open OpenScience from your launcher again to get your own shell. To sandbox every terminal, set `"terminal": { "mode": "sandboxed" }` in `openscience.json`.
 
 Use Control+backtick to open or close the terminal and Control+Shift+backtick for a new terminal when available. See [Keyboard shortcuts](/openscience/keyboard-shortcuts).
 

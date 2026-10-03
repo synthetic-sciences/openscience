@@ -37,6 +37,8 @@ const REPLAY_REQUEST = "\0"
 // the selection manager keeps the freed handle, which silently breaks copy after every reconnect.
 const ERASE = "\x1b[0m\x1b[2J\x1b[3J\x1b[H"
 const RECONNECT_LIMIT = 5
+// Mirrors Pty.KEY_REQUIRED on the server.
+const KEY_REQUIRED = 4401
 
 // Mirrors reconnectDelay in @/context/reconnecting-event-stream: 250 ms doubling to a 5 s cap.
 // Returns undefined once the attempt budget is spent so the caller reports the loss instead.
@@ -437,6 +439,17 @@ export const Terminal = (props: TerminalProps) => {
           if (disposed) return
           // Normal closure (code 1000) means PTY process exited - server event handles cleanup
           if (event.code === 1000) return
+          // The person's own shell refuses clients without their terminal key; retrying cannot help.
+          if (event.code === KEY_REQUIRED) {
+            if (once.value) return
+            once.value = true
+            local.onConnectError?.(
+              new Error(
+                event.reason || "This terminal belongs to the window that opened it. Open a new terminal here.",
+              ),
+            )
+            return
+          }
           // For other codes (network issues, server restart), retry with backoff before reporting once
           link.failures += 1
           const delay = backoff(link.failures)

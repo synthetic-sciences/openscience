@@ -1601,6 +1601,8 @@ export namespace OpenScience {
       path.join(Global.Path.data, "gcp-service-account.json"),
       CredentialLifecycle.revisionPath(),
       path.join(Global.Path.data, "mcp-auth.json"),
+      // Hashes of the person's terminal keys; see pty/key.ts.
+      path.join(Global.Path.data, "terminal-keys.json"),
       path.join(Global.Path.data, "file-trash"),
       ToolOutputPath.root,
       path.join(home, ".ssh"),

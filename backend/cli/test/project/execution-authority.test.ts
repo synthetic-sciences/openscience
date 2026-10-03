@@ -6,6 +6,7 @@ import { ExecutionAuthority } from "../../src/project/execution"
 import { Project } from "../../src/project/project"
 import { ProjectTrust } from "../../src/project/trust"
 import { Pty } from "../../src/pty"
+import { TerminalKey } from "../../src/pty/key"
 import { Shell } from "../../src/shell/shell"
 import { Sandbox } from "../../src/sandbox/sandbox"
 import { KernelRuntime } from "../../src/science/kernel/registry"
@@ -15,6 +16,13 @@ import { SessionFilesystem } from "../../src/session/filesystem"
 import { BashTool } from "../../src/tool/bash"
 import "../../src/tool/notebook"
 import { sandboxedExecution, tmpdir } from "../fixture/fixture"
+
+/** The cookie a launcher-opened browser holds after trading its launch code. */
+async function personCookie() {
+  const key = await TerminalKey.exchange(await TerminalKey.mintCode())
+  if (!key) throw new Error("launch code was not accepted")
+  return `${TerminalKey.cookieName("")}=${key}`
+}
 
 const context = (sessionID: string) => ({
   sessionID,
@@ -39,15 +47,27 @@ test("session execution authority is inspectable through the project route", asy
     },
   })
   const fetch = Server.internalFetch()
-  const response = await fetch(
-    `http://openscience.internal/project/${project.project.id}/execution?sessionID=${encodeURIComponent(sessionID)}&capability=terminal`,
-    {
-      headers: {
-        "x-openscience-project": project.project.id,
+  const inspect = (cookie?: string) =>
+    fetch(
+      `http://openscience.internal/project/${project.project.id}/execution?sessionID=${encodeURIComponent(sessionID)}&capability=terminal`,
+      {
+        headers: {
+          "x-openscience-project": project.project.id,
+          ...(cookie ? { cookie } : {}),
+        },
       },
-    },
-  )
+    )
 
+  // Without the person's key a terminal request may come from an agent process,
+  // so it is reported under the agent's sandbox policy.
+  const keyless = ExecutionAuthority.Decision.parse(await (await inspect()).json())
+  expect(keyless).toMatchObject({
+    capability: "terminal",
+    mode: Sandbox.available() ? "sandboxed" : "read_only",
+    sandbox: { enabled: true, enforced: Sandbox.available() },
+  })
+
+  const response = await inspect(await personCookie())
   expect(response.status).toBe(200)
   const decision = ExecutionAuthority.Decision.parse(await response.json())
   expect(decision).toMatchObject({
@@ -82,6 +102,20 @@ test("user terminals are independent of the enforced agent shell and kernel sand
   await using _sandbox = await sandboxedExecution()
   await using tmp = await tmpdir({ git: true })
   await using outside = await tmpdir()
+  // A login shell reads the host's startup files; an empty profile keeps the
+  // test independent of whoever runs it (a plugin manager can swallow input).
+  await using profile = await tmpdir()
+  const previous = { HOME: process.env.HOME, ZDOTDIR: process.env.ZDOTDIR }
+  process.env.HOME = profile.path
+  process.env.ZDOTDIR = profile.path
+  await using _profile = {
+    async [Symbol.asyncDispose]() {
+      for (const key of ["HOME", "ZDOTDIR"] as const) {
+        if (previous[key] === undefined) delete process.env[key]
+        else process.env[key] = previous[key]
+      }
+    },
+  }
   await Instance.provide({
     directory: tmp.path,
     fn: async () => {
@@ -123,7 +157,7 @@ test("user terminals are independent of the enforced agent shell and kernel sand
         language: "python" as const,
       }
       if (!Sandbox.available()) {
-        const terminal = await Pty.create({ sessionID: session.id })
+        const terminal = await Pty.create({ sessionID: session.id }, { key: true })
         expect(terminal.authority.mode).toBe("host")
         await Pty.remove(terminal.id)
         await expect(
@@ -143,16 +177,43 @@ test("user terminals are independent of the enforced agent shell and kernel sand
         return
       }
 
-      const terminal = await Pty.create({ sessionID: session.id })
+      // A keyless request, as an agent process reaching the server would make,
+      // gets the agent's sandbox rather than the person's shell.
+      const agentReached = await Pty.create({ sessionID: session.id })
       try {
+        expect(agentReached).toMatchObject({
+          mode: "sandboxed",
+          reason: "no_key",
+          authority: { mode: "sandboxed", sandbox: { enabled: true, enforced: true, network: "deny" } },
+        })
+        const escaped = path.join(outside.path, "keyless-terminal")
+        Pty.write(agentReached.id, `printf escaped > '${escaped}'\r`)
+        await Bun.sleep(500)
+        expect(await Bun.file(escaped).exists()).toBe(false)
+      } finally {
+        await Pty.remove(agentReached.id)
+      }
+
+      const terminal = await Pty.create({ sessionID: session.id }, { key: true })
+      try {
+        expect(terminal.mode).toBe("host")
         expect(terminal.authority).toMatchObject({
           allowed: true,
           mode: "host",
           sandbox: { enabled: false, enforced: false, network: "allow" },
         })
         const marker = path.join(outside.path, "user-terminal-config")
-        Pty.write(terminal.id, `printf user-terminal > '${marker}'\r`)
-        for (let attempt = 0; attempt < 500 && !(await Bun.file(marker).exists()); attempt++) await Bun.sleep(20)
+        // Keys typed before the login shell is ready can be lost, leaving only
+        // the redirect's empty file; resend the idempotent command until the
+        // text lands.
+        const written = () =>
+          Bun.file(marker)
+            .text()
+            .catch(() => "")
+        for (let attempt = 0; attempt < 500 && (await written()) !== "user-terminal"; attempt++) {
+          if (attempt % 50 === 0) Pty.write(terminal.id, `printf user-terminal > '${marker}'\r`)
+          await Bun.sleep(20)
+        }
         expect(await Bun.file(marker).text()).toBe("user-terminal")
         const denied = await bash.execute(
           {
@@ -333,13 +394,17 @@ test("user terminal derives its ownership and teardown from the owning session",
         root: trust.root,
       })
 
-      const terminal = await Pty.create({
-        sessionID: session.id,
-        title: "Authority terminal",
-      })
+      const terminal = await Pty.create(
+        {
+          sessionID: session.id,
+          title: "Authority terminal",
+        },
+        { key: true },
+      )
       try {
         expect(terminal).toMatchObject({
           title: "Authority terminal",
+          mode: "host",
           projectID: Instance.project.id,
           sessionID: session.id,
           cwd: tmp.path,
@@ -357,6 +422,23 @@ test("user terminal derives its ownership and teardown from the owning session",
         })
         expect(terminal.command).toBeTruthy()
         expect(terminal.pid).toBeGreaterThan(0)
+
+        // Only a client holding the person's key may attach to their shell.
+        const socket = () => {
+          const closed: (number | undefined)[] = []
+          return {
+            closed,
+            ws: { readyState: 1, send() {}, close: (code?: number) => void closed.push(code) } as never,
+          }
+        }
+        const keyless = socket()
+        expect(Pty.connect(terminal.id, keyless.ws)).toBeUndefined()
+        expect(keyless.closed).toEqual([Pty.KEY_REQUIRED])
+        const keyed = socket()
+        const handler = Pty.connect(terminal.id, keyed.ws, { key: true })
+        expect(handler).toBeDefined()
+        expect(keyed.closed).toEqual([])
+        handler?.onClose()
         await Session.remove(session.id)
       } finally {
         await Pty.remove(terminal.id)
@@ -433,7 +515,10 @@ test.skipIf(process.platform === "win32")(
             scope: "session",
             source: "api",
           })
-          const terminal = await Pty.create({ sessionID: session.id, program: "claude" })
+          await expect(Pty.create({ sessionID: session.id, program: "claude" })).rejects.toBeInstanceOf(
+            Pty.KeyRequiredError,
+          )
+          const terminal = await Pty.create({ sessionID: session.id, program: "claude" }, { key: true })
           try {
             expect(terminal.title).toBe("Claude Code")
             expect(terminal.program).toBe("claude")

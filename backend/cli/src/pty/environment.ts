@@ -1,4 +1,4 @@
-import { hostname } from "node:os"
+import { devNull, hostname } from "node:os"
 import path from "node:path"
 
 const inherited = new Set([
@@ -9,6 +9,16 @@ const inherited = new Set([
   "TERM_PROGRAM_VERSION",
   "TERM_SESSION_ID",
 ])
+
+/** Variables that describe the launcher rather than this terminal. A server
+ * started inside tmux or over SSH would otherwise make the person's startup
+ * files attach to tmux or behave as a remote login inside the tab. */
+const launcher = new Set(["TMUX", "TMUX_PANE", "SSH_CONNECTION", "SSH_CLIENT", "SSH_TTY"])
+
+/** Server-side credentials a user shell must never inherit. */
+const server = new Set(["OPENSCIENCE_AUTH_TOKEN"])
+
+export type TerminalMode = "host" | "sandboxed"
 
 const shellName = (command: string) =>
   command
@@ -24,10 +34,15 @@ export function terminalEnv(
   sessionID: string,
   command: string,
   machine = hostname(),
+  mode: TerminalMode = "host",
 ): Record<string, string> {
   const env = Object.fromEntries(
     Object.entries(source).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string" && !inherited.has(entry[0]),
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" &&
+        !inherited.has(entry[0]) &&
+        !server.has(entry[0]) &&
+        !(mode === "host" && launcher.has(entry[0])),
     ),
   )
   const host = machine.split(".")[0]?.replace(/[^a-zA-Z0-9_-]/g, "") || "localhost"
@@ -44,6 +59,8 @@ export function terminalEnv(
     PATH: terminalPath(env),
     ...(shell === "bash" ? { BASH_SILENCE_DEPRECATION_WARNING: "1" } : {}),
     TERM: "xterm-256color",
+    // A sandboxed shell has no home directory to keep history in.
+    ...(mode === "sandboxed" ? { HISTFILE: devNull } : {}),
     SHELL_SESSIONS_DISABLE: "1",
     OPENSCIENCE_TERMINAL: "1",
     OPENSCIENCE_PROJECT_ID: projectID,
@@ -67,8 +84,18 @@ export function terminalPath(env: NodeJS.ProcessEnv, platform: NodeJS.Platform =
   return [...new Set(entries.filter(Boolean))].join(separator)
 }
 
-export function terminalArgs(command: string) {
+export function terminalArgs(command: string, mode: TerminalMode = "host") {
   const shell = shellName(command)
+  if (mode === "sandboxed") {
+    // The sandbox hides the home directory, so startup files cannot load.
+    // Sandboxed zsh also cannot own the host PTY's foreground process group:
+    // disable job control so it does not print a false `can't set tty pgrp`.
+    if (shell === "zsh") return ["-d", "-f", "+m", "-i"]
+    if (shell === "bash") return ["--noprofile", "--norc", "-i"]
+    if (shell === "fish") return ["--no-config", "--interactive"]
+    if (shell === "sh" || shell === "dash" || shell === "ksh") return ["-i"]
+    return []
+  }
   // Preserve the user's login/interactive setup (PATH, aliases and version
   // managers). macOS session restoration remains disabled by terminalEnv.
   if (shell === "zsh") return ["-l", "-i"]

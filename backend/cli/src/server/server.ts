@@ -173,6 +173,7 @@ export namespace Server {
             else if (err.name === "ProjectTrustDeniedError") status = 403
             else if (err.name === "ProjectTrustRootMismatchError") status = 409
             else if (err.name === "ExecutionAuthorityDeniedError") status = 403
+            else if (err.name === "PtyKeyRequiredError") status = 403
             else if (err.name.startsWith("Worktree")) status = 400
             else status = 500
             return c.json(err.toObject(), { status })

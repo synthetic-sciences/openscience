@@ -29,7 +29,7 @@ Paid compute is bounded by time rather than bound to one job. A Modal job card o
 
 ## Network commands and publishing
 
-These controls apply to commands run by the research agent. The **Terminal** tab is a user-operated local shell with your operating-system permissions and normal network access. Opening it does not change the agent's sandbox or approval settings.
+These controls apply to commands run by the research agent. The **Terminal** tab is a user-operated local shell with your operating-system permissions and normal network access, available in windows your launcher opened. Opening it does not change the agent's sandbox or approval settings, and the agent cannot open it.
 
 The sandbox denies network access to shell commands. A command that needs it, such as `git push`, `gh`, `hf upload`, a package install, or `curl`, asks once for its destination host; approving it runs that command with the network and the same file confinement. Approve for **This project** or **Allow always** to stop asking for a host you publish to regularly, and Full access approves automatically.
 

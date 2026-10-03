@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- The Terminal tab opens your own shell only in a window OpenScience's launcher (`openscience`, `openscience web`, or the desktop app) opened for you. Any other request, including one from an agent command that reached the local server, gets a sandboxed shell, so an approved network command can no longer start an unsandboxed terminal. Set `terminal.mode` to `"sandboxed"` to sandbox every terminal.
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
 - Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
 

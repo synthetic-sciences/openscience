@@ -10,6 +10,8 @@ import { errors } from "../error"
 import { lazy } from "@synsci/util/lazy"
 import { ProjectTrust } from "../../project/trust"
 import { ExecutionAuthority } from "../../project/execution"
+import { terminalKey } from "./pty"
+import { Pty } from "@/pty"
 import { ProjectAccess } from "../../project/access"
 
 async function current(projectID: string) {
@@ -305,6 +307,11 @@ export const ProjectRoutes = lazy(() =>
             projectID,
             sessionID: query.sessionID,
             capability: query.capability,
+            // Report the policy the terminal will actually get for this client.
+            operator:
+              query.capability === "terminal" && (await Pty.mode({ key: await terminalKey(c) })).mode === "host"
+                ? "person"
+                : undefined,
           }),
         )
       },

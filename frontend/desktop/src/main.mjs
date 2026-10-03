@@ -421,6 +421,7 @@ async function start() {
   rotateLogs(output)
   writeFileSync(output, "", { mode: 0o600 })
   state.address = `http://127.0.0.1:${selected}`
+  state.terminalCode = randomBytes(32).toString("base64url")
   state.serviceExecutable = path.resolve(executable)
   const healthRequest = validateUpdateHealthRequest()
   state.runtimeLifecycle = "spawning"
@@ -437,6 +438,9 @@ async function start() {
           : {}),
         OPENSCIENCE_DESKTOP_PARENT_PID: String(process.pid),
         OPENSCIENCE_DESKTOP_PARENT_TOKEN: state.desktopParentToken,
+        // One-time proof that a window this app opens for the person may use
+        // their own shell in the Terminal tab (backend/cli/src/pty/key.ts).
+        OPENSCIENCE_DESKTOP_PARENT_TERMINAL_CODE: state.terminalCode,
         ...(healthRequest
           ? {
               OPENSCIENCE_DESKTOP_PARENT_RUNTIME_RECEIPT: healthRequest.runtime,
@@ -1026,9 +1030,13 @@ async function createWindow(remote) {
     event.preventDefault()
     external(url)
   })
+  // The first local window spends the launch code; later local windows share
+  // its session cookie. A remote workspace never receives it.
+  const terminalCode = remote ? undefined : state.terminalCode
+  if (terminalCode) state.terminalCode = undefined
   try {
     await window.loadURL(
-      `${origin}/?desktop=1${remote ? "&remote-workspace=1" : state.updateAddress ? "&desktop-update=1" : ""}`,
+      `${origin}/?desktop=1${remote ? "&remote-workspace=1" : state.updateAddress ? "&desktop-update=1" : ""}${terminalCode ? `#terminal-code=${terminalCode}` : ""}`,
     )
   } catch (error) {
     window.destroy()

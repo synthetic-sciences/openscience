@@ -5,6 +5,15 @@ import { Onboarding } from "../onboard"
 import { cmd } from "./cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { openUrl } from "../../util/open-url"
+import { TerminalKey } from "../../pty/key"
+
+/** The person ran this launcher, so the browser it opens may use their own
+ *  shell in the Terminal tab. The code rides in the fragment, which browsers
+ *  never send to the server, and is spent on first use. */
+async function withTerminalCode(url: string) {
+  const code = await TerminalKey.mintCode().catch(() => undefined)
+  return code ? `${url}#terminal-code=${code}` : url
+}
 import { WEB_INDEX } from "../../web/assets"
 import { probeProtectedFolderAccess } from "../../file/protected-folder-access"
 import { stopServer } from "../server-stop"
@@ -82,7 +91,7 @@ export const WebCommand = cmd({
     UI.empty()
 
     if (existingPort) {
-      const target = localWorkspaceUrl(localServerBase(existingPort), directory)
+      const target = await withTerminalCode(localWorkspaceUrl(localServerBase(existingPort), directory))
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
       UI.empty()
       UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server that is already running.")
@@ -98,7 +107,7 @@ export const WebCommand = cmd({
       const racedPort = await findWorkspaceServer(Installation.VERSION, LOCAL_WORKSPACE_PORTS, Global.Path.data)
       if (racedPort) {
         await server.stop(true)
-        const target = localWorkspaceUrl(localServerBase(racedPort), directory)
+        const target = await withTerminalCode(localWorkspaceUrl(localServerBase(racedPort), directory))
         UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
         UI.empty()
         UI.println(UI.Style.TEXT_DIM, "  Using the OpenScience server started by the other launch.")
@@ -108,7 +117,7 @@ export const WebCommand = cmd({
       }
     }
 
-    const target = localWorkspaceUrl(base, directory)
+    const target = await withTerminalCode(localWorkspaceUrl(base, directory))
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, target)
     UI.empty()
     if (!WEB_INDEX) {
