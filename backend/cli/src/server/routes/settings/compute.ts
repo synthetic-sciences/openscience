@@ -839,7 +839,13 @@ export namespace ComputeSettings {
             values.identity_file = tokens[0]
             values.identityBase = path.dirname(file)
           }
-          if (key === "proxyjump" && tokens[0]?.toLowerCase() !== "none") values.proxy_jump ??= tokens[0]
+          if (key === "proxyjump") {
+            // A ProxyJump list is comma separated but may also be split across
+            // whitespace, so keep every comma delimited hop instead of the
+            // first token. expandedProxyJump re-splits this value.
+            const hops = tokens.flatMap((token) => token.split(",")).filter((hop) => hop.length > 0)
+            if (hops.length > 0 && hops[0]!.toLowerCase() !== "none") values.proxy_jump ??= hops.join(",")
+          }
           if (key === "proxycommand" && tokens[0]?.toLowerCase() !== "none") values.unsupportedProxy = true
         }
       } finally {
