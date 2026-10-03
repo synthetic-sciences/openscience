@@ -206,11 +206,15 @@ export namespace ACP {
                 const newContent = await editPreview(filepath, diff)
 
                 if (newContent) {
-                  this.connection.writeTextFile({
-                    sessionId: session.id,
-                    path: filepath,
-                    content: newContent,
-                  })
+                  this.connection
+                    .writeTextFile({
+                      sessionId: session.id,
+                      path: filepath,
+                      content: newContent,
+                    })
+                    .catch((error) => {
+                      log.error("failed to write ACP edit preview", { error, filepath })
+                    })
                 }
               }
 

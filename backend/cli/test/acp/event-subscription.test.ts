@@ -368,6 +368,52 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("handles a rejected edit preview write instead of leaving it unhandled", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const unhandled: unknown[] = []
+        const onUnhandled = (reason: unknown) => {
+          unhandled.push(reason)
+        }
+        process.on("unhandledRejection", onUnhandled)
+        try {
+          const { agent, controller, connection, replies, stop } = createFakeAgent()
+          connection.writeTextFile = async () => {
+            throw new Error("path is outside the client roots")
+          }
+
+          const sessionID = await agent.newSession({ cwd: tmp.path, mcpServers: [] } as any).then((x) => x.sessionId)
+          const filepath = `${tmp.path}/paper.txt`
+          await Bun.write(filepath, "old\n")
+
+          controller.push({
+            directory: tmp.path,
+            payload: {
+              type: "permission.asked",
+              properties: {
+                id: "permission-rejected-preview",
+                sessionID,
+                permission: "edit",
+                metadata: { filepath, diff: "@@ -1,1 +1,1 @@\n-old\n+new\n" },
+              },
+            } as any,
+          })
+
+          await waitFor(() => replies.length === 1)
+          await Bun.sleep(50)
+
+          expect(unhandled).toEqual([])
+          expect(replies[0]).toMatchObject({ requestID: "permission-rejected-preview", reply: "once" })
+          stop()
+        } finally {
+          process.off("unhandledRejection", onUnhandled)
+        }
+      },
+    })
+  })
+
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

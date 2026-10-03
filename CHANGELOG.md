@@ -30,6 +30,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Fix duration day/minute boundaries, file directory and extension labels, and payload-size rounding. Unknown payload sizes now display clearly. Background queues process undefined items, reject invalid concurrency, and release timeout timers when an operation fails.
 
+- An edit preview the editor refuses no longer brings down the ACP server
+  with an unhandled rejection.
+
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
 ### Changed
