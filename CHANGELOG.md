@@ -342,6 +342,14 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **Codex sign-in no longer hangs after a retried attempt.** Abandoning a
+  browser sign-in left its five-minute timer armed, and that timer cleared
+  whichever attempt was waiting instead of the one it belonged to. The newer
+  attempt was left with nothing able to settle it: its own timer found the
+  slot already gone, its callback never resolved, and the next real browser
+  callback was refused as a CSRF attempt. Sign-in hung until the process
+  restarted. A timer now gives up only the attempt it was armed for.
+
 - Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
 
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.

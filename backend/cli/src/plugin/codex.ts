@@ -443,17 +443,24 @@ function stopOAuthServer() {
   }
 }
 
-function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResponse> {
+export function waitForOAuthCallback(
+  pkce: PkceCodes,
+  state: string,
+  timeoutMs = 5 * 60 * 1000,
+): Promise<TokenResponse> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(
       () => {
-        if (pendingOAuth) {
-          pendingOAuth = undefined
-          reject(new Error("OAuth callback timeout - authorization took too long"))
-        }
+        // A retry registers a new pendingOAuth while this timer is still armed.
+        // Give up this attempt either way, but only release the callback slot
+        // while this attempt still owns it: clearing a newer attempt leaves
+        // nothing able to settle it, so its callback never resolves, its own
+        // timer finds the slot already gone, and sign-in hangs until restart.
+        if (pendingOAuth?.state === state) pendingOAuth = undefined
+        reject(new Error("OAuth callback timeout - authorization took too long"))
       },
-      5 * 60 * 1000,
-    ) // 5 minute timeout
+      timeoutMs,
+    ) // 5 minutes by default
 
     pendingOAuth = {
       pkce,
