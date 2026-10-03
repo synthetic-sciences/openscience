@@ -461,11 +461,16 @@ export namespace LLM {
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
-    for (const tool of Object.keys(input.tools)) {
-      if (!ToolVisibility.enabled(tool, { permission: input.agent.permission, tools: input.user.tools }))
-        delete input.tools[tool]
+    // The tools record belongs to the caller, and one record is reused across
+    // every retry of a request. Prune into a copy of our own so a tool hidden
+    // for this request is still offered to the next one, and so the LiteLLM
+    // "_noop" placeholder stream() appends never reaches the caller's set.
+    const tools: Record<string, Tool> = {}
+    for (const [id, value] of Object.entries(input.tools)) {
+      if (ToolVisibility.enabled(id, { permission: input.agent.permission, tools: input.user.tools }))
+        tools[id] = value
     }
-    return input.tools
+    return tools
   }
 
   // Check if messages contain any tool-call content

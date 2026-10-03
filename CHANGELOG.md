@@ -342,6 +342,13 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **Tool visibility no longer leaks between requests.** The tools offered to
+  the model were pruned in place, and a single set is reused for every retry
+  of a request, so a tool hidden for one turn stayed out of all the later
+  turns of that session, and the placeholder added for LiteLLM proxies was
+  left behind in the caller's set. The set is now filtered into a copy of
+  its own.
+
 - Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
 
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.

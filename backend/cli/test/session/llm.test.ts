@@ -341,8 +341,57 @@ describe("session.llm.modelTools", () => {
       user,
     })
 
-    expect(resolved).toBe(tools)
+    expect(resolved).toEqual(tools)
     expect(Object.keys(resolved)).toStrictEqual(["question"])
+  })
+
+  test("does not prune the caller's tool record in place", async () => {
+    const tools = { question: questionTool() }
+    const resolved = await LLM.modelTools({
+      agent,
+      model: testModel(true),
+      tools,
+      user: { tools: { question: false } } as unknown as MessageV2.User,
+    })
+
+    expect(Object.keys(resolved)).toStrictEqual([])
+    expect(Object.keys(tools)).toStrictEqual(["question"])
+  })
+
+  test("a tool pruned for one request is still offered to the next", async () => {
+    // The processor reuses one tools record across retries, so a prune that
+    // edits the record in place would delete the tool for good.
+    const tools = { question: questionTool() }
+    const denied = await LLM.modelTools({
+      agent,
+      model: testModel(true),
+      tools,
+      user: { tools: { question: false } } as unknown as MessageV2.User,
+    })
+    expect(Object.keys(denied)).toStrictEqual([])
+
+    const allowed = await LLM.modelTools({
+      agent,
+      model: testModel(true),
+      tools,
+      user,
+    })
+    expect(Object.keys(allowed)).toStrictEqual(["question"])
+  })
+
+  test("returns a record the caller may extend without leaking back", async () => {
+    // stream() writes the LiteLLM "_noop" placeholder into what it is given,
+    // so the resolved record must not be the caller's own object.
+    const tools = { question: questionTool() }
+    const resolved = await LLM.modelTools({
+      agent,
+      model: testModel(true),
+      tools,
+      user,
+    })
+
+    resolved["_noop"] = questionTool()
+    expect(Object.keys(tools)).toStrictEqual(["question"])
   })
 })
 
