@@ -104,7 +104,6 @@ EXTENDED_VISUALS = [
     (
         "08_regional_breakdown.png",
         "scientific-schematics",
-        "scientific-schematics",
         "Pie chart regional market breakdown for {topic}. North America 40% dark blue, "
         "Europe 28% medium blue, Asia-Pacific 22% teal, Latin America 6% light blue, "
         "Middle East Africa 4% gray blue. Show percentage for each slice. Legend on right. "

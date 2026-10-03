@@ -8,6 +8,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- **`--all` no longer aborts the market visual generator.** The regional
+  breakdown entry repeated the `scientific-schematics` tool name, so it
+  carried four fields where every other entry carries three, and both
+  generation loops failed to unpack it with `ValueError`. `--all` and
+  `--dry-run --all` stopped at that entry and never reached the remaining
+  visuals.
+
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
 - Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
 
