@@ -269,8 +269,9 @@ export namespace Config {
     }
 
     if (Flag.OPENSCIENCE_PERMISSION) {
-      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENSCIENCE_PERMISSION))
-      execution.permission = mergeDeep(execution.permission ?? {}, JSON.parse(Flag.OPENSCIENCE_PERMISSION))
+      const permission = JSON.parse(Flag.OPENSCIENCE_PERMISSION)
+      result.permission = mergeDeep(result.permission ?? {}, permission)
+      execution.permission = mergeDeep(execution.permission ?? {}, permission)
     }
 
     // Backwards compatibility: legacy top-level `tools` config
