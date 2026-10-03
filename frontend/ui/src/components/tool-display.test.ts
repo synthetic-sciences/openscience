@@ -94,6 +94,18 @@ describe("sessionErrorText", () => {
     ).toBe("The connected provider account needs $3.74 for this step; $2.58 is available.")
   })
 
+  test("reads the same amounts when the gateway serialises the 402 with spaces", () => {
+    expect(
+      sessionErrorText({
+        data: {
+          message: "Payment Required: insufficient_balance",
+          // json.dumps-style separators put a space after every colon.
+          responseBody: '{"error": "insufficient_balance", "required_cents": 374, "available_cents": 258}',
+        },
+      }),
+    ).toBe("The connected provider account needs $3.74 for this step; $2.58 is available.")
+  })
+
   test("keeps the gateway's explanation when the 402 carries a recovery contract", () => {
     const message =
       "Ace is waiting for this Wallet's other requests in flight to settle before sending this one. Available: $0.09 of $6.81; $6.72 reserved by requests in flight; this request reserves $1.39. Retrying automatically."

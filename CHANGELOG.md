@@ -32,6 +32,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
+- **The balance recovery copy survives a reformatted gateway body.** The 402
+  probe matched `"error":"insufficient_balance"` exactly while the amount
+  probes beside it allowed whitespace, so a body written as
+  `"error": "insufficient_balance"` lost the "$X needed / $Y available"
+  sentence and showed only the bare provider text.
+
 ### Changed
 
 - Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.

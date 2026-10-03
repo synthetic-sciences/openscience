@@ -340,7 +340,10 @@ export function sessionErrorText(value: unknown): string {
   const credential = credentialErrorText(value)
   if (credential) return credential
   const body = typeof data?.responseBody === "string" ? data.responseBody : ""
-  if (!body.includes('"error":"insufficient_balance"')) return message
+  // Whitespace-tolerant like the two amount probes below: a body that a proxy
+  // or a `json.dumps`-style serializer wrote as `"error": "insufficient_balance"`
+  // carries the same contract, and this used to drop the recovery copy for it.
+  if (!/"error"\s*:\s*"insufficient_balance"/.test(body)) return message
   // The managed gateway's 402 carries a recovery contract, and the runtime
   // has already turned it into a sentence that says what is held, what a
   // reload is doing, and what to do. Repeating the two bare numbers here
