@@ -318,7 +318,11 @@ export function RightPane(
         danger: true,
       })
       if (!confirmed || !live || fileOwner() !== owner) return
-      setDirtyFiles([])
+      // Clear only the ids this dialog captured. Clearing every flag also
+      // cleared a file that went dirty while the dialog was open (autosave, a
+      // watcher, an in-flight edit): it stayed open but silently clean, so the
+      // next close discarded it with no prompt.
+      setDirtyFiles((items) => items.filter((item) => !pending.includes(item)))
     }
     for (const id of pending) {
       const tab = fileTabs().find((item) => item.id === id)

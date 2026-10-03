@@ -32,6 +32,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 - Expand account, privacy, and usage documentation; clarify prepaid Ace access, fixed optional reloads, and current account requirements.
 
+- **Closing the file pane keeps edits that arrived while it asked.** The pane
+  cleared every dirty flag after its confirm dialog, not just the files the
+  dialog had captured. A file that went dirty while the dialog was open stayed
+  open but silently clean, so the next close discarded it with no prompt.
+
 ### Changed
 
 - Reject zero shell timeouts and empty fuzzy edit matches, preserve the full shell output line allowance including unterminated lines, and make bounded grep results deterministic. Permission patterns expand only the exact HOME variable, and remembered shell grants keep ambiguous options tied to the approved command.
