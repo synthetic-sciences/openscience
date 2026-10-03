@@ -8,6 +8,13 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- **A TMB report survives a VCF where every variant is filtered out.** The
+  empty-result path in `calculate_tmb` returned a dict without
+  `passed_filters` or `filtered_out`, which `print_tmb_report` indexes
+  directly, so the run printed its warning and then died with `KeyError`
+  instead of reporting TBM 0 / Low. The two return paths now agree on shape,
+  and the filtered count is carried through.
+
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
 - Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
 
