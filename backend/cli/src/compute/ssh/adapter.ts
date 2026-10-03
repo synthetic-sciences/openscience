@@ -1687,7 +1687,20 @@ finally:
   export function parse<T>(buffer: Buffer): T {
     const text = buffer.toString("utf8").trim()
     if (!text) throw new Error("SSH control command returned no response")
-    return JSON.parse(text.split("\n").at(-1)!) as T
+    // A remote interpreter or login shell can print after the response, for
+    // example a DeprecationWarning or a profile echo, so look for the last
+    // line that is JSON rather than trusting the final line to be it.
+    const lines = text.split("\n")
+    for (let index = lines.length - 1; index >= 0; index--) {
+      const line = lines[index]!.trim()
+      if (!line) continue
+      try {
+        return JSON.parse(line) as T
+      } catch {
+        continue
+      }
+    }
+    throw new Error("SSH control command returned no response")
   }
 
   export async function slurm(state: string, exit = "1:0"): Promise<Result> {

@@ -23,6 +23,33 @@ test("accepts only Slurm COMPLETED 0:0 as a successful terminal result", async (
   }
 })
 
+test("reads control command JSON even when the remote prints a trailing line", () => {
+  const bytes = (value: string) => Buffer.from(value, "utf8")
+  const payload = { state: "done", code: 0 }
+  const json = JSON.stringify(payload)
+
+  expect(SshAdapter.parse<typeof payload>(bytes(json))).toEqual(payload)
+  expect(SshAdapter.parse<typeof payload>(bytes(`${json}\n`))).toEqual(payload)
+  expect(
+    SshAdapter.parse<{ exists: boolean }>(
+      bytes('{"exists":true}\nDeprecationWarning: datetime.datetime.utcnow() is deprecated'),
+    ),
+  ).toEqual({ exists: true })
+  expect(SshAdapter.parse<{ exists: boolean }>(bytes('motd: welcome to the cluster\n{"exists":false}'))).toEqual({
+    exists: false,
+  })
+})
+
+test("reports a control command that printed no JSON at all", () => {
+  const bytes = (value: string) => Buffer.from(value, "utf8")
+
+  expect(() => SshAdapter.parse(bytes(""))).toThrow("SSH control command returned no response")
+  expect(() => SshAdapter.parse(bytes("   \n  "))).toThrow("SSH control command returned no response")
+  expect(() => SshAdapter.parse(bytes("DeprecationWarning: nothing but a warning"))).toThrow(
+    "SSH control command returned no response",
+  )
+})
+
 test("stops a control subprocess before buffering an oversized response", async () => {
   if (process.platform === "win32") return
   await expect(SshAdapter.slurm("X".repeat(96 * 1024), "1:0")).rejects.toThrow(
