@@ -248,13 +248,26 @@ export const BashTool = Tool.define("bash", async () => {
       const patterns = new Set<string>()
       const always = new Set<string>()
       const parsed: string[][] = []
+      // What a network grant would cover: every simple command with its own
+      // `NAME=value` prefix, plus assignments and declarations that stand
+      // alone (`export GIT_SSH_COMMAND=…; git push`).
+      const riding: string[][] = []
+      for (const node of tree.rootNode.descendantsOfType(["declaration_command", "variable_assignment"])) {
+        if (!node || node.parent?.type === "command" || node.parent?.type === "declaration_command") continue
+        riding.push(node.text.split(/\s+/))
+      }
 
       for (const node of tree.rootNode.descendantsOfType("command")) {
         if (!node) continue
         const command: string[] = []
+        const assignments: string[] = []
         for (let i = 0; i < node.childCount; i++) {
           const child = node.child(i)
           if (!child) continue
+          if (child.type === "variable_assignment") {
+            assignments.push(child.text)
+            continue
+          }
           if (
             child.type !== "command_name" &&
             child.type !== "word" &&
@@ -305,6 +318,7 @@ export const BashTool = Tool.define("bash", async () => {
           always.add(BashArity.prefix(command).join(" ") + "*")
         }
         if (command.length) parsed.push(command)
+        if (command.length || assignments.length) riding.push([...assignments, ...command])
       }
 
       // Commands that need the network (a push, a fetch, an upload, a package
@@ -313,6 +327,20 @@ export const BashTool = Tool.define("bash", async () => {
       // the same file confinement, and the machine's own publishing
       // credentials. A named git remote resolves to its host from the repo.
       const network = NetworkCommands.detect(parsed)
+      // An approval names hosts for the network commands it shows. Anything
+      // else in the script would run with the same sockets, including the
+      // host's loopback, so it never shares the grant: refuse before asking.
+      const riders = network && authority.sandbox.enforced ? NetworkCommands.companions(riding) : []
+      if (riders.length) {
+        throw new Error(
+          [
+            "Network access is granted only to the network command itself, so this script cannot share it.",
+            `Run ${network!.commands.map((command) => `\`${command}\``).join(", ")} as its own command, without:`,
+            ...riders.map((command) => `- ${command}`),
+            "Run the other steps in a separate command; they keep the sandbox.",
+          ].join("\n"),
+        )
+      }
       const networkHosts = new Set(network?.hosts ?? [])
       // The repository may be the cwd, a `cd` target earlier in the script, or
       // a `git -C` directory; try each until one names the remote.

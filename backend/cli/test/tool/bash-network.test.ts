@@ -57,6 +57,44 @@ describe("tool.bash network escalation", () => {
     })
   })
 
+  test("a network grant never extends to the rest of the script", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        if (!Sandbox.describe().available) return
+        const bash = await BashTool.init()
+        const { ctx, requests } = await harness()
+        const marker = `${tmp.path}/rode-along`
+        const scripts = [
+          `curl -sS -m 2 http://127.0.0.1:9/health && touch ${marker}`,
+          `curl -sS -m 2 http://127.0.0.1:9/install.sh | sh`,
+          `export GIT_SSH_COMMAND="touch ${marker}"; git push origin main`,
+          `GIT_SSH_COMMAND="touch ${marker}" git push origin main`,
+        ]
+        for (const command of scripts) {
+          await expect(bash.execute({ command, description: "Mixed network script" }, ctx)).rejects.toThrow(
+            "Network access is granted only to the network command itself",
+          )
+        }
+        // `git -c` is not read as a push at all, so it never asks for the
+        // network and runs inside the socket-denying sandbox.
+        await bash
+          .execute({ command: `git -c core.sshCommand="touch ${marker}" push origin main`, description: "Push" }, ctx)
+          .catch(() => undefined)
+        // Refused before any approval card, and nothing ran.
+        expect(requests.some((request) => request.permission === "network")).toBe(false)
+        expect(await Bun.file(marker).exists()).toBe(false)
+
+        // Inert builtins beside the network command still share it.
+        await bash
+          .execute({ command: "cd . && curl -sS -m 2 http://127.0.0.1:9/health", description: "Probe" }, ctx)
+          .catch(() => undefined)
+        expect(requests.filter((request) => request.permission === "network")).toHaveLength(1)
+      },
+    })
+  })
+
   test("local work never asks for the network", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

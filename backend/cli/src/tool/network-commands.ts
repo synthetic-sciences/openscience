@@ -100,6 +100,80 @@ export namespace NetworkCommands {
     return
   }
 
+  /** Builtins that run no program and open no socket, so they may share a
+   *  network grant. Everything else in the script would ride on it. */
+  const INERT = new Set(["cd", "pushd", "popd", "pwd", "echo", "printf", "true", "false", "test", "[", "sleep"])
+
+  /** Variables that make an approved command run other code. */
+  const CODE_ENV = new Set([
+    "GIT_SSH",
+    "GIT_SSH_COMMAND",
+    "GIT_ASKPASS",
+    "SSH_ASKPASS",
+    "GIT_PROXY_COMMAND",
+    "GIT_EXEC_PATH",
+    "GIT_EXTERNAL_DIFF",
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_PARAMETERS",
+    "LD_PRELOAD",
+    "LD_LIBRARY_PATH",
+    "DYLD_INSERT_LIBRARIES",
+    "BASH_ENV",
+    "ENV",
+    "NODE_OPTIONS",
+    "PYTHONSTARTUP",
+    "PYTHONPATH",
+    "PERL5OPT",
+    "RUBYOPT",
+  ])
+
+  /** Options that make an approved command run another program. */
+  function runsCode(command: string[]) {
+    const name = command[0]?.split("/").pop()
+    const rest = command.slice(1)
+    if (name === "git")
+      return rest.some(
+        (arg, index) =>
+          arg === "-c" ||
+          (arg.startsWith("-c") && index === 0) ||
+          arg === "--config-env" ||
+          /^--(upload-pack|receive-pack|exec)(=|$)/.test(arg) ||
+          (arg === "-u" && rest.includes("clone")),
+      )
+    if (name === "ssh" || name === "scp" || name === "sftp" || name === "rsync")
+      return rest.some(
+        (arg, index) =>
+          /^-o\s*(ProxyCommand|LocalCommand|PermitLocalCommand|KnownHostsCommand)/i.test(arg) ||
+          (arg === "-o" &&
+            /^(ProxyCommand|LocalCommand|PermitLocalCommand|KnownHostsCommand)/i.test(rest[index + 1] ?? "")) ||
+          (name === "rsync" && /^(-e|--rsh)/.test(arg)),
+      )
+    return false
+  }
+
+  /**
+   * The commands that would share a network grant without being the network
+   * commands the person approved: other programs in the script (including a
+   * pipe into `sh` or a `$(…)` substitution), and approved commands carrying
+   * code through their environment or options. Each entry is one simple
+   * command with its leading `NAME=value` assignments.
+   */
+  export function companions(commands: string[][]): string[] {
+    return commands
+      .filter((input) => {
+        const command = stripEnv(input)
+        const assignments = input.slice(0, input.length - command.length)
+        if (command.length === 0) return assignments.length > 0
+        if (INERT.has(command[0]!)) return false
+        if (!inspect(input)) return true
+        return (
+          assignments.some((assignment) => CODE_ENV.has(assignment.slice(0, assignment.indexOf("=")))) ||
+          runsCode(command)
+        )
+      })
+      .map((command) => command.join(" "))
+  }
+
   /** Merge detections across every simple command in a script. */
   export function detect(commands: string[][]): Detected | undefined {
     const hits = commands.map(inspect).filter((value): value is Detected => !!value)
