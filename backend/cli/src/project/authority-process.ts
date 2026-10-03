@@ -92,10 +92,19 @@ export namespace AuthorityProcessLedger {
       throw error
     })
     if (text === undefined) return []
-    const parsed: unknown = JSON.parse(text)
-    if (!Array.isArray(parsed) || !parsed.every(valid)) {
-      throw new Error(`Authority process ledger ${filepath} is corrupt; refusing unsafe process revocation`)
+    // One diagnostic for every unusable ledger. Parsing unguarded rejected
+    // revoke()/complete()/assertRelocationSafe() with a bare SyntaxError that
+    // named neither the file nor the refusal, so an operator could not tell
+    // that revocation had been declined for safety.
+    const corrupt = (cause?: unknown) =>
+      new Error(`Authority process ledger ${filepath} is corrupt; refusing unsafe process revocation`, { cause })
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(text)
+    } catch (error) {
+      throw corrupt(error)
     }
+    if (!Array.isArray(parsed) || !parsed.every(valid)) throw corrupt()
     return parsed
   }
 
