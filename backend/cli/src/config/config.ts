@@ -231,7 +231,18 @@ export namespace Config {
 
     // Inline config content has highest precedence
     if (Flag.OPENSCIENCE_CONFIG_CONTENT) {
-      const inline = JSON.parse(Flag.OPENSCIENCE_CONFIG_CONTENT)
+      let inline: Info
+      try {
+        inline = JSON.parse(Flag.OPENSCIENCE_CONFIG_CONTENT)
+      } catch (error) {
+        throw new JsonError(
+          {
+            path: "OPENSCIENCE_CONFIG_CONTENT",
+            message: error instanceof Error ? error.message : String(error),
+          },
+          { cause: error },
+        )
+      }
       result = mergeConfigConcatArrays(result, inline)
       execution = mergeConfigConcatArrays(execution, inline)
       log.debug("loaded custom config from OPENSCIENCE_CONFIG_CONTENT")
