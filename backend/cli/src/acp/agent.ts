@@ -590,7 +590,6 @@ export namespace ACP {
 
     async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
       try {
-        const cursor = params.cursor ? Number(params.cursor) : undefined
         const limit = 100
 
         const sessions = await this.sdk.session
@@ -603,8 +602,17 @@ export namespace ACP {
           )
           .then((x) => x.data ?? [])
 
-        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated)
-        const filtered = cursor ? sorted.filter((s) => s.time.updated < cursor) : sorted
+        const sorted = sessions.toSorted((a, b) => b.time.updated - a.time.updated || a.id.localeCompare(b.id))
+        const cursor = params.cursor ?? ""
+        const split = cursor.indexOf(":")
+        const cursorTime = cursor === "" ? Number.NaN : Number(split === -1 ? cursor : cursor.slice(0, split))
+        const cursorID = split === -1 ? "" : cursor.slice(split + 1)
+        const filtered = sorted.filter(
+          (session) =>
+            Number.isNaN(cursorTime) ||
+            session.time.updated < cursorTime ||
+            (session.time.updated === cursorTime && session.id > cursorID),
+        )
         const page = filtered.slice(0, limit)
 
         const entries: SessionInfo[] = page.map((session) => ({
@@ -615,7 +623,7 @@ export namespace ACP {
         }))
 
         const last = page[page.length - 1]
-        const next = filtered.length > limit && last ? String(last.time.updated) : undefined
+        const next = filtered.length > limit && last ? `${last.time.updated}:${last.id}` : undefined
 
         const response: ListSessionsResponse = {
           sessions: entries,

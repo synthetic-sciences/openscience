@@ -368,6 +368,42 @@ describe("acp.agent event subscription", () => {
     })
   })
 
+  test("pages sessions without dropping those sharing a boundary millisecond", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, stop, sdk } = createFakeAgent()
+        const session = (id: string, updated: number) => ({
+          id,
+          directory: tmp.path,
+          title: id,
+          time: { updated },
+        })
+
+        sdk.session.list = async () => ({
+          data: [
+            ...Array.from({ length: 99 }, (_, i) => session(`ses_top_${i}`, 200 - i)),
+            session("ses_boundary_a", 101),
+            session("ses_boundary_b", 101),
+            session("ses_tail_1", 100),
+            session("ses_tail_2", 99),
+            session("ses_tail_3", 98),
+          ],
+        })
+
+        const first = await agent.listSessions({ cwd: tmp.path } as any)
+        const second = await agent.listSessions({ cwd: tmp.path, cursor: first.nextCursor } as any)
+
+        const ids = [...first.sessions, ...second.sessions].map((entry) => entry.sessionId)
+        expect(new Set(ids).size).toBe(ids.length)
+        expect(ids).toContain("ses_boundary_b")
+        expect(ids).toHaveLength(104)
+        stop()
+      },
+    })
+  })
+
   test("permission.asked events are handled and replied", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
