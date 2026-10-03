@@ -55,6 +55,17 @@ test("provider_compute owns every executable and exact official read argv", () =
   expect(() => ProviderCli.preview("lambda", "resource_status", "../../account")).toThrow("requires")
 })
 
+test("provider_compute rejects inherited Object.prototype names instead of reading them as a Spec", () => {
+  // `in` also matches prototype keys, so these names used to pass the provider
+  // guard and then fail deep in the operation grammar as an unknown provider.
+  for (const key of ["toString", "constructor", "hasOwnProperty", "valueOf", "__proto__", "isPrototypeOf"]) {
+    expect(() => ProviderCli.preview(key, "list_resources")).toThrow("has no reviewed native CLI broker")
+  }
+  // The reviewed names, including the documented alias, still resolve.
+  expect(ProviderCli.preview("prime", "list_resources").provider).toBe("prime_intellect")
+  expect(ProviderCli.preview("tensorpool", "list_resources").cli).toBe("tp")
+})
+
 test("provider_compute asks on the exact read before resolving a saved credential and forwards cancellation", async () => {
   const asked: Parameters<Tool.Context["ask"]>[0][] = []
   const calls: unknown[][] = []

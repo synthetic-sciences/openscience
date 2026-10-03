@@ -241,7 +241,11 @@ export namespace ProviderCli {
 
   function provider(target: string): Provider {
     const canonical = target === "prime" ? "prime_intellect" : target
-    if (!(canonical in DOCTOR_SPECS)) throw new Error(`Compute provider ${target} has no reviewed native CLI broker`)
+    // An own-property check: `in` also matches Object.prototype keys, so
+    // "toString" or "constructor" would otherwise resolve to an inherited
+    // member instead of a Spec and reach the executable attestation path.
+    if (!Object.hasOwn(DOCTOR_SPECS, canonical))
+      throw new Error(`Compute provider ${target} has no reviewed native CLI broker`)
     return canonical as Provider
   }
 
