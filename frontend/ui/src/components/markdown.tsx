@@ -427,8 +427,12 @@ export function Markdown(
         }
       }
 
+      // With no sanitizer there is nothing safe to show but the source text, and
+      // `markdownFallback` escapes it. Forwarding sanitize()'s empty string here
+      // left every message a blank box: the effect clears the container on empty
+      // content, and the fallback was reachable only from a parse rejection.
       const safe = await marked.parse(markdown).then(
-        (next) => sanitize(next),
+        (next) => (DOMPurify.isSupported ? sanitize(next) : markdownFallback(markdown)),
         () => markdownFallback(markdown),
       )
       if (key && hash) touch(key, { hash, html: safe })
