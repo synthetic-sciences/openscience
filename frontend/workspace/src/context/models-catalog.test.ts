@@ -36,19 +36,24 @@ describe("frontier model canonicalization", () => {
     })
   })
 
-  test("Sol 6.1 keeps ChatGPT subscription access selected alongside its API route", () => {
-    const api = { id: "gpt-6.1-sol", provider: { id: "openai" } }
-    const subscription = { id: api.id, provider: { id: "openai-codex" } }
-    const current = { providerID: subscription.provider.id, modelID: subscription.id }
-    const grouped = groupModelRoutes({ models: [api, subscription], current })
-    expect(isFrontier(current)).toBe(true)
-    expect(modelDisplayName(subscription.id, subscription.provider.id, subscription.id)).toBe("6.1 Sol")
-    expect(grouped).toHaveLength(1)
-    expect(grouped[0]?.model).toBe(subscription)
-    expect(grouped[0]?.routes).toEqual([subscription, api])
-    expect(modelFunding({ providerID: current.providerID, credential: "api" })).toBe("Subscription")
-    expect(routableModelKey(current, () => true)).toEqual(current)
-  })
+  test.each(["gpt-6-sol", "gpt-6.1-sol"])(
+    "%s keeps ChatGPT subscription access selected alongside its API route",
+    (id) => {
+      const api = { id, provider: { id: "openai" } }
+      const subscription = { id: api.id, provider: { id: "openai-codex" } }
+      const current = { providerID: subscription.provider.id, modelID: subscription.id }
+      const grouped = groupModelRoutes({ models: [api, subscription], current })
+      expect(isFrontier(current)).toBe(true)
+      expect(modelDisplayName(subscription.id, subscription.provider.id, subscription.id)).toBe(
+        id === "gpt-6-sol" ? "6 Sol" : "6.1 Sol",
+      )
+      expect(grouped).toHaveLength(1)
+      expect(grouped[0]?.model).toBe(subscription)
+      expect(grouped[0]?.routes).toEqual([subscription, api])
+      expect(modelFunding({ providerID: current.providerID, credential: "api" })).toBe("Subscription")
+      expect(routableModelKey(current, () => true)).toEqual(current)
+    },
+  )
 
   test("Astra groups native, subscription, and managed identities without changing the selected route", () => {
     const models = [

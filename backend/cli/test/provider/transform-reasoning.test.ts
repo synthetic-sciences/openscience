@@ -244,18 +244,15 @@ describe("new model reasoning effort contracts", () => {
       "max",
     ])
     expect(Object.keys(ProviderTransform.variants(codex("gpt-5.5")))).toEqual(["low", "medium", "high", "xhigh"])
-    expect(Object.keys(ProviderTransform.variants(codex("gpt-6.1-sol")))).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ])
-    expect(ProviderTransform.options({ model: codex("gpt-6.1-sol"), sessionID, providerOptions: {} })).toMatchObject({
-      reasoningEffort: "medium",
-      reasoningSummary: "detailed",
-      include: ["reasoning.encrypted_content"],
-    })
+    for (const id of ["gpt-6-sol", "gpt-6.1-sol"]) {
+      expect(Object.keys(ProviderTransform.variants(codex(id)))).toEqual(["low", "medium", "high", "xhigh", "max"])
+      expect(ProviderTransform.options({ model: codex(id), sessionID, providerOptions: {} })).toMatchObject({
+        reasoningEffort: "medium",
+        reasoningSummary: "detailed",
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(ProviderTransform.smallOptions(codex(id))).toEqual({ reasoningEffort: "low" })
+    }
     expect(ProviderTransform.variants(codex("gpt-5.6-sol")).none).toBeUndefined()
     expect(ProviderTransform.variants(codex("gpt-5.6-sol")).ultra).toBeUndefined()
 

@@ -46,7 +46,7 @@ const replay = () =>
     {
       id: "chat_fixture",
       created: 1,
-      model: "openai/gpt-6-sol",
+      model: "openai/gpt-6-luna",
       choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
     },
@@ -135,7 +135,7 @@ function settle(
   const init = {
     method: "POST",
     headers,
-    body: JSON.stringify({ model: "openai/gpt-6-sol", messages: [] }),
+    body: JSON.stringify({ model: "openai/gpt-6-luna", messages: [] }),
     signal: input.signal,
   }
   const url = new URL("/api/llm/proxy/openrouter/v1/chat/completions", server.url).href
@@ -150,7 +150,7 @@ function settle(
         headers,
         signal: input.signal,
         retry: request,
-        timing: { providerID: "openrouter", modelID: "openai/gpt-6-sol", idleTimeoutMs: false },
+        timing: { providerID: "openrouter", modelID: "openai/gpt-6-luna", idleTimeoutMs: false },
         onTiming: (timing) => timings.push(timing),
         limitMs: input.limitMs,
       }),
@@ -186,7 +186,7 @@ describe("managed conflict guard", () => {
     expect(timings[0]).toMatchObject({
       ...context,
       providerID: "openrouter",
-      modelID: "openai/gpt-6-sol",
+      modelID: "openai/gpt-6-luna",
       idleTimeoutMs: false,
       outcome: "conflict_wait",
       conflict: { code: "operation_in_progress", retries: 0, delayMs: 1000 },
@@ -223,7 +223,7 @@ describe("managed conflict guard", () => {
   test("keeps the idempotency key stable across attempts and distinct per body and message", () => {
     const base = {
       endpoint: "https://gateway.test/api/llm/proxy/openrouter/v1/chat/completions",
-      body: JSON.stringify({ model: "openai/gpt-6-sol", messages: [] }),
+      body: JSON.stringify({ model: "openai/gpt-6-luna", messages: [] }),
       sessionID: "ses_key",
       messageID: "msg_key",
       operation: "model",
@@ -363,7 +363,7 @@ describe("managed conflict guard", () => {
         fn: async () => {
           await Provider.list()
           await refreshed
-          const model = (await Provider.list()).openrouter.models["openai/gpt-6-sol"]
+          const model = (await Provider.list()).openrouter.models["openai/gpt-6-luna"]
           expect(model.api.url).toStartWith(fixture.server.url.origin)
           const language = await Provider.getLanguage(model)
           const scope = { ...context, modelID: model.id }
@@ -431,7 +431,7 @@ describe("conflict wait telemetry", () => {
         SessionTelemetry.recordProgress({
           ...context,
           providerID: "openrouter",
-          modelID: "openai/gpt-6-sol",
+          modelID: "openai/gpt-6-luna",
           phase: "connecting",
         })
         using fixture = gateway([progress, replay])
@@ -446,7 +446,7 @@ describe("conflict wait telemetry", () => {
           attempt: 1,
           agent: "research",
           providerID: "openrouter",
-          modelID: "openai/gpt-6-sol",
+          modelID: "openai/gpt-6-luna",
           retryAfterMs: 1000,
           detail: "operation_in_progress",
           stalls: 1,
@@ -498,9 +498,9 @@ describe("request timing attribution", () => {
       messageID: "msg_attr",
       attempt: 2,
       agent: "research",
-      modelID: "openai/gpt-6-sol",
+      modelID: "openai/gpt-6-luna",
     }
-    const sol = await timed({ method: "POST", body: body("openai/gpt-6-sol") }, scope)
+    const sol = await timed({ method: "POST", body: body("openai/gpt-6-luna") }, scope)
     const title = await timed(
       { method: "POST", body: body("anthropic/claude-haiku-4.5") },
       { ...scope, agent: "title", modelID: "anthropic/claude-haiku-4.5" },
@@ -511,15 +511,15 @@ describe("request timing attribution", () => {
       attempt: 2,
       agent: "research",
       providerID: "openrouter",
-      modelID: "openai/gpt-6-sol",
+      modelID: "openai/gpt-6-luna",
       outcome: "completed",
     })
     expect(title).toMatchObject({ agent: "title", modelID: "anthropic/claude-haiku-4.5" })
   })
 
   test("falls back to the session model, then to the SDK closure model", async () => {
-    const scope = { sessionID: "ses_attr", messageID: "msg_attr", attempt: 1, modelID: "openai/gpt-6-sol" }
-    expect((await timed({ method: "POST", body: body() }, scope)).modelID).toBe("openai/gpt-6-sol")
+    const scope = { sessionID: "ses_attr", messageID: "msg_attr", attempt: 1, modelID: "openai/gpt-6-luna" }
+    expect((await timed({ method: "POST", body: body() }, scope)).modelID).toBe("openai/gpt-6-luna")
     const bare = await timed({ method: "POST", body: body() })
     expect(bare.modelID).toBe("anthropic/claude-haiku-4.5")
     expect(bare.agent).toBeUndefined()

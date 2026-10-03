@@ -40,7 +40,7 @@ const catalog = MANAGED_OPENROUTER_MODELS.map((id) => {
       billing_basis: hosting === "openrouter" ? "provider_reported_cost" : `${hosting}_token_usage`,
       tiers: [{ input: 2, output: 6 }],
     },
-    ...(id === "openai/gpt-6-sol"
+    ...(id === "openai/gpt-6-luna"
       ? {
           fast_mode: true,
           fast_mode_details: {
@@ -244,14 +244,14 @@ test("Ace keeps every explicitly approved curated model on the scoped OpenRouter
         expect(calls.at(-2)?.body.reasoning).toEqual({ enabled: false })
         expect(calls.at(-1)?.body.reasoning).toEqual({ max_tokens: 4096 })
 
-        const sol = provider.models["openai/gpt-6-sol"]
-        expect(sol.pricing).toMatchObject({ hosting_provider: "azure", funding_fee_bps: 0 })
-        expect(sol.modes?.fast?.pricing).toMatchObject({ hosting_provider: "openai", funding_fee_bps: 0 })
-        const fast = ProviderTransform.tier(sol, "fast").options
+        const luna = provider.models["openai/gpt-6-luna"]
+        expect(luna.pricing).toMatchObject({ hosting_provider: "azure", funding_fee_bps: 0 })
+        expect(luna.modes?.fast?.pricing).toMatchObject({ hosting_provider: "openai", funding_fee_bps: 0 })
+        const fast = ProviderTransform.tier(luna, "fast").options
         const result = await generateText({
-          model: await Provider.getLanguage(sol),
+          model: await Provider.getLanguage(luna),
           prompt: "Hi",
-          providerOptions: ProviderTransform.providerOptions(sol, fast),
+          providerOptions: ProviderTransform.providerOptions(luna, fast),
           maxRetries: 0,
         })
         expect(result.text).toBe("ok")

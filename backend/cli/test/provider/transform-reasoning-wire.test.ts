@@ -46,7 +46,7 @@ async function send(language: any, providerOptions: Record<string, any>) {
 }
 
 describe("reasoning options serialize onto provider request bodies", () => {
-  test.each(["gpt-5.6-sol", "gpt-6.1-sol"])(
+  test.each(["gpt-5.6-sol", "gpt-6-sol", "gpt-6.1-sol"])(
     "Codex OAuth %s max and Fast reach the Responses wire shape",
     async (id) => {
       const target = model({

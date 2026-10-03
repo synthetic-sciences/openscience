@@ -166,7 +166,7 @@ test("explicit availability survives missing prices and conflicting rows fail cl
         { id: entry.id, available: true },
         { id: "openai/gpt-6-astra", available: true },
         { id: "unreviewed/model", available: true },
-        { id: "openai/gpt-6-sol" },
+        { id: "openai/gpt-6-luna" },
       ],
     }),
   ).toEqual({ [entry.id]: false, "openai/gpt-6-astra": true })
@@ -196,7 +196,7 @@ test("hosted routes keep the managed transport and Fast follows the catalog's fa
       models: [
         {
           ...entry,
-          id: "openai/gpt-6-sol",
+          id: "openai/gpt-6-luna",
           upstream_provider: "openrouter",
           hosting_provider,
           pricing: { ...entry.pricing, tiers: [{ input: 2.11, output: 10.55, cache_read: 0.211 }] },
@@ -213,7 +213,7 @@ test("hosted routes keep the managed transport and Fast follows the catalog's fa
             : {}),
         },
       ],
-    })["openai/gpt-6-sol"]!
+    })["openai/gpt-6-luna"]!
   // Azure alone has no priority tier.
   const azure = hosted("azure")
   expect(azure.pricing.hosting_provider).toBe("azure")
@@ -281,7 +281,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
     models: [
       {
         ...entry,
-        id: "openai/gpt-6-sol",
+        id: "openai/gpt-6-luna",
         upstream_provider: "openrouter",
         fast_mode: true,
         fast_mode_details: {
@@ -292,7 +292,7 @@ test("managed controls cannot import native-provider Fast transports into OpenRo
         },
       },
     ],
-  })["openai/gpt-6-sol"]!
+  })["openai/gpt-6-luna"]!
   expect(openrouter.modes.fast).toEqual({
     cost: { input: 4, output: 12, cache: { read: 1, write: 0 }, tiers: [] },
     pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 0 },
@@ -515,6 +515,7 @@ test("managed availability controls selection independently of pricing and canno
           { ...entry, id, upstream_provider: "openrouter", hosting_provider: "anthropic", available: allowed },
           // No prices: an explicit disabled established route must still be removed.
           { id: "openai/gpt-6-luna", available: false },
+          { id: "openai/gpt-6-sol", available: true },
         ],
       },
       {
@@ -528,7 +529,11 @@ test("managed availability controls selection independently of pricing and canno
   await using tmp = await tmpdir({
     config: {
       billing: { llm: "managed" },
-      provider: { openrouter: { models: { [id]: { name: "Configured Fable" } } } },
+      provider: {
+        openrouter: {
+          models: { [id]: { name: "Configured Fable" }, "openai/gpt-6-sol": { name: "Configured Sol" } },
+        },
+      },
     },
   })
   try {
@@ -553,7 +558,8 @@ test("managed availability controls selection independently of pricing and canno
         expect((await Provider.list()).openrouter.models[id]).toBeUndefined()
         const disabled = await waitFor((models) => !models["openai/gpt-6-luna"])
         expect(disabled[id]).toBeUndefined()
-        expect(disabled["openai/gpt-6-sol"]).toBeDefined()
+        expect(disabled["openai/gpt-6-sol"]).toBeUndefined()
+        await expect(Provider.getModel("openrouter", "openai/gpt-6-sol")).rejects.toThrow()
         expect(disabled["openai/gpt-6-astra"]).toBeDefined()
         await expect(Provider.getModel("openrouter", id)).rejects.toThrow()
         allowed = true
@@ -648,7 +654,7 @@ test("Standard and Fast retain independent hosts, fees and Wallet quotes", async
       models: [
         {
           ...entry,
-          id: standard === "xai" ? "x-ai/grok-4.7" : "openai/gpt-6-sol",
+          id: standard === "xai" ? "x-ai/grok-4.7" : "openai/gpt-6-luna",
           upstream_provider: "openrouter",
           hosting_provider: standard,
           pricing: { ...entry.pricing, hosting_provider: standard, funding_fee_bps: fee },
@@ -696,7 +702,7 @@ test("unknown selected-mode pricing refreshes before dispatch and cannot inherit
   const original = globalThis.fetch
   let requests = 0
   const model = {
-    id: "openai/gpt-6-sol",
+    id: "openai/gpt-6-luna",
     providerID: "openrouter",
     cost: { input: 2, output: 10, cache: { read: 0, write: 0 } },
     pricing: { upstream_provider: "openrouter", hosting_provider: "openrouter", funding_fee_bps: 550 },

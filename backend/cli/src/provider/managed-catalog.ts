@@ -1,7 +1,6 @@
 /** Reviewed Ace roster shipped with the client. No dashboard sync is required. */
 export const MANAGED_OPENROUTER_MODELS = Object.freeze([
   "openai/gpt-6-astra",
-  "openai/gpt-6-sol",
   "openai/gpt-6-luna",
   "anthropic/claude-opus-5.5",
   "anthropic/claude-fable-5.1",
@@ -54,17 +53,7 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     efforts: ["low", "medium", "high", "xhigh", "max"],
   },
   // Every OpenAI-hosted GPT-6 endpoint reports max_prompt_tokens 922000.
-  // Sol and Luna accept `none`; Astra does not.
-  "openai/gpt-6-sol": {
-    name: "GPT-6 Sol",
-    context: 1_050_000,
-    maxInput: 922_000,
-    output: 128_000,
-    input: ["text", "image", "pdf"],
-    temperature: false,
-    efforts: ["none", "low", "medium", "high", "xhigh", "max"],
-    defaultEffort: "medium",
-  },
+  // Luna accepts `none`; Astra does not.
   "openai/gpt-6-luna": {
     name: "GPT-6 Luna",
     context: 1_050_000,

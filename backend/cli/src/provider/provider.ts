@@ -632,6 +632,7 @@ export namespace Provider {
   // while current snapshots preserve the upstream ids.
   const CODEX_MODEL_IDS = new Set([
     "gpt-6-astra",
+    "gpt-6-sol",
     "gpt-6.1-sol",
     "gpt-5.6-sol",
     "gpt-5-6-sol",
@@ -652,7 +653,12 @@ export namespace Provider {
   }
 
   function codexOAuthModes(modelID: string) {
-    if (modelID !== "gpt-6.1-sol" && !/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)) return undefined
+    if (
+      modelID !== "gpt-6-sol" &&
+      modelID !== "gpt-6.1-sol" &&
+      !/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)
+    )
+      return undefined
     return {
       fast: {
         provider: {
@@ -746,6 +752,30 @@ export namespace Provider {
       cache_read: 1,
       cache_write: 12.5,
       tiers: [{ input: 20, output: 75, cache_read: 2, cache_write: 25, tier: { type: "context", size: 272_000 } }],
+    },
+    limit: { context: 1_050_000, input: 922_000, output: 128_000 },
+    modalities: { input: ["text", "image", "pdf"], output: ["text"] },
+    options: {},
+  } satisfies ModelsDev.Model
+
+  const SOL6 = {
+    id: "gpt-6-sol",
+    name: "GPT-6 Sol",
+    family: "gpt",
+    release_date: "",
+    knowledge: "2026-04-20",
+    provider: { npm: "@ai-sdk/openai" },
+    attachment: true,
+    reasoning: true,
+    reasoning_options: [{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }],
+    temperature: false,
+    tool_call: true,
+    cost: {
+      input: 2,
+      output: 10,
+      cache_read: 0.2,
+      cache_write: 2.5,
+      tiers: [{ input: 4, output: 15, cache_read: 0.4, cache_write: 5, tier: { type: "context", size: 272_000 } }],
     },
     limit: { context: 1_050_000, input: 922_000, output: 128_000 },
     modalities: { input: ["text", "image", "pdf"], output: ["text"] },
@@ -2269,6 +2299,7 @@ export namespace Provider {
       (provider.id === "zai" || provider.id === "zhipuai") && !provider.models[GLM53.id]
         ? { ...provider.models, [GLM53.id]: GLM53 }
         : { ...provider.models }
+    if (provider.id === "openai" && !models[SOL6.id]) models[SOL6.id] = SOL6
     for (const model of reviewed) {
       models[model.id] = { ...provider.models[model.id], ...model, experimental: undefined }
     }
@@ -2549,11 +2580,12 @@ export namespace Provider {
             // Keep each model's catalog window. Flattening the whole Codex
             // family to a legacy input allowance made flagship and mini
             // models advertise the same, incorrect context in every picker.
-            limit: id === "gpt-6-astra" ? { context: 872_000, output: 128_000 } : { ...model.limit },
+            limit:
+              id === "gpt-6-astra" || id === "gpt-6-sol" ? { context: 872_000, output: 128_000 } : { ...model.limit },
             // The subscription catalog advertises a smaller default/maximum
             // context than the public API. Ultra is a Codex orchestration mode,
             // not an additional Responses reasoning.effort value.
-            ...(id === "gpt-6-astra"
+            ...(id === "gpt-6-astra" || id === "gpt-6-sol"
               ? {
                   contextOptions: [272_000, 872_000],
                   reasoningOptions: [

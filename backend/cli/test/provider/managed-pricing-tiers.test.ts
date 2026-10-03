@@ -62,7 +62,7 @@ describe("ManagedPricing tier thresholds", () => {
 test("explicit base minima and tier gaps also apply to Fast pricing", () => {
   const row = {
     ...model([{ input: 2, output: 12, min_input_tokens: 1 }]),
-    id: "openai/gpt-6-sol",
+    id: "openai/gpt-6-luna",
     upstream_provider: "openrouter",
     hosting_provider: "openai",
     fast_mode: true,
