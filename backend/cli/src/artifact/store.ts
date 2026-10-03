@@ -291,6 +291,19 @@ export namespace ArtifactStore {
     return JSON.parse(value) as Record<string, unknown>
   }
 
+  // files is the one required JSON column on an execution, and get() builds the
+  // artifact, its versions and the execution together. A partially written or
+  // hand-edited value must not take the whole detail down with it, so an
+  // unreadable file list degrades to "no files recorded" instead of throwing.
+  function parseFiles(value: string): Execution["files"] {
+    try {
+      const parsed: unknown = JSON.parse(value)
+      return Array.isArray(parsed) ? (parsed as Execution["files"]) : []
+    } catch {
+      return []
+    }
+  }
+
   function execution(row: ExecutionRow): Execution {
     return {
       id: row.id,
@@ -307,7 +320,7 @@ export namespace ArtifactStore {
       ...(row.permission_snapshot ? { permissionSnapshot: parse(row.permission_snapshot) } : {}),
       ...(row.inputs ? { inputs: parse(row.inputs) } : {}),
       captureQuality: row.capture_quality,
-      files: JSON.parse(row.files) as Execution["files"],
+      files: parseFiles(row.files),
       ...(row.environment ? { environment: parse(row.environment) } : {}),
       createdAt: row.created_at,
     }
