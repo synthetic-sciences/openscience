@@ -32,4 +32,30 @@ describe("workspace error page", () => {
     expect(detail).toContain("Provider is overloaded")
     expect(projectRecovery(detail)).toBe(false)
   })
+
+  // A config file that is not an object at all fails on the root of the parse,
+  // so its Zod issue has an empty path. The file is already named above, and a
+  // root issue must not leave a bare trailing space where the others read a path.
+  test("locates a nested config issue, and says nothing for one at the config root", () => {
+    const rows = formatError(
+      {
+        name: "ConfigInvalidError",
+        data: {
+          path: "C:\\config\\openscience.json",
+          issues: [
+            { message: "Invalid input: expected object, received string", path: [] },
+            { message: "Invalid input: expected string, received number", path: ["model"] },
+          ],
+        },
+      },
+      t,
+    )
+      .split("\n")
+      .filter((line) => line.startsWith("↳ "))
+
+    expect(rows).toEqual([
+      "↳ Invalid input: expected object, received string",
+      "↳ Invalid input: expected string, received number model",
+    ])
+  })
 })

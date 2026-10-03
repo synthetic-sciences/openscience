@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Fix the workspace error page rendering a config validation problem that
+  applies to the entire file with no location and a trailing space, such as
+  an `openscience.json` whose root is not a JSON object.
+
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
 - Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
 

@@ -106,10 +106,14 @@ function formatInitError(error: InitError, t: Translator): string {
       return t("error.chain.configFrontmatterError", { path, message })
     }
     case "ConfigInvalidError": {
+      // A Zod issue raised on the root of the parsed config (a file that is not
+      // an object at all) carries an empty path. The line above already names
+      // that file, so a joined path would only leave a trailing space.
       const issues = Array.isArray(data.issues)
-        ? data.issues.map(
-            (issue: { message: string; path: string[] }) => "↳ " + issue.message + " " + issue.path.join("."),
-          )
+        ? data.issues.map((issue: { message: string; path: string[] }) => {
+            const location = issue.path.join(".")
+            return "↳ " + issue.message + (location ? " " + location : "")
+          })
         : []
       const message = typeof data.message === "string" ? data.message : ""
       const path = typeof data.path === "string" ? data.path : safeJson(data.path)
