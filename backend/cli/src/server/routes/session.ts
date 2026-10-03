@@ -66,8 +66,8 @@ export const SessionRoutes = lazy(() =>
           if (query.roots && session.parentID) continue
           if (query.start !== undefined && session.time.updated < query.start) continue
           if (term !== undefined && !session.title.toLowerCase().includes(term)) continue
-          sessions.push(session)
           if (query.limit !== undefined && sessions.length >= query.limit) break
+          sessions.push(session)
         }
         return c.json(sessions)
       },

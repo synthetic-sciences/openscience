@@ -36,4 +36,23 @@ describe("session.list", () => {
       },
     })
   })
+
+  test("applies the limit before appending a match", async () => {
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        await Session.create({})
+        await Session.create({})
+        const fetch = Server.internalFetch()
+
+        const empty = await fetch(`http://openscience.internal/session?limit=0`)
+        expect(empty.status).toBe(200)
+        expect(await empty.json()).toEqual([])
+
+        const single = await fetch(`http://openscience.internal/session?limit=1`)
+        expect(single.status).toBe(200)
+        expect(((await single.json()) as unknown[]).length).toBe(1)
+      },
+    })
+  })
 })
