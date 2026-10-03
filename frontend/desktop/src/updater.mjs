@@ -700,7 +700,7 @@ export async function recover(cache, options = {}) {
     // Untrusted verification still proves identifier, version, and a valid
     // code signature (it only skips notarization) and resolves without a
     // publisher identity, so success is tracked separately from its value.
-    const verified = await verify(candidate.bundle, candidate.version, {
+    const verified = await (options.verify ?? verify)(candidate.bundle, candidate.version, {
       trusted: options.trusted,
       current: options.current,
     }).then(
@@ -720,10 +720,12 @@ export async function recover(cache, options = {}) {
       trust: verified.trust,
     })
   }
+  // Newest first: a newer verified update always supersedes an older one, so
+  // the first entry is the update to keep and every later root is stale.
   candidates.sort((left, right) =>
     newer(left.version, right.version) ? 1 : newer(right.version, left.version) ? -1 : 0,
   )
-  const keep = candidates.at(-1)
+  const keep = candidates.at(0)
   await Promise.all(
     candidates
       .filter((candidate) => candidate !== keep)

@@ -342,6 +342,12 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 ### Fixed
 
+- **A staged desktop update is no longer rolled back to an older version.**
+  When several verified updates were waiting in the cache, recovery sorted the
+  pending roots newest-first and then kept the last entry, so it deleted the
+  newest update and left the oldest to be installed. The newest verified pending
+  update is now the one that survives.
+
 - Refresh the editor state, molecular viewer, schema conversion, and development-tool dependencies. Keep one CodeMirror state version across editor extensions to preserve extension identity.
 
 - Provider pricing respects each tier’s declared minimum, including Fast pricing, and scheme-less local endpoints are classified consistently. Failed model-catalog refreshes are reported without crashing the process; credential recovery messages only claim a backup when the copy succeeded.
