@@ -44,7 +44,13 @@ const fixtures = [
     origin: "user" as const,
   },
 ]
-function fixture(server: string, disabled: string[] = [], projectDisabled = false, hold?: Promise<void>) {
+function fixture(
+  server: string,
+  disabled: string[] = [],
+  projectDisabled = false,
+  hold?: Promise<void>,
+  catalog: typeof fixtures = fixtures,
+) {
   const [config, setConfig] = stores.createStore({ disabled })
   const calls: Array<{ names: string[]; enabled: boolean }> = []
   const writes: Array<{ name: string; content: string }> = []
@@ -59,7 +65,7 @@ function fixture(server: string, disabled: string[] = [], projectDisabled = fals
     server,
     load: async () => {
       await hold
-      return fixtures.map((skill) => ({
+      return catalog.map((skill) => ({
         name: skill.name,
         description: `${skill.name} research workflow. More detail follows.`,
         location: skill.location,
@@ -252,4 +258,19 @@ test("personal skills can be edited and deleted; sources list every root and the
   // The Add menu is a portal exercised by the browser suite; the folder form
   // itself is reached there too.
   expect(added).toEqual([])
+})
+
+test("skill labels keep acronym casing instead of sentence-casing it", async () => {
+  const { host } = fixture("http://skills-test:4106", [], false, undefined, [
+    { name: "MCP", category: "core", location: "/skills/core/MCP/SKILL.md", action: "allow" as const },
+    { name: "API", category: "core", location: "/skills/core/API/SKILL.md", action: "allow" as const },
+    // The lowercase acronym prefix the label already promotes.
+    { name: "llm-judge", category: "core", location: "/skills/core/llm-judge/SKILL.md", action: "allow" as const },
+  ])
+  await settle()
+  const labels = () =>
+    rows(host)
+      .map((row) => row.querySelector(".skills-workspace__identity strong")?.textContent)
+      .sort()
+  expect(labels()).toEqual(["API", "LLM judge", "MCP"])
 })

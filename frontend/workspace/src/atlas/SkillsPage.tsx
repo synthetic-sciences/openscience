@@ -124,8 +124,7 @@ type Form =
 export function displayLabel(value: string) {
   const words = value.replace(/[-_]+/g, " ").trim()
   if (/^(ml|llm|ai)\b/i.test(words)) return words.replace(/^(ml|llm|ai)\b/i, (m) => m.toUpperCase())
-  const label = /[A-Z]/.test(words) && words === words.toUpperCase() ? words.toLowerCase() : words
-  return label ? label[0]!.toUpperCase() + label.slice(1) : value
+  return words ? words[0]!.toUpperCase() + words.slice(1) : value
 }
 
 const SOURCE_LABEL: Record<SkillSource, string> = {
