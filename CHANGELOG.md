@@ -8,22 +8,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
-- Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
+-
 
-- Removing a saved provider key now disconnects the provider while preserving its endpoint and protocol preferences for reconnection.
-
-- Open trusted remote runtimes and SSH tunnels in isolated desktop workspace windows, keeping files, events, and terminals on the selected server without broadening the local workspace connection policy.
-- Add a Claude Code terminal launcher that uses the installed CLI and its own login in the selected working folder.
-
-- Add a keyless BioSimulators registry connector for simulator, KiSAO algorithm, and model-format searches, with version-specific record retrieval.
-- Find BioSimulators tools by any model format the registry lists, such as Kappa or Virtual Cell Markup Language, and show format names instead of ontology IDs in results.
-- Add custom model Base URLs and OpenAI protocol selection, separate research-search setup status, and complete Chinese connection/form validation messages.
-
-- Add OpenAI GPT-6.1 Sol with Responses tool calling, supported reasoning efforts, current pricing, and Fast mode.
-- Open terminals in the selected working folder and load login shell setup so installed commands such as Claude Code are discoverable, including when the desktop app launches from Finder. User-operated terminals use normal local-shell access; agent commands and kernels retain their sandbox.
-
-- Windows desktop releases now sign the installer, app, bundled CLI, and native libraries with Inkvell Inc., and verify trusted, timestamped signatures before publication.
+- - Exit non-zero when adding rows to a Hugging Face dataset fails, so a
 
 - Keep legacy home configuration below canonical user and project settings, preserve inline overrides, and push the selected repository branch to its own tracked destination.
 - Scientific helpers correct GC content within the requested codon window and target band, report unusable CFSE channels clearly, and match BRENDA transformation keywords consistently across letter case. GPU inventory gives unnamed devices a readable fallback label.

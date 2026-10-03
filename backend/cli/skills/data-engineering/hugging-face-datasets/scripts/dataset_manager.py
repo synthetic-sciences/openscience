@@ -26,6 +26,7 @@ import os
 import json
 import time
 import argparse
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from huggingface_hub import HfApi, create_repo
@@ -259,7 +260,7 @@ def add_rows(
     validate: bool = True,
     template: str = "chat",
     token: Optional[str] = None,
-) -> None:
+) -> bool:
     """
     Stream updates to the dataset by uploading a new chunk of rows.
     Enhanced with validation for multiple dataset types.
@@ -271,17 +272,22 @@ def add_rows(
         validate: Whether to validate data structure before upload
         template: Dataset template type (chat, classification, qa, completion, tabular, custom)
         token: HuggingFace API token
+
+    Returns:
+        True when the rows were committed (or there was nothing to add), and
+        False when validation rejected them or the upload failed. Callers that
+        drive this from a shell or CI use this to pick an exit status.
     """
     api = HfApi(token=token)
 
     if not rows:
         print("No rows to add.")
-        return
+        return True
 
     # Validate training data structure
     if validate and not validate_training_data(rows, template):
         print("❌ Validation failed. Use --no-validate to skip validation.")
-        return
+        return False
 
     # Create a newline-delimited JSON string
     jsonl_content = "\n".join(json.dumps(row) for row in rows)
@@ -299,9 +305,10 @@ def add_rows(
             commit_message=f"Add {len(rows)} rows to {split} split",
         )
         print(f"✅ Added {len(rows)} rows to {repo_id} (split: {split})")
+        return True
     except Exception as e:
         print(f"❌ Upload failed: {e}")
-        return
+        return False
 
 
 def load_template(template_name: str = "system_prompt_template.txt") -> str:
@@ -504,14 +511,17 @@ if __name__ == "__main__":
             rows = json.loads(args.rows_json)
             if not isinstance(rows, list):
                 raise ValueError("rows_json must be a JSON list of objects")
-            add_rows(
+            if not add_rows(
                 args.repo_id,
                 rows,
                 split=args.split,
                 template=args.template,
                 validate=args.validate,
                 token=token,
-            )
+            ):
+                # The rows were not committed. Exit non-zero so a script or CI
+                # step does not read the "Upload failed" line above as success.
+                sys.exit(1)
         except json.JSONDecodeError:
             print("Error: Invalid JSON provided for --rows_json")
     elif args.command == "quick_setup":
