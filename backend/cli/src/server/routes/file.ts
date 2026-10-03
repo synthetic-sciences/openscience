@@ -60,7 +60,12 @@ const authorized = <T>(promise: Promise<T>) =>
 
 const byteRange = (value: string | undefined, size: number) => {
   if (!value) return
-  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim())
+  const range = value.trim()
+  // RFC 9110 section 14.2 requires an origin server to ignore a Range field
+  // that names a range unit it does not understand, rather than reject it.
+  // Serving the whole representation is the only defined way to ignore it.
+  if (!/^bytes=/i.test(range)) return
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range)
   if (!match || (!match[1] && !match[2]) || size === 0) return "invalid" as const
   const suffix = match[1] ? undefined : Number(match[2])
   const start = match[1] ? Number(match[1]) : Math.max(0, size - (suffix ?? 0))

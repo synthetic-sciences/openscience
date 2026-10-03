@@ -110,6 +110,32 @@ describe("file content routes", () => {
     })
   })
 
+  test("ignores a Range header that names an unknown range unit", async () => {
+    await using tmp = await tmpdir({
+      init: (directory) => Bun.write(path.join(directory, "large.pdf"), "0123456789"),
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        // RFC 9110 section 14.2 requires an origin server to ignore a Range
+        // field whose range unit it does not understand, not to reject it.
+        const unknown = await FileRoutes().request("/file/raw?path=large.pdf", {
+          headers: { Range: "items=0-10" },
+        })
+        expect(unknown.status).toBe(200)
+        expect(unknown.headers.get("content-length")).toBe("10")
+        expect(unknown.headers.get("content-range")).toBeNull()
+        expect(await unknown.text()).toBe("0123456789")
+
+        const unsatisfiable = await FileRoutes().request("/file/raw?path=large.pdf", {
+          headers: { Range: "bytes=20-30" },
+        })
+        expect(unsatisfiable.status).toBe(416)
+      },
+    })
+  })
+
   test("serves explicit inline assets with a restrictive document sandbox", async () => {
     await using tmp = await tmpdir({
       init: async (directory) => {
