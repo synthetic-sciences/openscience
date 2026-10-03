@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- A hashed pip requirement that is not an exact `==` pin, such as
+  `requests>=2.31`, is now rejected instead of being read as a corrupted
+  package name and version that made the wheel check accept the wrong wheel.
+
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
 - Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
 

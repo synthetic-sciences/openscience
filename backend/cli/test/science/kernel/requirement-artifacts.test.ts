@@ -36,4 +36,29 @@ describe("requirementArtifacts", () => {
     expect(requirementArtifacts("")).toEqual([])
     expect(requirementArtifacts("   \n  ")).toEqual([])
   })
+
+  // TaskSpec validates pip_requirements only as a non-empty string, so a range
+  // or a bare name reaches here. indexOf("==") returned -1 and sliced the name
+  // and version out of the wrong offsets, which mis-counted the entry against
+  // the pinned packages in verifiedWheels.
+  test("rejects a requirement line that carries no == pin", () => {
+    expect(requirementArtifacts("requests>=2.31")).toEqual([])
+    expect(requirementArtifacts("requests")).toEqual([])
+    expect(requirementArtifacts("requests @ https://example.invalid/requests-2.31.0-py3-none-any.whl")).toEqual([])
+    expect(requirementArtifacts("~=2.31")).toEqual([])
+    expect(requirementArtifacts("-e .")).toEqual([])
+    // An environment marker alone is not a pin either.
+    expect(requirementArtifacts('numpy==1.26.4 ; python_version >= "3.10"')).toEqual([
+      { pin: "numpy==1.26.4", name: "numpy", version: "1.26.4", hashes: [] },
+    ])
+  })
+
+  test("keeps the valid pins around a line that carries none", () => {
+    const requirements = [
+      pin("numpy", "1.26.4", "a"),
+      "requests>=2.31",
+      pin("scipy", "1.11.4", "b"),
+    ].join("\n")
+    expect(requirementArtifacts(requirements).map((item) => item.pin)).toEqual(["numpy==1.26.4", "scipy==1.11.4"])
+  })
 })

@@ -457,6 +457,14 @@ export function requirementArtifacts(requirements: string) {
     .map((line) => {
       const pin = line.split(/\s+/u)[0]!
       const offset = pin.indexOf("==")
+      // TaskSpec accepts pip_requirements as any non-empty string, so a range
+      // ("requests>=2.31"), a bare name, or a direct URL can reach this parser.
+      // indexOf returned -1 for those, and slicing at -1 produced a name and a
+      // version carved out of the wrong offsets. The entry is not a pin at all,
+      // so drop it rather than let the corrupted name and version reach the
+      // wheel-coverage check in verifiedWheels, which would then mis-count
+      // pins and accept a wrong wheel or fail the exact coverage test.
+      if (offset <= 0) return undefined
       return {
         pin,
         name: pin.slice(0, offset),
@@ -464,6 +472,7 @@ export function requirementArtifacts(requirements: string) {
         hashes: [...line.matchAll(/--hash=sha256:([a-f0-9]{64})/gu)].map((match) => match[1]!),
       }
     })
+    .filter((item) => item !== undefined)
 }
 
 async function ensureCondaArchives(digest: string, selected: CoreScienceCondaPlatform, lock: string) {
