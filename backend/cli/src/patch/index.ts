@@ -578,26 +578,42 @@ export namespace Patch {
     const newLines = newContent.split("\n")
 
     // Simple diff generation - in a real implementation you'd use a proper diff algorithm
-    let diff = "@@ -1 +1 @@\n"
+    const body: string[] = []
+    let oldCount = 0
+    let newCount = 0
+    let hasChanges = false
 
     // Find changes (simplified approach)
     const maxLen = Math.max(oldLines.length, newLines.length)
-    let hasChanges = false
 
     for (let i = 0; i < maxLen; i++) {
       const oldLine = oldLines[i] || ""
       const newLine = newLines[i] || ""
 
       if (oldLine !== newLine) {
-        if (oldLine) diff += `-${oldLine}\n`
-        if (newLine) diff += `+${newLine}\n`
+        if (oldLine) {
+          body.push(`-${oldLine}\n`)
+          oldCount++
+        }
+        if (newLine) {
+          body.push(`+${newLine}\n`)
+          newCount++
+        }
         hasChanges = true
       } else if (oldLine) {
-        diff += ` ${oldLine}\n`
+        body.push(` ${oldLine}\n`)
+        oldCount++
+        newCount++
       }
     }
 
-    return hasChanges ? diff : ""
+    if (!hasChanges) return ""
+
+    // The header has to declare the lines the body actually carries: the old
+    // side is every removed and context line, the new side every added and
+    // context line. A fixed "-1 +1" header understates both, so an applier
+    // stops after the first line and rejects the rest of the hunk.
+    return `@@ -1,${oldCount} +1,${newCount} @@\n${body.join("")}`
   }
 
   // Apply hunks to filesystem
