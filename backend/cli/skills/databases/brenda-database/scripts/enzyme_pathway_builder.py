@@ -53,14 +53,14 @@ except ImportError:
 try:
     if __package__:
         from .brenda_queries import (
-            search_enzymes_by_product, search_enzymes_by_substrate,
+            search_enzymes_by_product, search_enzymes_by_substrate, search_by_pattern,
             get_environmental_parameters, compare_across_organisms,
             get_substrate_specificity, get_cofactor_requirements,
             find_thermophilic_homologs, find_ph_stable_variants
         )
     else:
         from brenda_queries import (
-            search_enzymes_by_product, search_enzymes_by_substrate,
+            search_enzymes_by_product, search_enzymes_by_substrate, search_by_pattern,
             get_environmental_parameters, compare_across_organisms,
             get_substrate_specificity, get_cofactor_requirements,
             find_thermophilic_homologs, find_ph_stable_variants

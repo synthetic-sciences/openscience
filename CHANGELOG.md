@@ -8,22 +8,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.
-- Keep GPT-6 Sol available through Codex subscriptions while removing it from the Ace model roster.
+-
 
-- Removing a saved provider key now disconnects the provider while preserving its endpoint and protocol preferences for reconnection.
-
-- Open trusted remote runtimes and SSH tunnels in isolated desktop workspace windows, keeping files, events, and terminals on the selected server without broadening the local workspace connection policy.
-- Add a Claude Code terminal launcher that uses the installed CLI and its own login in the selected working folder.
-
-- Add a keyless BioSimulators registry connector for simulator, KiSAO algorithm, and model-format searches, with version-specific record retrieval.
-- Find BioSimulators tools by any model format the registry lists, such as Kappa or Virtual Cell Markup Language, and show format names instead of ontology IDs in results.
-- Add custom model Base URLs and OpenAI protocol selection, separate research-search setup status, and complete Chinese connection/form validation messages.
-
-- Add OpenAI GPT-6.1 Sol with Responses tool calling, supported reasoning efforts, current pricing, and Fast mode.
-- Open terminals in the selected working folder and load login shell setup so installed commands such as Claude Code are discoverable, including when the desktop app launches from Finder. User-operated terminals use normal local-shell access; agent commands and kernels retain their sandbox.
-
-- Windows desktop releases now sign the installer, app, bundled CLI, and native libraries with Inkvell Inc., and verify trusted, timestamped signatures before publication.
+-
 
 - Keep legacy home configuration below canonical user and project settings, preserve inline overrides, and push the selected repository branch to its own tracked destination.
 - Scientific helpers correct GC content within the requested codon window and target band, report unusable CFSE channels clearly, and match BRENDA transformation keywords consistently across letter case. GPU inventory gives unnamed devices a readable fallback label.
@@ -1173,6 +1160,15 @@ public 50 the old detector named an example's `samples.csv` and the input
 - **An approval says what it is for.** Asking to run Python, R or a shell command showed a card that read "Approval required" twice, over a code cell folded shut, so the most common request in the app asked for a decision about code you could not see. The card now names it ("Run Python code", with the step's title and length, or "Run a shell command" with the command), and the cell's source stays open for as long as the request is.
 
 - File previews handle extensionless text files, balanced brackets in figure labels, Windows path casing, and files at filesystem roots. CSV previews skip blank lines while retaining quoted empty records, and large mzML runs compute scan ranges without overflowing the argument stack.
+
+- **The BRENDA enzyme fallback finds enzymes again.** The pathway builder
+  called `search_by_pattern`, a query it never imported, so the fallback that
+  exists to supply generic enzymes for a known transformation raised
+  `NameError`, printed it, and returned none. Both call sites — the
+  `COMMON_TRANSFORMATIONS` fallback and the retrosynthetic-tree step — now
+  reach the real query: a transformation with no substrate or product match
+  returns low-confidence enzymes, and a retrosynthetic tree grows hypothetical
+  precursor nodes instead of containing only its target.
 
 ## v2.0.115 – v2.0.119 — 2026-09-17
 
