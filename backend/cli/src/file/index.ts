@@ -277,7 +277,20 @@ export namespace File {
     [Symbol.dispose](): void
   }
 
+  // File routes run in the server, outside the sandbox: refuse the
+  // credential paths it masks even inside the project root.
   async function contained(file: string, access: SessionFilesystem.Access, options?: AccessOptions): Promise<string> {
+    const target = await resolveContained(file, access, options)
+    if (await SessionFilesystem.isCredentialPath(target))
+      throw new HTTPException(403, { message: "Credential files are not available here" })
+    return target
+  }
+
+  async function resolveContained(
+    file: string,
+    access: SessionFilesystem.Access,
+    options?: AccessOptions,
+  ): Promise<string> {
     if (options?.sessionID) {
       const target = await SessionFilesystem.authorize({
         sessionID: options.sessionID,

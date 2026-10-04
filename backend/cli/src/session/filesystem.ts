@@ -1,4 +1,5 @@
 import { Bus } from "@/bus"
+import { OpenScience } from "@/openscience"
 import { BusEvent } from "@/bus/bus-event"
 import { Global } from "@/global"
 import { Instance } from "@/project/instance"
@@ -1010,10 +1011,25 @@ export namespace SessionFilesystem {
    * canonical path callers must use, preventing a checked symlink spelling
    * from being reused for the actual I/O.
    */
+  /** Credential paths the sandbox masks from agent processes
+   *  (`OpenScience.kernelSensitivePaths`). In-process file access refuses
+   *  them too, whatever grant or project root would otherwise cover them. */
+  export async function isCredentialPath(target: string) {
+    // The managed tool-output folder is also on that list, but the broker
+    // grants a session exact reads of its own outputs (see authorize).
+    const output = await toolOutputRoot().catch(() => undefined)
+    const roots = OpenScience.kernelSensitivePaths().filter((root) => root !== output && root !== ToolOutputPath.root)
+    const resolved = await Promise.all(roots.map((root) => Filesystem.canonical(root).catch(() => undefined)))
+    return [...roots, ...resolved].some((root) => !!root && Filesystem.contains(root, target))
+  }
+
   export async function authorize(input: { sessionID: string; path: string; access: Access }): Promise<Authorized> {
     const record = await brokerState(input.sessionID)
     const target = await canonical(input.path, workspaceGrant(record)?.path ?? record.directory)
     assertPrivate(record, target, input.access)
+    if (await isCredentialPath(target)) {
+      throw new DeniedError({ sessionID: input.sessionID, path: target, access: input.access })
+    }
     const enclave = await managedToolOutput(target)
     const matches = record.grants
       .filter((grant) =>
