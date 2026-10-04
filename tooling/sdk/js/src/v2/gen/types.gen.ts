@@ -12602,10 +12602,10 @@ export type SessionPromptData = {
     agent?: string
     noReply?: boolean
     /**
-     * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
+     * @deprecated Disable tools for this session (false only). Tools and permissions have been merged; set permissions on the session itself.
      */
     tools?: {
-      [key: string]: boolean
+      [key: string]: false
     }
     effort?: ResearchEffort
     delegation?: boolean
@@ -12802,10 +12802,10 @@ export type SessionPromptAsyncData = {
     agent?: string
     noReply?: boolean
     /**
-     * @deprecated tools and permissions have been merged, you can set permissions on the session itself now
+     * @deprecated Disable tools for this session (false only). Tools and permissions have been merged; set permissions on the session itself.
      */
     tools?: {
-      [key: string]: boolean
+      [key: string]: false
     }
     effort?: ResearchEffort
     delegation?: boolean

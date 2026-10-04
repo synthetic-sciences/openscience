@@ -31988,13 +31988,14 @@
                     "type": "boolean"
                   },
                   "tools": {
-                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+                    "description": "@deprecated Disable tools for this session (false only). Tools and permissions have been merged; set permissions on the session itself.",
                     "type": "object",
                     "propertyNames": {
                       "type": "string"
                     },
                     "additionalProperties": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "const": false
                     }
                   },
                   "effort": {
@@ -32433,13 +32434,14 @@
                     "type": "boolean"
                   },
                   "tools": {
-                    "description": "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
+                    "description": "@deprecated Disable tools for this session (false only). Tools and permissions have been merged; set permissions on the session itself.",
                     "type": "object",
                     "propertyNames": {
                       "type": "string"
                     },
                     "additionalProperties": {
-                      "type": "boolean"
+                      "type": "boolean",
+                      "const": false
                     }
                   },
                   "effort": {

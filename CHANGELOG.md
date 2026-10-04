@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- A prompt sent over the API may only turn tools off. Its deprecated `tools` map no longer accepts `true`, which would have stored a session rule approving that permission for later turns.
 - A network approval now covers only the approved network command. Scripts that pair it with other programs (`git push && python …`, `curl … | sh`) or pass it code through variables such as `GIT_SSH_COMMAND` are refused before asking, so nothing can ride along on the approved sockets.
 - The Terminal tab opens your own shell only in a window OpenScience's launcher (`openscience`, `openscience web`, or the desktop app) opened for you. Any other request, including one from an agent command that reached the local server, gets a sandboxed shell, so an approved network command can no longer start an unsandboxed terminal. Set `terminal.mode` to `"sandboxed"` to sandbox every terminal.
 - Make GPT-6.1 Sol available through connected ChatGPT/Codex subscriptions, with supported reasoning levels and Fast mode.

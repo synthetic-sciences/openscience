@@ -86,6 +86,15 @@ export const RuntimePromptInput = z.object({
 // explicit subtasks, but cannot mark text as synthetic/ignored or attach
 // runtime metadata. Internal command expansion uses RuntimePromptInput.
 export const PromptInput = RuntimePromptInput.extend({
+  // Over HTTP a request may only turn tools off. An `allow` here would persist
+  // as a session rule that outranks the agent's own `ask` for later turns;
+  // in-process callers keep the runtime schema.
+  tools: z
+    .record(z.string(), z.literal(false))
+    .optional()
+    .describe(
+      "@deprecated Disable tools for this session (false only). Tools and permissions have been merged; set permissions on the session itself.",
+    ),
   parts: z.array(
     z.discriminatedUnion("type", [
       MessageV2.TextPart.omit({

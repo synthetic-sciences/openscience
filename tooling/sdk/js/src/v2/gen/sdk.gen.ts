@@ -4375,7 +4375,7 @@ export class Session extends HeyApiClient {
       agent?: string
       noReply?: boolean
       tools?: {
-        [key: string]: boolean
+        [key: string]: false
       }
       effort?: ResearchEffort
       delegation?: boolean
@@ -4482,7 +4482,7 @@ export class Session extends HeyApiClient {
       agent?: string
       noReply?: boolean
       tools?: {
-        [key: string]: boolean
+        [key: string]: false
       }
       effort?: ResearchEffort
       delegation?: boolean
