@@ -82,6 +82,10 @@ export namespace ToolRegistry {
   const compute = async () => {
     const custom = [] as Tool.Info[]
     const glob = new Bun.Glob("{tool,tools}/*.{js,ts}")
+    // Project tools run in the server process, outside the execution sandbox,
+    // and the agent can write project folders. Like project plugins, they load
+    // only when the person has chosen to run without the sandbox.
+    const sandboxed = (await Config.trustedSandbox()).enabled === true
 
     // Importing a tool module executes its top-level code in the host process.
     // Config.executableDirectories excludes project-owned directories until
@@ -99,6 +103,10 @@ export namespace ToolRegistry {
         // revocation so top-level module code cannot finish after a revoke has
         // already been acknowledged.
         const projectOwned = Instance.containsPath(dir)
+        if (projectOwned && sandboxed) {
+          log.warn("refusing in-process project tool while sandbox is enabled", { path: match })
+          continue
+        }
         const mod = projectOwned
           ? await AuthoritySignal.exclusive(async () => {
               await ProjectTrust.require(Instance.project, "project_plugin")

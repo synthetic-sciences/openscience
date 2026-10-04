@@ -6,12 +6,24 @@ import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
 import { ToolRegistry } from "../../src/tool/registry"
 import { ProjectTrust } from "../../src/project/trust"
+import { Config } from "../../src/config/config"
 import { Tool } from "../../src/tool/tool"
 import { Agent } from "../../src/agent/agent"
 
 async function trustProject() {
   const status = await ProjectTrust.status(Instance.project)
   await ProjectTrust.update(Instance.project, { trusted: true, root: status.root })
+}
+
+/** Project tools run in the server process, so they load only without the sandbox. */
+async function withoutSandbox<T>(fn: () => Promise<T>) {
+  const previous = await Config.trustedSandbox()
+  await Config.setSandbox({ ...previous, enabled: false })
+  try {
+    return await fn()
+  } finally {
+    await Config.setSandbox(previous)
+  }
 }
 
 describe("tool.registry", () => {
@@ -187,8 +199,35 @@ describe("tool.registry", () => {
       directory: tmp.path,
       fn: async () => {
         await trustProject()
-        const ids = await ToolRegistry.ids()
+        const ids = await withoutSandbox(() => ToolRegistry.ids())
         expect(ids).toContain("hello")
+      },
+    })
+  })
+
+  test("refuses project tools while the sandbox is enabled, even for a trusted project", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const toolDir = path.join(dir, ".openscience", "tool")
+        await fs.mkdir(toolDir, { recursive: true })
+        await Bun.write(
+          path.join(toolDir, "sandboxed_probe.ts"),
+          "export default { description: 'probe', args: {}, execute: async () => 'probe' }\n",
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const previous = await Config.trustedSandbox()
+        await Config.setSandbox({ ...previous, enabled: true })
+        try {
+          expect(await ToolRegistry.ids()).not.toContain("sandboxed_probe")
+        } finally {
+          await Config.setSandbox(previous)
+        }
       },
     })
   })
@@ -222,7 +261,7 @@ describe("tool.registry", () => {
       directory: tmp.path,
       fn: async () => {
         await trustProject()
-        const ids = await ToolRegistry.ids()
+        const ids = await withoutSandbox(() => ToolRegistry.ids())
         expect(ids).toContain("hello")
       },
     })

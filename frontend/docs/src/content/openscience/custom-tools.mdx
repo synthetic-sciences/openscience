@@ -29,7 +29,7 @@ export default tool({
 
 This deliberately small tool counts characters after whitespace removal. It does not validate an alphabet, remove alignment gaps, or parse a multi-record file. Those are separate behaviors to define if needed.
 
-Project code must be reviewed and permitted by the project's settings before it can load. Reopen the project after adding a tool and check that it becomes available.
+Project code must be reviewed and permitted by the project's settings before it can load. A project tool runs inside the OpenScience server rather than in the execution sandbox, and the agent can write project folders, so project tools load only for a trusted project with the execution sandbox turned off, the same rule as project plugins. To keep the sandbox on, install the tool globally in `~/.config/openscience/tool/` instead. Reopen the project after adding a tool and check that it becomes available.
 
 ## Ask the agent to use it
 
