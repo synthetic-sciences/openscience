@@ -34,7 +34,8 @@ export namespace NetworkCommands {
   const GIT_NETWORK = new Set(["push", "fetch", "pull", "clone", "ls-remote"])
 
   export function hostOf(value: string): string | undefined {
-    const url = /^[a-z][a-z0-9+.-]*:\/\/([^/@\s]+@)?([^/:\s]+)/i.exec(value)
+    // A bracketed IPv6 literal keeps its colons: `http://[::1]:8080/`.
+    const url = /^[a-z][a-z0-9+.-]*:\/\/([^/@\s]+@)?(\[[^\]\s]+\]|[^/:\s]+)/i.exec(value)
     if (url) return url[2].toLowerCase()
     const scp = /^(?:[\w.-]+@)?([\w.-]+\.[a-z]{2,}):/i.exec(value)
     if (scp) return scp[1].toLowerCase()
@@ -172,6 +173,20 @@ export namespace NetworkCommands {
         )
       })
       .map((command) => command.join(" "))
+  }
+
+  /** Whether a destination is this machine. A command approved for network
+   *  shares the host's network, so a loopback destination would reach local
+   *  services, including OpenScience's own server; it is never approved. */
+  export function loopback(host: string) {
+    const value = host
+      .toLowerCase()
+      .replace(/^\[|\]$/g, "")
+      .replace(/\.$/, "")
+    if (value === "localhost" || value.endsWith(".localhost")) return true
+    if (value === "::1" || value === "::" || value === "0.0.0.0") return true
+    const ipv4 = value.replace(/^::ffff:/, "")
+    return /^127(\.\d{1,3}){3}$/.test(ipv4)
   }
 
   /** Merge detections across every simple command in a script. */

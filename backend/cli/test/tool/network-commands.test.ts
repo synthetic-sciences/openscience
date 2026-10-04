@@ -137,3 +137,31 @@ describe("network grants cover only the approved commands", () => {
     expect(NetworkCommands.companions([["ssh", "-oLocalCommand=id", "lab.example.edu"]])).toHaveLength(1)
   })
 })
+
+describe("loopback destinations", () => {
+  test("recognizes every spelling of this machine", () => {
+    for (const host of [
+      "localhost",
+      "LOCALHOST",
+      "localhost.",
+      "api.localhost",
+      "127.0.0.1",
+      "127.1.2.3",
+      "::1",
+      "[::1]",
+      "0.0.0.0",
+      "::ffff:127.0.0.1",
+    ])
+      expect(NetworkCommands.loopback(host)).toBe(true)
+  })
+
+  test("reads bracketed IPv6 destinations whole", () => {
+    expect(NetworkCommands.hostOf("http://[::1]:4096/global/health")).toBe("[::1]")
+    expect(NetworkCommands.hostOf("https://[2001:db8::1]/x")).toBe("[2001:db8::1]")
+  })
+
+  test("leaves remote hosts alone", () => {
+    for (const host of ["github.com", "pypi.org", "10.0.0.5", "128.0.0.1", "localhost.example.org", "remote"])
+      expect(NetworkCommands.loopback(host)).toBe(false)
+  })
+})

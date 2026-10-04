@@ -435,6 +435,12 @@ export const BashTool = Tool.define("bash", async () => {
         },
       })
       if (network && authority.sandbox.enforced) {
+        const local = Array.from(networkHosts).filter(NetworkCommands.loopback)
+        if (local.length) {
+          throw new Error(
+            `Network access is for remote hosts only; ${local.join(", ")} is this machine. Commands keep the sandbox and cannot reach local services.`,
+          )
+        }
         const hosts = Array.from(networkHosts)
         await ctx.ask({
           permission: "network",

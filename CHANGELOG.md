@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Agent commands can no longer be approved for network access to this computer (`localhost`, `127.0.0.0/8`, `::1`). An approved command shares the host network, so a loopback destination reached local services, including the OpenScience server itself.
 - Project custom tools (`.openscience/tool/`) now load only while the execution sandbox is off, matching project plugins. They run inside the OpenScience server, and the agent can write project folders, so a trusted project no longer loads tool code added during a session while the sandbox is on.
 - File access inside OpenScience (the file panel, file routes and the agent's file tools) now refuses the credential paths the sandbox already hides from commands, such as `~/.ssh` and cloud CLI logins, even within a connected folder or a project rooted at the home folder.
 - A prompt sent over the API may only turn tools off. Its deprecated `tools` map no longer accepts `true`, which would have stored a session rule approving that permission for later turns.
