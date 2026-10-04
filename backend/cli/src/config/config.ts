@@ -1324,7 +1324,7 @@ export namespace Config {
             .boolean()
             .optional()
             .describe(
-              "Under autonomous autonomy, a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver",
+              "Under autonomous autonomy, a final answer that asks the user to upload, provide, confirm or choose is answered once: proceed on the inputs as supplied, state the assumption, deliver; a turn that asked before calling any tool is told to stop instead when the message asked for no work",
             ),
           review: z
             .boolean()

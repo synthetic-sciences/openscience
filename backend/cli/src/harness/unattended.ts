@@ -1,6 +1,7 @@
 import type { Hooks, Plugin } from "@synsci/plugin"
 import { Session } from "@/session"
 import { MessageV2 } from "@/session/message-v2"
+import { SessionLoopState } from "@/session/loop-state"
 import { HarnessState } from "./state"
 
 /**
@@ -45,14 +46,19 @@ export namespace Unattended {
     root: boolean
     rounds: number
     finalText: string
+    /** Whether the turn called any tool before its final answer. */
+    worked: boolean
   }
 
   /** The continuation, or nothing: only an unattended root session, only
-   * once, and only when the final answer hands the next move to a person. */
+   * once, and only when the final answer hands the next move to a person.
+   * A turn that asks before doing any work may have been given no task at
+   * all ("hey"), so it is told to stop when there is none rather than to
+   * deliver; a turn that worked and then stalled is told to deliver. */
   export function decide(input: Decision) {
     if (input.autonomy !== "autonomous" || !input.root || input.rounds >= 1) return
     if (!asksTheUser(input.finalText)) return
-    return render()
+    return input.worked ? render() : renderUnstarted()
   }
 
   export function render() {
@@ -60,6 +66,14 @@ export namespace Unattended {
       "No one is available to answer in this run, and nothing will be uploaded, corrected or confirmed.",
       "Proceed on the inputs exactly as supplied: state the assumption you are making, in the trace and in the report, and deliver every output the task asks for.",
       "Where two readings of an input remain, deliver under the reading the supplied files themselves support and record the alternative beside it. A run that ends on a question has delivered nothing.",
+    ].join(" ")
+  }
+
+  export function renderUnstarted() {
+    return [
+      "No one is available to answer in this run, and nothing will be uploaded, corrected or confirmed.",
+      "If the user's message asks for work, proceed on the inputs exactly as supplied: inspect them, state the assumption you are making, and deliver every output the task asks for.",
+      "If it asks for no work (a greeting, thanks or small talk), there is nothing to deliver: reply in one short line and end the turn without calling tools.",
     ].join(" ")
   }
 }
@@ -81,6 +95,9 @@ export const UnattendedUnit: Plugin = async () => {
         effort: user.effort,
         enabled: user.delegation,
       })
+      const worked = SessionLoopState.epochMessages(messages).some(
+        (message) => message.info.role === "assistant" && message.parts.some((part) => part.type === "tool"),
+      )
       const final = messages.find((message) => message.info.id === input.messageID)
       const finalText = (final?.parts ?? [])
         .filter((part): part is Extract<typeof part, { type: "text" }> => part.type === "text" && !part.synthetic)
@@ -91,6 +108,7 @@ export const UnattendedUnit: Plugin = async () => {
         root: !session.parentID,
         rounds: state.unattendedRounds,
         finalText,
+        worked,
       })
       if (!message) return
       state.unattendedRounds++

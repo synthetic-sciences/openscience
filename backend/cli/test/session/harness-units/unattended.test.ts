@@ -35,26 +35,50 @@ describe("Unattended.asksTheUser", () => {
 
 describe("Unattended.decide", () => {
   const asking = "Please upload the corrected input files you selected."
+  const decide = (input: Omit<Unattended.Decision, "worked"> & { worked?: boolean }) =>
+    Unattended.decide({ worked: true, ...input })
   test("only an unattended root session, once, and only on a question", () => {
-    expect(Unattended.decide({ autonomy: "autonomous", root: true, rounds: 0, finalText: asking })).toContain(
+    expect(decide({ autonomy: "autonomous", root: true, rounds: 0, finalText: asking })).toContain(
       "No one is available",
     )
     // A person is there to answer under the other postures.
-    expect(Unattended.decide({ autonomy: "balanced", root: true, rounds: 0, finalText: asking })).toBeUndefined()
-    expect(Unattended.decide({ autonomy: "interactive", root: true, rounds: 0, finalText: asking })).toBeUndefined()
+    expect(decide({ autonomy: "balanced", root: true, rounds: 0, finalText: asking })).toBeUndefined()
+    expect(decide({ autonomy: "interactive", root: true, rounds: 0, finalText: asking })).toBeUndefined()
     // A worker's question is for its lead, which the Task tool delivers.
-    expect(Unattended.decide({ autonomy: "autonomous", root: false, rounds: 0, finalText: asking })).toBeUndefined()
+    expect(decide({ autonomy: "autonomous", root: false, rounds: 0, finalText: asking })).toBeUndefined()
     // Once: a model that asks again after being told no one is there is answered by the loop's own bounds.
-    expect(Unattended.decide({ autonomy: "autonomous", root: true, rounds: 1, finalText: asking })).toBeUndefined()
+    expect(decide({ autonomy: "autonomous", root: true, rounds: 1, finalText: asking })).toBeUndefined()
     // A delivered answer is left alone.
     expect(
-      Unattended.decide({
+      decide({
         autonomy: "autonomous",
         root: true,
         rounds: 0,
         finalText: "Wrote /app/out.csv; checks pass.",
       }),
     ).toBeUndefined()
+  })
+
+  test("a greeting answered before any tool call is told to stop when nothing was asked", () => {
+    // GPT-5.5's reply to "hey", verbatim; it matches the question patterns.
+    const greeting = "Hey! What would you like to work on in Vriddhi AgentLS?"
+    expect(Unattended.asksTheUser(greeting)).toBe(true)
+    const unstarted = Unattended.decide({
+      autonomy: "autonomous",
+      root: true,
+      rounds: 0,
+      finalText: greeting,
+      worked: false,
+    })
+    expect(unstarted).toBe(Unattended.renderUnstarted())
+    expect(unstarted).toContain("If it asks for no work")
+    expect(unstarted).toContain("end the turn without calling tools")
+    // An instruction the model asked about before looking is still pushed to proceed.
+    expect(unstarted).toContain("If the user's message asks for work, proceed")
+    // A turn that worked and then stalled keeps the deliver-on-the-inputs answer.
+    expect(
+      Unattended.decide({ autonomy: "autonomous", root: true, rounds: 0, finalText: greeting, worked: true }),
+    ).toBe(Unattended.render())
   })
 
   test("the continuation says to proceed on the supplied inputs and to state the assumption", () => {
@@ -67,14 +91,16 @@ describe("Unattended.decide", () => {
   })
 })
 
+import path from "path"
 import { Instance } from "../../../src/project/instance"
 import { Session } from "../../../src/session"
 import { SessionPrompt } from "../../../src/session/prompt"
 import { tmpdir, trustProject } from "../../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../../fixture/stress-provider"
 
-/** A model that asks for corrected files until told no one is there, then delivers. */
-function server() {
+/** A model that asks for corrected files until told no one is there, then
+ * delivers. Given a `path`, it reads that file before asking. */
+function server(options: { path?: string } = {}) {
   const requests: Array<{ messages: Array<{ role: string; content: unknown }> }> = []
   const chunk = (delta: object, finish: string | null) =>
     `data: ${JSON.stringify({
@@ -99,6 +125,26 @@ function server() {
       if (!conversation.includes("Methods and deliverables")) return reply("title")
       if (conversation.includes("No one is available to answer in this run"))
         return reply("Proceeding on the supplied inputs as they are; the assumption is recorded in the report.")
+      if (options.path && !conversation.includes("call_inspect"))
+        return new Response(
+          chunk(
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_inspect",
+                  type: "function",
+                  function: { name: "read", arguments: JSON.stringify({ filePath: options.path }) },
+                },
+              ],
+            },
+            null,
+          ) +
+            chunk({}, "tool_calls") +
+            "data: [DONE]\n\n",
+          { headers: { "content-type": "text/event-stream" } },
+        )
       return reply("The supplied input and the cached reference disagree. Please upload the corrected input files.")
     },
   })
@@ -128,6 +174,8 @@ describe("UnattendedUnit in the loop", () => {
             (part) => part.type === "text" && part.synthetic && part.text.includes("No one is available"),
           )
           expect(answer).toBeDefined()
+          // It asked before calling any tool, so the message also allows for there being no task.
+          expect(answer?.type === "text" && answer.text).toBe(Unattended.renderUnstarted())
           const texts = parts
             .filter((part) => part.type === "text")
             .map((part) => (part.type === "text" ? part.text : ""))
@@ -137,6 +185,38 @@ describe("UnattendedUnit in the loop", () => {
           expect(
             fixture.requests.some((request) => JSON.stringify(request.messages).includes("No one is available")),
           ).toBe(true)
+        },
+      })
+    } finally {
+      fixture.instance.stop(true)
+    }
+  })
+
+  test("a turn that worked before asking is told to deliver on the inputs", async () => {
+    const inspect = { path: "" }
+    const fixture = server(inspect)
+    try {
+      await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+      inspect.path = path.join(tmp.path, "records.txt")
+      await Bun.write(inspect.path, "record 1\n")
+      await Instance.provide({
+        directory: tmp.path,
+        init: trustProject,
+        fn: async () => {
+          const session = await Session.create({ workspace: "project" })
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            delegationSettings: { level: "standard", autonomy: "autonomous" },
+            parts: [{ type: "text", text: "Annotate the supplied records and write the report." }],
+          })
+          const parts = (await Session.messages({ sessionID: session.id })).flatMap((message) => message.parts)
+          expect(parts.some((part) => part.type === "tool" && part.tool === "read")).toBe(true)
+          const answer = parts.find(
+            (part) => part.type === "text" && part.synthetic && part.text.includes("No one is available"),
+          )
+          expect(answer?.type === "text" && answer.text).toBe(Unattended.render())
         },
       })
     } finally {
