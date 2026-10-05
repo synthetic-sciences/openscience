@@ -102,6 +102,9 @@ never bump a version in a pull request, and add user-visible changes to the
 
 ## Conventions
 
+- Release notes credit external contributors only. Keep internal account and
+  display-name aliases in `tooling/repo/changelog.ts`; GitHub bot identities
+  are excluded automatically. Review generated notes before publication.
 - The repo bundles features into **patch** bumps unless a change is breaking;
   a feature release does not automatically imply a minor bump here.
 - `bump` accepts `patch`, `minor`, or `major`. A reviewed resume or retry may

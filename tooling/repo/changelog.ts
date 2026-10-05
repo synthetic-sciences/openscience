@@ -3,7 +3,19 @@
 import { $ } from "bun"
 import { parseArgs } from "util"
 
-const team = ["ishaan1124", "aayambansal", "openscience", "openscience-agent[bot]", "actions-user"]
+const team = [
+  "ishaan1124",
+  "aayambansal",
+  "KB",
+  "KB-syntheticsciences",
+  "syntheticsciences",
+  "synthetic-sciences",
+  "Synthetic Sciences",
+  "openscience",
+  "actions-user",
+  "github-actions",
+  "dependabot",
+]
 const teamAuthors = new Set([...team, "Ishaan Gangwani", "Aayam Bansal"].map((author) => author.toLowerCase()))
 const stableTag = /^v(\d+)\.(\d+)\.(\d+)$/
 const internalCommit = /^(?:ignore|test|chore|ci|release)(?:\([^)]*\))?!?:/i
@@ -125,7 +137,7 @@ function getSection(areas: Set<string>): string {
 }
 
 function isCommunityAuthor(author: string | null): author is string {
-  return !!author && !teamAuthors.has(author.toLowerCase())
+  return !!author && !teamAuthors.has(author.toLowerCase()) && !/\[bot\]$/i.test(author)
 }
 
 function humanize(message: string) {
