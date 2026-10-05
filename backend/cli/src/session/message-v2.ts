@@ -287,6 +287,10 @@ export namespace MessageV2 {
         provider: z.string(),
         model: z.string(),
         time: z.number(),
+        /** Client-minted id of the HTTP attempt that produced this step. */
+        call: z.string().optional(),
+        /** Atlas hold that reserved this step's Ace charge (managed route only). */
+        hold: z.string().optional(),
       })
       .optional(),
     /** Delivered speed when the provider reports it; otherwise the selected speed. */

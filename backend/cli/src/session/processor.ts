@@ -1022,7 +1022,7 @@ export namespace SessionProcessor {
               onTimeout: (error) => transport.abort(error),
             })
             output.pause(toolOutcomes.active())
-            const requestContext = {
+            const requestContext: Provider.RequestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
@@ -1262,6 +1262,10 @@ export namespace SessionProcessor {
                       provider: resolved.model.providerID,
                       model: resolved.model.id,
                       time: Date.now(),
+                      ...(requestContext.call && {
+                        call: requestContext.call.id,
+                        ...(requestContext.call.hold && { hold: requestContext.call.hold }),
+                      }),
                     },
                     tier: usage.tier,
                     tokens: usage.tokens,

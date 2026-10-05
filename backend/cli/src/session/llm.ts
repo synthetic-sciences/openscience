@@ -331,6 +331,7 @@ export namespace LLM {
           duration: performance.now() - started,
           content: { parts: step.content, toolResults: step.toolResults },
           finish: step.finishReason,
+          call: Provider.currentCall(),
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {
