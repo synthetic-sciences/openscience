@@ -411,8 +411,11 @@ def calculate_tmb(vcf_path, target_bed=None, genome_size_mb=38.0,
             "classification": "Low",
             "nonsynonymous_count": 0,
             "total_variants": total_variants,
+            "passed_filters": 0,
+            "filtered_out": filtered_count,
             "covered_mb": covered_mb,
             "breakdown": {},
+            "top_mutated_genes": {},
         }
 
     # Count nonsynonymous

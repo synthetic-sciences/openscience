@@ -40,6 +40,7 @@ Usage:
 
 import os
 import json
+import re
 import argparse
 from typing import Optional, List, Dict, Any, Union
 
@@ -49,6 +50,31 @@ from huggingface_hub import HfApi
 
 # Configuration
 HF_TOKEN = os.environ.get("HF_TOKEN")
+
+def _substitute_data_placeholder(sql: str, hf_path: str) -> str:
+    """Resolve bare FROM/JOIN data tokens without rewriting quoted SQL or comments."""
+    # DuckDB token offsets are UTF-8 byte offsets, not Python character offsets.
+    source = sql.encode("utf-8")
+    tokens = duckdb.tokenize(sql)
+    replacements = []
+    for index, (offset, kind) in enumerate(tokens):
+        if index == 0 or kind not in (duckdb.token_type.keyword, duckdb.token_type.identifier):
+            continue
+        word = re.match(rb"[\w$\x80-\xff]+", source[offset:])
+        if not word or word.group().lower() != b"data":
+            continue
+        previous, previous_kind = tokens[index - 1]
+        keyword = re.match(rb"[\w$\x80-\xff]+", source[previous:])
+        if previous_kind != duckdb.token_type.keyword or not keyword or keyword.group().lower() not in (b"from", b"join"):
+            continue
+        following = source[tokens[index + 1][0]:] if index + 1 < len(tokens) else b""
+        if following.startswith((b".", b"(")):
+            continue
+        replacements.append(offset)
+    replacement = ("'" + hf_path.replace("'", "''") + "'").encode("utf-8")
+    for offset in reversed(replacements):
+        source = source[:offset] + replacement + source[offset + 4:]
+    return source.decode("utf-8")
 
 
 class HFDatasetSQL:
@@ -124,16 +150,12 @@ class HFDatasetSQL:
         # Build the HF path
         hf_path = self._build_hf_path(dataset_id, split=split, config=config)
 
-        # Replace 'data' placeholder with actual path
-        # Handle various SQL patterns
-        processed_sql = sql.replace("FROM data", f"FROM '{hf_path}'")
-        processed_sql = processed_sql.replace("from data", f"FROM '{hf_path}'")
-        processed_sql = processed_sql.replace("JOIN data", f"JOIN '{hf_path}'")
-        processed_sql = processed_sql.replace("join data", f"JOIN '{hf_path}'")
-
-        # If user provides raw path, use as-is
-        if "hf://" in sql:
-            processed_sql = sql
+        # Replace 'data' placeholder with actual path. A query that already
+        # names a full hf:// path needs no special case: the placeholder
+        # pattern cannot match a quoted path, so such a query is passed
+        # through intact while an unrelated 'hf://' elsewhere in the text
+        # (a string literal, say) no longer discards the substitution.
+        processed_sql = _substitute_data_placeholder(sql, hf_path)
 
         # Apply limit if specified and not already in query
         if limit and "LIMIT" not in processed_sql.upper():
@@ -437,8 +459,7 @@ class HFDatasetSQL:
 
         if sql:
             # Process the query
-            processed_sql = sql.replace("FROM data", f"FROM '{hf_path}'")
-            processed_sql = processed_sql.replace("from data", f"FROM '{hf_path}'")
+            processed_sql = _substitute_data_placeholder(sql, hf_path)
         else:
             processed_sql = f"SELECT * FROM '{hf_path}'"
 

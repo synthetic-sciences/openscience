@@ -16,6 +16,7 @@ Version: 2.0.0
 
 Usage:
     uv run dataset_manager.py init --repo_id username/dataset-name
+    uv run dataset_manager.py init --repo_id username/dataset-name --public
     uv run dataset_manager.py quick_setup --repo_id username/dataset-name --template chat
     uv run dataset_manager.py add_rows --repo_id username/dataset-name --rows_json '[{"messages": [...]}]'
     uv run dataset_manager.py stats --repo_id username/dataset-name
@@ -26,6 +27,7 @@ import os
 import json
 import time
 import argparse
+import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from huggingface_hub import HfApi, create_repo
@@ -117,7 +119,22 @@ def validate_by_template(rows: List[Dict[str, Any]], template: Dict[str, Any]) -
     recommended_fields = set(schema.get("recommended_fields", []))
     field_types = schema.get("field_types", {})
 
+    # Every template the CLI advertises needs a structural validator here, or
+    # its rows are only checked for field presence. `custom` is deliberately
+    # absent: it is the escape hatch where the caller defines the shape, so
+    # there is no structure to enforce beyond its declared `data` field.
+    template_type = template.get("type")
+    validator = _TEMPLATE_VALIDATORS.get(template_type)
+    if validator is None and template_type != "custom":
+        print(
+            f"⚠️ No structural validator for template type '{template_type}'. "
+            "Only the declared required and typed fields were checked."
+        )
+
     for i, row in enumerate(rows):
+        if not isinstance(row, dict):
+            print(f"Row {i}: Must be a dictionary/object")
+            return False
         # Check required fields
         if not all(field in row for field in required_fields):
             missing = required_fields - set(row.keys())
@@ -131,27 +148,27 @@ def validate_by_template(rows: List[Dict[str, Any]], template: Dict[str, Any]) -
                     return False
 
         # Template-specific validation
-        if template["type"] == "chat":
-            if not _validate_chat_format(row, i):
-                return False
-        elif template["type"] == "classification":
-            if not _validate_classification_format(row, i):
-                return False
-        elif template["type"] == "tabular":
-            if not _validate_tabular_format(row, i):
-                return False
+        if validator is not None and not validator(row, i):
+            return False
 
         # Warn about missing recommended fields
         missing_recommended = recommended_fields - set(row.keys())
         if missing_recommended:
             print(f"Row {i}: Recommended to include: {missing_recommended}")
 
-    print(f"✓ Validated {len(rows)} examples for {template['type']} dataset")
+    print(f"✓ Validated {len(rows)} examples for {template_type} dataset")
     return True
 
 
 def _validate_field_type(value: Any, expected_type: str, context: str) -> bool:
     """Validate individual field type."""
+    if "|" in expected_type:
+        types = {"string": str, "array": list, "object": dict, "number": (int, float)}
+        choices = [types[name.strip()] for name in expected_type.split("|") if name.strip() in types]
+        if not any(isinstance(value, choice) for choice in choices):
+            print(f"{context}: Expected {expected_type}, got {type(value).__name__}")
+            return False
+        return True
     if expected_type.startswith("enum:"):
         valid_values = expected_type[5:].split(",")
         if value not in valid_values:
@@ -229,6 +246,56 @@ def _validate_tabular_format(row: Dict[str, Any], row_index: int) -> bool:
     return True
 
 
+def _validate_qa_format(row: Dict[str, Any], row_index: int) -> bool:
+    """
+    Validate qa-specific format.
+
+    The template declares `answer` as "string|array", a union the generic
+    field_types pass cannot check, so both shapes are enforced here.
+    """
+    question = row.get("question")
+    if not isinstance(question, str) or not question.strip():
+        print(f"Row {row_index}: 'question' must be a non-empty string")
+        return False
+
+    answer = row.get("answer")
+    if isinstance(answer, str):
+        if not answer.strip():
+            print(f"Row {row_index}: 'answer' must not be empty")
+            return False
+    elif isinstance(answer, list):
+        if not answer or not all(isinstance(item, str) and item.strip() for item in answer):
+            print(f"Row {row_index}: 'answer' list must hold non-empty strings")
+            return False
+    else:
+        print(f"Row {row_index}: 'answer' must be a string or a list of strings")
+        return False
+
+    return True
+
+
+def _validate_completion_format(row: Dict[str, Any], row_index: int) -> bool:
+    """Validate completion-specific format."""
+    for field in ("prompt", "completion"):
+        value = row.get(field)
+        if not isinstance(value, str) or not value.strip():
+            print(f"Row {row_index}: '{field}' must be a non-empty string")
+            return False
+
+    return True
+
+
+# Every template offered by `--template` that has a fixed structure. `custom`
+# is intentionally not listed: the caller defines its own shape.
+_TEMPLATE_VALIDATORS = {
+    "chat": _validate_chat_format,
+    "classification": _validate_classification_format,
+    "tabular": _validate_tabular_format,
+    "qa": _validate_qa_format,
+    "completion": _validate_completion_format,
+}
+
+
 def validate_training_data(rows: List[Dict[str, Any]], template_name: str = "chat") -> bool:
     """
     Validate training data structure according to template.
@@ -259,7 +326,7 @@ def add_rows(
     validate: bool = True,
     template: str = "chat",
     token: Optional[str] = None,
-) -> None:
+) -> bool:
     """
     Stream updates to the dataset by uploading a new chunk of rows.
     Enhanced with validation for multiple dataset types.
@@ -271,17 +338,22 @@ def add_rows(
         validate: Whether to validate data structure before upload
         template: Dataset template type (chat, classification, qa, completion, tabular, custom)
         token: HuggingFace API token
+
+    Returns:
+        True when the rows were committed (or there was nothing to add), and
+        False when validation rejected them or the upload failed. Callers that
+        drive this from a shell or CI use this to pick an exit status.
     """
     api = HfApi(token=token)
 
     if not rows:
         print("No rows to add.")
-        return
+        return True
 
     # Validate training data structure
     if validate and not validate_training_data(rows, template):
         print("❌ Validation failed. Use --no-validate to skip validation.")
-        return
+        return False
 
     # Create a newline-delimited JSON string
     jsonl_content = "\n".join(json.dumps(row) for row in rows)
@@ -299,9 +371,10 @@ def add_rows(
             commit_message=f"Add {len(rows)} rows to {split} split",
         )
         print(f"✅ Added {len(rows)} rows to {repo_id} (split: {split})")
+        return True
     except Exception as e:
         print(f"❌ Upload failed: {e}")
-        return
+        return False
 
 
 def load_template(template_name: str = "system_prompt_template.txt") -> str:
@@ -314,7 +387,7 @@ def load_template(template_name: str = "system_prompt_template.txt") -> str:
         return ""
 
 
-def quick_setup(repo_id: str, template_type: str = "chat", token: Optional[str] = None) -> None:
+def quick_setup(repo_id: str, template_type: str = "chat", token: Optional[str] = None) -> bool:
     """
     Quick setup for different dataset types using templates.
 
@@ -329,7 +402,7 @@ def quick_setup(repo_id: str, template_type: str = "chat", token: Optional[str] 
     template_config = load_dataset_template(template_type)
     if not template_config:
         print(f"❌ Could not load template '{template_type}'. Setup cancelled.")
-        return
+        return False
 
     # Initialize repository
     init_dataset(repo_id, token=token, private=True)
@@ -342,7 +415,8 @@ def quick_setup(repo_id: str, template_type: str = "chat", token: Optional[str] 
     # Add template examples
     examples = template_config.get("examples", [])
     if examples:
-        add_rows(repo_id, examples, template=template_type, token=token)
+        if not add_rows(repo_id, examples, template=template_type, token=token):
+            return False
         print(f"✅ Added {len(examples)} example(s) from template")
 
     print(f"✅ Quick setup complete for {repo_id}")
@@ -355,6 +429,7 @@ def quick_setup(repo_id: str, template_type: str = "chat", token: Optional[str] 
     )
     print(f"2. View stats: python scripts/dataset_manager.py stats --repo_id {repo_id}")
     print(f"3. Explore at: https://huggingface.co/datasets/{repo_id}")
+    return True
 
 
 def show_stats(repo_id: str, token: Optional[str] = None) -> None:
@@ -429,7 +504,23 @@ if __name__ == "__main__":
     # Init command
     init_parser = subparsers.add_parser("init", help="Initialize a new dataset")
     init_parser.add_argument("--repo_id", required=True, help="Repository ID (user/repo_name)")
-    init_parser.add_argument("--private", action="store_true", help="Make repository private")
+    # Repositories are private unless --public is passed. --private is kept so
+    # existing callers keep working; it is now the default rather than the only
+    # way to get a private repository.
+    visibility = init_parser.add_mutually_exclusive_group()
+    visibility.add_argument(
+        "--private",
+        dest="private",
+        action="store_true",
+        default=None,
+        help="Create a private repository (the default)",
+    )
+    visibility.add_argument(
+        "--public",
+        dest="private",
+        action="store_false",
+        help="Create a public repository",
+    )
 
     # Config command
     config_parser = subparsers.add_parser("config", help="Setup dataset config")
@@ -496,7 +587,10 @@ if __name__ == "__main__":
         print("Warning: HF_TOKEN environment variable not set.")
 
     if args.command == "init":
-        init_dataset(args.repo_id, token=token, private=args.private)
+        # An unset flag means no preference, so fall back to init_dataset's own
+        # private-by-default rather than reading absence as "publish me".
+        private = True if args.private is None else args.private
+        init_dataset(args.repo_id, token=token, private=private)
     elif args.command == "config":
         define_config(args.repo_id, system_prompt=args.system_prompt, token=token)
     elif args.command == "add_rows":
@@ -504,18 +598,23 @@ if __name__ == "__main__":
             rows = json.loads(args.rows_json)
             if not isinstance(rows, list):
                 raise ValueError("rows_json must be a JSON list of objects")
-            add_rows(
+            if not add_rows(
                 args.repo_id,
                 rows,
                 split=args.split,
                 template=args.template,
                 validate=args.validate,
                 token=token,
-            )
+            ):
+                # The rows were not committed. Exit non-zero so a script or CI
+                # step does not read the "Upload failed" line above as success.
+                sys.exit(1)
         except json.JSONDecodeError:
             print("Error: Invalid JSON provided for --rows_json")
+            sys.exit(1)
     elif args.command == "quick_setup":
-        quick_setup(args.repo_id, template_type=args.template, token=token)
+        if not quick_setup(args.repo_id, template_type=args.template, token=token):
+            sys.exit(1)
     elif args.command == "stats":
         show_stats(args.repo_id, token=token)
     elif args.command == "list_templates":

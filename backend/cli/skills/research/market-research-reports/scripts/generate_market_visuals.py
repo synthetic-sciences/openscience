@@ -26,8 +26,7 @@ from pathlib import Path
 
 
 # Visual definitions with prompts
-# Each tuple: (filename, tool, prompt_template, is_core)
-# is_core=True for the 5-6 essential visuals to generate first
+# Each tuple: (filename, tool, prompt_template)
 
 CORE_VISUALS = [
     # Priority 1: Market Growth Trajectory
@@ -103,7 +102,6 @@ EXTENDED_VISUALS = [
     # Regional Breakdown
     (
         "08_regional_breakdown.png",
-        "scientific-schematics",
         "scientific-schematics",
         "Pie chart regional market breakdown for {topic}. North America 40% dark blue, "
         "Europe 28% medium blue, Asia-Pacific 22% teal, Latin America 6% light blue, "
@@ -410,7 +408,10 @@ def main():
     # Filter visuals if --only specified
     if args.only:
         pattern = args.only.lower()
-        visuals_to_generate = [v for v in VISUALS if pattern in v[0].lower() or pattern in v[2].lower()]
+        visuals_to_generate = [
+            v for v in visuals_to_generate
+            if pattern in v[0].lower() or pattern in v[2].lower()
+        ]
         print(f"Filtered to {len(visuals_to_generate)} visuals matching '{args.only}'\n")
 
     if args.dry_run:

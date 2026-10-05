@@ -81,6 +81,8 @@ file.**
 
 ---
 
+New repositories created by `dataset_manager.py init` are private by default. Pass `--public` to publish a new repository; `--private` remains accepted. `add_rows` and `quick_setup` return a nonzero exit status if validation or an upload fails, so automation should check their exit status before proceeding.
+
 # SQL Dataset Querying (sql_manager.py)
 
 Query, transform, and push Hugging Face datasets using DuckDB SQL. The `hf://` protocol provides direct access to any public dataset (or private with token).
@@ -337,7 +339,7 @@ get_dataset_details("username/dataset-name")
 **2. Creation (Use This Skill):**
 ```bash
 # Initialize new dataset
-uv run scripts/dataset_manager.py init --repo_id "your-username/dataset-name" [--private]
+uv run scripts/dataset_manager.py init --repo_id "your-username/dataset-name" [--private | --public]
 
 # Configure with detailed system prompt
 uv run scripts/dataset_manager.py config --repo_id "your-username/dataset-name" --system_prompt "$(cat system_prompt.txt)"
@@ -480,7 +482,7 @@ uv run scripts/dataset_manager.py quick_setup --repo_id "your-username/dataset-n
 **Manual Setup:**
 ```bash
 # Initialize repository
-uv run scripts/dataset_manager.py init --repo_id "your-username/dataset-name" [--private]
+uv run scripts/dataset_manager.py init --repo_id "your-username/dataset-name" [--private | --public]
 
 # Configure with system prompt
 uv run scripts/dataset_manager.py config --repo_id "your-username/dataset-name" --system_prompt "Your prompt here"

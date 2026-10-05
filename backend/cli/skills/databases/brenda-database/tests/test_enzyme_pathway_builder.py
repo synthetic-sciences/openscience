@@ -70,3 +70,21 @@ def test_a_generic_result_is_not_offered_as_a_transformation():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_fallback_queries_reach_both_pathway_builders(monkeypatch):
+    import brenda_client
+
+    def query(method, **filters):
+        if method == "getReaction" and filters.get("reaction") in ("*phosphorylation*", "*oxidation*"):
+            return ["ecNumber*2.7.1.1#organism*Fixture#reaction*precursor = product"]
+        return []
+
+    monkeypatch.setattr(brenda_client, "_query", query)
+    monkeypatch.setattr(epb.time, "sleep", lambda _: None)
+    enzymes = epb.find_enzymes_for_transformation("glucose", "glucose-6-phosphate")
+    assert enzymes and enzymes[0]["ec_number"] == "2.7.1.1"
+    assert enzymes[0]["confidence"] == "low"
+    tree = epb.build_retrosynthetic_tree("unobtainium", depth=2)
+    assert "precursor_oxidation_unobtainium" in tree["nodes"]
+    assert tree["total_edges"] > 0
