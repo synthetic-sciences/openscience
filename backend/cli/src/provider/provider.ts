@@ -27,6 +27,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { MANAGED_OPENROUTER_MODEL_SET, managedModelDetails } from "./managed-catalog"
 import { managedModelRoute } from "./managed-routing"
 import { ManagedPricing } from "./managed-pricing"
+import { CallLink } from "./call-link"
 import { gatewayTiming, type GatewayTiming } from "./gateway-timing"
 
 // Direct imports for bundled providers
@@ -105,6 +106,9 @@ export namespace Provider {
     abort?: AbortSignal
     /** Actual fetch dispatch, after local request and credential preparation. */
     onRequest?: () => void
+    /** Written by the fetch watchdog after each response: the attempt's call id
+     * and, on the managed route, the Atlas hold that reserved it. */
+    call?: { id: string; hold?: string }
   }
 
   export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> &
@@ -223,6 +227,11 @@ export namespace Provider {
 
   export function withRequestContext<T>(context: RequestContext, run: () => T): T {
     return requestContext.run(context, run)
+  }
+
+  /** The latest attempt's call identity for the active request, if any. */
+  export function currentCall() {
+    return requestContext.getStore()?.call
   }
 
   /** Keep the request context active for every lazy `next()` call. AI SDK
@@ -487,12 +496,13 @@ export namespace Provider {
         ? undefined
         : setTimeout(() => idleController.abort(new RequestTimeoutError("total", total)), total).unref()
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
+    const call = crypto.randomUUID()
     const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
       sessionID: context.sessionID,
       messageID: context.messageID,
       attempt: context.attempt,
       ...(context.agent && { agent: context.agent }),
-      requestID: crypto.randomUUID(),
+      requestID: call,
       providerID: options.providerID,
       modelID: requestModel(init?.body) ?? context.modelID ?? options.modelID,
       idleTimeoutMs,
@@ -520,7 +530,16 @@ export namespace Provider {
     try {
       response = await waitForActivity({
         run: () => {
-          const fetchInit = { ...(init ?? {}), signal }
+          const fetchInit = {
+            ...(init ?? {}),
+            signal,
+            ...(options.managed && {
+              headers: CallLink.headers(
+                init?.headers ?? (fetchInput instanceof Request ? fetchInput.headers : undefined),
+                { call, sessionID: context.sessionID, messageID: context.messageID, attempt: context.attempt },
+              ),
+            }),
+          }
           // Bun's native fetch accepts this runtime option even though its
           // current BunFetchRequestInit declaration omits it.
           ;(fetchInit as BunFetchRequestInit & { timeout: false }).timeout = false
@@ -537,6 +556,9 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
+      const store = requestContext.getStore()
+      const hold = options.managed ? CallLink.hold(response.headers) : undefined
+      if (store) store.call = hold ? { id: call, hold } : { id: call }
       if (options.managed) Object.assign(timing, gatewayTiming(response.headers))
       log.info("request response", {
         sessionID: timing.sessionID,

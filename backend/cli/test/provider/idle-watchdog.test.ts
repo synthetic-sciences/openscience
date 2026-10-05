@@ -79,7 +79,7 @@ function watched(
   init?: BunFetchRequestInit,
 ) {
   const timings: Provider.RequestTiming[] = []
-  const response = Provider.withRequestContext(context, () =>
+  const response = Provider.withRequestContext({ ...context }, () =>
     Provider.fetchWithIdleWatchdog(fetchFn, "https://provider.test/v1/responses", init, {
       providerID: "test-provider",
       modelID: "test-model",
