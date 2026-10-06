@@ -12,7 +12,8 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
       if (error instanceof Storage.NotFoundError) return undefined
       throw error
     })
-    if (!session || session.time.updated < start) continue
+    // A record without an id (legacy or corrupt) has no messages to list.
+    if (!session?.id || session.time.updated < start) continue
     const keys = await Storage.list(["message", session.id])
     for (let offset = 0; offset < keys.length; offset += 32) {
       const messages = await Promise.all(
@@ -24,7 +25,7 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
         ),
       )
       for (const message of messages) {
-        if (!message || message.role !== "assistant") continue
+        if (!message?.id || message.role !== "assistant") continue
         // Forks copy their transcript. Only calls made after this session was
         // created belong to it; inherited history must not be counted again.
         if (message.time.created < session.time.created || message.time.created >= end) continue
