@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Preserve distinct tokens at overlapping positions when reconstructing literature abstracts, without duplicating repeated postings or losing words at sparse positions.
+
 - Dataset helpers create private repositories by default with an explicit `--public` option, propagate failed uploads, validate QA/completion and union fields, and substitute SQL table placeholders without modifying quoted text or comments.
 - Restore BRENDA fallback enzyme queries, fix filtered and extended market-visual dry runs, and report zero TMB with accurate counts when every variant is filtered out.
 
