@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Settings → Usage no longer fails when a saved session or message record has no id; such records are skipped.
+
 - Dataset helpers create private repositories by default with an explicit `--public` option, propagate failed uploads, validate QA/completion and union fields, and substitute SQL table placeholders without modifying quoted text or comments.
 - Restore BRENDA fallback enzyme queries, fix filtered and extended market-visual dry runs, and report zero TMB with accurate counts when every variant is filtered out.
 
