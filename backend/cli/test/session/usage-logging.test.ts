@@ -750,10 +750,14 @@ describe("usage delivery", () => {
       call: { id: "7f3c1e9a-0000-4000-8000-000000000001", hold: "orgh_0123456789abcdef" },
     })
     await UsageLogging.flush()
-    expect(remote.batches[0].events[0].payload).toMatchObject({
-      call_id: "7f3c1e9a-0000-4000-8000-000000000001",
+    const payload = remote.batches[0].events[0].payload
+    // tool.* events use call_id for the model's tool-call id; the HTTP
+    // attempt gets its own key so the two never collide in a trace.
+    expect(payload).toMatchObject({
+      http_call_id: "7f3c1e9a-0000-4000-8000-000000000001",
       hold: "orgh_0123456789abcdef",
     })
+    expect(payload).not.toHaveProperty("call_id")
     expect(JSON.stringify(remote.batches)).not.toContain("private-conversation")
   })
 })

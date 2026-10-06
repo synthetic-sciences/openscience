@@ -106,9 +106,6 @@ export namespace Provider {
     abort?: AbortSignal
     /** Actual fetch dispatch, after local request and credential preparation. */
     onRequest?: () => void
-    /** Written by the fetch watchdog after each response: the attempt's call id
-     * and, on the managed route, the Atlas hold that reserved it. */
-    call?: { id: string; hold?: string }
   }
 
   export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> &
@@ -227,11 +224,6 @@ export namespace Provider {
 
   export function withRequestContext<T>(context: RequestContext, run: () => T): T {
     return requestContext.run(context, run)
-  }
-
-  /** The latest attempt's call identity for the active request, if any. */
-  export function currentCall() {
-    return requestContext.getStore()?.call
   }
 
   /** Keep the request context active for every lazy `next()` call. AI SDK
@@ -404,11 +396,11 @@ export namespace Provider {
     return "error"
   }
 
-  function copyResponse(response: Response, body: ReadableStream<Uint8Array>) {
+  function copyResponse(response: Response, body: ReadableStream<Uint8Array> | null, headers: Headers) {
     const monitored = new Response(body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers,
     })
     for (const property of ["url", "redirected", "type"] as const) {
       Object.defineProperty(monitored, property, { configurable: true, value: response[property] })
@@ -556,9 +548,6 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
-      const store = requestContext.getStore()
-      const hold = options.managed ? CallLink.hold(response.headers) : undefined
-      if (store) store.call = hold ? { id: call, hold } : { id: call }
       if (options.managed) Object.assign(timing, gatewayTiming(response.headers))
       log.info("request response", {
         sessionID: timing.sessionID,
@@ -577,12 +566,23 @@ export namespace Provider {
       throw connectFailure(error, signal)
     }
 
+    // The response carries its own call identity (and, on the managed route,
+    // the validated hold), so a step reads the attempt that produced it even
+    // when the SDK has already started the next step's fetch.
+    const linked = CallLink.responseHeaders(response.headers, {
+      call,
+      hold: options.managed ? CallLink.hold(response.headers) : undefined,
+    })
     // Response.error()/opaque responses use status 0, which the Response
     // constructor forbids. They do not expose a consumable network body, so
     // preserve the original object rather than attempting to wrap it.
-    if (!response.body || response.status === 0) {
+    if (response.status === 0) {
       emit("completed")
       return response
+    }
+    if (!response.body) {
+      emit("completed")
+      return copyResponse(response, null, linked)
     }
 
     const reader = response.body.getReader()
@@ -646,7 +646,7 @@ export namespace Provider {
         cancelReader(reason)
       },
     })
-    return copyResponse(response, body)
+    return copyResponse(response, body, linked)
   }
 
   // Models exposed by the ChatGPT / Codex OAuth transport. Keep the dot and

@@ -23,6 +23,7 @@ import type { CredentialSource } from "./access-route"
 import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
 import { ManagedPricing } from "@/provider/managed-pricing"
+import { CallLink } from "@/provider/call-link"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
@@ -1022,7 +1023,7 @@ export namespace SessionProcessor {
               onTimeout: (error) => transport.abort(error),
             })
             output.pause(toolOutcomes.active())
-            const requestContext: Provider.RequestContext = {
+            const requestContext = {
               sessionID: input.sessionID,
               messageID: input.assistantMessage.id,
               attempt: attempt + 1,
@@ -1230,10 +1231,10 @@ export namespace SessionProcessor {
                 }
 
                 case "finish-step":
-                  // Read the call before any await: in a multi-step tool
-                  // stream the SDK may start the next step's fetch while this
-                  // step awaits, which replaces requestContext.call.
-                  const stepCall = requestContext.call
+                  // The call and hold travel on this step's own response: in
+                  // a multi-step tool stream the SDK may already be fetching
+                  // the next step, so shared request state would name it.
+                  const stepCall = CallLink.fromResponse(value.response?.headers)
                   const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
                     model: resolved.model,

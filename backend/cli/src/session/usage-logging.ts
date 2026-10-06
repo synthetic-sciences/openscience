@@ -250,7 +250,7 @@ export namespace UsageLogging {
     return event(input, "model.response", {
       ...reported(input.usage, input.metadata),
       duration_ms: input.duration,
-      ...(input.call && { call_id: input.call.id, ...(input.call.hold && { hold: input.call.hold }) }),
+      ...(input.call && { http_call_id: input.call.id, ...(input.call.hold && { hold: input.call.hold }) }),
       ...(input.content === undefined ? {} : { content: input.content }),
       ...(input.finish === undefined ? {} : { finish: input.finish }),
     })
