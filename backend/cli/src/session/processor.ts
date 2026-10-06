@@ -1230,6 +1230,10 @@ export namespace SessionProcessor {
                 }
 
                 case "finish-step":
+                  // Read the call before any await: in a multi-step tool
+                  // stream the SDK may start the next step's fetch while this
+                  // step awaits, which replaces requestContext.call.
+                  const stepCall = requestContext.call
                   const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
                     model: resolved.model,
@@ -1262,9 +1266,9 @@ export namespace SessionProcessor {
                       provider: resolved.model.providerID,
                       model: resolved.model.id,
                       time: Date.now(),
-                      ...(requestContext.call && {
-                        call: requestContext.call.id,
-                        ...(requestContext.call.hold && { hold: requestContext.call.hold }),
+                      ...(stepCall && {
+                        call: stepCall.id,
+                        ...(stepCall.hold && { hold: stepCall.hold }),
                       }),
                     },
                     tier: usage.tier,

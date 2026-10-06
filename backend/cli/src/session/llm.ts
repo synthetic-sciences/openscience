@@ -323,6 +323,8 @@ export namespace LLM {
         await capture("assistant.message", { ...partial, interrupted: true })
       },
       async onStepFinish(step) {
+        // Capture before any await so the next step's fetch cannot replace it.
+        const call = Provider.currentCall()
         if (!binding) return
         await UsageLogging.record({
           ...binding,
@@ -331,7 +333,7 @@ export namespace LLM {
           duration: performance.now() - started,
           content: { parts: step.content, toolResults: step.toolResults },
           finish: step.finishReason,
-          call: Provider.currentCall(),
+          call,
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {
