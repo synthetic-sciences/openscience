@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Point the plotly and neuropixels-analysis skills at their `references/` guides; their links named a `reference/` folder that does not exist.
+
 - Preserve distinct tokens at overlapping positions when reconstructing literature abstracts, without duplicating repeated postings or losing words at sparse positions.
 
 - Dataset helpers create private repositories by default with an explicit `--public` option, propagate failed uploads, validate QA/completion and union fields, and substitute SQL table placeholders without modifying quoted text or comments.
