@@ -51,7 +51,7 @@ For quick, standard visualizations with sensible defaults:
 - Need automatic color encoding and legends
 - Want minimal code (1-5 lines)
 
-See [reference/plotly-express.md](reference/plotly-express.md) for complete guide.
+See [references/plotly-express.md](references/plotly-express.md) for complete guide.
 
 ### Use Graph Objects (go)
 For fine-grained control and custom visualizations:
@@ -60,7 +60,7 @@ For fine-grained control and custom visualizations:
 - Need precise control over individual components
 - Creating specialized visualizations with custom shapes and annotations
 
-See [reference/graph-objects.md](reference/graph-objects.md) for complete guide.
+See [references/graph-objects.md](references/graph-objects.md) for complete guide.
 
 **Note:** Plotly Express returns graph objects Figure, so you can combine approaches:
 ```python
@@ -89,7 +89,7 @@ Plotly supports 40+ chart types organized into categories:
 
 **Specialized:** sunburst, treemap, sankey, parallel coordinates, gauge
 
-For detailed examples and usage of all chart types, see [reference/chart-types.md](reference/chart-types.md).
+For detailed examples and usage of all chart types, see [references/chart-types.md](references/chart-types.md).
 
 ### 2. Layouts and Styling
 
@@ -116,7 +116,7 @@ fig = px.scatter(df, x='x', y='y', template='plotly_dark')
 - Margins and sizing
 - Annotations and shapes
 
-For complete layout and styling options, see [reference/layouts-styling.md](reference/layouts-styling.md).
+For complete layout and styling options, see [references/layouts-styling.md](references/layouts-styling.md).
 
 ### 3. Interactivity
 
@@ -142,7 +142,7 @@ fig.update_xaxes(rangeslider_visible=True)
 fig = px.scatter(df, x='x', y='y', animation_frame='year')
 ```
 
-For complete interactivity guide, see [reference/export-interactivity.md](reference/export-interactivity.md).
+For complete interactivity guide, see [references/export-interactivity.md](references/export-interactivity.md).
 
 ### 4. Export Options
 
@@ -163,7 +163,7 @@ fig.write_image('chart.pdf')   # PDF
 fig.write_image('chart.svg')   # SVG
 ```
 
-For complete export options, see [reference/export-interactivity.md](reference/export-interactivity.md).
+For complete export options, see [references/export-interactivity.md](references/export-interactivity.md).
 
 ## Common Workflows
 
@@ -262,11 +262,11 @@ app.run_server(debug=True)
 
 ## Reference Files
 
-- **[plotly-express.md](reference/plotly-express.md)** - High-level API for quick visualizations
-- **[graph-objects.md](reference/graph-objects.md)** - Low-level API for fine-grained control
-- **[chart-types.md](reference/chart-types.md)** - Complete catalog of 40+ chart types with examples
-- **[layouts-styling.md](reference/layouts-styling.md)** - Subplots, templates, colors, customization
-- **[export-interactivity.md](reference/export-interactivity.md)** - Export options and interactive features
+- **[plotly-express.md](references/plotly-express.md)** - High-level API for quick visualizations
+- **[graph-objects.md](references/graph-objects.md)** - Low-level API for fine-grained control
+- **[chart-types.md](references/chart-types.md)** - Complete catalog of 40+ chart types with examples
+- **[layouts-styling.md](references/layouts-styling.md)** - Subplots, templates, colors, customization
+- **[export-interactivity.md](references/export-interactivity.md)** - Export options and interactive features
 
 ## Additional Resources
 
