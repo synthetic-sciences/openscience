@@ -53,7 +53,7 @@
         "@synsci/plugin": "workspace:*",
         "@synsci/sdk": "workspace:*",
         "@synsci/util": "workspace:*",
-        "@zip.js/zip.js": "2.7.62",
+        "@zip.js/zip.js": "2.23.0",
         "ai": "catalog:",
         "bun-pty": "0.4.10",
         "decimal.js": "10.5.0",
@@ -1054,7 +1054,7 @@
 
     "@xmldom/xmldom": ["@xmldom/xmldom@0.8.15", "", {}, "sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA=="],
 
-    "@zip.js/zip.js": ["@zip.js/zip.js@2.7.62", "", {}, "sha512-OaLvZ8j4gCkLn048ypkZu29KX30r8/OfFF2w4Jo5WXFr+J04J+lzJ5TKZBVgFXhlvSkqNFQdfnY1Q8TMTCyBVA=="],
+    "@zip.js/zip.js": ["@zip.js/zip.js@2.23.0", "", {}, "sha512-K5obAqfrO7zhycnCupM9aaoZ9kx0SA0kv7+Z2oOUsdpWquv4s/Z4zyD7AdTqxrK3pgPM+ozaUi8kdRQbCWaIrQ=="],
 
     "abbrev": ["abbrev@4.0.0", "", {}, "sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA=="],
 
