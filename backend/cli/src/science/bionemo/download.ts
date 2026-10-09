@@ -1,4 +1,4 @@
-import { Uint8ArrayReader, ZipReader, type Entry } from "@zip.js/zip.js"
+import { Uint8ArrayReader, ZipReader, type Entry, type FileEntry } from "@zip.js/zip.js"
 import { Network } from "@/settings/network"
 
 const LIMIT = 25 * 1024 * 1024
@@ -99,12 +99,10 @@ export async function decodeBioNemoResult(bytes: Uint8Array, limit = LIMIT) {
         throw new Error(`NVIDIA result ZIP exceeds the ${limit}-byte capture limit`)
       entries.push(entry)
     }
-    const payloads = entries.filter((entry) => !entry.directory && entry.filename.endsWith(".response"))
-    const candidates = payloads.length
-      ? payloads
-      : entries.filter((entry) => !entry.directory && entry.filename.endsWith(".json"))
-    if (candidates.length !== 1 || !candidates[0].getData)
-      throw new Error("NVIDIA result ZIP must contain one JSON response payload")
+    const files = entries.filter((entry): entry is FileEntry => !entry.directory)
+    const payloads = files.filter((entry) => entry.filename.endsWith(".response"))
+    const candidates = payloads.length ? payloads : files.filter((entry) => entry.filename.endsWith(".json"))
+    if (candidates.length !== 1) throw new Error("NVIDIA result ZIP must contain one JSON response payload")
     const chunks: Uint8Array[] = []
     let size = 0
     await candidates[0].getData(
