@@ -194,7 +194,7 @@
         "@synsci/util": "workspace:*",
         "codemirror": "6.0.2",
         "ghostty-web": "0.3.0",
-        "igv": "^3.8.4",
+        "igv": "^3.8.9",
         "katex": "^0.17.0",
         "luxon": "catalog:",
         "molstar": "^5.12.0",
@@ -1506,7 +1506,7 @@
 
     "ignore": ["ignore@7.0.5", "", {}, "sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg=="],
 
-    "igv": ["igv@3.8.4", "", {}, "sha512-XtZzlYxtGMMEaOlpPAcZIdGCIJ1n9RrPjmQgze6KNWQnppjmdRfPUmB11JJrX4FmtUf0GavALtXzhyJoWV5x3Q=="],
+    "igv": ["igv@3.8.9", "", {}, "sha512-d+m5gPeMc8k1K9TaLP11WCKW5JXtyXxAbrcBgSPP1XEQrHBhijD4l3+ZJ1VH79JGzDJnfqf9DicljjSinMZO9g=="],
 
     "immutable": ["immutable@5.1.9", "", {}, "sha512-m8nVez3rwrgmWxtLMt1ZYXB2Lv7OKYn/disyxAlSDYAlKSlFoPPfIAmAM/M5xqL4m4C/wAPw7S2/CNaUii1Hxg=="],
 
