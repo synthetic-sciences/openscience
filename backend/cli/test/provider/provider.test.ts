@@ -165,6 +165,12 @@ test("Codex OAuth includes the exact GPT-6.1 Sol model without inventing adjacen
   }
 })
 
+test("Codex OAuth excludes API-only GPT-5.4 models", () => {
+  for (const id of ["gpt-5.4", "gpt-5-4", "gpt-5.4-mini", "gpt-5-4-mini"]) {
+    expect(Provider.isCodexOAuthModel(id)).toBe(false)
+  }
+})
+
 test("synthesized Codex OAuth models use Codex variants and preserve model-specific context", async () => {
   const previous = await Auth.get("openai-codex")
   await using tmp = await tmpdir({
@@ -225,13 +231,10 @@ test("synthesized Codex OAuth models use Codex variants and preserve model-speci
         expect(sol61.modes?.fast.cost).toBeUndefined()
         expect(providers.openai?.models[sol61.id].cost.input).toBe(2)
 
-        const codex54 = codex.models["gpt-5.4"]
-        expect(codex54.limit.context).toBe(1_050_000)
-        expect(Object.keys(codex54.variants ?? {})).toEqual(["low", "medium", "high", "xhigh"])
-        expect(Object.keys(codex54.modes ?? {})).toEqual(["fast"])
-        const mini = codex.models["gpt-5.4-mini"]
-        expect(mini.limit.context).toBe(400_000)
-        expect(mini.modes).toBeUndefined()
+        expect(codex.models["gpt-5.4"]).toBeUndefined()
+        expect(codex.models["gpt-5.4-mini"]).toBeUndefined()
+        expect(providers.openai?.models["gpt-5.4"]).toBeDefined()
+        expect(providers.openai?.models["gpt-5.4-mini"]).toBeDefined()
         expect(codex.name).toBe("OpenAI (Codex subscription)")
 
         const publicSol = providers.openai?.models["gpt-5.6-sol"]

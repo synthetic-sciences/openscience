@@ -264,7 +264,7 @@ describe("new model reasoning effort contracts", () => {
     expect(
       ProviderTransform.options({ model: codex("gpt-5.6-terra"), sessionID, providerOptions: {} }).reasoningEffort,
     ).toBe("medium")
-    expect(ProviderTransform.options({ model: codex("gpt-5.4"), sessionID, providerOptions: {} }).reasoningEffort).toBe(
+    expect(ProviderTransform.options({ model: codex("gpt-5.5"), sessionID, providerOptions: {} }).reasoningEffort).toBe(
       "medium",
     )
   })
@@ -289,7 +289,7 @@ describe("new model reasoning effort contracts", () => {
   })
 
   test("dash-normalized versioned GPT-5 Codex ids use a supported small-call effort", () => {
-    for (const id of ["gpt-5-6-sol", "gpt-5-6-terra", "gpt-5-6-luna", "gpt-5-5", "gpt-5-4", "gpt-5-4-mini"]) {
+    for (const id of ["gpt-5-6-sol", "gpt-5-6-terra", "gpt-5-6-luna", "gpt-5-5"]) {
       const codex = model({
         id,
         providerID: "openai-codex",
