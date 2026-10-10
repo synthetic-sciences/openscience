@@ -822,59 +822,44 @@ pre {
   }
 
   /* Install tabs -------------------------------------------------------- */
-  /* The hero's two badges, one height: YC drawn to match Product Hunt's
-     featured badge (250 x 54, dark). */
-  [data-slot="badges"] {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 32px;
-  }
+  /* The YC line above the headline: set in the page's own face, on the same
+     surface and hairline as the install box below it. */
   [data-slot="backed"] {
-    height: 54px;
+    align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: 12px;
-    padding: 0 20px 0 12px;
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    background: hsl(0, 0%, 11%);
-    color: var(--color-text-strong);
-    text-decoration: none;
-    font-family:
-      system-ui,
-      -apple-system,
-      "Segoe UI",
-      Helvetica,
-      Arial,
-      sans-serif;
-    -webkit-text-stroke: 0;
+    margin-bottom: 28px;
+    padding: 6px 16px 6px 6px;
+    border: 1px solid var(--color-border-weak);
+    border-radius: 6px;
+    background: var(--color-background-weak);
+    color: var(--color-text-weak);
+    font-size: var(--text-body);
     line-height: 1;
-    transition: border-color 120ms ease;
+    text-decoration: none;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
     &:hover {
-      border-color: var(--color-text-weak);
-      color: var(--color-text-strong);
+      border-color: var(--color-border);
+      background: var(--color-background-weak-hover);
+      color: var(--color-text-weak);
+    }
+    &:focus-visible {
+      outline: 1px solid var(--color-text-strong);
+      outline-offset: 2px;
     }
     [data-slot="yc"] {
-      width: 30px;
-      height: 30px;
+      flex: none;
+      width: 24px;
+      height: 24px;
       display: block;
-      border-radius: 5px;
+      border-radius: 4px;
     }
-    > span {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      font-size: 18px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-    small {
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+    strong {
+      font-weight: 400;
+      color: var(--color-text-strong);
     }
   }
 
@@ -882,15 +867,6 @@ pre {
     width: 100%;
     max-width: 100%;
     overflow: hidden;
-  }
-  [data-slot="product-hunt"] {
-    line-height: 0;
-    text-decoration: none;
-    img {
-      display: block;
-      width: 250px;
-      height: 54px;
-    }
   }
   [data-component="tabs"] {
     [data-slot="tablist"] {

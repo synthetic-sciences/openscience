@@ -61,14 +61,20 @@ export function raw(value: unknown): Record<string, unknown> {
 /** Reconstruct a plain abstract from OpenAlex's `abstract_inverted_index`. */
 export function fromInverted(index?: Record<string, number[]> | null): string | undefined {
   if (!index) return undefined
-  const words: string[] = []
+  // Preserve distinct tokens at overlapping positions without expanding sparse
+  // positions into an array or repeating duplicate postings for the same word.
+  const slots = new Map<number, Set<string>>()
   for (const word of Object.keys(index)) {
     for (const pos of index[word] ?? []) {
-      if (Number.isInteger(pos) && pos >= 0) words[pos] = word
+      if (!Number.isInteger(pos) || pos < 0) continue
+      const bucket = slots.get(pos)
+      if (bucket) bucket.add(word)
+      else slots.set(pos, new Set([word]))
     }
   }
-  const text = words
-    .filter((w) => w !== undefined)
+  const text = [...slots.keys()]
+    .sort((a, b) => a - b)
+    .map((pos) => [...slots.get(pos)!].join(" "))
     .join(" ")
     .trim()
   return text.length ? text : undefined

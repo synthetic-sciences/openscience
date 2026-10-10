@@ -211,30 +211,15 @@ export default function Landing() {
 
         <div data-component="content">
           <section data-component="hero">
-            <div data-slot="badges">
-              <a data-slot="backed" href={SYNTHETIC_SCIENCES} target="_blank" rel="noreferrer">
-                <svg data-slot="yc" viewBox="0 0 24 24" aria-hidden focusable="false">
-                  <rect width="24" height="24" fill="#F26625" />
-                  <path d="M7 5.5h2.6l2.4 4.7 2.4-4.7H17l-3.9 7.1v5.9h-2.2v-5.9z" fill="#fff" />
-                </svg>
-                <span>
-                  <small>Backed by</small>Y Combinator
-                </span>
-              </a>
-              <a
-                data-slot="product-hunt"
-                href="https://www.producthunt.com/products/openscience?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-openscience"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <img
-                  alt="OpenScience - The open-source AI workbench for scientific research | Product Hunt"
-                  width="250"
-                  height="54"
-                  src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1261821&theme=dark&t=1790483021568"
-                />
-              </a>
-            </div>
+            <a data-slot="backed" href={SYNTHETIC_SCIENCES} target="_blank" rel="noreferrer">
+              <svg data-slot="yc" viewBox="0 0 24 24" aria-hidden focusable="false">
+                <rect width="24" height="24" fill="#F26625" />
+                <path d="M7 5.5h2.6l2.4 4.7 2.4-4.7H17l-3.9 7.1v5.9h-2.2v-5.9z" fill="#fff" />
+              </svg>
+              <span>
+                Backed by <strong>Y Combinator</strong>
+              </span>
+            </a>
             <div data-slot="hero-copy">
               <h1>The open-source AI workbench for scientific research</h1>
               <p>
