@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Model calls now retain provider request IDs across managed, API-key, and ChatGPT subscription routes, and `openscience debug audit <session>` reports content-free call identities for a session and its workers.
+
 - Managed model steps record the HTTP call and Ace hold that produced them, making each charge auditable.
 
 - Settings → Usage no longer fails when a saved session or message record has no id; such records are skipped.

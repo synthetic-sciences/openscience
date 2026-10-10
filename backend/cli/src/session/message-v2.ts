@@ -291,6 +291,8 @@ export namespace MessageV2 {
         call: z.string().optional(),
         /** Atlas hold that reserved this step's Ace charge (managed route only). */
         hold: z.string().optional(),
+        /** Provider-owned response or request identity, when the route exposes one. */
+        providerRequest: z.string().optional(),
       })
       .optional(),
     /** Delivered speed when the provider reports it; otherwise the selected speed. */

@@ -332,7 +332,7 @@ export namespace LLM {
           duration: performance.now() - started,
           content: { parts: step.content, toolResults: step.toolResults },
           finish: step.finishReason,
-          call: CallLink.fromResponse(step.response?.headers),
+          call: CallLink.fromResponse(step.response?.headers, step.response?.id),
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {

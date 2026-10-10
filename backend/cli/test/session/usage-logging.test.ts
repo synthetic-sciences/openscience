@@ -423,6 +423,8 @@ describe("usage delivery", () => {
         const response = events.find((event) => event.event_type === "model.response")!
         expect(events).toHaveLength(2)
         expect(response.payload).toMatchObject({
+          http_call_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+          provider_request_id: "chatcmpl-usage",
           usage: {
             input_tokens: 917,
             output_tokens: 83,
@@ -747,7 +749,11 @@ describe("usage delivery", () => {
       model: "anthropic/claude-sonnet-4",
       usage: measured,
       duration: 10,
-      call: { id: "7f3c1e9a-0000-4000-8000-000000000001", hold: "orgh_0123456789abcdef" },
+      call: {
+        id: "7f3c1e9a-0000-4000-8000-000000000001",
+        hold: "orgh_0123456789abcdef",
+        providerRequest: "gen-provider-012345",
+      },
     })
     await UsageLogging.flush()
     const payload = remote.batches[0].events[0].payload
@@ -756,6 +762,7 @@ describe("usage delivery", () => {
     expect(payload).toMatchObject({
       http_call_id: "7f3c1e9a-0000-4000-8000-000000000001",
       hold: "orgh_0123456789abcdef",
+      provider_request_id: "gen-provider-012345",
     })
     expect(payload).not.toHaveProperty("call_id")
     expect(JSON.stringify(remote.batches)).not.toContain("private-conversation")
