@@ -295,11 +295,12 @@ export namespace LLM {
     ]
     const logging = await UsageLogging.context().catch(() => undefined)
     const started = performance.now()
+    const traceMessageID = input.trace?.messageID ?? input.user.id
     const binding = logging
       ? {
           context: logging,
           sessionID: input.sessionID,
-          messageID: input.trace?.messageID ?? input.user.id,
+          messageID: traceMessageID,
           route: traceRoute,
           provider: routed.providerID,
           model: routed.api.id,
@@ -324,6 +325,27 @@ export namespace LLM {
         await capture("assistant.message", { ...partial, interrupted: true })
       },
       async onStepFinish(step) {
+        const call = CallLink.fromResponse(step.response?.headers, step.response?.id)
+        if (call) {
+          await SessionTraceStore.recordModelCall({
+            id: call.id,
+            sessionID: input.sessionID,
+            messageID: traceMessageID,
+            route:
+              traceRoute === "managed" ||
+              traceRoute === "byok" ||
+              traceRoute === "chatgpt" ||
+              traceRoute === "subscription" ||
+              traceRoute === "local"
+                ? traceRoute
+                : "custom",
+            provider: routed.providerID,
+            model: routed.api.id,
+            occurredAt: Date.now(),
+            ...(call.providerRequest && { providerRequest: call.providerRequest }),
+            ...(call.hold && { hold: call.hold }),
+          })
+        }
         if (!binding) return
         await UsageLogging.record({
           ...binding,
@@ -332,7 +354,7 @@ export namespace LLM {
           duration: performance.now() - started,
           content: { parts: step.content, toolResults: step.toolResults },
           finish: step.finishReason,
-          call: CallLink.fromResponse(step.response?.headers, step.response?.id),
+          call,
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {

@@ -12,6 +12,7 @@ export namespace CallLink {
   const PROVIDER_HEADERS = [
     "x-generation-id",
     "x-request-id",
+    "x-oai-request-id",
     "request-id",
     "openai-request-id",
     "x-goog-request-id",

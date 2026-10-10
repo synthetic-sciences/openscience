@@ -77,7 +77,7 @@ describe("call link", () => {
       managed: false,
       ctx: context(),
       response: new Headers({
-        "x-request-id": "req_byok_0123456789",
+        "x-oai-request-id": "req_byok_0123456789",
         "x-openscience-provider-request-id": "spoofed",
       }),
     })
