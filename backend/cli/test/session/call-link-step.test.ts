@@ -53,7 +53,7 @@ test("each step reads the call and hold of its own response, even when the next 
   const provider = createOpenRouter({
     apiKey: "test-local-only",
     baseURL: `${server.url.origin}/api/v1`,
-    fetch: ((input: any, init?: RequestInit) =>
+    fetch: ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
       Provider.fetchWithIdleWatchdog(fetch, input, init, {
         providerID: "openrouter",
         modelID: "openai/test",

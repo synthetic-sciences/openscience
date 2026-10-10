@@ -24,7 +24,7 @@ export namespace CallLink {
     result.set(CALL_HEADER, input.call)
     result.set("x-openscience-message", input.messageID)
     result.set("x-openscience-attempt", String(input.attempt))
-    if (!result.has("x-openscience-session")) result.set("x-openscience-session", input.sessionID)
+    result.set("x-openscience-session", input.sessionID)
     return result
   }
 

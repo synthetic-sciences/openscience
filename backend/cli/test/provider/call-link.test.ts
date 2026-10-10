@@ -31,72 +31,87 @@ async function send(input: {
 
 describe("call link", () => {
   test("managed requests carry the call identity and the response carries the same call and a valid hold", async () => {
-    const { sent, link } = await send({
+    const result = await send({
       managed: true,
       ctx: context(),
       response: new Headers({ "x-openscience-hold-id": "orgh_0123456789abcdef" }),
     })
-    expect(sent.get("x-openscience-call")).toMatch(/^[0-9a-f-]{36}$/)
-    expect(sent.get("x-openscience-message")).toBe("msg_link")
-    expect(sent.get("x-openscience-attempt")).toBe("2")
-    expect(sent.get("x-openscience-session")).toBe("ses_link")
-    expect(link).toEqual({ id: sent.get("x-openscience-call")!, hold: "orgh_0123456789abcdef" })
+    expect(result.sent.get("x-openscience-call")).toMatch(/^[0-9a-f-]{36}$/)
+    expect(result.sent.get("x-openscience-message")).toBe("msg_link")
+    expect(result.sent.get("x-openscience-attempt")).toBe("2")
+    expect(result.sent.get("x-openscience-session")).toBe("ses_link")
+    expect(result.link).toEqual({
+      id: result.sent.get("x-openscience-call")!,
+      hold: "orgh_0123456789abcdef",
+    })
   })
 
   test("a malformed hold id is dropped from the response", async () => {
-    const { link, response } = await send({
+    const result = await send({
       managed: true,
       ctx: context(),
       response: new Headers({ "x-openscience-hold-id": "Bearer secret" }),
     })
-    expect(link?.id).toBeDefined()
-    expect(link?.hold).toBeUndefined()
-    expect(response.headers.get("x-openscience-hold-id")).toBeNull()
+    expect(result.link?.id).toBeDefined()
+    expect(result.link?.hold).toBeUndefined()
+    expect(result.response.headers.get("x-openscience-hold-id")).toBeNull()
   })
 
   test("non-managed requests get a call id but send no link headers and keep no hold", async () => {
-    const { sent, link, response } = await send({
+    const result = await send({
       managed: false,
       ctx: context(),
       response: new Headers({ "x-openscience-hold-id": "hold_0123456789abcdef" }),
     })
-    expect(sent.get("x-openscience-call")).toBeNull()
-    expect(sent.get("x-openscience-message")).toBeNull()
-    expect(link?.id).toMatch(/^[0-9a-f-]{36}$/)
-    expect(link?.hold).toBeUndefined()
-    expect(response.headers.get("x-openscience-hold-id")).toBeNull()
+    expect(result.sent.get("x-openscience-call")).toBeNull()
+    expect(result.sent.get("x-openscience-message")).toBeNull()
+    expect(result.sent.get("x-openscience-attempt")).toBeNull()
+    expect(result.sent.get("x-openscience-session")).toBeNull()
+    expect(result.link?.id).toMatch(/^[0-9a-f-]{36}$/)
+    expect(result.link?.hold).toBeUndefined()
+    expect(result.response.headers.get("x-openscience-hold-id")).toBeNull()
   })
 
   test("an upstream cannot choose the call id", async () => {
-    const { sent, link } = await send({
+    const result = await send({
       managed: true,
       ctx: context(),
       response: new Headers({ "x-openscience-call": "spoofed" }),
     })
-    expect(link?.id).toBe(sent.get("x-openscience-call")!)
+    expect(result.link?.id).toBe(result.sent.get("x-openscience-call")!)
   })
 
   test("a response without a body still carries its call", async () => {
-    const { sent, link } = await send({ managed: true, ctx: context(), body: null })
-    expect(link?.id).toBe(sent.get("x-openscience-call")!)
+    const result = await send({ managed: true, ctx: context(), body: null })
+    expect(result.link?.id).toBe(result.sent.get("x-openscience-call")!)
   })
 
-  test("a Request input keeps its own headers", async () => {
+  test("a Request input keeps unrelated headers and cannot override the request identity", async () => {
     const request = new Request("https://gateway.test", {
       method: "POST",
-      headers: { authorization: "Bearer test-only", "Idempotency-Key": "logical" },
+      headers: {
+        authorization: "Bearer test-only",
+        "Idempotency-Key": "logical",
+        "x-openscience-call": "spoofed",
+        "x-openscience-message": "spoofed",
+        "x-openscience-attempt": "999",
+        "x-openscience-session": "spoofed",
+      },
       body: "{}",
     })
-    const { sent } = await send({ managed: true, ctx: context(), request })
-    expect(sent.get("authorization")).toBe("Bearer test-only")
-    expect(sent.get("Idempotency-Key")).toBe("logical")
-    expect(sent.get("x-openscience-call")).not.toBeNull()
+    const result = await send({ managed: true, ctx: context(), request })
+    expect(result.sent.get("authorization")).toBe("Bearer test-only")
+    expect(result.sent.get("Idempotency-Key")).toBe("logical")
+    expect(result.sent.get("x-openscience-call")).toMatch(/^[0-9a-f-]{36}$/)
+    expect(result.sent.get("x-openscience-message")).toBe("msg_link")
+    expect(result.sent.get("x-openscience-attempt")).toBe("2")
+    expect(result.sent.get("x-openscience-session")).toBe("ses_link")
   })
 
   test("without a request context the response still carries its call and nothing throws", async () => {
-    const { sent, link } = await send({ managed: true })
-    expect(sent.get("x-openscience-call")).not.toBeNull()
-    expect(link?.id).toBe(sent.get("x-openscience-call")!)
+    const result = await send({ managed: true })
+    expect(result.sent.get("x-openscience-call")).not.toBeNull()
+    expect(result.link?.id).toBe(result.sent.get("x-openscience-call")!)
   })
 
   test("sequential attempts on one context each keep their own call and hold on their own response", async () => {
@@ -113,9 +128,9 @@ describe("call link", () => {
   test("the call id is the timing request id", async () => {
     const timings: Provider.RequestTiming[] = []
     const off = Provider.onTiming((timing) => timings.push(timing))
-    const { sent } = await send({ managed: true, ctx: context() })
+    const result = await send({ managed: true, ctx: context() })
     off()
-    expect(timings.at(-1)?.requestID).toBe(sent.get("x-openscience-call")!)
+    expect(timings.at(-1)?.requestID).toBe(result.sent.get("x-openscience-call")!)
   })
 
   test("hold() accepts only the two Atlas hold shapes", () => {
