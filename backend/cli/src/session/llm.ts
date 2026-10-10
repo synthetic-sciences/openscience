@@ -32,6 +32,7 @@ import { Toolset } from "./toolset"
 import { UsageLogging } from "./usage-logging"
 
 import { ManagedPricing } from "@/provider/managed-pricing"
+import { CallLink } from "@/provider/call-link"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -331,6 +332,7 @@ export namespace LLM {
           duration: performance.now() - started,
           content: { parts: step.content, toolResults: step.toolResults },
           finish: step.finishReason,
+          call: CallLink.fromResponse(step.response?.headers),
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {

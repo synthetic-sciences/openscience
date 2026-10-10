@@ -5,6 +5,7 @@ import { GlobalBus } from "../../src/bus/global"
 import { OpenScience } from "../../src/openscience"
 import { Instance } from "../../src/project/instance"
 import { MANAGED_MODEL_DETAILS, MANAGED_OPENROUTER_MODELS } from "../../src/provider/managed-catalog"
+import { CallLink } from "../../src/provider/call-link"
 import { Provider } from "../../src/provider/provider"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionProcessor } from "../../src/session/processor"
@@ -50,7 +51,13 @@ const replay = () =>
       choices: [{ index: 0, message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
       usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
     },
-    { headers: { ...funding, "x-openscience-idempotent-replay": "true" } },
+    {
+      headers: {
+        ...funding,
+        "x-openscience-idempotent-replay": "true",
+        "x-openscience-hold-id": "hold_replay",
+      },
+    },
   )
 const conflict = () =>
   Response.json(
@@ -91,7 +98,7 @@ const unknown = (status: 409 | 410) =>
 const upstream = () =>
   Response.json({ error: { message: "upstream conflict", code: "temporary_conflict" } }, { status: 409 })
 
-type Seen = { key: string | null; body: string }
+type Seen = { key: string | null; call: string | null; body: string }
 
 /** A real gateway whose chat completions follow a scripted response sequence. */
 function gateway(script: Array<() => Response>) {
@@ -102,7 +109,11 @@ function gateway(script: Array<() => Response>) {
       const url = new URL(request.url)
       if (url.pathname.endsWith("/model-catalog")) return Response.json({ models: catalog }, { headers: funding })
       if (!url.pathname.endsWith("/chat/completions")) return Response.json({}, { headers: funding })
-      seen.push({ key: request.headers.get("Idempotency-Key"), body: await request.text() })
+      seen.push({
+        key: request.headers.get("Idempotency-Key"),
+        call: request.headers.get("x-openscience-call"),
+        body: await request.text(),
+      })
       const next = script.shift()
       if (!next) return Response.json({ error: "fixture script exhausted" }, { status: 500 })
       return next()
@@ -139,14 +150,21 @@ function settle(
     signal: input.signal,
   }
   const url = new URL("/api/llm/proxy/openrouter/v1/chat/completions", server.url).href
-  const request = () => fetch(url, init)
+  const managed = input.managed ?? true
+  const request = () =>
+    Provider.fetchWithIdleWatchdog(fetch, url, init, {
+      providerID: "openrouter",
+      modelID: "openai/gpt-6-luna",
+      idleTimeout: false,
+      managed,
+    })
   const timings: Provider.RequestTiming[] = []
   const started = Date.now()
   const response = Provider.withRequestContext(input.context ?? context, () =>
     request().then((first) =>
       Provider.retryManagedConflict({
         response: first,
-        managed: input.managed ?? true,
+        managed,
         headers,
         signal: input.signal,
         retry: request,
@@ -180,8 +198,15 @@ describe("managed conflict guard", () => {
     )
     expect(elapsed()).toBeGreaterThanOrEqual(1000)
     expect(fixture.seen).toHaveLength(2)
-    expect(fixture.seen[1]).toEqual(fixture.seen[0])
+    expect(fixture.seen[1]).toMatchObject({ key: fixture.seen[0].key, body: fixture.seen[0].body })
     expect(fixture.seen[0].key).toBe("os_fixture")
+    expect(fixture.seen[0].call).toMatch(/^[0-9a-f-]{36}$/)
+    expect(fixture.seen[1].call).toMatch(/^[0-9a-f-]{36}$/)
+    expect(fixture.seen[1].call).not.toBe(fixture.seen[0].call)
+    expect(CallLink.fromResponse(Object.fromEntries(result.headers))).toEqual({
+      id: fixture.seen[1].call!,
+      hold: "hold_replay",
+    })
     expect(timings).toHaveLength(1)
     expect(timings[0]).toMatchObject({
       ...context,
@@ -374,7 +399,8 @@ describe("managed conflict guard", () => {
           expect(result.text).toBe("ok")
           expect(fixture.seen).toHaveLength(2)
           expect(fixture.seen[0].key).toStartWith("os_")
-          expect(fixture.seen[1]).toEqual(fixture.seen[0])
+          expect(fixture.seen[1]).toMatchObject({ key: fixture.seen[0].key, body: fixture.seen[0].body })
+          expect(fixture.seen[1].call).not.toBe(fixture.seen[0].call)
 
           const error = await failure(
             Provider.withRequestContext({ ...scope, messageID: "msg_sealed" }, () =>
@@ -408,7 +434,8 @@ describe("managed conflict guard", () => {
           expect(fixture.seen[3].key).toStartWith("os_")
           await dispatch(2)
           expect(fixture.seen).toHaveLength(5)
-          expect(fixture.seen[4]).toEqual(fixture.seen[3])
+          expect(fixture.seen[4]).toMatchObject({ key: fixture.seen[3].key, body: fixture.seen[3].body })
+          expect(fixture.seen[4].call).not.toBe(fixture.seen[3].call)
         },
       })
     } finally {

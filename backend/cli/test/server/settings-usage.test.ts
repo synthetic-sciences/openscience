@@ -46,6 +46,35 @@ test("usage records each completed step once, uses its actual route, and exclude
   expect(row).toMatchObject({ route: "byok", calls: 2, tokens: 350, output: 40, reasoning: 20, cost: 0.04 })
 })
 
+test("local usage skips session and message records without an id", async () => {
+  await write(["session", "usage-test", "no-id"], { time: { created: start, updated: start + 2000 } })
+  await write(["session", "usage-test", "kept"], { id: "kept", time: { created: start, updated: start + 2000 } })
+  await write(["message", "kept", "no-id"], {
+    sessionID: "kept",
+    role: "assistant",
+    providerID: "openrouter",
+    modelID: "orphan",
+    time: { created: start + 1 },
+    cost: 1,
+    tokens,
+  })
+  await write(["message", "kept", "kept"], {
+    id: "kept",
+    sessionID: "kept",
+    role: "assistant",
+    providerID: "openrouter",
+    modelID: "kept-model",
+    time: { created: start + 1 },
+    cost: 1,
+    tokens,
+  })
+  const response = await UsageSettingsRoutes().request("/local?start=2026-09-01&end=2026-09-01")
+  expect(response.status).toBe(200)
+  const result = (await response.json()) as { rows: UsageRow[] }
+  expect(result.rows.map((row) => row.model)).toContain("kept-model")
+  expect(result.rows.map((row) => row.model)).not.toContain("orphan")
+})
+
 test("local usage honors day boundaries and keeps ambiguous historical routes separate", async () => {
   await write(["session", "usage-test", "dates"], {
     id: "dates",

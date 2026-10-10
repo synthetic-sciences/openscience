@@ -733,4 +733,31 @@ describe("usage delivery", () => {
       },
     })
   })
+  test("a model response carries its call id and hold", async () => {
+    using remote = receiver()
+    await signedIn()
+    const context = await UsageLogging.context()
+    if (!context) throw new Error("fixture account is not signed in")
+    await UsageLogging.record({
+      context,
+      sessionID: "ses_private-project-name",
+      messageID: "msg_private-conversation",
+      route: "managed",
+      provider: "openrouter",
+      model: "anthropic/claude-sonnet-4",
+      usage: measured,
+      duration: 10,
+      call: { id: "7f3c1e9a-0000-4000-8000-000000000001", hold: "orgh_0123456789abcdef" },
+    })
+    await UsageLogging.flush()
+    const payload = remote.batches[0].events[0].payload
+    // tool.* events use call_id for the model's tool-call id; the HTTP
+    // attempt gets its own key so the two never collide in a trace.
+    expect(payload).toMatchObject({
+      http_call_id: "7f3c1e9a-0000-4000-8000-000000000001",
+      hold: "orgh_0123456789abcdef",
+    })
+    expect(payload).not.toHaveProperty("call_id")
+    expect(JSON.stringify(remote.batches)).not.toContain("private-conversation")
+  })
 })

@@ -23,6 +23,7 @@ import type { CredentialSource } from "./access-route"
 import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
 import { ManagedPricing } from "@/provider/managed-pricing"
+import { CallLink } from "@/provider/call-link"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
@@ -1230,6 +1231,10 @@ export namespace SessionProcessor {
                 }
 
                 case "finish-step":
+                  // The call and hold travel on this step's own response: in
+                  // a multi-step tool stream the SDK may already be fetching
+                  // the next step, so shared request state would name it.
+                  const stepCall = CallLink.fromResponse(value.response?.headers)
                   const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
                     model: resolved.model,
@@ -1262,6 +1267,10 @@ export namespace SessionProcessor {
                       provider: resolved.model.providerID,
                       model: resolved.model.id,
                       time: Date.now(),
+                      ...(stepCall && {
+                        call: stepCall.id,
+                        ...(stepCall.hold && { hold: stepCall.hold }),
+                      }),
                     },
                     tier: usage.tier,
                     tokens: usage.tokens,

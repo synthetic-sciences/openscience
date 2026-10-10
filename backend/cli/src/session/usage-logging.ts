@@ -244,11 +244,13 @@ export namespace UsageLogging {
       duration: number
       content?: unknown
       finish?: string
+      call?: { id: string; hold?: string }
     },
   ) {
     return event(input, "model.response", {
       ...reported(input.usage, input.metadata),
       duration_ms: input.duration,
+      ...(input.call && { http_call_id: input.call.id, ...(input.call.hold && { hold: input.call.hold }) }),
       ...(input.content === undefined ? {} : { content: input.content }),
       ...(input.finish === undefined ? {} : { finish: input.finish }),
     })

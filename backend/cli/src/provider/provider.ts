@@ -27,6 +27,7 @@ import { AsyncLocalStorage } from "node:async_hooks"
 import { MANAGED_OPENROUTER_MODEL_SET, managedModelDetails } from "./managed-catalog"
 import { managedModelRoute } from "./managed-routing"
 import { ManagedPricing } from "./managed-pricing"
+import { CallLink } from "./call-link"
 import { gatewayTiming, type GatewayTiming } from "./gateway-timing"
 
 // Direct imports for bundled providers
@@ -395,11 +396,11 @@ export namespace Provider {
     return "error"
   }
 
-  function copyResponse(response: Response, body: ReadableStream<Uint8Array>) {
+  function copyResponse(response: Response, body: ReadableStream<Uint8Array> | null, headers: Headers) {
     const monitored = new Response(body, {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      headers,
     })
     for (const property of ["url", "redirected", "type"] as const) {
       Object.defineProperty(monitored, property, { configurable: true, value: response[property] })
@@ -487,12 +488,13 @@ export namespace Provider {
         ? undefined
         : setTimeout(() => idleController.abort(new RequestTimeoutError("total", total)), total).unref()
     const signal = signals.length === 1 ? signals[0]! : AbortSignal.any(signals)
+    const call = crypto.randomUUID()
     const timing: Omit<RequestTiming, "completedAt" | "outcome"> = {
       sessionID: context.sessionID,
       messageID: context.messageID,
       attempt: context.attempt,
       ...(context.agent && { agent: context.agent }),
-      requestID: crypto.randomUUID(),
+      requestID: call,
       providerID: options.providerID,
       modelID: requestModel(init?.body) ?? context.modelID ?? options.modelID,
       idleTimeoutMs,
@@ -520,7 +522,16 @@ export namespace Provider {
     try {
       response = await waitForActivity({
         run: () => {
-          const fetchInit = { ...(init ?? {}), signal }
+          const fetchInit = {
+            ...(init ?? {}),
+            signal,
+            ...(options.managed && {
+              headers: CallLink.headers(
+                init?.headers ?? (fetchInput instanceof Request ? fetchInput.headers : undefined),
+                { call, sessionID: context.sessionID, messageID: context.messageID, attempt: context.attempt },
+              ),
+            }),
+          }
           // Bun's native fetch accepts this runtime option even though its
           // current BunFetchRequestInit declaration omits it.
           ;(fetchInit as BunFetchRequestInit & { timeout: false }).timeout = false
@@ -555,12 +566,23 @@ export namespace Provider {
       throw connectFailure(error, signal)
     }
 
+    // The response carries its own call identity (and, on the managed route,
+    // the validated hold), so a step reads the attempt that produced it even
+    // when the SDK has already started the next step's fetch.
+    const linked = CallLink.responseHeaders(response.headers, {
+      call,
+      hold: options.managed ? CallLink.hold(response.headers) : undefined,
+    })
     // Response.error()/opaque responses use status 0, which the Response
     // constructor forbids. They do not expose a consumable network body, so
     // preserve the original object rather than attempting to wrap it.
-    if (!response.body || response.status === 0) {
+    if (response.status === 0) {
       emit("completed")
       return response
+    }
+    if (!response.body) {
+      emit("completed")
+      return copyResponse(response, null, linked)
     }
 
     const reader = response.body.getReader()
@@ -624,7 +646,7 @@ export namespace Provider {
         cancelReader(reason)
       },
     })
-    return copyResponse(response, body)
+    return copyResponse(response, body, linked)
   }
 
   // Models exposed by the ChatGPT / Codex OAuth transport. Keep the dot and

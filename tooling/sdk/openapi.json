@@ -57952,6 +57952,12 @@
               },
               "time": {
                 "type": "number"
+              },
+              "call": {
+                "type": "string"
+              },
+              "hold": {
+                "type": "string"
               }
             },
             "required": [
