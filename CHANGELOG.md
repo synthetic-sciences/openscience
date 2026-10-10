@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Stop advertising GPT-5.4 and GPT-5.4 Mini through ChatGPT/Codex subscriptions, whose endpoint rejects those models; they remain available through OpenAI API-key connections.
+
+- Model calls now retain provider request IDs across managed, API-key, and ChatGPT subscription routes, and `openscience debug audit <session>` reports content-free call identities for visible, internal, and worker calls.
+
 - Managed model steps record the HTTP call and Ace hold that produced them, making each charge auditable.
 
 - Settings → Usage no longer fails when a saved session or message record has no id; such records are skipped.

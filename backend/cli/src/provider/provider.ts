@@ -572,6 +572,7 @@ export namespace Provider {
     const linked = CallLink.responseHeaders(response.headers, {
       call,
       hold: options.managed ? CallLink.hold(response.headers) : undefined,
+      providerRequest: CallLink.providerRequest(response.headers),
     })
     // Response.error()/opaque responses use status 0, which the Response
     // constructor forbids. They do not expose a consumable network body, so
@@ -664,10 +665,6 @@ export namespace Provider {
     "gpt-5-6-luna",
     "gpt-5.5",
     "gpt-5-5",
-    "gpt-5.4",
-    "gpt-5-4",
-    "gpt-5.4-mini",
-    "gpt-5-4-mini",
   ])
 
   export function isCodexOAuthModel(modelID: string): boolean {
@@ -678,7 +675,7 @@ export namespace Provider {
     if (
       modelID !== "gpt-6-sol" &&
       modelID !== "gpt-6.1-sol" &&
-      !/^gpt-5[.-](?:4|5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)
+      !/^gpt-5[.-](?:5|6(?:-(?:sol|terra|luna))?)$/.test(modelID)
     )
       return undefined
     return {

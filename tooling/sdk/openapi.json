@@ -57958,6 +57958,9 @@
               },
               "hold": {
                 "type": "string"
+              },
+              "providerRequest": {
+                "type": "string"
               }
             },
             "required": [

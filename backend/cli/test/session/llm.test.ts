@@ -224,7 +224,7 @@ describe("session.llm.responseStructure", () => {
         fn: async () => {
           const research = await Agent.get("research")
           if (!research) throw new Error("missing Research agent")
-          const model = await Provider.getModel("openai-codex", "gpt-5.4")
+          const model = await Provider.getModel("openai-codex", "gpt-5.6-sol")
           const expected = SystemPrompt.header(model)
           const provider = await Provider.getProvider(model.providerID)
           // Fail before starting a stream if the fixture transport was not loaded.

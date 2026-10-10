@@ -566,6 +566,7 @@ export type StepFinishPart = {
     time: number
     call?: string
     hold?: string
+    providerRequest?: string
   }
   tier?: string
   reason: string

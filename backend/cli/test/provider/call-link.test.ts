@@ -72,6 +72,19 @@ describe("call link", () => {
     expect(result.response.headers.get("x-openscience-hold-id")).toBeNull()
   })
 
+  test("non-managed responses keep a bounded provider request id without trusting an internal header", async () => {
+    const result = await send({
+      managed: false,
+      ctx: context(),
+      response: new Headers({
+        "x-oai-request-id": "req_byok_0123456789",
+        "x-openscience-provider-request-id": "spoofed",
+      }),
+    })
+    expect(result.link).toMatchObject({ providerRequest: "req_byok_0123456789" })
+    expect(result.response.headers.get("x-openscience-provider-request-id")).toBe("req_byok_0123456789")
+  })
+
   test("an upstream cannot choose the call id", async () => {
     const result = await send({
       managed: true,
@@ -143,11 +156,24 @@ describe("call link", () => {
 
   test("fromResponse() reads a step's own response headers", () => {
     const id = "7f3c1e9a-0000-4000-8000-000000000001"
-    expect(CallLink.fromResponse({ "x-openscience-call": id, "x-openscience-hold-id": "hold_abc" })).toEqual({
-      id,
-      hold: "hold_abc",
-    })
+    expect(
+      CallLink.fromResponse(
+        {
+          "x-openscience-call": id,
+          "x-openscience-hold-id": "hold_abc",
+          "x-openscience-provider-request-id": "req_header",
+        },
+        "resp_body",
+      ),
+    ).toEqual({ id, hold: "hold_abc", providerRequest: "resp_body" })
     expect(CallLink.fromResponse({ "x-openscience-call": id, "x-openscience-hold-id": "nope" })).toEqual({ id })
+    expect(
+      CallLink.fromResponse({
+        "x-openscience-call": id,
+        "x-openscience-provider-request-id": "Bearer secret",
+      }),
+    ).toEqual({ id })
+    expect(CallLink.fromResponse({ "x-openscience-call": id }, "x".repeat(201))).toEqual({ id })
     expect(CallLink.fromResponse({ "x-openscience-call": "not a uuid" })).toBeUndefined()
     expect(CallLink.fromResponse({})).toBeUndefined()
     expect(CallLink.fromResponse(undefined)).toBeUndefined()

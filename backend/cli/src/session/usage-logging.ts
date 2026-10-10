@@ -237,6 +237,17 @@ export namespace UsageLogging {
     }
   }
 
+  /** Opaque session identity used by the server. It lets a local audit name
+   * its consented trace without revealing the user's local session id. */
+  export async function telemetrySessionID(sessionID: string) {
+    // Persist the installation before deriving an identity. On a fresh data
+    // root, parsing defaults alone would mint a different installation for
+    // each call and none would match a later uploaded trace.
+    if (!(await Bun.file(filepath).exists())) await update(() => {})
+    const state = await read()
+    return digest(`${state.installation}:${sessionID}`)
+  }
+
   export async function record(
     input: Binding & {
       usage: LanguageModelUsage
@@ -244,13 +255,17 @@ export namespace UsageLogging {
       duration: number
       content?: unknown
       finish?: string
-      call?: { id: string; hold?: string }
+      call?: { id: string; hold?: string; providerRequest?: string }
     },
   ) {
     return event(input, "model.response", {
       ...reported(input.usage, input.metadata),
       duration_ms: input.duration,
-      ...(input.call && { http_call_id: input.call.id, ...(input.call.hold && { hold: input.call.hold }) }),
+      ...(input.call && {
+        http_call_id: input.call.id,
+        ...(input.call.hold && { hold: input.call.hold }),
+        ...(input.call.providerRequest && { provider_request_id: input.call.providerRequest }),
+      }),
       ...(input.content === undefined ? {} : { content: input.content }),
       ...(input.finish === undefined ? {} : { finish: input.finish }),
     })
