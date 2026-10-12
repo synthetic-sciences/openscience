@@ -34,12 +34,13 @@ Things to keep current:
 - `src/pages/Ace.tsx` mirrors `backend/cli/src/provider/managed-catalog.ts`.
 - `src/pages/Download.tsx` groups desktop installers by operating system before
   the terminal commands. Keep its download filenames in sync with release assets.
-- `src/components/Workspace.tsx` is a pixel replica of the product in its own
-  font (Inter Variable) and tokens, standing in for a product video. Swap it
-  for a `<video>` in `Landing.tsx` when a recording exists.
+- `src/components/Workspace.tsx` is a pixel replica of the product in the
+  product's tokens, set in the site's typeface so the page reads as one, standing
+  in for a product video. Swap it for a `<video>` in `Landing.tsx` when a
+  recording exists.
 - `public/provider-logos.svg` is the same sprite the dashboard ships.
-- Fonts under `public/fonts/` are CMU Concrete (OFL, `OFL-cmu.txt`) for the
-  site and Inter Variable (OFL, `OFL-inter.txt`) for the product replica.
+- Fonts under `public/fonts/` are CMU Concrete Roman and Bold as woff2 (OFL,
+  `OFL-cmu.txt`), the same files the other Synthetic Sciences sites ship.
 
 ```bash
 bun install

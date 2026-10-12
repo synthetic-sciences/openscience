@@ -22,7 +22,7 @@
   --slate: var(--color-chart-codex);
   --graphite: var(--color-chart-other);
   --serif: var(--font-serif);
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --mono: var(--font-serif);
   --col: 680px;
 
   [data-slot="paper"] {

@@ -10,7 +10,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("/fonts/cmu-concrete-roman.woff") format("woff");
+  src: url("/fonts/cmunorm.woff2") format("woff2");
 }
 /* Registered so a stray bold never falls back to a synthesised face. */
 @font-face {
@@ -18,7 +18,7 @@
   font-style: normal;
   font-weight: 700;
   font-display: swap;
-  src: url("/fonts/cmu-concrete-bold.woff") format("woff");
+  src: url("/fonts/cmunobx.woff2") format("woff2");
 }
 
 @tailwind base;
