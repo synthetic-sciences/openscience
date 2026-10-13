@@ -1,27 +1,10 @@
-import { createRoot } from "react-dom/client"
-import Ace from "./pages/Ace"
-import Benchmark from "./pages/Benchmark"
-import Download from "./pages/Download"
-import Landing from "./pages/Landing"
-import Privacy from "./pages/Privacy"
+import { createRoot, hydrateRoot } from "react-dom/client"
+import App from "./App"
 import "./index.css"
 
-const ROUTES: Record<string, () => JSX.Element> = {
-  "/": Landing,
-  "/download": Download,
-  "/ace": Ace,
-  "/benchmark": Benchmark,
-  "/benchmarks": Benchmark,
-  "/blog/launch": Benchmark,
-  "/privacy": Privacy,
-  "/legal/privacy": Privacy,
-  "/legal/privacy-policy": Privacy,
-}
+const root = document.getElementById("root")!
+const app = <App path={window.location.pathname} />
 
-function App() {
-  const path = window.location.pathname.replace(/\/+$/, "") || "/"
-  const Page = ROUTES[path] ?? Landing
-  return <Page />
-}
-
-createRoot(document.getElementById("root")!).render(<App />)
+// Production builds ship prerendered markup for each page (scripts/prerender.mjs); the dev server doesn't.
+if (root.hasChildNodes()) hydrateRoot(root, app)
+else createRoot(root).render(app)

@@ -10,7 +10,8 @@
     />
     <meta name="author" content="Synthetic Sciences" />
     <meta name="theme-color" content="#141210" />
-    <link rel="canonical" href="https://openscience.sh/" />
+    <link rel="canonical" href="https://www.openscience.sh/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
     <meta property="og:type" content="website" />
     <meta property="og:title" content="OpenScience | The open-source AI workbench for scientific research" />
@@ -18,34 +19,63 @@
       property="og:description"
       content="Free models included or connect any model from any provider, including Claude, GPT, Gemini and more."
     />
-    <meta property="og:url" content="https://openscience.sh" />
+    <meta property="og:url" content="https://www.openscience.sh/" />
     <meta property="og:site_name" content="OpenScience" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://www.openscience.sh/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="OpenScience: the open-source AI workbench for scientific research, with the workspace open on a protein stability analysis." />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="OpenScience | The open-source AI workbench for scientific research" />
     <meta
       name="twitter:description"
       content="Free models included or connect any model from any provider, including Claude, GPT, Gemini and more."
     />
     <meta name="twitter:site" content="@SynScience" />
+    <meta name="twitter:image" content="https://www.openscience.sh/og.jpg" />
 
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "OpenScience",
-        "url": "https://openscience.sh",
-        "description": "The open-source AI workbench for scientific research. Literature, code, experiments, and writing in one local workspace.",
-        "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "macOS, Linux, Windows",
-        "license": "https://www.apache.org/licenses/LICENSE-2.0",
-        "isAccessibleForFree": true,
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": { "@type": "Organization", "name": "Synthetic Sciences", "url": "https://syntheticsciences.ai" }
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://www.openscience.sh/#website",
+            "name": "OpenScience",
+            "url": "https://www.openscience.sh/",
+            "inLanguage": "en",
+            "publisher": { "@id": "https://syntheticsciences.ai/#organization" }
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "OpenScience",
+            "url": "https://www.openscience.sh/",
+            "description": "The open-source AI workbench for scientific research. Literature, code, experiments, and writing in one local workspace.",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS, Linux, Windows",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "isAccessibleForFree": true,
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+            "downloadUrl": "https://www.openscience.sh/download",
+            "screenshot": "https://www.openscience.sh/og.jpg",
+            "sameAs": ["https://github.com/synthetic-sciences/OpenScience", "https://www.npmjs.com/package/@synsci/openscience"],
+            "author": { "@id": "https://syntheticsciences.ai/#organization" }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://syntheticsciences.ai/#organization",
+            "name": "Synthetic Sciences",
+            "url": "https://syntheticsciences.ai/",
+            "sameAs": ["https://x.com/SynScience", "https://github.com/synthetic-sciences"]
+          }
+        ]
       }
     </script>
 
     <link rel="preload" href="/fonts/cmunorm.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>

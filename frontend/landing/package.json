@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "bun run --cwd ../docs build && vite build",
+    "build": "bun run --cwd ../docs build && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && bun scripts/prerender.mjs",
     "preview": "vite preview",
     "sync:docs": "bun run build"
   },

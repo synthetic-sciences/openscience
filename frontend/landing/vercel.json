@@ -9,9 +9,42 @@
   "buildCommand": "bun run build",
   "installCommand": "bun install --frozen-lockfile && cd ../.. && bun install --frozen-lockfile --ignore-scripts --filter '@synsci/docs'",
   "outputDirectory": "dist",
+  "cleanUrls": true,
+  "redirects": [
+    {
+      "source": "/benchmarks",
+      "destination": "/benchmark",
+      "permanent": true
+    },
+    {
+      "source": "/blog/launch",
+      "destination": "/benchmark",
+      "permanent": true
+    },
+    {
+      "source": "/legal/privacy",
+      "destination": "/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/legal/privacy-policy",
+      "destination": "/privacy",
+      "permanent": true
+    },
+    {
+      "source": "/:page(download|ace|benchmark|privacy)/",
+      "destination": "/:page",
+      "permanent": true
+    }
+  ],
   "rewrites": [
-    { "source": "/docs", "destination": "/docs/index.html" },
-    { "source": "/docs/:path*", "destination": "/docs/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/docs",
+      "destination": "/docs/index.html"
+    },
+    {
+      "source": "/docs/:path*",
+      "destination": "/docs/index.html"
+    }
   ]
 }
