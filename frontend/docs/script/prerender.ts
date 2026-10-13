@@ -1,6 +1,6 @@
 // Runs after the client and SSR builds. Writes every page to dist/<page>.html
-// with its own title, description, canonical URL and JSON-LD, plus 404.html
-// for unknown paths and sitemap.xml, so each page can be indexed on its own.
+// with its own title, description, canonical URL and JSON-LD, plus sitemap.xml,
+// so each page can be indexed on its own. Unknown paths get the site's 404.
 import path from "node:path"
 import { BASE, SITE, documentTitle, pageUrl } from "../src/navigation"
 
@@ -99,19 +99,6 @@ for (const name of order) {
   await Bun.write(path.join(dist, name === "index" ? "index.html" : name + ".html"), html)
 }
 
-// Unknown /docs paths are rewritten here by the site's vercel.json.
-const missing = withHead(template, {
-  title: documentTitle("Page not found"),
-  description: "This documentation page does not exist or has moved.",
-  url: SITE + BASE,
-})
-  .replace(
-    /(<meta\s+name="robots"\s+content=")[^"]*(")/,
-    (_match, before: string, after: string) => before + "noindex" + after,
-  )
-  .replace(slot, () => `<div id="root">${render(BASE + "/404")}</div>`)
-await Bun.write(path.join(dist, "404.html"), missing)
-
 await Bun.write(
   path.join(dist, "sitemap.xml"),
   `<?xml version="1.0" encoding="UTF-8"?>
@@ -120,4 +107,4 @@ ${order.map((name) => `  <url>\n    <loc>${pageUrl(name)}</loc>\n  </url>`).join
 </urlset>
 `,
 )
-console.log(`Prerendered ${order.length} documentation pages, 404.html and sitemap.xml.`)
+console.log(`Prerendered ${order.length} documentation pages and sitemap.xml.`)
