@@ -162,17 +162,6 @@ const FAQ = [
     ),
   },
   {
-    q: "What about data and privacy?",
-    a: (
-      <p>
-        Sessions, files, credentials, and results are stored on your machine. If you sign in to Synthetic Sciences,
-        session traces are shared by default to improve the agent, including prompts, model responses, tool activity,
-        and reported usage. Saved opt-outs are preserved, and you can turn sharing off in General settings or your
-        account. Read the <a href="/privacy">privacy page</a> for controls and deletion.
-      </p>
-    ),
-  },
-  {
     q: "Is OpenScience open source?",
     a: (
       <p>
