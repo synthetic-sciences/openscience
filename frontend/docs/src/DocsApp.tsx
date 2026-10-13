@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import {
@@ -24,7 +24,7 @@ import {
   Terminal,
 } from "lucide-react"
 import { useTheme } from "./theme"
-import { headings, pageHref, parseRoute, resolveLink, slug, type Route } from "./navigation"
+import { documentTitle, headings, pageHref, parseRoute, resolveLink, slug, type Route } from "./navigation"
 
 const mono = `"JetBrains Mono", "SF Mono", ui-monospace, monospace`
 
@@ -188,8 +188,8 @@ const SECTION_CONFIGS: Record<SectionKey, DocsConfig> = {
   openscience: RAW_CONFIGS["./content/openscience/docs.json"],
 }
 
-function routeFromHash(): Route {
-  return parseRoute(typeof window === "undefined" ? "" : window.location.hash)
+function routeFromLocation(): Route {
+  return parseRoute(typeof window === "undefined" ? "" : window.location.pathname + window.location.hash)
 }
 
 // The renderer uses the current route for page-relative Markdown links.
@@ -502,9 +502,15 @@ function renderMintlifyContent(source: string): ReactNode[] {
   return nodes
 }
 
-export function DocumentationPage() {
+export const DOC_PAGES = SECTION_DOC_PAGES.openscience
+export const DOC_CONFIG = SECTION_CONFIGS.openscience
+
+/* initialPath is set when prerendering; in the browser the route comes from the URL. */
+export function DocumentationPage({ initialPath }: { initialPath?: string } = {}) {
   const { theme, toggle: toggleTheme } = useTheme()
-  const [route, setRouteState] = useState<Route>(() => routeFromHash())
+  const [route, setRouteState] = useState<Route>(() =>
+    initialPath === undefined ? routeFromLocation() : parseRoute(initialPath),
+  )
   const section = route.section
   CURRENT_SECTION = section
   CURRENT_ROUTE = route
@@ -584,23 +590,52 @@ export function DocumentationPage() {
       .map((result) => result.page)
   }, [query, section])
 
-  const navigate = (next: Route) => {
-    window.location.hash = pageHref(next.section, next.path, next.anchor)
+  const navigate = useCallback((next: Route) => {
+    const href = pageHref(next.section, next.path, next.anchor)
+    if (window.location.pathname + window.location.hash !== href) window.history.pushState(null, "", href)
     setRouteState(next)
     setMenuOpen(false)
     setSearchOpen(false)
-  }
-
-  useEffect(() => {
-    const onHashChange = () => setRouteState(routeFromHash())
-    window.addEventListener("hashchange", onHashChange)
-    return () => window.removeEventListener("hashchange", onHashChange)
   }, [])
 
-  // Keep the URL canonical (legacy + bare hashes resolve to #/<section>/<page>).
+  useEffect(() => {
+    const onLocation = () => setRouteState(routeFromLocation())
+    window.addEventListener("popstate", onLocation)
+    window.addEventListener("hashchange", onLocation)
+    return () => {
+      window.removeEventListener("popstate", onLocation)
+      window.removeEventListener("hashchange", onLocation)
+    }
+  }, [])
+
+  // Links between docs pages switch the page in place instead of loading its prerendered HTML.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return
+      const link = (event.target as Element | null)?.closest?.("a")
+      if (!link || link.target || link.hasAttribute("download")) return
+      const url = new URL(link.href, window.location.href)
+      if (url.origin !== window.location.origin || !/^\/docs(\/|$)/.test(url.pathname) || /\.\w+$/.test(url.pathname))
+        return
+      event.preventDefault()
+      navigate(parseRoute(url.pathname + url.hash))
+    }
+    document.addEventListener("click", onClick)
+    return () => document.removeEventListener("click", onClick)
+  }, [navigate])
+
+  // Keep the URL canonical (a trailing slash or a renamed page resolves to /docs/<page>).
   useEffect(() => {
     const canonical = pageHref(route.section, route.path, route.anchor)
-    if (window.location.hash !== canonical) {
+    if (window.location.pathname + window.location.hash !== canonical) {
       window.history.replaceState(null, "", canonical)
     }
   }, [route])
@@ -615,9 +650,9 @@ export function DocumentationPage() {
   }, [route.path, route.anchor])
 
   useEffect(() => {
-    document.title = activePage.title + " · OpenScience Docs"
+    document.title = documentTitle(activePage.title, activePage.path)
     document.querySelector('meta[name="description"]')?.setAttribute("content", activePage.description)
-  }, [activePage.title, activePage.description])
+  }, [activePage.title, activePage.path, activePage.description])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

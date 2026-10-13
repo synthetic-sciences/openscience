@@ -9,3 +9,4 @@ dist/
 /public/llms-full.txt
 /test-results/
 /playwright-report/
+/dist-ssr/

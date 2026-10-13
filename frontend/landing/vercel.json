@@ -35,6 +35,11 @@
       "source": "/:page(download|ace|benchmark|privacy)/",
       "destination": "/:page",
       "permanent": true
+    },
+    {
+      "source": "/docs/",
+      "destination": "/docs",
+      "permanent": true
     }
   ],
   "rewrites": [
@@ -44,7 +49,7 @@
     },
     {
       "source": "/docs/:path*",
-      "destination": "/docs/index.html"
+      "destination": "/docs/404.html"
     }
   ]
 }

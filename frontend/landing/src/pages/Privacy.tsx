@@ -63,7 +63,7 @@ export default function Privacy() {
               Shell commands, Python and R kernels, and local compute jobs run inside macOS Seatbelt or Linux bubblewrap
               when containment is on, with network egress denied. Known credential patterns are redacted from tool
               output before it is written into a session. The full picture is in the{" "}
-              <a href={docs("security")}>security documentation</a>.
+              <a href={docs("permissions")}>security documentation</a>.
             </p>
 
             <h2 id="leaves">What leaves your machine</h2>

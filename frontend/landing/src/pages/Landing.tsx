@@ -198,7 +198,7 @@ const FAQ = [
 
 export default function Landing() {
   useMeta({
-    title: "OpenScience | The open-source AI workbench for scientific research",
+    title: "OpenScience | Open-source AI co-scientist for research",
     description:
       "OpenScience is the open-source AI co-scientist. Free models included or connect any model from any provider, including Claude, GPT, Gemini and more.",
     path: "/",

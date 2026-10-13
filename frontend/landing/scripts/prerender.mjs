@@ -34,12 +34,61 @@ const template = await readFile(resolve("dist/index.html"), "utf8")
 const slot = '<div id="root"></div>'
 if (!template.includes(slot)) throw new Error(`prerender: ${slot} not found in dist/index.html`)
 
+// Page-level structured data, alongside the site-wide WebSite and SoftwareApplication in index.html.
+function pageData({ path, url, title, description }) {
+  const crumbs =
+    path === "/"
+      ? []
+      : [
+          { name: "OpenScience", item: `${CANONICAL}/` },
+          { name: title.replace(/^OpenScience \| /, ""), item: url },
+        ]
+  const graph = [
+    {
+      "@type": "WebPage",
+      "@id": `${url}#webpage`,
+      url,
+      name: title,
+      description,
+      inLanguage: "en",
+      isPartOf: { "@id": `${CANONICAL}/#website` },
+      primaryImageOfPage: `${CANONICAL}/og.jpg`,
+      ...(crumbs.length ? { breadcrumb: { "@id": `${url}#breadcrumb` } } : {}),
+    },
+    ...(crumbs.length
+      ? [
+          {
+            "@type": "BreadcrumbList",
+            "@id": `${url}#breadcrumb`,
+            itemListElement: crumbs.map((c, i) => ({ "@type": "ListItem", position: i + 1, ...c })),
+          },
+        ]
+      : []),
+  ]
+  const json = JSON.stringify({ "@context": "https://schema.org", "@graph": graph }).replace(/</g, "\\u003c")
+  return `<script type="application/ld+json">${json}</script>`
+}
+
+// Fails the build rather than shipping a page that breaks the on-page rules.
+function check(path, html, { title, description }) {
+  const h1s = (html.slice(html.indexOf("<body")).match(/<h1[\s>]/g) ?? []).length
+  const problems = [
+    title.length > 60 && `title is ${title.length} characters (max 60)`,
+    (!description || description.length > 155) && `description is ${description.length} characters (max 155)`,
+    h1s !== 1 && `${h1s} h1 elements (want 1)`,
+  ].filter(Boolean)
+  if (problems.length) throw new Error(`prerender: ${path}: ${problems.join("; ")}`)
+}
+
 const pages = []
 for (const path of Object.keys(ROUTES)) {
   const { html, meta } = render(path)
   if (!meta) throw new Error(`prerender: ${path} rendered without calling useMeta`)
   const url = path === "/" ? `${CANONICAL}/` : `${CANONICAL}${path}`
-  const page = withHead(template, { ...meta, url }).replace(slot, () => `<div id="root">${html}</div>`)
+  const page = withHead(template, { ...meta, url })
+    .replace("</head>", () => `${pageData({ path, url, ...meta })}\n  </head>`)
+    .replace(slot, () => `<div id="root">${html}</div>`)
+  check(path, page, meta)
   await writeFile(resolve(path === "/" ? "dist/index.html" : `dist${path}.html`), page)
   pages.push({ path, url, ...meta })
 }
@@ -51,7 +100,8 @@ await writeFile(
   withHead(template, home).replace(slot, () => `<div id="root">${render("/").html}</div>`),
 )
 
-const urls = [...pages.map((p) => p.url), `${CANONICAL}/docs`]
+// Docs pages are listed in /docs/sitemap.xml, written by the docs build.
+const urls = pages.map((p) => p.url)
 await writeFile(
   resolve("dist/sitemap.xml"),
   `<?xml version="1.0" encoding="UTF-8"?>

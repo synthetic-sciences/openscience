@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "bun run export && vite build",
+    "build": "bun run export && vite build && vite build --ssr src/entry-server.tsx --outDir dist-ssr && bun script/prerender.ts && rm -rf dist-ssr",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "catalog": "bun --no-env-file script/catalog.ts",

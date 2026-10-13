@@ -14,7 +14,7 @@ export const NPM = "https://www.npmjs.com/package/@synsci/openscience"
 export const NPM_SDK = "https://www.npmjs.com/package/@synsci/sdk"
 
 export const DOCS = `${SITE}/docs`
-export const docs = (page: string, hash = "") => `${DOCS}/#/openscience/${page}${hash}`
+export const docs = (page: string, hash = "") => (page === "index" ? DOCS : `${DOCS}/${page}`) + hash
 
 export const SYNTHETIC_SCIENCES = "https://syntheticsciences.ai"
 export const DASHBOARD = "https://app.syntheticsciences.ai"

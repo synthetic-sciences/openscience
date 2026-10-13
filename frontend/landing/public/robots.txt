@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://www.openscience.sh/sitemap.xml
+Sitemap: https://www.openscience.sh/docs/sitemap.xml
