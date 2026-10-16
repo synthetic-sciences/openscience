@@ -73,7 +73,7 @@
         "ulid": "catalog:",
         "unpdf": "1.8.1",
         "vscode-jsonrpc": "8.2.1",
-        "web-tree-sitter": "0.25.10",
+        "web-tree-sitter": "0.27.1",
         "xdg-basedir": "5.1.0",
         "yargs": "18.1.0",
         "zod": "catalog:",
@@ -2218,7 +2218,7 @@
 
     "web-streams-polyfill": ["web-streams-polyfill@3.3.3", "", {}, "sha512-d2JWLCivmZYTSIoge9MsgFCZrt571BikcWGYkjC1khllbTeDlGqZ2D8vD8E/lJa8WGWbb7Plm8/XJYV7IJHZZw=="],
 
-    "web-tree-sitter": ["web-tree-sitter@0.25.10", "", { "peerDependencies": { "@types/emscripten": "^1.40.0" }, "optionalPeers": ["@types/emscripten"] }, "sha512-Y09sF44/13XvgVKgO2cNDw5rGk6s26MgoZPXLESvMXeefBf7i6/73eFurre0IsTW6E14Y0ArIzhUMmjoc7xyzA=="],
+    "web-tree-sitter": ["web-tree-sitter@0.27.1", "", {}, "sha512-qtx0VyUyNRHtL3ze7+v0hCKB/sLcAmY7ZAVp/ZK/bCj0yED8ptvNrr7Vd7DwDyKDWN9baqcUx4uaD2r2ql+6IA=="],
 
     "webcrypto-core": ["webcrypto-core@1.9.2", "", { "dependencies": { "@peculiar/asn1-schema": "^2.7.0", "@peculiar/json-schema": "^1.1.12", "@peculiar/utils": "^2.0.2", "asn1js": "^3.0.10", "tslib": "^2.8.1" } }, "sha512-gsXecm82UQNlTBURJGuqOWy1Ww08S3kZUcr3aOJS02Pk0xLtkfeUAVC0u0xhgdonFme80edSJUIJyuvL/7250Q=="],
 
