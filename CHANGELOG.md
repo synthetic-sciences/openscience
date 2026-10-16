@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Cancel image-download response streams before reporting HTTP or unsupported-format errors.
+
 - Stop advertising GPT-5.4 and GPT-5.4 Mini through ChatGPT/Codex subscriptions, whose endpoint rejects those models; they remain available through OpenAI API-key connections.
 
 - Model calls now retain provider request IDs across managed, API-key, and ChatGPT subscription routes, and `openscience debug audit <session>` reports content-free call identities for visible, internal, and worker calls.
