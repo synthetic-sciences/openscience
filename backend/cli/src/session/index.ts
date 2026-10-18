@@ -730,16 +730,6 @@ export namespace Session {
       .parse(usage)
   }
 
-  function reportedCacheWrite(metadata: ProviderMetadata | undefined): number | undefined {
-    const usage = metadata?.["openrouter"]?.["usage"]
-    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return
-    const details = usage["promptTokensDetails"]
-    if (!details || typeof details !== "object" || Array.isArray(details)) return
-    const count = details["cacheWriteTokens"]
-    if (typeof count !== "number" || !Number.isSafeInteger(count) || count < 0) return
-    return count
-  }
-
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
@@ -766,28 +756,18 @@ export namespace Session {
       // The SDK can use NaN for omitted cached usage. Sanitize before
       // subtracting so an unknown cache count cannot erase known input.
       const cacheReadInputTokens = safe(input.usage.cachedInputTokens ?? 0)
-      const cacheWriteInputTokens = safe(
-        (input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-          // @ts-expect-error
-          input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
-          reportedCacheWrite(input.metadata) ??
-          0) as number,
-      )
+      const observed = UsageLogging.reported(input.usage, input.metadata, input.model.providerID).usage
+      const cacheWriteInputTokens = observed.cache_creation_input_tokens ?? 0
 
       const excludesCachedTokens = !!(input.metadata?.["anthropic"] || input.metadata?.["bedrock"])
       const uncachedInputTokens = excludesCachedTokens
         ? (input.usage.inputTokens ?? 0)
         : (input.usage.inputTokens ?? 0) - cacheReadInputTokens - cacheWriteInputTokens
-      // OpenAI writes every uncached token of a GPT-5.6+ prompt to its cache
-      // at 1.25x the input rate and reports only the reads, so on the native
-      // route the uncached remainder is a cache write, not plain input; the
-      // catalog's write rate already carries the premium. Routes that report a
-      // cost (OpenRouter, the gateway) are settled from that figure instead.
+      // Catalog cache-write pricing is an estimate when the provider omits
+      // the counter. An explicitly reported zero must win over that inference.
       const implicitWrite =
         input.model.providerID === "openai" &&
-        cacheWriteInputTokens === 0 &&
+        observed.cache_creation_input_tokens === null &&
         (input.model.cost?.cache?.write ?? 0) > (input.model.cost?.input ?? 0) &&
         /^gpt-(?:5\.[6-9]|[6-9])/.test(input.model.api.id.toLowerCase())
       const adjustedInputTokens = implicitWrite ? 0 : uncachedInputTokens

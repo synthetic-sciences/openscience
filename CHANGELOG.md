@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Preserve provider-reported cache-write counters from OpenAI and Azure Responses, including explicit zero, instead of losing them in SDK parsing or replacing them with catalog estimates.
+
 - Separate provider-reported, estimated, imported and historical cost evidence in `openscience stats`; retain exact amounts, mark missing evidence Unknown, and label compatibility accounting separately.
 
 - Keep the task context and settled-charge lookup accessible before the first model response, including failed or cancelled first attempts.

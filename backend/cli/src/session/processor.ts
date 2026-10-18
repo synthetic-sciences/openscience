@@ -1250,7 +1250,11 @@ export namespace SessionProcessor {
                   // moment after its stream ends; announce it here rather than
                   // at the response headers, which predate the charge.
                   if (funded) OpenScience.noteManagedSpend()
-                  const observation = UsageLogging.reported(value.usage, value.providerMetadata)
+                  const observation = UsageLogging.reported(
+                    value.usage,
+                    value.providerMetadata,
+                    resolved.model.providerID,
+                  )
                   const route = accessRoute(credentialSource, resolved.model)
                   const subscription = route === "chatgpt" || route === "subscription"
                   const stepPartID = Identifier.ascending("part")

@@ -185,7 +185,7 @@ export namespace UsageLogging {
 
   /** Retain only numeric provider usage. Missing usage is unknown, never an
    * invented zero or a count estimated from the generated text. */
-  export function reported(usage: LanguageModelUsage, metadata?: ProviderMetadata) {
+  export function reported(usage: LanguageModelUsage, metadata?: ProviderMetadata, provider?: string) {
     const cost = object(metadata?.openrouter?.usage).cost
     const price = typeof cost === "number" && Number.isFinite(cost) && cost >= 0 ? cost : null
     return {
@@ -200,7 +200,10 @@ export namespace UsageLogging {
           metadata?.anthropic?.cacheCreationInputTokens ??
             object(metadata?.bedrock?.usage).cacheWriteInputTokens ??
             object(metadata?.venice?.usage).cacheCreationInputTokens ??
-            object(object(metadata?.openrouter?.usage).promptTokensDetails).cacheWriteTokens,
+            object(object(metadata?.openrouter?.usage).promptTokensDetails).cacheWriteTokens ??
+            metadata?.openai?.cacheCreationInputTokens ??
+            metadata?.azure?.cacheCreationInputTokens ??
+            (provider ? object(metadata?.[provider]).cacheCreationInputTokens : undefined),
         ),
       },
       cost_usd: price,
@@ -246,7 +249,7 @@ export namespace UsageLogging {
     },
   ) {
     return event({ ...input, operationID: input.call?.id ?? input.operationID }, "model.response", {
-      ...reported(input.usage, input.metadata),
+      ...reported(input.usage, input.metadata, input.provider),
       duration_ms: input.duration,
       ...(input.call && {
         http_call_id: input.call.id,

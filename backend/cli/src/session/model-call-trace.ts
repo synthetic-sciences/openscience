@@ -103,7 +103,7 @@ export namespace ModelCallTrace {
             ? pending[0]
             : undefined
         if (!current) return
-        const observed = UsageLogging.reported(usage, metadata)
+        const observed = UsageLogging.reported(usage, metadata, input.provider)
         await finish({
           ...current,
           outcome,

@@ -91,3 +91,54 @@ The original localhost server was no longer listening. An authenticated read-onl
 request to the hosted health endpoint returned HTTP 404: current local health
 features are not verified on that hosted deployment. No model request or payment
 was made during this historical inspection.
+
+## Fresh subscription audit and cache-write correction
+
+A fresh real `openai-codex/gpt-6.1-sol` subscription audit used only minimal test
+prompts and isolated local state. The existing unexpired access credential was
+copied without its refresh token and removed from the audit state afterward.
+The original credential file and original conversations were not written.
+Trace uploads went to the separately deployed local Dashboard service, not the
+hosted endpoint that returned 404.
+
+Five real calls completed while verifying the pipeline and correcting an
+observed field-loss bug. One was a subagent-mode child-session call; the local
+root audit found its parent and child with two distinct completed HTTP call IDs.
+This verifies child-session lineage, not a full live Task-tool orchestration.
+Every response passed usage projection and delivery reconciliation. These
+subscription calls had no managed call/hold links, and their per-call cost stayed
+null/subscription-covered rather than being assigned a zero-price receipt.
+
+For the final minimal call, the raw `response.completed` usage was:
+
+```json
+{
+  "input_tokens": 33,
+  "output_tokens": 5,
+  "total_tokens": 38,
+  "input_tokens_details": { "cached_tokens": 0, "cache_write_tokens": 0 },
+  "output_tokens_details": { "reasoning_tokens": 0 }
+}
+```
+
+The pinned SDK originally stripped `cache_write_tokens`; after preserving it,
+the recorder also needed the configured provider metadata namespace
+(`openai-codex`, rather than always `openai`). The SDK patch, compatible adapter
+and recorder now preserve the field. A post-fix real call matched raw provider,
+local trace and server counters exactly: input 33, output 5, reasoning 0, cache
+read 0, cache write 0. HTTP call and provider request identities also matched.
+The earlier audit records retain their original unknown cache-write evidence;
+they were not silently rewritten.
+
+A replay regression matrix covers JSON and SSE for OpenAI, CommonJS, Azure,
+compatible and renamed Codex adapters, with zero, positive, null and omitted
+write counters. Explicit provider counts override the catalog cache-write
+inference. Final focused tests: 90 passed; broader provider/usage/trace/CLI
+regressions: 605 passed, two skipped. Another 71 processor/accounting tests passed.
+Frozen installation, all seven typecheck
+packages and documentation checks pass. Raw numeric usage, lineage and matching
+assertions remain in the isolated audit directory named by
+`/tmp/roadmap-real-chatgpt-root`; its provider access credential has been removed.
+
+Real Ace/BYOK provider billing reconciliation, full live delegated-task coverage
+and hosted rollout remain unproven.

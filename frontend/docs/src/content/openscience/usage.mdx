@@ -130,3 +130,8 @@ nullable provider fields on recorded calls.
 calls and unmatched or ambiguous billing records are excluded from project
 summaries; all-project summaries include them. `--models` also lists models
 seen only in internal/failed calls or imports, even without transcript messages.
+
+
+OpenAI and Azure Responses cache-write counters are retained when the provider
+exposes them. Explicit zero stays zero; omitted or null counters remain unknown.
+A reported counter takes precedence over a catalog-based cache-write estimate.

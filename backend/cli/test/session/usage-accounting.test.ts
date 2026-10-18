@@ -391,3 +391,14 @@ test("cost provenance distinguishes estimates, provider reports, wallet calculat
       .costSource,
   ).toBe("wallet_calculated")
 })
+
+test.each([0, 25])("explicit OpenAI cache-write evidence %d wins over catalog inference", (write) => {
+  const priced = { ...model(), providerID: "openai", api: { id: "gpt-6-sol" } }
+  const result = Session.getUsage({
+    model: priced,
+    usage: { inputTokens: 100, outputTokens: 5, totalTokens: 105, cachedInputTokens: 10 },
+    metadata: { openai: { cacheCreationInputTokens: write } },
+  })
+  expect(result.tokens.input).toBe(90 - write)
+  expect(result.tokens.cache.write).toBe(write)
+})
