@@ -137,7 +137,7 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 5 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 6 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })
@@ -194,4 +194,68 @@ test("version-four receipt evidence survives adding billing imports and their re
   ).toEqual([{ record_id: "record" }])
   await upgraded.transaction((db) => db.query("DELETE FROM billing_import WHERE id=?").run("import"))
   expect(await upgraded.query((db) => db.query("SELECT record_id FROM billing_import_item").all())).toEqual([])
+})
+
+test("later root imports reach running readers without reviving deleted or changed backups", async () => {
+  await using tmp = await tmpdir()
+  const key = ["session", "project", "original"]
+  const file = path.join(tmp.path, "storage", ...key) + ".json"
+  await Bun.write(file, JSON.stringify({ id: "original" }))
+  const store = ResearchDatabase.create(tmp.path)
+  expect(await store.read<unknown>(key)).toEqual({ id: "original" })
+  await store.remove(key)
+  await Bun.write(file, "{damaged old backup")
+  const added = ["message", "new_session", "new_message"]
+  await Bun.write(path.join(tmp.path, "storage", ...added) + ".json", JSON.stringify({ id: "new_message" }))
+  await ResearchDatabase.notifyLegacy(tmp.path)
+  expect(await store.read<unknown>(added)).toEqual({ id: "new_message" })
+  await expect(store.read<unknown>(key)).rejects.toMatchObject({ code: "ENOENT" })
+  await expect(ResearchDatabase.create(tmp.path).read<unknown>(key)).rejects.toMatchObject({ code: "ENOENT" })
+  await store.importRecords("late-trace-import", [{ key, value: { id: "resurrected" } }])
+  await expect(store.read<unknown>(key)).rejects.toMatchObject({ code: "ENOENT" })
+})
+
+test("old experimental databases retain ambiguous backups for explicit atomic recovery", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const current = ["session", "project", "current"]
+  const missing = ["session", "project", "ambiguous"]
+  await store.write(current, { id: "current", title: "current title" })
+  const previous = new Database(store.filepath)
+  previous.exec(
+    "DROP TABLE legacy_record; DELETE FROM migration WHERE name='legacy-rescan-automatic'; PRAGMA user_version=5;",
+  )
+  previous.close()
+  await Bun.write(path.join(tmp.path, "storage", ...current) + ".json", "{obsolete corrupt backup")
+  await Bun.write(path.join(tmp.path, "storage", ...missing) + ".json", JSON.stringify({ id: "ambiguous" }))
+  const upgraded = ResearchDatabase.create(tmp.path)
+  expect(await upgraded.read<unknown>(current)).toEqual({ id: "current", title: "current title" })
+  await expect(upgraded.read<unknown>(missing)).rejects.toMatchObject({ code: "ENOENT" })
+  expect(await upgraded.pendingLegacy()).toEqual([{ key: missing, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) }])
+  await expect(upgraded.restoreLegacy([missing, current])).rejects.toThrow("not pending")
+  await expect(upgraded.read<unknown>(missing)).rejects.toMatchObject({ code: "ENOENT" })
+  await upgraded.restoreLegacy([missing])
+  expect(await upgraded.read<unknown>(missing)).toEqual({ id: "ambiguous" })
+  expect(await upgraded.pendingLegacy()).toEqual([])
+  await upgraded.remove(missing)
+  await expect(upgraded.restoreLegacy([missing])).rejects.toThrow("not pending")
+  await ResearchDatabase.notifyLegacy(tmp.path)
+  await expect(upgraded.read<unknown>(missing)).rejects.toMatchObject({ code: "ENOENT" })
+})
+
+test("a failed later rescan imports nothing and retries after the new source is repaired", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["todo", "existing"], [])
+  const valid = path.join(tmp.path, "storage", "session", "project", "new.json")
+  const invalid = path.join(tmp.path, "storage", "message", "new", "bad.json")
+  await Bun.write(valid, JSON.stringify({ id: "new" }))
+  await Bun.write(invalid, "{invalid")
+  await ResearchDatabase.notifyLegacy(tmp.path)
+  await expect(store.list([])).rejects.toThrow("original file is unchanged")
+  const verify = new Database(store.filepath, { readonly: true })
+  expect(verify.query("SELECT COUNT(*) AS count FROM session").get()).toEqual({ count: 0 })
+  verify.close()
+  await Bun.write(invalid, JSON.stringify({ id: "bad" }))
+  expect(await store.list([])).toHaveLength(3)
 })

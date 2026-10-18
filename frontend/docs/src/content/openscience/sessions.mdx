@@ -22,6 +22,23 @@ If migration reports a malformed legacy file, repair that original file and
 retry. No partial conversation import is committed. The database is included
 when relocating the application's data directory.
 
+Later data-root rescans can import previously unseen records into the database,
+including while the current server is running. Records already imported or deleted
+are never replaced by a legacy backup.
+
+Early experimental database versions did not retain deletion history. When upgrading
+one of those databases, unseen backups remain pending rather than reappearing as
+conversations. Run `openscience debug legacy-import` to list pending record keys and
+SHA-256 hashes without printing conversation content. To restore selected snapshots,
+pass their exact keys explicitly:
+
+```bash
+openscience debug legacy-import --restore session/PROJECT_ID/SESSION_ID
+```
+
+Multiple keys can follow `--restore`; restoration is atomic. Records deleted by the current database cannot
+be recovered through this command. Original JSON backups remain unchanged.
+
 ## Check settled Ace charges
 
 Open the session's context panel and choose **Check settled charges**. OpenScience

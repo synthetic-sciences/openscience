@@ -6,6 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import { resolveDataDirectory } from "@/global/data-dir"
 import { SecretBox } from "@/util/secret-box"
+import { ResearchDatabase } from "@/storage/database"
 
 // Windows' chmod only toggles the read-only bit, so `chmod 000` there leaves a
 // file perfectly readable and there is no portable way to stage the
@@ -964,4 +965,32 @@ describe("OpenScience data directory", () => {
     expect(await fs.readFile(path.join(target, "settings", "cache", "index.db"), "utf8")).toBe("current-index")
     expect(fsSync.existsSync(path.join(target, "settings", "cache", "index.db-wal"))).toBe(false)
   })
+})
+
+test("legacy-root rescans notify a running research store and preserve database deletions", async () => {
+  const home = await root()
+  const legacy = path.join(home, "share", "openscience")
+  const key = ["session", "project", "original"]
+  await Bun.write(path.join(legacy, "storage", ...key) + ".json", JSON.stringify({ id: "original" }))
+  const first = await resolveDataDirectory({ home, legacy })
+  const store = ResearchDatabase.create(first.path)
+  expect(await store.read<unknown>(key)).toEqual({ id: "original" })
+  await store.remove(key)
+  const added = ["session", "project", "later"]
+  await Bun.write(path.join(legacy, "storage", ...added) + ".json", JSON.stringify({ id: "later" }))
+  const marker = path.join(first.path, ".xdg-data-migration-v2.json")
+  const previous = await Bun.file(marker).json()
+  await Bun.write(marker, JSON.stringify({ ...previous, checkedAt: 0 }))
+  const rescan = await resolveDataDirectory({ home, legacy })
+  expect(rescan.error).toBeUndefined()
+  expect(await store.read<unknown>(added)).toEqual({ id: "later" })
+  await expect(store.read<unknown>(key)).rejects.toMatchObject({ code: "ENOENT" })
+  // A retry after copying but before recording success must still notify readers.
+  const retry = ["session", "project", "copied_before_crash"]
+  const data = JSON.stringify({ id: "copied_before_crash" })
+  await Bun.write(path.join(legacy, "storage", ...retry) + ".json", data)
+  await Bun.write(path.join(first.path, "storage", ...retry) + ".json", data)
+  await Bun.write(marker, JSON.stringify({ ...previous, checkedAt: 0 }))
+  expect((await resolveDataDirectory({ home, legacy })).error).toBeUndefined()
+  expect(await store.read<unknown>(retry)).toEqual({ id: "copied_before_crash" })
 })

@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite"
 import path from "node:path"
 import fs from "node:fs/promises"
+import { randomUUID, createHash } from "node:crypto"
 import { FileLease } from "@/util/file-lease"
 import { DataRootBarrier } from "@/global/data-root-barrier"
 
@@ -31,7 +32,17 @@ export namespace ResearchDatabase {
     })
   }
 
+  export const revisionFile = ".research-legacy-revision"
+
+  export async function notifyLegacy(root: string) {
+    const target = path.join(root, revisionFile)
+    const temporary = `${target}.${randomUUID()}.tmp`
+    await Bun.write(temporary, randomUUID(), { mode: 0o600 })
+    await fs.rename(temporary, target)
+  }
+
   export function create(root: string) {
+    let scanned: string | undefined
     const filepath = path.join(root, "research.sqlite")
     const legacy = path.join(root, "storage")
     const shape = (key: string[]) => {
@@ -49,6 +60,10 @@ export namespace ResearchDatabase {
       const record = shape(key)
       const data = JSON.stringify(value)
       if (data === undefined) throw new Error("Research records must be JSON values")
+      db.query(
+        `INSERT INTO legacy_record(kind,parent,id,state,data) VALUES (?,?,?,'known',NULL)
+        ON CONFLICT(kind,parent,id) DO UPDATE SET state='known',data=NULL`,
+      ).run(record.kind, record.parent, record.id)
       db.query(
         `INSERT INTO ${record.kind} (${record.scope},id,data,updated_at) VALUES (?,?,?,?)
         ON CONFLICT (${record.scope},id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at`,
@@ -69,8 +84,8 @@ export namespace ResearchDatabase {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 5) throw new Error("This research database requires a newer OpenScience version")
-        if (version < 5)
+        if (version > 6) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 6)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
@@ -116,12 +131,25 @@ export namespace ResearchDatabase {
             CREATE INDEX IF NOT EXISTS idx_part_session ON part(json_extract(data,'$.sessionID'));
             CREATE INDEX IF NOT EXISTS idx_part_call ON part(json_extract(data,'$.callID'));
             CREATE INDEX IF NOT EXISTS idx_part_model_call ON part(json_extract(data,'$.usage.call'));
-            PRAGMA user_version=5;`)
+            CREATE TABLE IF NOT EXISTS legacy_record (
+              kind TEXT NOT NULL,parent TEXT NOT NULL,id TEXT NOT NULL,
+              state TEXT NOT NULL CHECK(state IN ('known','deleted','pending')),
+              data TEXT CHECK(data IS NULL OR json_valid(data)),PRIMARY KEY(kind,parent,id));
+            PRAGMA user_version=6;`)
           }).immediate()
-        if (!db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get()) {
+        const revision = await fs
+          .readFile(path.join(root, revisionFile), "utf8")
+          .catch((error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") return "initial"
+            throw error
+          })
+        if (scanned !== revision) {
           await using lease = await FileLease.acquire(`${filepath}.migration.lock`, 120_000)
           await lease.during(async () => {
-            if (db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get()) return
+            // Earlier experimental schemas cannot distinguish unseen backups from deleted records.
+            const automatic =
+              !db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get() ||
+              !!db.query("SELECT 1 FROM migration WHERE name='legacy-rescan-automatic'").get()
             db.exec("DELETE FROM legacy_stage")
             const records: { kind: string; parent: string; id: string; data: string }[] = []
             const staged = { bytes: 0 }
@@ -147,6 +175,20 @@ export namespace ResearchDatabase {
                 continue
               for await (const relative of new Bun.Glob("**/*.json").scan({ cwd: directory, onlyFiles: true })) {
                 const record = shape([kind, ...relative.slice(0, -5).split(path.sep)])
+                if (
+                  db
+                    .query("SELECT 1 FROM legacy_record WHERE kind=? AND parent=? AND id=?")
+                    .get(kind, record.parent, record.id)
+                )
+                  continue
+                if (db.query(`SELECT 1 FROM ${kind} WHERE ${record.scope}=? AND id=?`).get(record.parent, record.id)) {
+                  db.query("INSERT OR IGNORE INTO legacy_record(kind,parent,id,state) VALUES (?,?,?,'known')").run(
+                    kind,
+                    record.parent,
+                    record.id,
+                  )
+                  continue
+                }
                 const source = path.join(directory, relative)
                 const data = await Bun.file(source).text()
                 await Promise.resolve()
@@ -164,16 +206,29 @@ export namespace ResearchDatabase {
             flush()
             db.transaction(() => {
               for (const [kind, table] of Object.entries(tables)) {
-                db.query(
-                  `INSERT INTO ${kind} (${table.scope},id,data,updated_at)
-                  SELECT parent,id,data,? FROM legacy_stage WHERE kind=?
+                if (automatic)
+                  db.query(
+                    `INSERT INTO ${kind} (${table.scope},id,data,updated_at)
+                  SELECT parent,id,data,? FROM legacy_stage AS staged WHERE kind=?
+                    AND NOT EXISTS (SELECT 1 FROM legacy_record AS seen WHERE seen.kind=staged.kind AND seen.parent=staged.parent AND seen.id=staged.id)
                   ON CONFLICT (${table.scope},id) DO NOTHING`,
-                ).run(Date.now(), kind)
+                  ).run(Date.now(), kind)
               }
-              db.query("INSERT INTO migration (name,completed_at) VALUES ('legacy-session-records',?)").run(Date.now())
+              db.query(
+                `INSERT OR IGNORE INTO legacy_record(kind,parent,id,state,data)
+                SELECT kind,parent,id,?,CASE WHEN ? THEN NULL ELSE data END FROM legacy_stage`,
+              ).run(automatic ? "known" : "pending", automatic ? 1 : 0)
+              db.query("INSERT OR IGNORE INTO migration (name,completed_at) VALUES ('legacy-session-records',?)").run(
+                Date.now(),
+              )
+              if (automatic)
+                db.query("INSERT OR IGNORE INTO migration(name,completed_at) VALUES ('legacy-rescan-automatic',?)").run(
+                  Date.now(),
+                )
               db.exec("DELETE FROM legacy_stage")
             }).immediate()
           })
+          scanned = revision
         }
         return fn(db)
       } finally {
@@ -183,6 +238,36 @@ export namespace ResearchDatabase {
     }
     return {
       filepath,
+      pendingLegacy: () =>
+        access((db) =>
+          db
+            .query<{ kind: Kind; parent: string; id: string; data: string }, []>(
+              "SELECT kind,parent,id,data FROM legacy_record WHERE state='pending' ORDER BY kind,parent,id",
+            )
+            .all()
+            .map((record) => ({
+              key: tables[record.kind].depth === 3 ? [record.kind, record.parent, record.id] : [record.kind, record.id],
+              sha256: createHash("sha256").update(record.data).digest("hex"),
+            })),
+        ),
+      restoreLegacy: (keys: string[][]) =>
+        access((db) =>
+          db
+            .transaction(() => {
+              for (const key of keys) {
+                const record = shape(key)
+                const pending = db
+                  .query<{ data: string }, [string, string, string]>(
+                    "SELECT data FROM legacy_record WHERE kind=? AND parent=? AND id=? AND state='pending'",
+                  )
+                  .get(record.kind, record.parent, record.id)
+                if (!pending || get(db, key) !== undefined)
+                  throw new Error(`Legacy record is not pending: ${key.join("/")}`)
+                save(db, key, JSON.parse(pending.data))
+              }
+            })
+            .immediate(),
+        ),
       query: <T>(fn: (db: Database) => T) => access(fn),
       transaction: <T>(fn: (db: Database) => T) => access((db) => db.transaction(fn).immediate(db)),
       migrated: (name: string) => access((db) => !!db.query("SELECT 1 FROM migration WHERE name=?").get(name)),
@@ -192,7 +277,11 @@ export namespace ResearchDatabase {
             .transaction(() => {
               if (db.query("SELECT 1 FROM migration WHERE name=?").get(name)) return
               for (const record of records) {
-                if (get(db, record.key) === undefined) save(db, record.key, record.value)
+                const key = shape(record.key)
+                const seen = db
+                  .query("SELECT 1 FROM legacy_record WHERE kind=? AND parent=? AND id=?")
+                  .get(key.kind, key.parent, key.id)
+                if (!seen && get(db, record.key) === undefined) save(db, record.key, record.value)
               }
               db.query("INSERT INTO migration (name,completed_at) VALUES (?,?)").run(name, Date.now())
             })
@@ -229,7 +318,13 @@ export namespace ResearchDatabase {
       remove: (key: string[]) =>
         access((db) => {
           const record = shape(key)
-          db.query(`DELETE FROM ${record.kind} WHERE ${record.scope}=? AND id=?`).run(record.parent, record.id)
+          db.transaction(() => {
+            db.query(
+              `INSERT INTO legacy_record(kind,parent,id,state,data) VALUES (?,?,?,'deleted',NULL)
+              ON CONFLICT(kind,parent,id) DO UPDATE SET state='deleted',data=NULL`,
+            ).run(record.kind, record.parent, record.id)
+            db.query(`DELETE FROM ${record.kind} WHERE ${record.scope}=? AND id=?`).run(record.parent, record.id)
+          }).immediate()
         }),
       list: (prefix: string[]) =>
         access((db) => {

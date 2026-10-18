@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Import later legacy-root session records without reviving deleted backups, and provide `debug legacy-import` to recover ambiguous records from earlier experimental databases.
+
 - Import normalized provider billing evidence locally, reconcile unique request IDs, and keep imported charges and credits separate from provider-reported costs, estimates and historical accounting in Usage and CSV exports.
 
 - Add an explicit settled Ace charge lookup in the task context panel, including worker calls, exact Wallet receipt amounts and separate pending, unknown and inconsistent settlement states.

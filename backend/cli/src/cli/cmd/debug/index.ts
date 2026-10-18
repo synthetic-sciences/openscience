@@ -11,6 +11,7 @@ import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
 import { CapabilityCanaryCommand } from "./capability-canary"
 import { AuditCommand } from "./audit"
+import { LegacyImportCommand } from "./legacy-import"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -27,6 +28,7 @@ export const DebugCommand = cmd({
       .command(AgentCommand)
       .command(CapabilityCanaryCommand)
       .command(AuditCommand)
+      .command(LegacyImportCommand)
       .command(PathsCommand)
       .command(
         cmd({

@@ -6,6 +6,7 @@ import path from "node:path"
 import z from "zod"
 import { JsonStore } from "../util/jsonstore"
 import { SecretBox } from "../util/secret-box"
+import { ResearchDatabase } from "../storage/database"
 
 const marker = ".xdg-data-migration-v2.json"
 /** Suffix for a copy in flight. Never collides with a real name, and marks
@@ -15,7 +16,7 @@ const pending = ".openscience-import"
 // the one tree a still-running older instance appends to throughout the import,
 // so copying it buys nothing and costs a full SHA-256 pass over tens of MB on
 // the boot path.
-const reserved = new Set(["bin", "log", ".xdg-data-migration-v1.json", marker])
+const reserved = new Set(["bin", "log", ".xdg-data-migration-v1.json", marker, ResearchDatabase.revisionFile])
 const stores = new Set(["auth.json", "credentials.json", "mcp-auth.json"])
 // Per-process scratch that must not be transplanted — including this code's
 // own staging copies, so a previous root that was once a target does not have
@@ -897,6 +898,13 @@ export async function resolveDataDirectory(input: {
       const record = sealed
         ? { ...sealed, pending: deferred, ...(resumed ? {} : { checkedAt: Date.now() }) }
         : { ...migration, migratedAt: Date.now(), checkedAt: Date.now(), pending: deferred }
+      if (
+        source.some((file) => {
+          const parts = file.path.split(path.sep)
+          return parts[0] === "storage" && file.path.endsWith(".json") && ResearchDatabase.handles(parts.slice(1))
+        })
+      )
+        await ResearchDatabase.notifyLegacy(target)
       await Bun.write(path.join(target, marker), `${JSON.stringify(record, null, 2)}\n`, { mode: 0o600 })
       if (deferred.length > 0)
         notes.push(`${deferred.length} file(s) could not be read from ${legacy}; the next launch will retry them`)
