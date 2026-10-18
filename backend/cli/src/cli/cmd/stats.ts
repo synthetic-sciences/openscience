@@ -1,16 +1,20 @@
 import type { Argv } from "yargs"
 import { cmd } from "./cmd"
 import { Session } from "../../session"
+import { MessageV2 } from "../../session/message-v2"
 import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Project } from "../../project/project"
 import { Instance } from "../../project/instance"
 import { TokenUsage } from "@synsci/util/token-usage"
+import { localUsage } from "@/session/usage"
+import { usageCostLabels, usageCostTotals, type UsageCost, type UsageRow } from "@synsci/util/usage"
 
 interface SessionStats {
   totalSessions: number
   totalMessages: number
   totalCost: number
+  evidence: UsageRow[]
   totalTokens: {
     input: number
     output: number
@@ -109,7 +113,7 @@ async function getAllSessions(): Promise<Session.Info[]> {
   return sessions
 }
 
-async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
+export async function aggregateSessionStats(days?: number, projectFilter?: string): Promise<SessionStats> {
   const sessions = await getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
@@ -131,19 +135,14 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
 
   let filteredSessions = cutoffTime > 0 ? sessions.filter((session) => session.time.updated >= cutoffTime) : sessions
 
-  if (projectFilter !== undefined) {
-    if (projectFilter === "") {
-      const currentProject = await getCurrentProject()
-      filteredSessions = filteredSessions.filter((session) => session.projectID === currentProject.id)
-    } else {
-      filteredSessions = filteredSessions.filter((session) => session.projectID === projectFilter)
-    }
-  }
+  const projectID = projectFilter === "" ? (await getCurrentProject()).id : projectFilter
+  if (projectID !== undefined) filteredSessions = filteredSessions.filter((session) => session.projectID === projectID)
 
   const stats: SessionStats = {
     totalSessions: filteredSessions.length,
     totalMessages: 0,
     totalCost: 0,
+    evidence: await localUsage(cutoffTime, Date.now() + 1, projectID),
     totalTokens: {
       input: 0,
       output: 0,
@@ -165,6 +164,15 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     medianTokensPerSession: 0,
   }
 
+  for (const row of stats.evidence) {
+    const model = `${row.provider}/${row.model}`
+    stats.modelUsage[model] ??= {
+      messages: 0,
+      tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+      cost: 0,
+    }
+  }
+
   if (filteredSessions.length > 1000) {
     console.log(`Large dataset detected (${filteredSessions.length} sessions). This may take a while...`)
   }
@@ -184,7 +192,10 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
     const batch = filteredSessions.slice(i, i + BATCH_SIZE)
 
     const batchPromises = batch.map(async (session) => {
-      const messages = await Session.messages({ sessionID: session.id })
+      // CLI summaries intentionally span projects; the HTTP session reader is
+      // restricted to the current project and directory.
+      await Session.flushPendingParts(session.id)
+      const messages = await Array.fromAsync(MessageV2.stream(session.id))
 
       let sessionCost = 0
       let sessionTokens = { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
@@ -312,7 +323,7 @@ async function aggregateSessionStats(days?: number, projectFilter?: string): Pro
   return stats
 }
 
-function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number) {
+export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: number): void {
   const width = 56
 
   function renderRow(label: string, value: string): string {
@@ -332,15 +343,33 @@ function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: numb
   console.log("└────────────────────────────────────────────────────────┘")
   console.log()
 
+  const costValue = (cost: UsageCost) =>
+    cost.source === "subscription"
+      ? "Not allocated"
+      : cost.amountUSD === null
+        ? "Unknown"
+        : `$${cost.amountUSD}${cost.unknown ? " (partial)" : ""}`
+  console.log("Local cost evidence in the selected time window:")
+  const evidence = usageCostTotals(stats.evidence)
+  if (!evidence.length) console.log("  Unknown: no cost evidence recorded.")
+  for (const cost of evidence) {
+    console.log(`  ${usageCostLabels[cost.source]}: ${costValue(cost)}`)
+    if (cost.unknown && cost.source !== "subscription") console.log(`    Unreported amounts: ${cost.unknown}`)
+  }
+  console.log("Categories are separate; they are not added together.")
+  console.log("Ace Wallet receipts: check the task context; this command does not fetch charges.")
+  console.log("Project filters exclude unattributed internal calls and unmatched billing records.")
+  console.log()
+
   // Cost & Tokens section
   console.log("┌────────────────────────────────────────────────────────┐")
-  console.log("│                    COST & TOKENS                       │")
+  console.log("│                  RECORDED ACCOUNTING                   │")
   console.log("├────────────────────────────────────────────────────────┤")
   const cost = isNaN(stats.totalCost) ? 0 : stats.totalCost
   const costPerDay = isNaN(stats.costPerDay) ? 0 : stats.costPerDay
   const tokensPerSession = isNaN(stats.tokensPerSession) ? 0 : stats.tokensPerSession
-  console.log(renderRow("Total Cost", `$${cost.toFixed(2)}`))
-  console.log(renderRow("Avg Cost/Day", `$${costPerDay.toFixed(2)}`))
+  console.log(renderRow("Accounting amount", `$${cost.toFixed(2)}`))
+  console.log(renderRow("Avg accounting/Day", `$${costPerDay.toFixed(2)}`))
   console.log(renderRow("Avg Tokens/Session", formatNumber(Math.round(tokensPerSession))))
   const medianTokensPerSession = isNaN(stats.medianTokensPerSession) ? 0 : stats.medianTokensPerSession
   console.log(renderRow("Median Tokens/Session", formatNumber(Math.round(medianTokensPerSession))))
@@ -348,7 +377,12 @@ function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: numb
   console.log(renderRow("Output", formatNumber(stats.totalTokens.output)))
   console.log(renderRow("Cache Read", formatNumber(stats.totalTokens.cache.read)))
   console.log(renderRow("Cache Write", formatNumber(stats.totalTokens.cache.write)))
+  console.log(renderRow("Reasoning", formatNumber(stats.totalTokens.reasoning)))
   console.log("└────────────────────────────────────────────────────────┘")
+  console.log("Accounting includes whole transcripts of selected sessions and may include estimates.")
+  console.log(
+    "Historical token zeros do not establish provider-reported counts; use debug audit for nullable evidence.",
+  )
   console.log()
 
   // Model Usage section
@@ -367,7 +401,15 @@ function displayStats(stats: SessionStats, toolLimit?: number, modelLimit?: numb
       console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
       console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
       console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
-      console.log(renderRow("  Cost", `$${usage.cost.toFixed(4)}`))
+      console.log(renderRow("  Recorded accounting", `$${usage.cost.toFixed(4)}`))
+      const rows = stats.evidence.filter((row) => `${row.provider}/${row.model}` === model)
+      console.log(renderRow("  Calls in this cost evidence", String(rows.reduce((sum, row) => sum + row.calls, 0))))
+      const costs = usageCostTotals(rows)
+      if (!costs.length) console.log(renderRow("  Cost evidence", "Unknown"))
+      for (const cost of costs) {
+        console.log(`│  ${usageCostLabels[cost.source]}: ${costValue(cost)}`)
+        if (cost.unknown && cost.source !== "subscription") console.log(`│    Unreported amounts: ${cost.unknown}`)
+      }
       console.log("├────────────────────────────────────────────────────────┤")
     }
     // Remove last separator and add bottom border

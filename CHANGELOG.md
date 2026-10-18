@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Separate provider-reported, estimated, imported and historical cost evidence in `openscience stats`; retain exact amounts, mark missing evidence Unknown, and label compatibility accounting separately.
+
 - Keep the task context and settled-charge lookup accessible before the first model response, including failed or cancelled first attempts.
 
 - Show server-side HTTP dispatch, failure, cancellation and timeout coverage in logging health, including Ace settlement checks for calls without model responses.

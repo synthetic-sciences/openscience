@@ -65,3 +65,29 @@ credentials are kept separately and are not included in this note.
   export conversion and reconciliation acceptance.
 - Hosted rollout and verification at the deployed versions. Local checks do
   not prove that these commits are running on a hosted service.
+
+## CLI follow-up and read-only historical audit
+
+The CLI `stats` surface also used a combined compatibility `Total Cost`. New
+source separates the same cost categories as Settings, preserves exact decimal
+amounts and partial/unknown evidence, and labels legacy transcript accounting
+separately. Project filters include only attributable session calls and uniquely
+matched imported records. All-project summaries retain unattributed internal
+calls and unmatched billing. Internal/failed calls can introduce a model even
+without transcript messages. Cross-project transcript reads no longer use the
+HTTP reader's current-project restriction.
+
+Validation: 107 CLI/usage/import tests passed, then 18 focused tests passed after
+adding an empty-evidence check. Backend typecheck and documentation checks pass.
+An actual source CLI invocation against the disposable acceptance data displayed
+provider-reported `$0.00123 (partial)` separately from imported billing
+`$0.004560000000000001`; the unmatched credit was excluded by its project filter.
+
+A read-only inspection of the previously supplied real ChatGPT session found
+41 completed steps and 49 saved call identities. The older records have neither
+nullable reported usage nor explicit call outcomes, so their compatibility zeros
+cannot establish actual provider observations. No stored records were rewritten.
+The original localhost server was no longer listening. An authenticated read-only
+request to the hosted health endpoint returned HTTP 404: current local health
+features are not verified on that hosted deployment. No model request or payment
+was made during this historical inspection.

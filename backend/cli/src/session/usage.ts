@@ -7,7 +7,9 @@ import type { Session } from "."
 import { TokenUsage } from "@synsci/util/token-usage"
 import type { UsageRow, UsageRoute } from "@synsci/util/usage"
 
-export async function localUsage(start: number, end: number): Promise<UsageRow[]> {
+export async function localUsage(start: number, end: number, projectID?: string): Promise<UsageRow[]> {
+  const sessions = await Storage.list(projectID === undefined ? ["session"] : ["session", projectID])
+  const scope = projectID === undefined ? undefined : new Set(sessions.map((key) => key.at(-1)!))
   const rows = new Map<string, UsageRow>()
   const seen = new Set<string>()
   const calls = await (
@@ -18,10 +20,10 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
         "SELECT data FROM model_call WHERE json_extract(data,'$.occurredAt')>=? AND json_extract(data,'$.occurredAt')<?",
       )
       .all(start, end)
-      .map((row) => SessionTraceStore.ModelCall.parse(JSON.parse(row.data))),
+      .map((row) => SessionTraceStore.ModelCall.parse(JSON.parse(row.data)))
+      .filter((call) => !scope || scope.has(call.sessionID)),
   )
   const trace = new Map(calls.map((call) => [JSON.stringify([call.sessionID, call.id]), call]))
-  const sessions = await Storage.list(["session"])
   for (const key of sessions) {
     const session = await Storage.read<Session.Info>(key).catch((error) => {
       if (error instanceof Storage.NotFoundError) return undefined
@@ -166,6 +168,7 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
     rows.set(id, row)
   }
   for (const record of await BillingImport.records(start, end)) {
+    if (scope && (!record.sessionID || !scope.has(record.sessionID))) continue
     const date = record.occurredAt.slice(0, 10)
     const model = record.model ?? "Unknown billing model"
     const id = JSON.stringify([date, record.provider, model, "byok"])

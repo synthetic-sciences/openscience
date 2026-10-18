@@ -109,3 +109,24 @@ Use **Wallet** for settled managed charges and your provider's billing for direc
 For a single conversation, open its context indicator or run `openscience stats` for local session summaries. `openscience debug audit <session>` adds content-free call identities for the conversation and its workers, including provider request IDs when the provider reports them. These views describe saved research activity and may have a different scope from account reports. If a discrepancy remains, retain the date range, funding workspace, model, request identifier, and relevant CSV rows for support.
 
 See [Pricing and usage](/openscience/pricing) for rates, reservations, and spending controls, and [Privacy and data](/openscience/privacy) for trace sharing.
+
+
+### CLI summaries
+
+`openscience stats` separates locally retained provider reports, catalog estimates,
+imported billing charges and credits, subscription coverage and historical
+accounting. Exact decimal amounts stay separate; a partial subtotal shows the
+number of observations with unreported amounts. Missing evidence is Unknown.
+This command does not fetch Ace Wallet receipts; check the task context for
+settled charges.
+
+Cost evidence uses call and billing timestamps in the selected `--days` window.
+Legacy accounting statistics describe whole transcripts of sessions active in
+that window and can contain estimates or historical token zero defaults. They
+are labeled separately. Use `openscience debug audit <session>` for exact
+nullable provider fields on recorded calls.
+
+`--project <id>` limits evidence to that project's sessions. Unattributed internal
+calls and unmatched or ambiguous billing records are excluded from project
+summaries; all-project summaries include them. `--models` also lists models
+seen only in internal/failed calls or imports, even without transcript messages.
