@@ -103,6 +103,11 @@ describe("a study run through a real local compute job", () => {
           expect(settled?.points).toBe(5)
           expect(settled?.headline).toBeCloseTo(0.125)
           expect(settled?.summary).toMatchObject({ val_mse: 0.125 })
+          expect(settled?.provenance?.identity.run_id).toEqual({ status: "available", value: job.id })
+          expect(settled?.provenance?.outputs.status).toBe("succeeded")
+          expect(settled?.provenance?.input.code.status).toBe("available")
+          Experiments.close()
+          expect((await Experiments.getRun(run.id))?.provenance).toEqual(settled?.provenance)
           // The log shown to readers and the model carries the plain output only.
           const shown = await ComputeJobs.log(job.id, options)
           expect(shown).toContain("done")

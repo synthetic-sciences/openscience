@@ -23,6 +23,8 @@ track.finish()
 
 Scripts written for `wandb` work unchanged inside a study: `import wandb` resolves to a shim that forwards to the tracker. No account, no network, no dependency: inside a compute job each record is one marked line on the job's output, which OpenScience reads back and stores in a per-project SQLite file under the data root. The Compute pane's log view and the model's `compute_job logs` never show those lines.
 
+New study runs retain their bound compute job’s provenance envelope. Expand **Recorded execution provenance** in run details to inspect the recorded command, working directory, code state, host/runtime information when captured, output hashes and timestamps. Unavailable fields retain their reason, and older runs without evidence say so. This snapshot survives reopening the experiment database; it is not a complete replay bundle or a guarantee that the dataset and environment can be reconstructed.
+
 Runs appear under their study as they log. Click a run for its configuration, summary values and one chart per metric; toggle runs on the comparison chart with the coloured squares, pick the metric, smooth or switch to a log scale.
 
 ## Start a study

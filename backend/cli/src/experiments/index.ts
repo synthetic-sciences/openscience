@@ -7,6 +7,7 @@ import { BusEvent } from "@/bus/bus-event"
 import { Global } from "@/global"
 import { Identifier } from "@/id/id"
 import { Instance } from "@/project/instance"
+import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { Log } from "@/util/log"
 
 /**
@@ -46,6 +47,7 @@ export namespace Experiments {
       status: RunStatus,
       source: z.enum(["job", "kernel", "external"]),
       config: z.record(z.string(), z.unknown()),
+      provenance: ProvenanceEnvelope.Schema.optional(),
       summary: z.record(z.string(), z.unknown()),
       headline: z.number().nullable(),
       baselineDelta: z.number().nullable(),
@@ -234,6 +236,7 @@ export namespace Experiments {
       status TEXT NOT NULL,
       source TEXT NOT NULL,
       config TEXT NOT NULL,
+      provenance TEXT,
       summary TEXT NOT NULL,
       headline REAL,
       baseline_delta REAL,
@@ -288,6 +291,9 @@ export namespace Experiments {
     for (const name of ["question", "hypothesis"]) {
       if (!columns.some((column) => column.name === name)) database.exec(`ALTER TABLE study ADD COLUMN ${name} TEXT`)
     }
+    const runColumns = database.query("PRAGMA table_info(run)").all() as Array<{ name: string }>
+    if (!runColumns.some((column) => column.name === "provenance"))
+      database.exec("ALTER TABLE run ADD COLUMN provenance TEXT")
     databases.set(projectID, database)
     return database
   }
@@ -326,6 +332,7 @@ export namespace Experiments {
     status: string
     source: string
     config: string
+    provenance: string | null
     summary: string
     headline: number | null
     baseline_delta: number | null
@@ -350,6 +357,7 @@ export namespace Experiments {
       status: RunStatus.parse(row.status),
       source: row.source as Run["source"],
       config: parse(row.config, {}),
+      provenance: row.provenance ? ProvenanceEnvelope.Schema.parse(JSON.parse(row.provenance)) : undefined,
       summary: parse(row.summary, {}),
       headline: row.headline,
       baselineDelta: row.baseline_delta,
@@ -619,6 +627,29 @@ export namespace Experiments {
     const now = Date.now()
     database.query(`UPDATE run SET job_id = ?, started_at = ? WHERE id = ?`).run(jobID, now, runID)
     database.query(`UPDATE idea SET started_at = ? WHERE run_id = ?`).run(now, runID)
+    const updated = await getRun(runID, { projectID: project })
+    if (updated) await publish(Event.RunUpdated, { run: updated })
+    return updated
+  }
+
+  /** Retain evidence from the bound compute job, even after that job's record is removed. */
+  export async function recordProvenance(
+    runID: string,
+    jobID: string,
+    evidence: ProvenanceEnvelope.Schema,
+    input?: { projectID?: string },
+  ) {
+    const project = projectID(input)
+    const database = await db(project)
+    const provenance = ProvenanceEnvelope.Schema.parse(evidence)
+    if (provenance.identity.run_id.status === "available" && provenance.identity.run_id.value !== jobID) {
+      throw new Error("Provenance does not belong to the bound compute job")
+    }
+    const existing = await getRun(runID, { projectID: project })
+    if (!existing || existing.jobID !== jobID) return
+    const encoded = json(provenance)
+    if (encoded === json(existing.provenance)) return existing
+    database.query("UPDATE run SET provenance = ? WHERE id = ? AND job_id = ?").run(encoded, runID, jobID)
     const updated = await getRun(runID, { projectID: project })
     if (updated) await publish(Event.RunUpdated, { run: updated })
     return updated

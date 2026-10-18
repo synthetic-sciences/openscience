@@ -1,5 +1,6 @@
 import path from "node:path"
 import z from "zod"
+import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 import { Experiments } from "@/experiments"
 import { StudyDriver } from "@/experiments/driver"
 import { GpuInventory } from "@/experiments/gpu"
@@ -479,13 +480,15 @@ export const StudyTool = Tool.define("study", {
           await Experiments.updateIdea(idea.id, { status: "queued", runID: undefined })
           throw error
         })
-      const job = (result.metadata as { job?: { id: string; status: string } }).job
+      const job = (result.metadata as { job?: { id: string; status: string; provenance?: ProvenanceEnvelope.Schema } })
+        .job
       if (!job) {
         await Experiments.finishRun(run.id, "failed", { killReason: "dispatch returned no job" })
         await Experiments.updateIdea(idea.id, { status: "queued", runID: undefined })
         throw new Error("The compute job was not dispatched")
       }
       await Experiments.bindJob(run.id, job.id)
+      if (job.provenance) await Experiments.recordProvenance(run.id, job.id, job.provenance)
       const bound = (await Experiments.getRun(run.id))!
       await Experiments.addEvent(current.id, "started", `${idea.title} started as run ${run.id} (job ${job.id})`, {
         runID: run.id,

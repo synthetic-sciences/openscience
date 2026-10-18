@@ -1,3 +1,4 @@
+import { ProvenanceEnvelope } from "../../src/science/provenance/envelope"
 import { Database } from "bun:sqlite"
 import path from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
@@ -184,4 +185,33 @@ test("older study databases gain nullable framing fields without inventing a hyp
   await Experiments.updateStudy(study.id, { question: "Can we lower loss?" }, { projectID: project })
   Experiments.close()
   expect((await Experiments.getStudy(study.id, { projectID: project }))?.question).toBe("Can we lower loss?")
+})
+
+test("run provenance is tied to its bound job and survives older database migration", async () => {
+  const project = `${projectID}_provenance`
+  const run = await Experiments.createRun({ projectID: project, name: "baseline", source: "job" })
+  Experiments.close()
+  const database = new Database(path.join(Experiments.directory(), `${project}.sqlite`))
+  database.exec("ALTER TABLE run DROP COLUMN provenance")
+  database.close()
+  expect((await Experiments.getRun(run.id, { projectID: project }))?.provenance).toBeUndefined()
+  const envelope = ProvenanceEnvelope.create({
+    kind: "local_compute",
+    runID: "job_bound",
+    code: "python train.py",
+    status: "succeeded",
+  })
+  expect(await Experiments.recordProvenance(run.id, "job_bound", envelope, { projectID: project })).toBeUndefined()
+  await Experiments.bindJob(run.id, "job_bound", { projectID: project })
+  await expect(
+    Experiments.recordProvenance(
+      run.id,
+      "job_bound",
+      ProvenanceEnvelope.create({ kind: "local_compute", runID: "job_other" }),
+      { projectID: project },
+    ),
+  ).rejects.toThrow("does not belong")
+  await Experiments.recordProvenance(run.id, "job_bound", envelope, { projectID: project })
+  Experiments.close()
+  expect((await Experiments.getRun(run.id, { projectID: project }))?.provenance).toEqual(envelope)
 })

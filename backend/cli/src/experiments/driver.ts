@@ -264,6 +264,8 @@ export namespace StudyDriver {
             : undefined
         if (reason) {
           await cancelJob(run.jobID, study.sessionID).catch((error) => log.warn("kill failed", { run: run.id, error }))
+          const cancelled = await job(run.jobID, study.sessionID).catch(() => undefined)
+          if (cancelled?.provenance) await Experiments.recordProvenance(run.id, run.jobID, cancelled.provenance)
           await Experiments.finishRun(fresh.id, "killed", { killReason: reason })
           await Experiments.addEvent(study.id, "killed", `${fresh.name} killed: ${reason}`, { runID: fresh.id })
           current.followers.delete(fresh.id)
@@ -271,6 +273,7 @@ export namespace StudyDriver {
           continue
         }
         const info = await job(run.jobID, study.sessionID).catch(() => undefined)
+        if (info?.provenance) await Experiments.recordProvenance(run.id, run.jobID, info.provenance)
         if (!info) {
           // A job record that stays missing was lost with its store; the run
           // cannot end on its own and would hold a slot for the study's life.

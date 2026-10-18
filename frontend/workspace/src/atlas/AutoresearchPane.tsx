@@ -348,6 +348,20 @@ export function AutoresearchPane(): JSX.Element {
             <Show when={run().killReason}>
               <p class="ar-run__reason">{run().killReason}</p>
             </Show>
+            <Show when={run().provenance} fallback={<p>Execution provenance was not captured for this run.</p>}>
+              {(provenance) => (
+                <details>
+                  <summary>Recorded execution provenance</summary>
+                  <p>
+                    Compute-job evidence retained with this run. Unavailable fields are explicit; this is not a complete
+                    replay bundle.
+                  </p>
+                  <pre style={{ "white-space": "pre-wrap", "overflow-wrap": "anywhere" }}>
+                    {JSON.stringify(provenance(), null, 2)}
+                  </pre>
+                </details>
+              )}
+            </Show>
             <dl class="ar-facts">
               <For each={Object.entries({ ...(run().config ?? {}), ...(run().summary ?? {}) })}>
                 {([name, value]) => (
