@@ -3,20 +3,15 @@ import { createHash } from "node:crypto"
 import type { LanguageModelUsage, ProviderMetadata } from "ai"
 import z from "zod"
 import { Global } from "@/global"
-import { DataRootBarrier } from "@/global/data-root-barrier"
 import { CredentialLifecycle } from "@/credentials/lifecycle"
 import { OpenScience } from "@/openscience"
 import { managedApiBase } from "@/endpoints"
-import { JsonStore } from "@/util/jsonstore"
-import { Log } from "@/util/log"
 import type { MessageV2 } from "./message-v2"
 import { tracePayload } from "./trace-payload"
+import { TraceQueue } from "./trace-queue"
 
-const log = Log.create({ service: "usage-logging" })
-const filepath = path.join(Global.Path.data, "usage-logging.json")
 const version = "openscience-trace-v3-2026-08-26"
-const limit = 2_048
-const Route = z.enum(["managed", "byok", "chatgpt", "subscription", "local", "custom"])
+const Route = TraceQueue.Route
 const Count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable()
 const Observation = z.object({
   usage_source: z.literal("provider_response"),
@@ -32,47 +27,8 @@ const Observation = z.object({
   cost_source: z.enum(["provider_response", "unavailable"]),
   duration_ms: z.number().finite().nonnegative(),
 })
-const Kind = z.enum([
-  "model.request",
-  "model.response",
-  "assistant.message",
-  "tool.started",
-  "tool.completed",
-  "tool.failed",
-  "tool.cancelled",
-  "error",
-])
-const Event = z.object({
-  event_id: z.string().uuid(),
-  schema_version: z.literal(2),
-  event_type: Kind,
-  occurred_at: z.string().datetime(),
-  installation_id: z.string().uuid(),
-  trace_id: z.string(),
-  span_id: z.string(),
-  parent_span_id: z.string().optional(),
-  session_id: z.string(),
-  run_id: z.string(),
-  model_route: Route,
-  provider_id: z.string(),
-  model_id: z.string(),
-  payload: z.record(z.string(), z.unknown()),
-})
-const Row = z.object({ account: z.string(), event: Event })
-const Store = z.object({
-  installation: z
-    .string()
-    .uuid()
-    .default(() => crypto.randomUUID()),
-  enabled: z.boolean().default(true),
-  revision: z.string().default("initial"),
-  queue: Row.array().max(limit).default([]),
-  quarantined: Row.array().max(64).default([]),
-  batchSize: z.number().int().min(1).max(64).default(64),
-  delivered: z.number().int().nonnegative().default(0),
-  lastDelivery: z.string().datetime().optional(),
-  error: z.string().optional(),
-})
+const Kind = TraceQueue.Kind
+const Event = TraceQueue.Event
 const Consent = z.object({
   consent_version: z.literal(version),
   analytics_enabled: z.boolean(),
@@ -100,18 +56,19 @@ function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
 }
 
-async function read() {
-  return Store.parse(await JsonStore.read(filepath, { strict: true }))
+class DeliveryError extends Error {
+  constructor(kind: "consent" | "delivery" | "receipt", status?: number) {
+    super(
+      kind === "consent"
+        ? `Account sharing preference could not be verified (HTTP ${status}).`
+        : kind === "delivery"
+          ? `Trace delivery was not accepted (HTTP ${status}); queued records will be retried.`
+          : "Usage delivery receipt did not match the submitted batch; queued records will be retried.",
+    )
+  }
 }
 
-async function update(fn: (state: z.infer<typeof Store>) => void) {
-  await using operation = await DataRootBarrier.enter(filepath)
-  await JsonStore.update(filepath, (raw) => {
-    const state = Store.parse(raw)
-    fn(state)
-    return state
-  })
-}
+const read = TraceQueue.read
 
 async function legacy(session: { user_id: string; api_key: string }, route?: z.infer<typeof Route>) {
   for (const filename of ["telemetry-consent-v2.json", "telemetry-consent-v1.json"]) {
@@ -160,22 +117,44 @@ export namespace UsageLogging {
     model: string
     operationID?: string
   }
-  const bindings = new Map<string, Binding>()
-
-  export function bind(input: Binding) {
-    const key = `${input.sessionID}:${input.messageID}`
-    bindings.delete(key)
-    bindings.set(key, input)
-    if (bindings.size > 512) bindings.delete(bindings.keys().next().value!)
+  export async function bind(input: Binding) {
+    await TraceQueue.bind({
+      account: input.context.account,
+      revision: input.context.revision,
+      credential: digest(input.context.session.api_key),
+      sessionID: input.sessionID,
+      messageID: input.messageID,
+      route: Route.catch("custom").parse(input.route),
+      provider: input.provider,
+      model: input.model,
+      operationID: input.operationID,
+    })
   }
 
   export function unbind(sessionID: string, messageID: string) {
-    bindings.delete(`${sessionID}:${messageID}`)
+    return TraceQueue.unbind(sessionID, messageID)
   }
 
   export async function part(part: MessageV2.Part) {
-    const bound = bindings.get(`${part.sessionID}:${part.messageID}`)
-    if (!bound) return
+    const who = await context()
+    if (!who) return
+    const record = await TraceQueue.binding(part.sessionID, part.messageID)
+    if (
+      !record ||
+      record.account !== who.account ||
+      record.revision !== who.revision ||
+      record.credential !== digest(who.session.api_key)
+    )
+      return
+    const bound: Binding = {
+      context: who,
+      sessionID: record.sessionID,
+      messageID: record.messageID,
+      route: record.route,
+      provider: record.provider,
+      model: record.model,
+      operationID: record.operationID,
+    }
     if (part.type === "tool") {
       const status = part.state.status
       const kind =
@@ -197,6 +176,10 @@ export namespace UsageLogging {
     quarantined: z.number().int(),
     delivered: z.number().int(),
     lastDelivery: z.string().optional(),
+    oldestQueuedAt: z.string().datetime().optional(),
+    stalled: z.boolean().optional(),
+    lastAttempt: TraceQueue.Attempt.optional(),
+    rejection: TraceQueue.Rejection.optional(),
     error: z.string().optional(),
   })
 
@@ -239,7 +222,6 @@ export namespace UsageLogging {
   }
 
   export async function installationID(): Promise<string> {
-    if (!(await Bun.file(filepath).exists())) await update(() => {})
     return (await read()).installation
   }
 
@@ -249,7 +231,6 @@ export namespace UsageLogging {
     // Persist the installation before deriving an identity. On a fresh data
     // root, parsing defaults alone would mint a different installation for
     // each call and none would match a later uploaded trace.
-    if (!(await Bun.file(filepath).exists())) await update(() => {})
     const state = await read()
     return digest(`${state.installation}:${sessionID}`)
   }
@@ -264,7 +245,7 @@ export namespace UsageLogging {
       call?: { id: string; hold?: string; providerRequest?: string }
     },
   ) {
-    return event(input, "model.response", {
+    return event({ ...input, operationID: input.call?.id ?? input.operationID }, "model.response", {
       ...reported(input.usage, input.metadata),
       duration_ms: input.duration,
       ...(input.call && {
@@ -296,15 +277,11 @@ export namespace UsageLogging {
     }
     const labels = await OpenScience.scrubSecrets({ provider: input.provider, model: input.model })
     const label = (value: string) => (/^[A-Za-z0-9][A-Za-z0-9._:/+@-]{0,199}$/.test(value) ? value : "custom")
-    await update((state) => {
-      if (!state.enabled || state.revision !== input.context.revision) return
-      if (state.queue.length >= limit || Buffer.byteLength(JSON.stringify(state.queue)) > 32 * 1024 * 1024) {
-        state.error = "Trace queue is full; the latest record could not be saved."
-        log.warn("usage queue full")
-        return
-      }
-      const id = crypto.randomUUID()
-      state.queue.push({
+    const state = await read()
+    if (!state.enabled || state.revision !== input.context.revision) return
+    const id = crypto.randomUUID()
+    await TraceQueue.enqueue(
+      {
         account: current.account,
         event: Event.parse({
           event_id: id,
@@ -327,37 +304,33 @@ export namespace UsageLogging {
           model_id: label(labels.model),
           payload: sanitized,
         }),
-      })
-    })
+      },
+      input.context.revision,
+    )
     schedule()
   }
 
   export async function status(): Promise<z.infer<typeof Status>> {
-    const state = await read()
+    const state = await TraceQueue.status()
     return {
       enabled: state.enabled,
       signedIn: !!(await OpenScience.getSession())?.user_id,
-      queued: state.queue.length,
-      quarantined: state.quarantined.length,
+      queued: state.queued,
+      quarantined: state.quarantined,
       delivered: state.delivered,
       lastDelivery: state.lastDelivery,
+      oldestQueuedAt: state.oldestQueuedAt,
+      stalled: state.stalled,
+      lastAttempt: state.lastAttempt,
+      rejection: state.rejection,
       error: state.error,
     }
   }
 
   export async function setEnabled(enabled: boolean) {
-    await CredentialLifecycle.serialized(() =>
-      update((state) => {
-        if (state.enabled !== enabled) state.revision = crypto.randomUUID()
-        state.enabled = enabled
-        if (!enabled) {
-          state.queue = []
-          state.quarantined = []
-          bindings.clear()
-        }
-        state.error = undefined
-      }),
-    )
+    await CredentialLifecycle.serialized(async () => {
+      await TraceQueue.setEnabled(enabled)
+    })
     if (enabled) schedule()
     return status()
   }
@@ -366,17 +339,13 @@ export namespace UsageLogging {
     await CredentialLifecycle.serialized(async () => {
       const who = await context()
       if (!who) {
-        if (!(await OpenScience.getSession()) && (await Bun.file(filepath).exists())) {
-          await update((state) => {
-            state.queue = []
-            state.quarantined = []
-          })
-          bindings.clear()
+        if (!(await OpenScience.getSession())) {
+          await TraceQueue.clear()
         }
         return
       }
       const state = await read()
-      if (!state.queue.length) return
+      if (!(await TraceQueue.status()).queued) return
       const headers = {
         Authorization: `Bearer ${who.session.api_key}`,
         ...(who.session.organization_id ? { "X-Organization-ID": who.session.organization_id } : {}),
@@ -386,31 +355,16 @@ export namespace UsageLogging {
         signal: AbortSignal.timeout(3_000),
         redirect: "error",
       })
-      if (!response.ok) throw new Error("Account sharing preference could not be verified.")
+      if (!response.ok) throw new DeliveryError("consent", response.status)
       const consent = Consent.parse(await response.json())
       const managed =
         consent.analytics_enabled && consent.research_content_enabled && (await legacy(who.session, "managed"))
       const owned = managed && consent.user_owned_content_enabled && (await legacy(who.session, "byok"))
-      const allowed = (row: z.infer<typeof Row>) =>
-        row.account === who.account && (row.event.model_route === "managed" ? managed : owned)
-      const rows: z.infer<typeof Row>[] = []
-      let bytes = 0
-      for (const row of state.queue) {
-        if (!allowed(row)) continue
-        const size = Buffer.byteLength(JSON.stringify(row.event))
-        if (rows.length >= state.batchSize || bytes + size > 2 * 1024 * 1024) break
-        rows.push(row)
-        bytes += size
-      }
-      // Drop other accounts' records and records excluded by an opt-out. Do
-      // not retain them for a later sign-in or a later change of preference.
-      await update((latest) => {
-        latest.queue = latest.queue.filter(allowed)
-        latest.quarantined = latest.quarantined.filter(allowed)
-        if (!managed) latest.error = "Trace sharing is disabled by your saved privacy preferences."
-      })
+      await TraceQueue.filter(who.account, managed, owned)
+      const rows = await TraceQueue.batch(who.account)
       if (!rows.length) return
       const delivery = crypto.randomUUID()
+      if (!(await TraceQueue.beginDelivery(delivery, who.account, rows, who.revision))) return
       const batch = await fetch(`${who.base}/api/v1/telemetry/batches`, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json", "Content-Encoding": "gzip" },
@@ -426,20 +380,19 @@ export namespace UsageLogging {
         signal: AbortSignal.timeout(5_000),
         redirect: "error",
       })
+      await TraceQueue.response(delivery, batch.status)
       if ([400, 413, 415, 422].includes(batch.status)) {
-        await update((latest) => {
-          latest.batchSize = Math.max(1, Math.floor(rows.length / 2))
-          if (rows.length === 1) {
-            latest.queue = latest.queue.filter((row) => row.event.event_id !== rows[0].event.event_id)
-            latest.quarantined = [...latest.quarantined, rows[0]].slice(-64)
-            latest.batchSize = 64
-          }
-          latest.error = `Trace delivery needs attention (HTTP ${batch.status}). Rejected records are kept locally.`
-        })
+        await batch.body?.cancel().catch(() => undefined)
+        await TraceQueue.reject(delivery, rows, batch.status)
         return
       }
-      if (!batch.ok) throw new Error(`Trace delivery was not accepted (HTTP ${batch.status}).`)
-      const receipt = Receipt.parse(await batch.json())
+      if (!batch.ok) {
+        await batch.body?.cancel().catch(() => undefined)
+        throw new DeliveryError("delivery", batch.status)
+      }
+      const parsed = Receipt.safeParse(await batch.json().catch(() => undefined))
+      if (!parsed.success) throw new DeliveryError("receipt")
+      const receipt = parsed.data
       const sent = new Set(rows.map((row) => row.event.event_id))
       const confirmed = [...receipt.accepted, ...receipt.replayed]
       if (
@@ -448,16 +401,14 @@ export namespace UsageLogging {
         new Set(confirmed).size !== confirmed.length ||
         confirmed.some((id) => !sent.has(id))
       )
-        throw new Error("Usage delivery receipt did not match the submitted batch.")
-      await update((latest) => {
-        const ids = new Set(confirmed)
-        const removed = latest.queue.filter((row) => ids.has(row.event.event_id)).length
-        latest.queue = latest.queue.filter((row) => !ids.has(row.event.event_id))
-        latest.delivered += removed
-        if (removed) latest.lastDelivery = new Date().toISOString()
-        latest.error = confirmed.length === sent.size ? undefined : "Some trace records are awaiting acknowledgement."
-        if (confirmed.length === sent.size) latest.batchSize = 64
-      })
+        throw new DeliveryError("receipt")
+      await TraceQueue.acknowledge(
+        delivery,
+        receipt.accepted,
+        receipt.replayed,
+        confirmed.length === sent.size,
+        who.revision,
+      )
       delay = confirmed.length ? 1_000 : Math.min(delay * 2, 300_000)
     })
   }
@@ -465,18 +416,20 @@ export namespace UsageLogging {
   export function flush(): Promise<void> {
     if (pending) return pending
     const operation = deliver()
-      .catch(async () => {
+      .catch(async (error: unknown) => {
         // Provider/account payloads and HTTP bodies can contain credentials;
         // persist only our content-free diagnostic, never the caught exception.
-        await update((state) => {
-          state.error = "Trace delivery could not be verified; queued records will be retried."
-        })
+        await TraceQueue.failure(
+          error instanceof DeliveryError
+            ? error.message
+            : "Trace delivery could not be verified; queued records will be retried.",
+        )
         delay = Math.min(delay * 2, 300_000)
       })
       .finally(async () => {
         pending = undefined
-        const state = await read().catch(() => undefined)
-        if (state?.queue.length) schedule()
+        const state = await TraceQueue.status().catch(() => undefined)
+        if (state?.queued) schedule()
         else delay = 1_000
       })
     pending = operation

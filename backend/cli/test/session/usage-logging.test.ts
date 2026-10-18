@@ -1,3 +1,6 @@
+import { Storage } from "../../src/storage/storage"
+import { TraceQueue } from "../../src/session/trace-queue"
+import { resetTraceQueue } from "../fixture/trace-queue"
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
 import type { LanguageModelUsage } from "ai"
@@ -107,6 +110,7 @@ async function record(route = "managed") {
 
 beforeEach(async () => {
   await UsageLogging.drain()
+  await resetTraceQueue()
   for (const file of [store, session, consent])
     await Bun.file(file)
       .delete()
@@ -115,6 +119,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await UsageLogging.drain()
+  await resetTraceQueue()
   for (const file of [store, session, consent])
     await Bun.file(file)
       .delete()
@@ -217,7 +222,8 @@ describe("usage delivery", () => {
     await UsageLogging.flush()
     expect(remote.requests).toEqual([])
     expect(await UsageLogging.context()).toBeUndefined()
-    expect(await Bun.file(store).json()).toMatchObject({ enabled: false, queue: [] })
+    expect(await TraceQueue.read()).toMatchObject({ enabled: false })
+    expect(await TraceQueue.status()).toMatchObject({ queued: 0, quarantined: 0 })
   })
 
   test("account opt-out is checked before uploading and clears queued records", async () => {
@@ -268,7 +274,11 @@ describe("usage delivery", () => {
     await record()
     await UsageLogging.flush()
     expect(remote.requests).toEqual([])
-    await Bun.write(store, "{truncated")
+    await (
+      await Storage.research()
+    ).transaction((db) =>
+      db.query("UPDATE trace_settings SET data=? WHERE id=1").run(JSON.stringify({ enabled: "unreadable" })),
+    )
     await expect(UsageLogging.context()).rejects.toThrow()
     expect(remote.batches).toHaveLength(0)
   })
@@ -489,7 +499,9 @@ describe("usage delivery", () => {
         parameters: { api_key: "nested-secret", child: { password: "sensitive-password" } },
       },
     )
-    const disk = await Bun.file(store).text()
+    const disk = await (
+      await Storage.research()
+    ).query((db) => JSON.stringify(db.query("SELECT data FROM trace_event").all()))
     expect(disk).toContain("Research question")
     for (const secret of [token, "private-secret-header", "nested-secret", "sensitive-password"])
       expect(disk).not.toContain(secret)
@@ -547,7 +559,7 @@ describe("usage delivery", () => {
       fn: async () => {
         const session = await Session.create({ title: "Tool trace fixture" })
         const messageID = Identifier.ascending("message")
-        UsageLogging.bind({
+        await UsageLogging.bind({
           context: (await UsageLogging.context())!,
           sessionID: session.id,
           messageID,
@@ -791,4 +803,15 @@ describe("usage delivery", () => {
     expect(payload).not.toHaveProperty("call_id")
     expect(JSON.stringify(remote.batches)).not.toContain("private-conversation")
   })
+})
+
+test("HTTP failure diagnostics retain status without storing the server's error body", async () => {
+  using remote = receiver({ respond: () => new Response("PRIVATE_SERVER_ERROR_BODY", { status: 503 }) })
+  await signedIn()
+  await record()
+  await UsageLogging.flush()
+  const status = await UsageLogging.status()
+  expect(status.error).toContain("HTTP 503")
+  expect(status.lastAttempt).toMatchObject({ httpStatus: 503 })
+  expect(JSON.stringify(status)).not.toContain("PRIVATE_SERVER_ERROR_BODY")
 })

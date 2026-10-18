@@ -19,7 +19,10 @@ export const UsageLoggingRoutes = lazy(() =>
           },
         },
       }),
-      async (c) => c.json(await UsageLogging.status()),
+      async (c) => {
+        c.header("Cache-Control", "no-store")
+        return c.json(await UsageLogging.status())
+      },
     )
     .get(
       "/health",

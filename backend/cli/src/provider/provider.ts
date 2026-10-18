@@ -106,6 +106,14 @@ export namespace Provider {
     abort?: AbortSignal
     /** Actual fetch dispatch, after local request and credential preparation. */
     onRequest?: () => void
+    /** Durable attempt recording, installed by the session trace path. */
+    callTrace?: {
+      start: (timing: Omit<RequestTiming, "completedAt" | "outcome">, body: unknown) => Promise<void>
+      finish: (
+        timing: RequestTiming,
+        response: { status?: number; hold?: string; providerRequest?: string },
+      ) => Promise<void>
+    }
   }
 
   export type RequestTiming = Pick<RequestContext, "sessionID" | "messageID" | "attempt" | "agent"> &
@@ -221,6 +229,10 @@ export namespace Provider {
   }
 
   const requestContext = new AsyncLocalStorage<RequestContext>()
+
+  export function currentRequestContext() {
+    return requestContext.getStore()
+  }
 
   export function withRequestContext<T>(context: RequestContext, run: () => T): T {
     return requestContext.run(context, run)
@@ -502,24 +514,25 @@ export namespace Provider {
       startedAt: Date.now(),
     }
     let emitted = false
-    const emit = (outcome: RequestTiming["outcome"], error?: unknown, phase?: RequestTiming["timeoutPhase"]) => {
+    const evidence: { status?: number; hold?: string; providerRequest?: string } = {}
+    const emit = async (outcome: RequestTiming["outcome"], error?: unknown, phase?: RequestTiming["timeoutPhase"]) => {
       if (emitted) return
       emitted = true
       if (timer) clearTimeout(timer)
-      publishTiming(
-        {
-          ...timing,
-          completedAt: Date.now(),
-          outcome,
-          ...(phase && { timeoutPhase: phase }),
-          ...(error instanceof Error && { errorName: error.name }),
-        },
-        options.onTiming,
-      )
+      const item = {
+        ...timing,
+        completedAt: Date.now(),
+        outcome,
+        ...(phase && { timeoutPhase: phase }),
+        ...(error instanceof Error && { errorName: error.name }),
+      }
+      await context.callTrace?.finish(item, evidence)
+      publishTiming(item, options.onTiming)
     }
 
     let response: Response
     try {
+      await context.callTrace?.start(timing, init?.body)
       response = await waitForActivity({
         run: () => {
           const fetchInit = {
@@ -548,6 +561,9 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
+      evidence.status = response.status
+      evidence.hold = options.managed ? CallLink.hold(response.headers) : undefined
+      evidence.providerRequest = CallLink.providerRequest(response.headers)
       if (options.managed) Object.assign(timing, gatewayTiming(response.headers))
       log.info("request response", {
         sessionID: timing.sessionID,
@@ -562,7 +578,7 @@ export namespace Provider {
         gatewayTiming: timing.gatewayTiming,
       })
     } catch (error) {
-      emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
+      await emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
       throw connectFailure(error, signal)
     }
 
@@ -578,11 +594,11 @@ export namespace Provider {
     // constructor forbids. They do not expose a consumable network body, so
     // preserve the original object rather than attempting to wrap it.
     if (response.status === 0) {
-      emit("completed")
+      await emit("completed")
       return response
     }
     if (!response.body) {
-      emit("completed")
+      await emit("completed")
       return copyResponse(response, null, linked)
     }
 
@@ -624,7 +640,7 @@ export namespace Provider {
           })
           if (next.done) {
             release()
-            emit("completed")
+            await emit("completed")
             controller.close()
             return
           }
@@ -634,15 +650,15 @@ export namespace Provider {
           controller.enqueue(next.value)
         } catch (error) {
           if (!cancelled) {
-            emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
+            await emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
             controller.error(error)
           }
           cancelReader(error)
         }
       },
-      cancel(reason) {
+      async cancel(reason) {
         cancelled = true
-        emit("cancelled", reason)
+        await emit("cancelled", reason)
         idleController.abort(reason ?? new DOMException("The response body was cancelled", "AbortError"))
         cancelReader(reason)
       },

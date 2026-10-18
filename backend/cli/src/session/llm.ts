@@ -30,6 +30,7 @@ import { resolveAccessRoute } from "./access-route"
 import { providerErrorMetadata } from "./provider-error"
 import { Toolset } from "./toolset"
 import { UsageLogging } from "./usage-logging"
+import { ModelCallTrace } from "./model-call-trace"
 
 import { ManagedPricing } from "@/provider/managed-pricing"
 import { CallLink } from "@/provider/call-link"
@@ -295,7 +296,8 @@ export namespace LLM {
     ]
     const logging = await UsageLogging.context().catch(() => undefined)
     const started = performance.now()
-    const traceMessageID = input.trace?.messageID ?? input.user.id
+    const parent = Provider.currentRequestContext()
+    const traceMessageID = input.trace?.messageID ?? parent?.messageID ?? input.user.id
     const binding = logging
       ? {
           context: logging,
@@ -307,11 +309,26 @@ export namespace LLM {
           operationID: crypto.randomUUID(),
         }
       : undefined
-    if (binding) UsageLogging.bind(binding)
+    if (binding) await UsageLogging.bind(binding)
+    const calls = ModelCallTrace.create({
+      context: {
+        ...parent,
+        sessionID: input.sessionID,
+        messageID: traceMessageID,
+        attempt: input.trace?.attempt ?? parent?.attempt ?? 0,
+        modelID: routed.api.id,
+      },
+      route: SessionTraceStore.ModelCall.shape.route.catch("custom").parse(traceRoute),
+      provider: routed.providerID,
+      model: routed.api.id,
+      binding,
+    })
     const partial = { text: "", reasoning: "", truncated: false }
     const capture = (kind: "model.request" | "assistant.message" | "error", payload: Record<string, unknown>) =>
       binding
-        ? UsageLogging.event(binding, kind, payload).catch(() => l.warn("could not persist trace record"))
+        ? UsageLogging.event({ ...binding, operationID: calls.current() }, kind, payload).catch(() =>
+            l.warn("could not persist trace record"),
+          )
         : undefined
     const result = streamText({
       onChunk({ chunk }) {
@@ -322,31 +339,15 @@ export namespace LLM {
         if (chunk.text.length > remaining) partial.truncated = true
       },
       async onAbort() {
+        await calls.fail("cancelled")
         await capture("assistant.message", { ...partial, interrupted: true })
       },
       async onStepFinish(step) {
-        const call = CallLink.fromResponse(step.response?.headers, step.response?.id)
-        if (call) {
-          await SessionTraceStore.recordModelCall({
-            id: call.id,
-            sessionID: input.sessionID,
-            messageID: traceMessageID,
-            route:
-              traceRoute === "managed" ||
-              traceRoute === "byok" ||
-              traceRoute === "chatgpt" ||
-              traceRoute === "subscription" ||
-              traceRoute === "local"
-                ? traceRoute
-                : "custom",
-            provider: routed.providerID,
-            model: routed.api.id,
-            occurredAt: Date.now(),
-            reportedCostUSD: UsageLogging.reported(step.usage, step.providerMetadata).cost_usd,
-            ...(call.providerRequest && { providerRequest: call.providerRequest }),
-            ...(call.hold && { hold: call.hold }),
-          })
-        }
+        const call = await calls.complete(
+          CallLink.fromResponse(step.response?.headers, step.response?.id),
+          step.usage,
+          step.providerMetadata,
+        )
         if (!binding) return
         await UsageLogging.record({
           ...binding,
@@ -359,6 +360,7 @@ export namespace LLM {
         }).catch(() => l.warn("could not persist usage record"))
       },
       async onError(error) {
+        await calls.fail("failed")
         l.error("stream error", providerErrorMetadata(error))
         await capture("error", { error: error.error, partial })
       },
@@ -423,26 +425,9 @@ export namespace LLM {
               return args.params
             },
             async wrapStream(args) {
-              await capture("model.request", {
-                attempt: input.trace?.attempt,
-                messages: args.params.prompt,
-                tools: args.params.tools,
-                parameters: {
-                  providerOptions: args.params.providerOptions,
-                  maxOutputTokens: args.params.maxOutputTokens,
-                  temperature: args.params.temperature,
-                  topP: args.params.topP,
-                  topK: args.params.topK,
-                  presencePenalty: args.params.presencePenalty,
-                  frequencyPenalty: args.params.frequencyPenalty,
-                  stopSequences: args.params.stopSequences,
-                  toolChoice: args.params.toolChoice,
-                  responseFormat: args.params.responseFormat,
-                },
-              })
               // doStream settles when the response headers arrive, before any
               // body chunk is read: the exact "waiting for first token" edge.
-              const result = await args.doStream()
+              const result = await Provider.withRequestContext(calls.context, () => args.doStream())
               input.onResponse?.()
               return result
             },

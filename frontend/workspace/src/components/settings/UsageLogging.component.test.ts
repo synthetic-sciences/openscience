@@ -1,4 +1,4 @@
-import type { SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
+import type { SettingsUsageLoggingGetResponses, SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
 import { afterAll, afterEach, expect, test } from "bun:test"
 import { once } from "node:events"
 import { createServer } from "node:http"
@@ -36,7 +36,7 @@ async function mount(error?: string) {
       quarantined: 0,
       lastDelivery: undefined as string | undefined,
       error,
-    },
+    } as SettingsUsageLoggingGetResponses[200],
     reject: false,
     health: undefined as SettingsUsageLoggingHealthResponses[200] | undefined,
     healthReads: 0,
@@ -229,4 +229,23 @@ test("receipt-only deliveries remain visible when there are no stored responses"
   checkServer(host).click()
   await ready(() => host.textContent?.includes("Stored evidence needs attention") === true)
   expect(host.textContent).toContain("2 deliveries · 2 without stored events (1 replay-only) · 1 inconsistent receipts")
+})
+
+test("refresh explains delayed queues and content-free delivery/rejection diagnostics", async () => {
+  const { state, host } = await mount()
+  state.status.oldestQueuedAt = "2026-10-18T00:00:00.000Z"
+  state.status.stalled = true
+  state.status.lastAttempt = {
+    deliveryID: "delivery_fixture",
+    startedAt: "2026-10-18T00:01:00.000Z",
+    httpStatus: 422,
+    state: "rejected",
+  }
+  state.status.rejection = { eventID: "event_fixture", reason: "http_422" }
+  host.querySelector<HTMLButtonElement>("button")!.click()
+  await ready(() => host.textContent?.includes("Last delivery attempt") === true)
+  expect(host.textContent).toContain("waiting more than five minutes")
+  expect(host.textContent).toContain("HTTP 422")
+  expect(host.textContent).toContain("event_fixture")
+  expect(state.healthReads).toBe(0)
 })

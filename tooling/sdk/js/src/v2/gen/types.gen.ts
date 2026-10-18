@@ -9817,6 +9817,19 @@ export type SettingsUsageLoggingGetResponses = {
     quarantined: number
     delivered: number
     lastDelivery?: string
+    oldestQueuedAt?: string
+    stalled?: boolean
+    lastAttempt?: {
+      deliveryID: string
+      startedAt: string
+      completedAt?: string
+      httpStatus?: number
+      state: "pending" | "response_received" | "rejected" | "acknowledged" | "partial" | "unknown"
+    }
+    rejection?: {
+      eventID: string
+      reason: string
+    }
     error?: string
   }
 }
@@ -9843,6 +9856,19 @@ export type SettingsUsageLoggingUpdateResponses = {
     quarantined: number
     delivered: number
     lastDelivery?: string
+    oldestQueuedAt?: string
+    stalled?: boolean
+    lastAttempt?: {
+      deliveryID: string
+      startedAt: string
+      completedAt?: string
+      httpStatus?: number
+      state: "pending" | "response_received" | "rejected" | "acknowledged" | "partial" | "unknown"
+    }
+    rejection?: {
+      eventID: string
+      reason: string
+    }
     error?: string
   }
 }

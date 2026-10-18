@@ -35,6 +35,8 @@ export namespace CallAudit {
       recordedTokens?: { input: number; output: number; reasoning: number; cache: { read: number; write: number } }
       /** Historical step accounting; may be calculated, not a billing receipt. */
       recordedCostUSD?: number
+      outcome?: SessionTraceStore.ModelCall["outcome"]
+      httpStatus?: number
       reportedCostUSD?: number | null
       reportedTokens?: NonNullable<MessageV2.StepFinishPart["usage"]>["reported"]
       cost: {
@@ -71,6 +73,9 @@ export namespace CallAudit {
           ...(call.providerRequest && { providerRequest: call.providerRequest }),
           ...(call.hold && { hold: call.hold }),
           ...(call.reportedCostUSD !== undefined && { reportedCostUSD: call.reportedCostUSD }),
+          ...(call.reported && { reportedTokens: call.reported }),
+          ...(call.outcome && { outcome: call.outcome }),
+          ...(call.httpStatus !== undefined && { httpStatus: call.httpStatus }),
           cost: cost(call.route, call.reportedCostUSD),
         })
       }

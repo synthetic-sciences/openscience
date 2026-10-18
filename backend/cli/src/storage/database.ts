@@ -13,6 +13,8 @@ export namespace ResearchDatabase {
     part: { scope: "message_id", depth: 3 },
     session_diff: { scope: "scope_id", depth: 2 },
     todo: { scope: "scope_id", depth: 2 },
+    trace: { scope: "scope_id", depth: 2 },
+    model_call: { scope: "session_id", depth: 3 },
   } as const
   type Kind = keyof typeof tables
 
@@ -63,10 +65,10 @@ export namespace ResearchDatabase {
       const db = new Database(filepath, { create: true, strict: true })
       try {
         await fs.chmod(filepath, 0o600)
-        db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;")
+        db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 1) throw new Error("This research database requires a newer OpenScience version")
-        if (version === 0)
+        if (version > 3) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 3)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
@@ -78,11 +80,30 @@ export namespace ResearchDatabase {
               ${table.scope} TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL CHECK(json_valid(data)),
               updated_at INTEGER NOT NULL,PRIMARY KEY (${table.scope},id))`)
             }
+            db.exec(`CREATE TABLE IF NOT EXISTS trace_settings (
+              id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL CHECK(json_valid(data)));
+            CREATE TABLE IF NOT EXISTS trace_event (
+              sequence INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT NOT NULL UNIQUE,account TEXT NOT NULL,session_id TEXT NOT NULL,model_route TEXT NOT NULL,
+              data TEXT NOT NULL CHECK(json_valid(data)),state TEXT NOT NULL CHECK(state IN ('queued','quarantined','acknowledged')),
+              queued_at INTEGER NOT NULL,error TEXT);
+            CREATE INDEX IF NOT EXISTS idx_trace_event_queue ON trace_event(account,state,sequence);
+            CREATE INDEX IF NOT EXISTS idx_trace_event_state ON trace_event(state,queued_at,sequence);
+            CREATE INDEX IF NOT EXISTS idx_trace_event_session ON trace_event(session_id,id);
+            CREATE TABLE IF NOT EXISTS trace_binding (
+              session_id TEXT NOT NULL,message_id TEXT NOT NULL,account TEXT NOT NULL,model_route TEXT NOT NULL,
+              data TEXT NOT NULL CHECK(json_valid(data)),PRIMARY KEY(session_id,message_id));
+            CREATE TABLE IF NOT EXISTS trace_delivery (
+              id TEXT PRIMARY KEY,account TEXT NOT NULL,started_at INTEGER NOT NULL,completed_at INTEGER,
+              status INTEGER,state TEXT NOT NULL,accepted INTEGER NOT NULL DEFAULT 0,replayed INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS trace_delivery_event (
+              delivery_id TEXT NOT NULL REFERENCES trace_delivery(id) ON DELETE CASCADE,
+              event_id TEXT NOT NULL REFERENCES trace_event(id) ON DELETE CASCADE,
+              PRIMARY KEY(delivery_id,event_id));`)
             db.exec(`CREATE INDEX IF NOT EXISTS idx_session_parent ON session(json_extract(data,'$.parentID'));
             CREATE INDEX IF NOT EXISTS idx_part_session ON part(json_extract(data,'$.sessionID'));
             CREATE INDEX IF NOT EXISTS idx_part_call ON part(json_extract(data,'$.callID'));
             CREATE INDEX IF NOT EXISTS idx_part_model_call ON part(json_extract(data,'$.usage.call'));
-            PRAGMA user_version=1;`)
+            PRAGMA user_version=3;`)
           }).immediate()
         if (!db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get()) {
           await using lease = await FileLease.acquire(`${filepath}.migration.lock`, 120_000)
@@ -149,6 +170,21 @@ export namespace ResearchDatabase {
     }
     return {
       filepath,
+      query: <T>(fn: (db: Database) => T) => access(fn),
+      transaction: <T>(fn: (db: Database) => T) => access((db) => db.transaction(fn).immediate(db)),
+      migrated: (name: string) => access((db) => !!db.query("SELECT 1 FROM migration WHERE name=?").get(name)),
+      importRecords: (name: string, records: { key: string[]; value: unknown }[]) =>
+        access((db) =>
+          db
+            .transaction(() => {
+              if (db.query("SELECT 1 FROM migration WHERE name=?").get(name)) return
+              for (const record of records) {
+                if (get(db, record.key) === undefined) save(db, record.key, record.value)
+              }
+              db.query("INSERT INTO migration (name,completed_at) VALUES (?,?)").run(name, Date.now())
+            })
+            .immediate(),
+        ),
       read: <T>(key: string[]) =>
         access((db) => {
           const value = get<T>(db, key)

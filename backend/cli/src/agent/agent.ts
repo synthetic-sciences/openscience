@@ -1,7 +1,14 @@
 import { Config } from "../config/config"
 import z from "zod"
 import { Provider } from "../provider/provider"
-import { generateObject, streamObject, type ModelMessage } from "ai"
+import {
+  generateObject,
+  streamObject,
+  NoObjectGeneratedError,
+  type ModelMessage,
+  type LanguageModelUsage,
+  type ProviderMetadata,
+} from "ai"
 import { SystemPrompt } from "../session/system"
 import { Instance } from "../project/instance"
 import { Auth } from "../auth"
@@ -25,9 +32,12 @@ import { ProjectAccess } from "@/project/access"
 import { randomUUID } from "node:crypto"
 import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
-import { requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
+import { accessRoute, requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
 import { ToolVisibility } from "@/tool/visibility"
 import { BIOLOGY_TOOL_IDS } from "@/tool/biology/ids"
+import { ModelCallTrace } from "@/session/model-call-trace"
+import { UsageLogging } from "@/session/usage-logging"
+import { CallLink } from "@/provider/call-link"
 
 export namespace Agent {
   export const Info = z
@@ -551,24 +561,85 @@ export namespace Agent {
         })
       : undefined
 
-    const requestContext = { sessionID, messageID, attempt: 1, ...(funding ? { funding } : {}) }
-
-    if (oauthStream) {
-      const result = Provider.withRequestContext(requestContext, () =>
-        streamObject({
-          ...params,
-          providerOptions,
-          onError: () => {},
-        }),
-      )
-      for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
-        if (part.type === "error") throw part.error
-      }
-      const object = await result.object
+    const logging = await UsageLogging.context()
+    const route = accessRoute(credentialSource, model)
+    const started = Date.now()
+    const binding = logging
+      ? {
+          context: logging,
+          sessionID,
+          messageID,
+          route,
+          provider: model.providerID,
+          model: model.api.id,
+          operationID: crypto.randomUUID(),
+        }
+      : undefined
+    const calls = ModelCallTrace.create({
+      context: { sessionID, messageID, attempt: 1, ...(funding ? { funding } : {}) },
+      route,
+      provider: model.providerID,
+      model: model.api.id,
+      binding,
+    })
+    const requestContext = calls.context
+    const complete = async (
+      object: z.infer<typeof schema>,
+      usage: LanguageModelUsage,
+      metadata: ProviderMetadata | undefined,
+      response: { headers?: Record<string, string>; id?: string },
+    ) => {
+      const call = await calls.complete(CallLink.fromResponse(response.headers, response.id), usage, metadata)
+      if (binding)
+        await UsageLogging.record({
+          ...binding,
+          usage,
+          metadata,
+          duration: Date.now() - started,
+          content: object,
+          call,
+        })
       return object
     }
+    const failed = async (error: unknown): Promise<never> => {
+      if (NoObjectGeneratedError.isInstance(error) && error.usage) {
+        const call = await calls.complete(
+          CallLink.fromResponse(error.response?.headers, error.response?.id),
+          error.usage,
+          undefined,
+          "failed",
+        )
+        if (binding)
+          await UsageLogging.record({
+            ...binding,
+            usage: error.usage,
+            duration: Date.now() - started,
+            content: { text: error.text, invalid_output: true },
+            finish: error.finishReason,
+            call,
+          })
+      }
+      await calls.fail("failed")
+      throw error
+    }
 
-    const result = await Provider.withRequestContext(requestContext, () => generateObject(params))
-    return result.object
+    if (oauthStream)
+      return (async () => {
+        const result = Provider.withRequestContext(requestContext, () =>
+          streamObject({
+            ...params,
+            providerOptions,
+            onError: () => {},
+          }),
+        )
+        for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
+          if (part.type === "error") await failed(part.error)
+        }
+        const object = await result.object.catch(failed)
+        return complete(object, await result.usage, await result.providerMetadata, await result.response).catch(failed)
+      })().catch(failed)
+
+    const result = await Provider.withRequestContext(requestContext, () => generateObject(params)).catch(failed)
+    return complete(result.object, result.usage, result.providerMetadata, result.response).catch(failed)
   }
 }

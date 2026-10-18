@@ -1,3 +1,4 @@
+import { resetTraceQueue } from "../fixture/trace-queue"
 import type z from "zod"
 import { afterEach, beforeEach, expect, test } from "bun:test"
 import path from "node:path"
@@ -48,10 +49,12 @@ const report: z.infer<typeof LoggingHealth.Report> = {
 }
 
 beforeEach(async () => {
+  await resetTraceQueue()
   await Bun.write(store, JSON.stringify({ installation, enabled: true }))
   await Bun.write(session, JSON.stringify({ api_key: token, user_id: "health-user", organization_id: organization }))
 })
 afterEach(async () => {
+  await resetTraceQueue()
   await Bun.file(session)
     .delete()
     .catch(() => undefined)

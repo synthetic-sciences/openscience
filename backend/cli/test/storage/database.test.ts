@@ -110,3 +110,35 @@ test("a newer database format is rejected without rewriting its records", async 
   })
   verify.close()
 })
+
+test("version-one databases gain the trace outbox without replacing existing session records", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const key = ["session", "project", "session_stable"]
+  await store.write(key, { id: "session_stable", parentID: "parent_stable" })
+  const old = new Database(store.filepath)
+  old.exec(`DROP TABLE trace_delivery_event; DROP TABLE trace_delivery; DROP TABLE trace_binding;
+    DROP TABLE trace_event; DROP TABLE trace_settings; DROP TABLE model_call; DROP TABLE trace;
+    PRAGMA user_version=1;`)
+  old.close()
+  const upgraded = ResearchDatabase.create(tmp.path)
+  expect(await upgraded.read<{ id: string; parentID: string }>(key)).toEqual({
+    id: "session_stable",
+    parentID: "parent_stable",
+  })
+  await upgraded.write(["model_call", "session_stable", "call_stable"], { id: "call_stable", outcome: "pending" })
+  expect(
+    await ResearchDatabase.create(tmp.path).read<{ id: string; outcome: string }>([
+      "model_call",
+      "session_stable",
+      "call_stable",
+    ]),
+  ).toEqual({
+    id: "call_stable",
+    outcome: "pending",
+  })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 3 })
+  expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
+    count: 0,
+  })
+})

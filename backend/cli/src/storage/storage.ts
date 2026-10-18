@@ -195,10 +195,22 @@ export namespace Storage {
     }
   })
 
+  /** Initialize legacy storage before any shared research-database access. */
+  export async function research() {
+    await state()
+    return database
+  }
+
   export async function remove(key: string[]) {
     if (ResearchDatabase.handles(key)) {
-      await state()
-      return withErrorHandling(() => database.remove(key))
+      const dir = await state().then((value) => value.dir)
+      return withErrorHandling(async () => {
+        await using operation = await DataRootBarrier.enter(database.filepath)
+        await database.remove(key)
+        await fs.unlink(path.join(dir, ...key) + ".json").catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") throw error
+        })
+      })
     }
     const dir = await state().then((x) => x.dir)
     const target = path.join(dir, ...key) + ".json"

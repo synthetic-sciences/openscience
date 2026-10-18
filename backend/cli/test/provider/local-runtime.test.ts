@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import fs from "node:fs/promises"
-import path from "node:path"
 import { jsonSchema, streamText, tool } from "ai"
 import { Agent } from "../../src/agent/agent"
-import { Global } from "../../src/global"
 import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { LLM } from "../../src/session/llm"
@@ -92,14 +89,16 @@ describe("local OpenAI-compatible runtime", () => {
     }
   })
 
-  test("starts provider dispatch while preserving durable trace-before-consumption ordering", async () => {
+  test("persists the HTTP attempt before dispatch and the harness before returning the stream", async () => {
     const seen = Promise.withResolvers<void>()
     const server = Bun.serve({
       port: 0,
       hostname: "127.0.0.1",
-      fetch(request) {
+      async fetch(request) {
         const url = new URL(request.url)
         if (url.pathname !== "/v1/chat/completions") return new Response("not found", { status: 404 })
+        const trace = await SessionTraceStore.read(sessionID)
+        expect(trace.modelCalls).toMatchObject([{ outcome: "pending", messageID: "message_assistant" }])
         seen.resolve()
         const chunks = [
           {
@@ -122,7 +121,6 @@ describe("local OpenAI-compatible runtime", () => {
       },
     })
     const sessionID = `session_trace_${crypto.randomUUID()}`
-    const lock = path.join(Global.Path.data, "trace", `${encodeURIComponent(sessionID)}.json.lock`)
 
     try {
       await using tmp = await tmpdir({
@@ -157,9 +155,6 @@ describe("local OpenAI-compatible runtime", () => {
             agent: agent.name,
             model: { providerID: model.providerID, modelID: model.id },
           })
-          await fs.mkdir(path.dirname(lock), { recursive: true })
-          await Bun.write(lock, JSON.stringify({ pid: process.pid, created: Date.now() }))
-
           const pending = LLM.stream({
             user,
             sessionID,
@@ -174,14 +169,9 @@ describe("local OpenAI-compatible runtime", () => {
           await Promise.race([
             seen.promise,
             Bun.sleep(2_000).then(() => {
-              throw new Error("provider dispatch did not start while trace persistence was locked")
+              throw new Error("provider dispatch did not start")
             }),
           ])
-          expect(await Promise.race([pending.then(() => "resolved"), Bun.sleep(30).then(() => "pending")])).toBe(
-            "pending",
-          )
-
-          await fs.unlink(lock)
           const result = await pending
           const trace = await SessionTraceStore.read(sessionID)
           expect(trace.harness).toHaveLength(1)
@@ -190,7 +180,6 @@ describe("local OpenAI-compatible runtime", () => {
         },
       })
     } finally {
-      await fs.unlink(lock).catch(() => undefined)
       await SessionTraceStore.remove(sessionID)
       server.stop(true)
     }

@@ -4,19 +4,11 @@ import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { Card, Row, RowCopy, Section } from "./_shared"
-import type { SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
+import type { SettingsUsageLoggingGetResponses, SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
 import { ServerLoggingHealth } from "./ServerLoggingHealth"
 import { settingsApi } from "./api"
 
-type Status = {
-  enabled: boolean
-  signedIn: boolean
-  queued: number
-  quarantined: number
-  delivered: number
-  lastDelivery?: string
-  error?: string
-}
+type Status = SettingsUsageLoggingGetResponses[200]
 
 type Services = {
   sdk: Pick<ReturnType<typeof useGlobalSDK>, "url">
@@ -103,6 +95,34 @@ export function UsageLogging(props: { services?: Services } = {}) {
                   description={status().lastDelivery ?? "No delivery has been acknowledged on this device yet."}
                 />
               </Row>
+              <Show when={status().oldestQueuedAt}>
+                <Row>
+                  <RowCopy
+                    title="Oldest queued record"
+                    description={`${status().oldestQueuedAt}${status().stalled ? " · waiting more than five minutes for acknowledgement" : ""}`}
+                  />
+                </Row>
+              </Show>
+              <Show when={status().lastAttempt}>
+                {(attempt) => (
+                  <Row>
+                    <RowCopy
+                      title="Last delivery attempt"
+                      description={`${attempt().startedAt} · ${attempt().state}${attempt().httpStatus === undefined ? "" : ` · HTTP ${attempt().httpStatus}`} · ${attempt().deliveryID}`}
+                    />
+                  </Row>
+                )}
+              </Show>
+              <Show when={status().rejection}>
+                {(rejection) => (
+                  <Row>
+                    <RowCopy
+                      title="Latest rejected record"
+                      description={`${rejection().eventID} · ${rejection().reason === "local_size_limit" ? "Record exceeds the delivery size limit" : /^http_[1-5][0-9]{2}$/.test(rejection().reason) ? `HTTP ${rejection().reason.slice(5)}` : "Reason unavailable"}`}
+                    />
+                  </Row>
+                )}
+              </Show>
               <Show when={status().quarantined > 0}>
                 <Row>
                   <RowCopy
