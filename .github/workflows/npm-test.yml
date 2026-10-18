@@ -92,7 +92,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - name: Restore immutable npm test artifacts
@@ -160,7 +160,7 @@ jobs:
       # registry.npmjs.org, so the rehearsal never waits for the registry to
       # commit fifteen uploads. The real staging happens once, in publish.yml.
       - name: Share the packed candidate with the gate jobs
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-candidate-${{ needs.version.outputs.version }}
           path: .release/npm-test/${{ needs.version.outputs.version }}
@@ -184,7 +184,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -214,7 +214,7 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.source }}
       - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - name: Set Playwright browser path
@@ -394,7 +394,7 @@ jobs:
           cat "$RUNNER_TEMP/openscience-fake-model.log" || true
       - name: Upload packaged E2E artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-test-packaged-e2e-${{ github.run_attempt }}
           if-no-files-found: ignore
@@ -433,7 +433,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install: "false"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - uses: ./.github/actions/candidate-registry
@@ -481,7 +481,7 @@ jobs:
           bun --no-env-file backend/cli/script/smoke-darwin-launcher.ts "$native" "$RUNNER_TEMP/darwin-launcher-smoke"
       - name: Upload macOS worker startup evidence
         if: always() && runner.os == 'macOS'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-test-darwin-launcher-${{ github.run_attempt }}
           if-no-files-found: error
@@ -537,7 +537,7 @@ jobs:
         shell: sh
         run: apk add --no-cache curl libstdc++
       - name: Download the packed candidate
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: npm-candidate-${{ needs.version.outputs.version }}
           path: ${{ runner.temp }}/npm-candidate
@@ -608,7 +608,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
         with:
           install: "false"
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
       - uses: ./.github/actions/candidate-registry
@@ -690,7 +690,7 @@ jobs:
           NODE
       - name: Upload scientific capability evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: npm-test-scientific-capability-${{ matrix.os }}-${{ matrix.capability }}-${{ github.run_attempt }}
           if-no-files-found: ignore
