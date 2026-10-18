@@ -22569,6 +22569,328 @@
         ]
       }
     },
+    "/settings/usage/imports": {
+      "get": {
+        "operationId": "settings.usage.imports",
+        "summary": "List local provider billing imports",
+        "responses": {
+          "200": {
+            "description": "Billing imports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "accountLabel": {
+                        "type": "string"
+                      },
+                      "importedAt": {
+                        "type": "string"
+                      },
+                      "records": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "provider",
+                      "accountLabel",
+                      "importedAt",
+                      "records"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.imports({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "settings.usage.importBilling",
+        "summary": "Import provider billing evidence locally",
+        "responses": {
+          "200": {
+            "description": "Imported billing evidence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "provider": {
+                      "type": "string"
+                    },
+                    "accountLabel": {
+                      "type": "string"
+                    },
+                    "importedAt": {
+                      "type": "string"
+                    },
+                    "records": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "provider",
+                    "accountLabel",
+                    "importedAt",
+                    "records"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "schema_version": {
+                    "type": "number",
+                    "const": 1
+                  },
+                  "provider": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "account_label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "currency": {
+                    "type": "string",
+                    "const": "USD"
+                  },
+                  "records": {
+                    "minItems": 1,
+                    "maxItems": 10000,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "billing_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "kind": {
+                          "default": "charge",
+                          "type": "string",
+                          "enum": [
+                            "charge",
+                            "credit"
+                          ]
+                        },
+                        "provider_request_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "occurred_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "amount_usd": {
+                          "type": "string",
+                          "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,18})?$"
+                        }
+                      },
+                      "required": [
+                        "billing_id",
+                        "occurred_at",
+                        "amount_usd"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "provider",
+                  "account_label",
+                  "currency",
+                  "records"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.importBilling({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/usage/imports/{id}": {
+      "delete": {
+        "operationId": "settings.usage.removeImport",
+        "summary": "Remove a local billing import",
+        "responses": {
+          "200": {
+            "description": "Removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "required": true
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.removeImport({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/settings/usage/billing": {
+      "get": {
+        "operationId": "settings.usage.billing",
+        "summary": "List and reconcile imported billing evidence",
+        "responses": {
+          "200": {
+            "description": "Billing records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "charge",
+                          "credit"
+                        ]
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "accountLabel": {
+                        "type": "string"
+                      },
+                      "billingID": {
+                        "type": "string"
+                      },
+                      "providerRequestID": {
+                        "type": "string"
+                      },
+                      "occurredAt": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "amountUSD": {
+                        "type": "string",
+                        "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,18})?$"
+                      },
+                      "match": {
+                        "type": "string",
+                        "enum": [
+                          "matched",
+                          "unmatched",
+                          "ambiguous"
+                        ]
+                      },
+                      "callID": {
+                        "type": "string"
+                      },
+                      "sessionID": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "id",
+                      "provider",
+                      "accountLabel",
+                      "billingID",
+                      "occurredAt",
+                      "amountUSD",
+                      "match"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usage.billing({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/usage/local": {
       "get": {
         "operationId": "settings.usage.local",
@@ -22633,6 +22955,55 @@
                           },
                           "cost": {
                             "type": "number"
+                          },
+                          "costs": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "wallet_receipt",
+                                    "provider_response",
+                                    "catalog_estimate",
+                                    "imported_billing",
+                                    "imported_credit",
+                                    "wallet_calculated",
+                                    "recorded_unclassified",
+                                    "subscription",
+                                    "no_provider_charge",
+                                    "unknown"
+                                  ]
+                                },
+                                "amountUSD": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "known": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "amountUSD",
+                                "known",
+                                "unknown"
+                              ]
+                            }
                           }
                         },
                         "required": [
@@ -22749,6 +23120,55 @@
                           },
                           "cost": {
                             "type": "number"
+                          },
+                          "costs": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "source": {
+                                  "type": "string",
+                                  "enum": [
+                                    "wallet_receipt",
+                                    "provider_response",
+                                    "catalog_estimate",
+                                    "imported_billing",
+                                    "imported_credit",
+                                    "wallet_calculated",
+                                    "recorded_unclassified",
+                                    "subscription",
+                                    "no_provider_charge",
+                                    "unknown"
+                                  ]
+                                },
+                                "amountUSD": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "known": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "source",
+                                "amountUSD",
+                                "known",
+                                "unknown"
+                              ]
+                            }
                           }
                         },
                         "required": [

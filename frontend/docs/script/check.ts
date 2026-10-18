@@ -1,4 +1,5 @@
 import path from "node:path"
+import { BillingImport } from "../../../backend/cli/src/session/billing-import"
 import { Config } from "../../../backend/cli/src/config/config"
 import { RunEvents } from "../../../backend/cli/src/cli/run-events"
 import { aliases, headings, parseRoute, resolveLink, slug } from "../src/navigation"
@@ -24,7 +25,8 @@ for (const file of files) {
   pages.set(file.replace(/\.mdx$/, ""), { body, headings: sections })
   for (const match of body.matchAll(/```json\n([\s\S]*?)\n```/g)) {
     const value: unknown = JSON.parse(match[1])
-    const schema = file === "automation.mdx" ? RunEvents.Event : Config.Info
+    const schema =
+      file === "automation.mdx" ? RunEvents.Event : file === "usage.mdx" ? BillingImport.Document : Config.Info
     const result = schema.safeParse(value)
     if (!result.success) report(file, "Invalid JSON example: " + result.error.message)
     counts.examples++

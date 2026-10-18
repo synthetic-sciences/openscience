@@ -1,11 +1,22 @@
 import { For, Show, createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@synsci/ui/button"
-import { usageCsv, usageDate, usageModels, usageRange, usageTotals, type UsageRow } from "@synsci/util/usage"
+import {
+  usageCostTotals,
+  usageCostLabels,
+  type UsageCost,
+  usageCsv,
+  usageDate,
+  usageModels,
+  usageRange,
+  usageTotals,
+  type UsageRow,
+} from "@synsci/util/usage"
 import { downloadBlob } from "@/artifacts/bytes"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
+import { BillingImports } from "./BillingImports"
 import { settingsApi } from "./api"
 import "./preference-panels.css"
 import "./usage.css"
@@ -41,6 +52,7 @@ export default function Usage(props: { services?: Services } = {}) {
     source: "managed" as Source,
     model: "all",
     period: "30",
+    basis: "catalog_estimate" as UsageCost["source"],
     metric: "tokens" as "tokens" | "cost" | "calls",
     active: "",
     refresh: 0,
@@ -104,6 +116,13 @@ export default function Usage(props: { services?: Services } = {}) {
   )
   const options = createMemo(() => [...new Set(filtered().map((row) => row.model))].sort())
   const rows = createMemo(() => filtered().filter((row) => state.model === "all" || row.model === state.model))
+  const costs = createMemo(() => usageCostTotals(rows()))
+  const costBasis = () => (state.source === "managed" ? "wallet_receipt" : state.basis)
+  const exact = (value: string | null) => {
+    if (value === null) return "Unknown"
+    const [whole, fraction = ""] = value.split(".")
+    return `$${whole}.${fraction.padEnd(2, "0")}`
+  }
   const totals = createMemo(() => usageTotals(rows()))
   const models = createMemo(() => usageModels(rows()))
   const days = createMemo(() => {
@@ -111,7 +130,15 @@ export default function Usage(props: { services?: Services } = {}) {
     const count = Math.round((Date.parse(state.end) - Date.parse(state.start)) / 86_400_000) + 1
     return Array.from({ length: count }, (_, index) => {
       const date = new Date(Date.parse(state.start) + index * 86_400_000).toISOString().slice(0, 10)
-      return { date, ...usageTotals(rows().filter((row) => row.date === date)) }
+      const items = rows().filter((row) => row.date === date)
+      const cost = usageCostTotals(items).find((cost) => cost.source === costBasis())
+      return {
+        date,
+        ...usageTotals(items),
+        cost: Number(cost?.amountUSD ?? 0),
+        costKnown: (cost?.known ?? 0) > 0,
+        costUnknown: cost?.unknown ?? 0,
+      }
     })
   })
   const max = () => Math.max(Number.EPSILON, ...days().map((day) => day[state.metric]))
@@ -213,8 +240,9 @@ export default function Usage(props: { services?: Services } = {}) {
                   ? "Saved conversation activity on this device, across projects. Local inference has no provider charge."
                   : state.source === "subscription"
                     ? "ChatGPT and subscription activity on this device. Subscription fees are not included."
-                    : "API-key activity in saved conversations on this device, across projects. Costs are estimates; your provider bills you directly."}{" "}
-            Dates use UTC.
+                    : "API-key activity recorded on this device, including internal calls, across projects. Your provider bills you directly; provider-reported amounts, catalog estimates and imported billing are separate."}{" "}
+            Dates use UTC. Imported billing includes unmatched records and may cover activity outside OpenScience.
+            Subscriptions are not allocated per call. Cost categories are never added together.
           </p>
           <Show when={state.error[dataset()]}>
             <div class="settings-alert" data-tone="critical" role="alert">
@@ -243,12 +271,22 @@ export default function Usage(props: { services?: Services } = {}) {
                 }
               >
                 <dl class="usage-totals">
+                  <For each={costs()}>
+                    {(cost) => (
+                      <div>
+                        <dt>{usageCostLabels[cost.source]}</dt>
+                        <dd>
+                          {cost.source === "subscription" ? "Not allocated" : exact(cost.amountUSD)}
+                          {cost.unknown > 0 && cost.known > 0 ? " (partial)" : ""}
+                        </dd>
+                        <Show when={cost.unknown > 0 && cost.source !== "subscription"}>
+                          <small>{cost.unknown} unknown cost observations</small>
+                        </Show>
+                      </div>
+                    )}
+                  </For>
                   <div>
-                    <dt>{state.source === "managed" ? "Wallet charges" : "Estimated cost"}</dt>
-                    <dd>{money(totals().cost)}</dd>
-                  </div>
-                  <div>
-                    <dt>Tokens</dt>
+                    <dt>Recorded tokens</dt>
                     <dd>{number(totals().tokens)}</dd>
                   </div>
                   <div>
@@ -256,20 +294,34 @@ export default function Usage(props: { services?: Services } = {}) {
                     <dd>{totals().calls.toLocaleString()}</dd>
                   </div>
                   <div>
-                    <dt>Cached input</dt>
+                    <dt>Recorded cached input</dt>
                     <dd>{number(totals().cacheRead)}</dd>
                   </div>
                 </dl>
                 <section class="usage-chart" aria-label="Daily usage">
                   <header>
                     <h3>Daily activity</h3>
+                    <Show when={state.source !== "managed"}>
+                      <label>
+                        Cost category{" "}
+                        <select
+                          aria-label="Cost category"
+                          value={state.basis}
+                          onChange={(event) => setState("basis", event.currentTarget.value as UsageCost["source"])}
+                        >
+                          <For each={Object.entries(usageCostLabels)}>
+                            {([source, label]) => <option value={source}>{label}</option>}
+                          </For>
+                        </select>
+                      </label>
+                    </Show>
                     <select
                       aria-label="Chart metric"
                       value={state.metric}
                       onChange={(event) => setState("metric", event.currentTarget.value as typeof state.metric)}
                     >
                       <option value="tokens">Tokens</option>
-                      <option value="cost">Cost</option>
+                      <option value="cost">Cost (known amounts)</option>
                       <option value="calls">Requests</option>
                     </select>
                   </header>
@@ -285,7 +337,7 @@ export default function Usage(props: { services?: Services } = {}) {
                         {(day) => (
                           <button
                             type="button"
-                            aria-label={`${day.date}: ${day.tokens.toLocaleString()} tokens, ${day.calls} requests, ${money(day.cost)}`}
+                            aria-label={`${day.date}: ${day.tokens.toLocaleString()} recorded tokens, ${day.calls} requests, ${usageCostLabels[costBasis()]} ${day.costKnown ? money(day.cost) : "Unknown"}${day.costUnknown > 0 ? " (partial or unknown)" : ""}`}
                             aria-pressed={state.active === day.date}
                             onFocus={() => setState("active", day.date)}
                             onClick={() => setState("active", day.date)}
@@ -307,7 +359,7 @@ export default function Usage(props: { services?: Services } = {}) {
                   </div>
                   <p class="usage-chart-detail" aria-live="polite">
                     {active()
-                      ? `${dateName(active()!.date)} · ${number(active()!.tokens)} tokens · ${active()!.calls} requests · ${money(active()!.cost)}`
+                      ? `${dateName(active()!.date)} · ${number(active()!.tokens)} tokens · ${active()!.calls} requests · ${usageCostLabels[costBasis()]} ${active()!.costKnown ? money(active()!.cost) : "Unknown"}${active()!.costUnknown > 0 ? " (partial or unknown)" : ""} (known amounts only)`
                       : "Select a day to see its activity."}
                   </p>
                 </section>
@@ -325,7 +377,7 @@ export default function Usage(props: { services?: Services } = {}) {
                           <tr>
                             <th scope="col">Model</th>
                             <th scope="col">Requests</th>
-                            <th scope="col">Tokens</th>
+                            <th scope="col">Recorded tokens</th>
                             <th scope="col">Cost</th>
                           </tr>
                         </thead>
@@ -341,7 +393,17 @@ export default function Usage(props: { services?: Services } = {}) {
                                 </td>
                                 <td>{row.calls.toLocaleString()}</td>
                                 <td>{number(row.tokens)}</td>
-                                <td>{money(row.cost)}</td>
+                                <td>
+                                  <For each={usageCostTotals([row])}>
+                                    {(cost) => (
+                                      <div>
+                                        {usageCostLabels[cost.source]}:{" "}
+                                        {cost.source === "subscription" ? "Not allocated" : exact(cost.amountUSD)}
+                                        {cost.unknown > 0 && cost.known > 0 ? " (partial)" : ""}
+                                      </div>
+                                    )}
+                                  </For>
+                                </td>
                               </tr>
                             )}
                           </For>
@@ -352,6 +414,15 @@ export default function Usage(props: { services?: Services } = {}) {
                 </section>
               </Show>
             </Show>
+          </Show>
+          <Show when={state.source === "byok" && valid()}>
+            <BillingImports
+              base={sdk.url}
+              fetch={platform.fetch ?? fetch}
+              start={state.start}
+              end={state.end}
+              changed={() => setState("refresh", (value) => value + 1)}
+            />
           </Show>
           <footer class="usage-export">
             <div>

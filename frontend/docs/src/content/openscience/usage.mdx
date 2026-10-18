@@ -1,30 +1,30 @@
 ---
 title: "Usage reports and CSV exports"
-description: "Filter activity by source, model, and date, and distinguish Wallet charges from local estimates."
+description: "Filter activity by source, model, and date, and keep Wallet receipts, provider reports, estimates and imported bills separate."
 ---
 
-Open **Customize → Usage** to review model activity. Choose the source first: the Managed report and the reports from saved conversations have different scopes.
+Open **Customize → Usage** to review model activity. Choose the source first: the Managed report and device reports have different scopes.
 
 ## Choose a source
 
 | Source | What the report includes | Cost basis |
 | --- | --- | --- |
 | Managed | Server-recorded usage available to the connected account and funding workspace. | Wallet charges. |
-| API keys | Provider-key and custom-route activity in saved conversations on this device, across projects. | Estimates; the provider bills you directly. |
+| API keys | Provider-key and custom-route activity recorded on this device, including internal and failed calls, across projects. | Separate provider-reported amounts, catalog estimates, imported charges and credits, and historical amounts whose basis is unknown; the provider bills you directly. |
 | Local models | Local model activity saved on this device. | No Ace model charge; hardware costs are not included. |
 | Subscriptions | ChatGPT and other subscription activity saved on this device. | Subscription fees are not included. |
 | Unclassified | Saved activity whose funding route could not be identified. | Do not infer a Wallet charge from an unclassified row. |
 
-Managed usage requires a connected account. Previously saved API-key and local activity can be viewed while signed out. A device report is not a complete history of work performed on other machines. Deleted conversations are excluded and inherited fork history is not counted twice. Older saved activity without a known route appears under Unclassified, including any managed calls that cannot be classified.
+Managed usage requires a connected account. Previously saved API-key and local activity can be viewed while signed out. A device report is not a complete history of work performed on other machines. Deleting a conversation removes its saved call activity; imported billing evidence remains until its import is removed. Inherited fork history is not counted twice. Older saved activity without a known route appears under Unclassified, including any managed calls that cannot be classified.
 
 ## Filter the report
 
 1. Select **Last 7 days**, **Last 30 days**, **Last 90 days**, or **Custom dates**.
 2. Set **From** and **To** when you need a particular range. Both dates are inclusive and use UTC; a range can cover at most 366 days.
 3. Choose **All models** or a single model.
-4. Select **Tokens**, **Cost**, or **Requests** in **Daily activity**. Select or focus a day to inspect its totals.
+4. Select **Tokens**, **Cost**, or **Requests** in **Daily activity**. For device reports, choose a **Cost category**; the cost chart shows known amounts from that category only. Select or focus a day to inspect its totals.
 
-The summary shows cost, tokens, requests, and cached input. **By model** summarizes the same filtered records. **Refresh** reloads the report. A loading or connection error is not a confirmed zero-usage result.
+The summary shows each cost category separately, plus recorded tokens, requests and cached input. Amounts with omitted observations are labeled partial, and entirely missing amounts are Unknown. Subscription fees are Not allocated. Imported credits are displayed separately from imported charges; no net invoice amount is inferred. **By model** summarizes the same filtered records. **Refresh** reloads the report. A loading or connection error is not a confirmed zero-usage result.
 
 ## Export the matching records
 
@@ -32,11 +32,69 @@ Select **Export CSV** below the report. It exports the selected source, dates, a
 
 - UTC date, provider, model, route, and request count.
 - Input, output, reasoning, cache-read, cache-write, and total tokens.
-- USD cost and its cost basis: **Wallet charge** or **Estimate**.
+- Separate exact decimal USD columns for Wallet charges, provider-reported amounts, catalog estimates, imported charges/credits, calculated Ace amounts, and historical accounting.
+- Cost-source labels, unknown cost observation counts, and a clearly labeled compatibility accounting column for older integrations.
 
 Output tokens already include reported reasoning; do not add reasoning again. Cached-token fields explain the breakdown, rather than representing extra requests. A small positive cost can appear below one cent; do not round each row to dollars and cents before summing an export.
 
 The export is an activity report, not a payment invoice. It contains aggregate records, not prompts, complete responses, or project files.
+
+## Import provider billing evidence
+
+Choose **API keys → Manage billing imports → Download billing template**.
+Convert your provider export into this JSON format, then choose **Import billing
+JSON**. This is a normalized exchange format, not an automatic reader for every
+provider's native export. Keep stable provider billing-line IDs and use the
+provider ID recorded by OpenScience. Use a consistent label for each provider
+account. The label is user supplied; OpenScience cannot verify account ownership
+from the file.
+
+```json
+{
+  "schema_version": 1,
+  "provider": "openai",
+  "account_label": "Research API account",
+  "currency": "USD",
+  "records": [
+    {
+      "billing_id": "invoice-line-123",
+      "kind": "charge",
+      "provider_request_id": "req_example",
+      "occurred_at": "2026-10-18T12:00:00Z",
+      "model": "example-model",
+      "amount_usd": "0.0123456789"
+    }
+  ]
+}
+```
+
+Only USD is supported; no exchange rate is invented. Amounts must be
+nonnegative decimal strings, with at most 12 integer digits and 18 decimal
+places. Use `kind: "credit"` for a credit or refund; omitted `kind` defaults to
+`charge`. `provider_request_id` and `model` are optional. Timestamps require a
+timezone. Files are limited to 2 MiB and 10,000 records. Other fields are rejected
+so a native export cannot silently lose information during conversion.
+
+A unique exact provider/request-ID match can link a billing record to a saved
+BYOK or custom call. A supplied model must also match. Missing request IDs,
+missing calls, duplicate local matches, and provider-account collisions remain
+unmatched or ambiguous. Matching updates when calls are later saved or removed.
+Imported totals include unmatched records and can cover work outside OpenScience;
+they are never added to provider-reported or estimated amounts. Importing a bill
+does not prove that an amount was paid or settled.
+
+Repeated files and overlapping records do not add duplicate billing amounts.
+Changing an existing billing ID's amount or other evidence fails atomically;
+remove the imports that reference that record before replacing it. **Remove
+import** discards only that local import. Shared records remain while another
+import references them. This changes neither a provider bill nor Wallet history.
+
+**Export billing reconciliation** downloads normalized records and their current
+match state for the selected dates, including stable local call/session IDs when
+matched. Billing records and import identities are stored in `research.sqlite`
+on this device, independently of Synthetic Sciences sign-in and trace sharing.
+They are not uploaded by this feature. Treat the file and reconciliation export
+as private financial data.
 
 ## Compare with dashboard usage
 

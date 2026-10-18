@@ -9942,6 +9942,115 @@ export type SettingsUsageLoggingHealthResponses = {
 export type SettingsUsageLoggingHealthResponse =
   SettingsUsageLoggingHealthResponses[keyof SettingsUsageLoggingHealthResponses]
 
+export type SettingsUsageImportsData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/usage/imports"
+}
+
+export type SettingsUsageImportsResponses = {
+  /**
+   * Billing imports
+   */
+  200: Array<{
+    id: string
+    provider: string
+    accountLabel: string
+    importedAt: string
+    records: number
+  }>
+}
+
+export type SettingsUsageImportsResponse = SettingsUsageImportsResponses[keyof SettingsUsageImportsResponses]
+
+export type SettingsUsageImportBillingData = {
+  body?: {
+    schema_version: 1
+    provider: string
+    account_label: string
+    currency: "USD"
+    records: Array<{
+      billing_id: string
+      kind?: "charge" | "credit"
+      provider_request_id?: string
+      occurred_at: string
+      model?: string
+      amount_usd: string
+    }>
+  }
+  path?: never
+  query?: never
+  url: "/settings/usage/imports"
+}
+
+export type SettingsUsageImportBillingResponses = {
+  /**
+   * Imported billing evidence
+   */
+  200: {
+    id: string
+    provider: string
+    accountLabel: string
+    importedAt: string
+    records: number
+  }
+}
+
+export type SettingsUsageImportBillingResponse =
+  SettingsUsageImportBillingResponses[keyof SettingsUsageImportBillingResponses]
+
+export type SettingsUsageRemoveImportData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/settings/usage/imports/{id}"
+}
+
+export type SettingsUsageRemoveImportResponses = {
+  /**
+   * Removed
+   */
+  200: boolean
+}
+
+export type SettingsUsageRemoveImportResponse =
+  SettingsUsageRemoveImportResponses[keyof SettingsUsageRemoveImportResponses]
+
+export type SettingsUsageBillingData = {
+  body?: never
+  path?: never
+  query?: {
+    start?: string
+    end?: string
+  }
+  url: "/settings/usage/billing"
+}
+
+export type SettingsUsageBillingResponses = {
+  /**
+   * Billing records
+   */
+  200: Array<{
+    kind: "charge" | "credit"
+    id: string
+    provider: string
+    accountLabel: string
+    billingID: string
+    providerRequestID?: string
+    occurredAt: string
+    model?: string
+    amountUSD: string
+    match: "matched" | "unmatched" | "ambiguous"
+    callID?: string
+    sessionID?: string
+  }>
+}
+
+export type SettingsUsageBillingResponse = SettingsUsageBillingResponses[keyof SettingsUsageBillingResponses]
+
 export type SettingsUsageLocalData = {
   body?: never
   path?: never
@@ -9971,6 +10080,22 @@ export type SettingsUsageLocalResponses = {
       cacheWrite: number
       tokens: number
       cost: number
+      costs?: Array<{
+        source:
+          | "wallet_receipt"
+          | "provider_response"
+          | "catalog_estimate"
+          | "imported_billing"
+          | "imported_credit"
+          | "wallet_calculated"
+          | "recorded_unclassified"
+          | "subscription"
+          | "no_provider_charge"
+          | "unknown"
+        amountUSD: string | null
+        known: number
+        unknown: number
+      }>
     }>
   }
 }
@@ -10006,6 +10131,22 @@ export type SettingsUsageManagedResponses = {
       cacheWrite: number
       tokens: number
       cost: number
+      costs?: Array<{
+        source:
+          | "wallet_receipt"
+          | "provider_response"
+          | "catalog_estimate"
+          | "imported_billing"
+          | "imported_credit"
+          | "wallet_calculated"
+          | "recorded_unclassified"
+          | "subscription"
+          | "no_provider_charge"
+          | "unknown"
+        amountUSD: string | null
+        known: number
+        unknown: number
+      }>
     }>
   }
 }

@@ -1,3 +1,6 @@
+import { SessionTraceStore } from "./trace-store"
+import { BillingImport } from "./billing-import"
+import { usageCost, usageCosts } from "@synsci/util/usage"
 import { Storage } from "@/storage/storage"
 import { MessageV2 } from "./message-v2"
 import type { Session } from "."
@@ -6,6 +9,18 @@ import type { UsageRow, UsageRoute } from "@synsci/util/usage"
 
 export async function localUsage(start: number, end: number): Promise<UsageRow[]> {
   const rows = new Map<string, UsageRow>()
+  const seen = new Set<string>()
+  const calls = await (
+    await Storage.research()
+  ).query((db) =>
+    db
+      .query<{ data: string }, [number, number]>(
+        "SELECT data FROM model_call WHERE json_extract(data,'$.occurredAt')>=? AND json_extract(data,'$.occurredAt')<?",
+      )
+      .all(start, end)
+      .map((row) => SessionTraceStore.ModelCall.parse(JSON.parse(row.data))),
+  )
+  const trace = new Map(calls.map((call) => [JSON.stringify([call.sessionID, call.id]), call]))
   const sessions = await Storage.list(["session"])
   for (const key of sessions) {
     const session = await Storage.read<Session.Info>(key).catch((error) => {
@@ -54,8 +69,10 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
                 : "unknown")
           // Managed requests are counted from verified server receipts.
           if (route === "managed") continue
+          const callKey = recorded?.call ? JSON.stringify([session.id, recorded.call]) : undefined
+          if (callKey) seen.add(callKey)
           const tokens = TokenUsage.total(entry.tokens)
-          if (!tokens && !entry.cost) continue
+          if (!tokens && !entry.cost && !recorded) continue
           const date = new Date(time).toISOString().slice(0, 10)
           const id = JSON.stringify([date, provider, model, route])
           const row = rows.get(id) ?? {
@@ -80,10 +97,97 @@ export async function localUsage(start: number, end: number): Promise<UsageRow[]
           row.cacheWrite += entry.tokens.cache.write
           row.tokens += tokens
           row.cost += route === "local" || route === "chatgpt" || route === "subscription" ? 0 : entry.cost
+          const source =
+            route === "local"
+              ? "no_provider_charge"
+              : route === "chatgpt" || route === "subscription"
+                ? "subscription"
+                : (recorded?.cost?.source ?? "recorded_unclassified")
+          const costs = [
+            usageCost(
+              source,
+              source === "subscription"
+                ? null
+                : source === "no_provider_charge"
+                  ? 0
+                  : recorded?.cost
+                    ? recorded.cost.amountUSD
+                    : entry.cost,
+            ),
+          ]
+          const reported = recorded?.reportedCostUSD ?? (callKey ? trace.get(callKey)?.reportedCostUSD : undefined)
+          if (source !== "provider_response" && (reported != null || route === "byok" || route === "custom"))
+            costs.push(usageCost("provider_response", reported ?? null))
+          row.costs = usageCosts([...(row.costs ?? []), ...costs])
           rows.set(id, row)
         }
       }
     }
+  }
+  for (const call of calls) {
+    if (call.route === "managed" || seen.has(JSON.stringify([call.sessionID, call.id]))) continue
+    const date = new Date(call.occurredAt).toISOString().slice(0, 10)
+    const id = JSON.stringify([date, call.provider, call.model, call.route])
+    const row = rows.get(id) ?? {
+      date,
+      provider: call.provider,
+      model: call.model,
+      route: call.route,
+      calls: 0,
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      tokens: 0,
+      cost: 0,
+    }
+    row.calls++
+    row.input += call.reported?.input_tokens ?? 0
+    row.output += call.reported?.output_tokens ?? 0
+    row.reasoning += call.reported?.reasoning_tokens ?? 0
+    row.cacheRead += call.reported?.cached_input_tokens ?? 0
+    row.cacheWrite += call.reported?.cache_creation_input_tokens ?? 0
+    row.tokens +=
+      call.reported?.total_tokens ?? (call.reported?.input_tokens ?? 0) + (call.reported?.output_tokens ?? 0)
+    const source =
+      call.route === "local"
+        ? "no_provider_charge"
+        : call.route === "chatgpt" || call.route === "subscription"
+          ? "subscription"
+          : "provider_response"
+    row.costs = usageCosts([
+      ...(row.costs ?? []),
+      usageCost(
+        source,
+        source === "no_provider_charge" ? 0 : source === "subscription" ? null : (call.reportedCostUSD ?? null),
+      ),
+    ])
+    rows.set(id, row)
+  }
+  for (const record of await BillingImport.records(start, end)) {
+    const date = record.occurredAt.slice(0, 10)
+    const model = record.model ?? "Unknown billing model"
+    const id = JSON.stringify([date, record.provider, model, "byok"])
+    const row = rows.get(id) ?? {
+      date,
+      provider: record.provider,
+      model,
+      route: "byok" as const,
+      calls: 0,
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      tokens: 0,
+      cost: 0,
+    }
+    row.costs = usageCosts([
+      ...(row.costs ?? []),
+      usageCost(record.kind === "credit" ? "imported_credit" : "imported_billing", record.amountUSD),
+    ])
+    rows.set(id, row)
   }
   return [...rows.values()].sort((a, b) => a.date.localeCompare(b.date) || a.model.localeCompare(b.model))
 }

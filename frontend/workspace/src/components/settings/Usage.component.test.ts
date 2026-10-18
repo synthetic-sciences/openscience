@@ -37,7 +37,7 @@ const sample = (route: UsageRow["route"], cost: number): UsageRow => ({
   cacheRead: 0,
   cacheWrite: 0,
 })
-async function mount(connected = true) {
+async function mount(connected = true, costs?: UsageRow["costs"]) {
   const state = { connected, fail: false, requests: [] as URL[] }
   const server = createServer((request, response) => {
     const url = new URL(request.url!, "http://localhost")
@@ -61,7 +61,14 @@ async function mount(connected = true) {
           ? { message: "Usage unavailable" }
           : url.pathname.endsWith("managed")
             ? { connected: state.connected, rows: state.connected ? [sample("managed", 2)] : [] }
-            : { connected: true, rows: [sample("byok", 0.2), sample("local", 0), sample("unknown", 0.1)] },
+            : {
+                connected: true,
+                rows: [
+                  { ...sample("byok", 0.2), ...(costs ? { costs } : {}) },
+                  sample("local", 0),
+                  sample("unknown", 0.1),
+                ],
+              },
       ),
     )
   })
@@ -167,7 +174,7 @@ test("CSV download contains only the active source with its filename and cost ba
   expect(files[1].name).toContain("openscience-byok-usage-")
   expect(await files[1].blob.text()).toContain('"byok-model"')
   expect(await files[1].blob.text()).not.toContain('"managed-model"')
-  expect(await files[1].blob.text()).toContain('"Estimate"')
+  expect(await files[1].blob.text()).toContain('"Historical accounting · basis unknown"')
 })
 
 test("account changes invalidate cached managed usage while the settings panel stays mounted", async () => {
@@ -180,4 +187,24 @@ test("account changes invalidate cached managed usage while the settings panel s
   expect(button("Export CSV").disabled).toBe(true)
   button("API keys").click()
   await ready(() => !button("Export CSV").disabled)
+})
+
+test("provider reports, estimates, imported charges and credits remain separate in totals and model rows", async () => {
+  const { host, button } = await mount(true, [
+    { source: "provider_response", amountUSD: "0", known: 1, unknown: 0 },
+    { source: "catalog_estimate", amountUSD: "0.01", known: 1, unknown: 0 },
+    { source: "imported_billing", amountUSD: "0.000000000000000001", known: 1, unknown: 0 },
+    { source: "imported_credit", amountUSD: "0.02", known: 1, unknown: 0 },
+    { source: "unknown", amountUSD: null, known: 0, unknown: 1 },
+  ])
+  button("API keys").click()
+  const summary = host.querySelector("dl")!.textContent!
+  expect(summary).toContain("Provider reported$0.00")
+  expect(summary).toContain("Catalog estimate$0.01")
+  expect(summary).toContain("Imported billing$0.000000000000000001")
+  expect(summary).toContain("Imported billing credits$0.02")
+  expect(summary).toContain("Unknown costUnknown")
+  expect(summary).not.toContain("$0.20")
+  expect(host.querySelector("tbody")!.textContent).toContain("Provider reported: $0.00")
+  expect(host.querySelector('[aria-label="Cost category"]')).not.toBeNull()
 })

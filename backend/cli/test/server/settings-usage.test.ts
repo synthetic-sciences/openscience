@@ -130,8 +130,20 @@ test("CSV exports exact daily values and escapes configured model names", () => 
   const csv = usageCsv([row, { ...row, date: "2026-09-02", route: "managed" }])
   expect(csv).toContain('"\'=provider"')
   expect(csv).toContain('"model,""quoted""\nline"')
-  expect(csv).toContain('"0.00012345","Estimate"')
+  expect(csv).toContain('"0.00012345","Historical accounting · basis unknown"')
   expect(csv).toContain('"0.00012345","Wallet charge"')
   expect(usageTotals([row, row])).toEqual({ calls: 4, tokens: 350, cacheRead: 100, cost: 0.0002469 })
   expect(usageModels([row, row])[0].calls).toBe(4)
+})
+
+test("cost evidence adds exact decimal values without erasing tiny reported amounts or unknown observations", async () => {
+  const { usageCost, usageCosts } = await import("@synsci/util/usage")
+  expect(
+    usageCosts([
+      usageCost("provider_response", 0.1),
+      usageCost("provider_response", 0.2),
+      usageCost("provider_response", 1e-20),
+      usageCost("provider_response", null),
+    ]),
+  ).toEqual([{ source: "provider_response", amountUSD: "0.30000000000000000001", known: 3, unknown: 1 }])
 })

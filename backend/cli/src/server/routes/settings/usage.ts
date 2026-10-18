@@ -1,9 +1,12 @@
+import { HTTPException } from "hono/http-exception"
+import { bodyLimit } from "hono/body-limit"
+import { BillingImport } from "@/session/billing-import"
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { OpenScience } from "@/openscience"
 import { localUsage } from "@/session/usage"
-import { usageDate, usageRange, usageModels } from "@synsci/util/usage"
+import { usageCost, usageCostLabels, usageDate, usageRange, usageModels } from "@synsci/util/usage"
 import { lazy } from "@synsci/util/lazy"
 
 const DateValue = z.string().refine(usageDate, "Use a valid YYYY-MM-DD date")
@@ -27,6 +30,18 @@ const Row = z.object({
   cacheWrite: z.number(),
   tokens: z.number(),
   cost: z.number(),
+  costs: z
+    .array(
+      z.object({
+        source: z.enum(
+          Object.keys(usageCostLabels) as [keyof typeof usageCostLabels, ...(keyof typeof usageCostLabels)[]],
+        ),
+        amountUSD: z.string().nullable(),
+        known: z.number().int().nonnegative(),
+        unknown: z.number().int().nonnegative(),
+      }),
+    )
+    .optional(),
 })
 const Result = z.object({ connected: z.boolean(), rows: z.array(Row) })
 const Remote = z.object({
@@ -49,6 +64,80 @@ const Remote = z.object({
 
 export const UsageSettingsRoutes = lazy(() => {
   const app = new Hono()
+  app.get(
+    "/imports",
+    describeRoute({
+      summary: "List local provider billing imports",
+      operationId: "settings.usage.imports",
+      responses: {
+        200: {
+          description: "Billing imports",
+          content: { "application/json": { schema: resolver(BillingImport.Batch.array()) } },
+        },
+      },
+    }),
+    async (c) => {
+      c.header("Cache-Control", "no-store")
+      return c.json(await BillingImport.list())
+    },
+  )
+  app.post(
+    "/imports",
+    bodyLimit({ maxSize: 2 * 1024 * 1024 }),
+    describeRoute({
+      summary: "Import provider billing evidence locally",
+      operationId: "settings.usage.importBilling",
+      responses: {
+        200: {
+          description: "Imported billing evidence",
+          content: { "application/json": { schema: resolver(BillingImport.Batch) } },
+        },
+      },
+    }),
+    validator("json", BillingImport.Document),
+    async (c) => {
+      const result = await BillingImport.add(c.req.valid("json")).catch((error) => {
+        if (error instanceof BillingImport.Conflict) throw new HTTPException(409, { message: error.message })
+        throw error
+      })
+      c.header("Cache-Control", "no-store")
+      return c.json(result)
+    },
+  )
+  app.delete(
+    "/imports/:id",
+    describeRoute({
+      summary: "Remove a local billing import",
+      operationId: "settings.usage.removeImport",
+      responses: {
+        200: { description: "Removed", content: { "application/json": { schema: resolver(z.boolean()) } } },
+      },
+    }),
+    validator("param", z.object({ id: z.string().regex(/^[a-f0-9]{64}$/) })),
+    async (c) => {
+      await BillingImport.remove(c.req.valid("param").id)
+      return c.json(true)
+    },
+  )
+  app.get(
+    "/billing",
+    describeRoute({
+      summary: "List and reconcile imported billing evidence",
+      operationId: "settings.usage.billing",
+      responses: {
+        200: {
+          description: "Billing records",
+          content: { "application/json": { schema: resolver(BillingImport.Record.array()) } },
+        },
+      },
+    }),
+    validator("query", Query),
+    async (c) => {
+      const range = c.req.valid("query")
+      c.header("Cache-Control", "no-store")
+      return c.json(await BillingImport.records(Date.parse(range.start), Date.parse(range.end) + 86_400_000))
+    },
+  )
   for (const source of ["local", "managed"] as const) {
     app.get(
       `/${source}`,
@@ -62,6 +151,7 @@ export const UsageSettingsRoutes = lazy(() => {
         const range = c.req.valid("query")
         const start = Date.parse(range.start)
         const end = Date.parse(range.end) + 86_400_000
+        c.header("Cache-Control", "no-store")
         if (source === "local") return c.json({ connected: true, rows: await localUsage(start, end) })
         const result = await OpenScience.getUsage(
           new Date(start).toISOString(),
@@ -84,6 +174,7 @@ export const UsageSettingsRoutes = lazy(() => {
             cacheWrite: row.cache_creation_tokens ?? 0,
             tokens: row.input_tokens + row.output_tokens,
             cost: row.cost_cents / 100,
+            costs: [usageCost("wallet_receipt", row.cost_cents / 100)],
           }))
         return c.json({
           connected: true,

@@ -69,8 +69,8 @@ export namespace ResearchDatabase {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 4) throw new Error("This research database requires a newer OpenScience version")
-        if (version < 4)
+        if (version > 5) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 5)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
@@ -101,11 +101,22 @@ export namespace ResearchDatabase {
               delivery_id TEXT NOT NULL REFERENCES trace_delivery(id) ON DELETE CASCADE,
               event_id TEXT NOT NULL REFERENCES trace_event(id) ON DELETE CASCADE,
               PRIMARY KEY(delivery_id,event_id));`)
+            db.exec(`CREATE TABLE IF NOT EXISTS billing_import(id TEXT PRIMARY KEY,data TEXT NOT NULL CHECK(json_valid(data)));
+            CREATE TABLE IF NOT EXISTS billing_record(id TEXT PRIMARY KEY,data TEXT NOT NULL CHECK(json_valid(data)));
+            CREATE TABLE IF NOT EXISTS billing_import_item(
+              import_id TEXT NOT NULL REFERENCES billing_import(id) ON DELETE CASCADE,
+              record_id TEXT NOT NULL REFERENCES billing_record(id) ON DELETE CASCADE,
+              PRIMARY KEY(import_id,record_id));
+            CREATE INDEX IF NOT EXISTS idx_billing_record_time ON billing_record(json_extract(data,'$.occurredAt'));
+            CREATE INDEX IF NOT EXISTS idx_billing_record_request ON billing_record(json_extract(data,'$.provider'),json_extract(data,'$.providerRequestID'));
+            CREATE INDEX IF NOT EXISTS idx_model_call_provider_request ON model_call(json_extract(data,'$.provider'),json_extract(data,'$.providerRequest'));
+            CREATE INDEX IF NOT EXISTS idx_model_call_time ON model_call(json_extract(data,'$.occurredAt'));
+            CREATE INDEX IF NOT EXISTS idx_billing_import_record ON billing_import_item(record_id);`)
             db.exec(`CREATE INDEX IF NOT EXISTS idx_session_parent ON session(json_extract(data,'$.parentID'));
             CREATE INDEX IF NOT EXISTS idx_part_session ON part(json_extract(data,'$.sessionID'));
             CREATE INDEX IF NOT EXISTS idx_part_call ON part(json_extract(data,'$.callID'));
             CREATE INDEX IF NOT EXISTS idx_part_model_call ON part(json_extract(data,'$.usage.call'));
-            PRAGMA user_version=4;`)
+            PRAGMA user_version=5;`)
           }).immediate()
         if (!db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get()) {
           await using lease = await FileLease.acquire(`${filepath}.migration.lock`, 120_000)

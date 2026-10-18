@@ -137,7 +137,7 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 4 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 5 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })
@@ -169,4 +169,29 @@ test("adding receipt tables preserves existing version-three model-call and outb
       "receipt",
     ]),
   ).toEqual({ receipt_id: "receipt", charged_microusd: "1" })
+})
+
+test("version-four receipt evidence survives adding billing imports and their relational links", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["charge", "account", "receipt"], { receipt_id: "receipt", charged_microusd: "1" })
+  const previous = new Database(store.filepath)
+  previous.exec(
+    "DROP TABLE billing_import_item; DROP TABLE billing_record; DROP TABLE billing_import; PRAGMA user_version=4;",
+  )
+  previous.close()
+  const upgraded = ResearchDatabase.create(tmp.path)
+  expect(
+    await upgraded.read<{ receipt_id: string; charged_microusd: string }>(["charge", "account", "receipt"]),
+  ).toEqual({ receipt_id: "receipt", charged_microusd: "1" })
+  await upgraded.transaction((db) => {
+    db.query("INSERT INTO billing_import(id,data) VALUES (?,?)").run("import", "{}")
+    db.query("INSERT INTO billing_record(id,data) VALUES (?,?)").run("record", "{}")
+    db.query("INSERT INTO billing_import_item(import_id,record_id) VALUES (?,?)").run("import", "record")
+  })
+  expect(
+    await ResearchDatabase.create(tmp.path).query((db) => db.query("SELECT record_id FROM billing_import_item").all()),
+  ).toEqual([{ record_id: "record" }])
+  await upgraded.transaction((db) => db.query("DELETE FROM billing_import WHERE id=?").run("import"))
+  expect(await upgraded.query((db) => db.query("SELECT record_id FROM billing_import_item").all())).toEqual([])
 })
