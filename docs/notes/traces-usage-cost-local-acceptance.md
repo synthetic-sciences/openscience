@@ -232,3 +232,28 @@ JSON record into SQLite and replayed successfully without credentials or new
 model calls. Verification: 33 storage tests, 32 focused database/Task tests and
 backend typechecking passed. The schema-six upgrade regression covers retained
 results, changed authoritative content and deletion without resurrection.
+
+## Hosted Ace read-only readiness audit
+
+Authenticated read-only requests to the existing hosted account returned HTTP
+200 for managed usage and Wallet status. The usage window contains 55 managed
+calls and nonzero billed amounts; its recent-call rows expose usage IDs but omit
+HTTP call IDs, hold IDs and task/session relationships. These aggregate amounts
+do not prove a specific task receipt. The Wallet has available funds, auto-reload
+is disabled and no payment method is configured. No new inference, reload,
+payment or account mutation was requested.
+
+The scoped receipt lookup returned HTTP 404 for a content-free nonexistent call
+ID. The route is a read-only lookup despite using POST. Together with the earlier
+health 404, this confirms that the hosted deployment does not yet expose the
+local acceptance endpoints. Generating a paid managed call alone would not close
+this receipt verification gap. Account-specific response snapshots remain private
+in temporary files; no account credential or balance is committed.
+
+Dashboard's deployment workflow requires an exact reviewed commit reachable
+from main and successful push CI at that same SHA. The local Dashboard branch
+contains four commits beyond origin/main, ending at `83ae327f`; no push, merge or
+production deployment was performed. The release path is to review those changes,
+squash merge after required checks, and explicitly promote the resulting main
+commit using the existing workflow. Then verify scoped receipt and health
+availability before doing the remaining real Ace audit.
