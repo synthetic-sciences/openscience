@@ -1000,6 +1000,16 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.source }}
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Overlay reviewed download canary repair
+        if: needs.version.outputs.workflow_source != needs.version.outputs.source
+        shell: bash
+        env:
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
+        run: |
+          set -euo pipefail
+          git show "$WORKFLOW_SOURCE:frontend/desktop/script/update-download-canary.mjs" > frontend/desktop/script/update-download-canary.mjs
 
       # Includes the pinned block-map generator and differential planner.
       - uses: ./.github/actions/setup-bun

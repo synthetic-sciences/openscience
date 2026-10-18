@@ -145,8 +145,10 @@ if (!Script.preview) {
       .then((value) => value.trim().split("\n").filter(Boolean))
     const allowed = new Set([
       ".github/workflows/publish.yml",
+      "backend/cli/test/installation/desktop-update-download.test.ts",
       "backend/cli/test/installation/desktop-updater.test.ts",
       "backend/cli/test/installation/release-order.test.ts",
+      "frontend/desktop/script/update-download-canary.mjs",
       "frontend/desktop/script/update-lifecycle-canary.mjs",
       "tooling/repo/npm-release.ts",
       "tooling/repo/prepare-npm.ts",

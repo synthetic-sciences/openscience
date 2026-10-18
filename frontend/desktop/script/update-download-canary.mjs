@@ -1,6 +1,9 @@
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { createWriteStream } from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { Readable } from "node:stream"
+import { pipeline } from "node:stream/promises"
 import { blockmap } from "./update-blockmap.mjs"
 import { cacheArchive, downloadChanges } from "../src/update-download.mjs"
 import { checksum } from "../src/updater.mjs"
@@ -63,7 +66,11 @@ try {
       throw new Error(`Real release differential canary fell back: ${reasons.join("; ")}`)
     }
     // Large runtime upgrades may legitimately replace almost every chunk.
-    await Bun.write(output, await fetch(info.url))
+    // Match the desktop's streaming path; Bun.write(Response) can stall on this large local response.
+    const signal = AbortSignal.timeout(120_000)
+    const response = await fetch(info.url, { signal })
+    if (!response.ok || !response.body) throw new Error("Full update fallback is unavailable")
+    await pipeline(Readable.fromWeb(response.body), createWriteStream(output, { mode: 0o600 }), { signal })
   }
   if ((await checksum(output)) !== digest || transferred !== (result.bytes ?? size))
     throw new Error("Reconstructed release does not match its immutable archive")

@@ -21,12 +21,12 @@ afterEach(async () => {
 
 const hash = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex")
 
-async function fixture(replace = false) {
+async function fixture(replace = false, size = 2 * 1024 * 1024) {
   const root = await mkdtemp(path.join(os.tmpdir(), "openscience-differential-"))
   roots.push(root)
   const cache = path.join(root, "cache")
   await mkdir(cache)
-  const old = randomBytes(2 * 1024 * 1024)
+  const old = randomBytes(size)
   // Insertions exercise shifted COPY offsets, not just same-position replacement.
   const next = replace
     ? randomBytes(old.length)
@@ -87,6 +87,34 @@ test("uses the full download when nearly all archive bytes changed", async () =>
   expect(reasons).toEqual(["A full update is more efficient"])
   expect(value.state.ranges).toBe(0)
 })
+
+test("the release canary completes and verifies a full-download fallback", async () => {
+  // Small responses do not reproduce Bun's stalled large-response write path.
+  const value = await fixture(true, 192 * 1024 * 1024)
+  const report = path.join(value.root, "canary.json")
+  const proc = Bun.spawn(
+    [
+      process.execPath,
+      path.resolve(import.meta.dir, "../../../../frontend/desktop/script/update-download-canary.mjs"),
+      value.previous,
+      path.join(value.root, "next.zip"),
+      report,
+    ],
+    {
+      env: { ...process.env, TMPDIR: value.root, TEMP: value.root, TMP: value.root },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 20_000,
+    },
+  )
+  const result = await Promise.all([proc.exited, new Response(proc.stderr).text()])
+  expect(result[0], result[1]).toBe(0)
+  const evidence = await Bun.file(report).json()
+  expect(evidence.method).toBe("full")
+  expect(evidence.sha256).toBe(hash(value.next))
+  expect(evidence.downloaded_bytes).toBe(value.next.length)
+  expect(evidence.fallback_verified).toBe(true)
+}, 45_000)
 
 test("the first upgraded app retains the legacy helper ZIP and fetches only its map on the next update", async () => {
   const value = await fixture()
