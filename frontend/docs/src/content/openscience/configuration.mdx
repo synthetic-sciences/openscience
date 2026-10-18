@@ -112,3 +112,26 @@ Use a connection form or environment reference instead of committing a real key.
 After editing configuration, reopen the project or restart the app if the setting does not refresh automatically. Use `openscience doctor` to check setup and read any configuration error for the file and field that need correction.
 
 For project rules, use [Project instructions](/openscience/instructions). For external tools, use [Connectors](/openscience/connectors).
+
+## Network transport and TUN DNS
+
+Requests enforce response limits on decoded bytes, including gzip, deflate and
+Brotli responses. Cancellation covers DNS resolution and response bodies;
+incomplete or timed-out scientific responses are never cached.
+
+The default resolver is your operating system. If a TUN proxy supplies Fake IP
+addresses such as `198.18.0.30`, configure a real-IP DNS exclusion for the
+requested public domain in that proxy. Private and synthetic addresses remain
+blocked even when the domain allow-list is off.
+
+Alternatively, start OpenScience with `OPENSCIENCE_DNS_RESOLVER=cloudflare`.
+This explicitly sends queried hostnames to Cloudflare's DNS-over-HTTPS service,
+using a fixed public bootstrap address with TLS hostname verification. Returned
+addresses still undergo the same private-address checks, and every redirect is
+checked again. It does not trust or connect through the proxy's synthetic IP
+mapping. Use `system` or unset the variable to keep your system resolver.
+
+The resolver setting affects the shared web, scientific connector, remote
+instruction and result-download transport. It does not change provider
+credentials, model requests or MCP connections. No DNS change is enabled by
+default, and an unavailable public resolver fails closed.

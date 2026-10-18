@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Decode compressed network responses, enforce streamed byte limits, reject partial/aborted data before caching, and cancel DNS waits promptly. Add opt-in Cloudflare DNS-over-HTTPS for TUN Fake IP environments while retaining private-address protection.
+
 - Anthropic API-key requests no longer send the `claude-code-20250219` beta header, which billed them as Claude Code usage and made Console orgs funded only by Max/Team plan API credits fail with "credit balance is too low".
 
 - Stop advertising GPT-5.4 and GPT-5.4 Mini through ChatGPT/Codex subscriptions, whose endpoint rejects those models; they remain available through OpenAI API-key connections.
