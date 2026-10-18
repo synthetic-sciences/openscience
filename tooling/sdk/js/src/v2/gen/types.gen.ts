@@ -9914,7 +9914,19 @@ export type SettingsUsageLoggingHealthResponses = {
             unknown_cache_read: number
             unknown_cache_write: number
           }
+          attempts?: {
+            calls: number
+            dispatched: number
+            completed: number
+            failed: number
+            cancelled: number
+            timed_out: number
+            pending: number
+            unclassified_requests: number
+          }
           managed: {
+            attempts_without_response?: number
+            unknown_attempt_charge?: number
             responses: number
             pending: number
             settled: number

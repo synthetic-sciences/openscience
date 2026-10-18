@@ -136,3 +136,19 @@ test("a changed account discards the in-flight server report", async () => {
   })
   expect(await LoggingHealth.check()).toEqual({ state: "unavailable", reason: "account_changed" })
 })
+
+test("new attempt evidence survives validation while older reports leave coverage unknown", () => {
+  expect(LoggingHealth.Report.parse(report).attempts).toBeUndefined()
+  const attempts = {
+    calls: 3,
+    dispatched: 3,
+    completed: 0,
+    failed: 1,
+    cancelled: 1,
+    timed_out: 0,
+    pending: 1,
+    unclassified_requests: 2,
+  }
+  expect(LoggingHealth.Report.parse({ ...report, attempts }).attempts).toEqual(attempts)
+  expect(LoggingHealth.Report.safeParse({ ...report, attempts: { ...attempts, pending: -1 } }).success).toBe(false)
+})

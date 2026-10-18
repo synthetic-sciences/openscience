@@ -22421,9 +22421,74 @@
                                 "unknown_cache_write"
                               ]
                             },
+                            "attempts": {
+                              "type": "object",
+                              "properties": {
+                                "calls": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "dispatched": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "completed": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "failed": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "cancelled": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "timed_out": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "pending": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unclassified_requests": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "calls",
+                                "dispatched",
+                                "completed",
+                                "failed",
+                                "cancelled",
+                                "timed_out",
+                                "pending",
+                                "unclassified_requests"
+                              ]
+                            },
                             "managed": {
                               "type": "object",
                               "properties": {
+                                "attempts_without_response": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_attempt_charge": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
                                 "responses": {
                                   "type": "integer",
                                   "minimum": 0,

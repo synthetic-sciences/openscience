@@ -58,3 +58,18 @@ Use private account support for account data and payment details. Follow the [se
 Open a conversation’s context indicator to see **Model call usage**. Each completed step shows its access route, model, provider token counts, cost basis, call ID and any recorded Ace hold ID. Provider-reported input, output, reasoning, cache-read and cache-write counts remain separate; an omitted field or an older record without that evidence shows **Unknown**, while a reported zero stays zero. Counts are not added together because some providers include reasoning in output and cache reads in input.
 
 Provider-reported amounts, calculated Ace amounts and catalog estimates have separate subtotals for this session. Child agents have their own sessions. Subscription fees are not allocated per call. The historical accounting total may include estimates; use the per-call basis before interpreting a value as a charge.
+
+
+### HTTP attempt coverage
+
+Server reconciliation reports stored HTTP dispatches, completions, failures,
+cancellations and timeouts by call ID. A dispatch without a recorded terminal
+outcome stays pending; it is not presented as a successful or failed call. Older
+requests without normalized HTTP identities remain unclassified. Older servers
+that do not expose this coverage show it as unknown.
+
+Ace calls without model responses also participate in hold and charge checks.
+A missing call-to-hold link leaves the charge unknown; it does not establish a
+zero charge. These checks do not create usage or billing rows. Server reports
+only cover events received inside the selected window, so an outcome outside
+that window can leave a dispatch pending in that report.

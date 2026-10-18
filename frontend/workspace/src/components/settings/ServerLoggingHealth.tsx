@@ -26,8 +26,8 @@ const labels = {
 const summaries = {
   healthy: "No discrepancies found in the stored evidence checked.",
   attention: "Stored evidence needs attention. Review the findings below.",
-  incomplete: "Some token counts or settlement evidence are still unavailable.",
-  no_data: "No stored model responses found for this device and workspace in the checked window.",
+  incomplete: "Some call outcomes, token counts or settlement evidence are still unavailable.",
+  no_data: "No stored model-call evidence found for this device and workspace in the checked window.",
 }
 
 export function ServerLoggingHealth(props: {
@@ -111,6 +111,16 @@ export function ServerLoggingHealth(props: {
             </Row>
             <Row>
               <RowCopy
+                title="HTTP attempts"
+                description={
+                  value().attempts
+                    ? `${value().attempts!.calls} calls · ${value().attempts!.dispatched} dispatches · ${value().attempts!.completed} completed · ${value().attempts!.failed} failed · ${value().attempts!.cancelled} cancelled · ${value().attempts!.timed_out} timed out · ${value().attempts!.pending} without a terminal outcome · ${value().attempts!.unclassified_requests} requests without HTTP attempt evidence`
+                    : "This server does not report pre-response attempt coverage. Failure and cancellation coverage is unknown."
+                }
+              />
+            </Row>
+            <Row>
+              <RowCopy
                 title="Unknown provider fields"
                 description={`Input ${value().usage.unknown_input} · output ${value().usage.unknown_output} · reasoning ${value().usage.unknown_reasoning} · cache read ${value().usage.unknown_cache_read} · cache write ${value().usage.unknown_cache_write}. An omitted field is not a token-count mismatch.`}
               />
@@ -121,6 +131,14 @@ export function ServerLoggingHealth(props: {
                 description={`${value().managed.settled} settled holds · ${value().managed.pending} pending · ${value().managed.not_charged} released or expired · ${value().managed.unknown_charge_amount} settled amounts unknown`}
               />
             </Row>
+            <Show when={value().managed.attempts_without_response !== undefined}>
+              <Row>
+                <RowCopy
+                  title="Ace calls without responses"
+                  description={`${value().managed.attempts_without_response} HTTP attempts checked · ${value().managed.unknown_attempt_charge ?? 0} without a known call-to-hold link. An absent link does not establish a zero charge.`}
+                />
+              </Row>
+            </Show>
             <For each={(Object.keys(labels) as Array<keyof typeof labels>).filter((key) => value().managed[key] > 0)}>
               {(key) => (
                 <Row>

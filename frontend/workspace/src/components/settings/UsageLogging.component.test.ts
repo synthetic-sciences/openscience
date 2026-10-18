@@ -249,3 +249,34 @@ test("refresh explains delayed queues and content-free delivery/rejection diagno
   expect(host.textContent).toContain("event_fixture")
   expect(state.healthReads).toBe(0)
 })
+
+test("server attempts expose failures and unknown Ace charges while old coverage stays explicit", async () => {
+  const { state, host } = await mount()
+  state.health = healthy
+  checkServer(host).click()
+  await ready(() => host.textContent?.includes("Failure and cancellation coverage is unknown") === true)
+  state.health = {
+    ...healthy,
+    report: {
+      ...healthy.report,
+      status: "incomplete",
+      attempts: {
+        calls: 4,
+        dispatched: 4,
+        completed: 0,
+        failed: 1,
+        cancelled: 1,
+        timed_out: 1,
+        pending: 1,
+        unclassified_requests: 2,
+      },
+      managed: { ...healthy.report.managed, attempts_without_response: 3, unknown_attempt_charge: 1 },
+    },
+  }
+  checkServer(host).click()
+  await ready(() => host.textContent?.includes("4 calls · 4 dispatches") === true)
+  expect(host.textContent).toContain("1 failed · 1 cancelled · 1 timed out · 1 without a terminal outcome")
+  expect(host.textContent).toContain("2 requests without HTTP attempt evidence")
+  expect(host.textContent).toContain("3 HTTP attempts checked · 1 without a known call-to-hold link")
+  expect(host.textContent).toContain("An absent link does not establish a zero charge")
+})

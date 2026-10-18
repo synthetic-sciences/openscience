@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Show server-side HTTP dispatch, failure, cancellation and timeout coverage in logging health, including Ace settlement checks for calls without model responses.
+
 - Import later legacy-root session records without reviving deleted backups, and provide `debug legacy-import` to recover ambiguous records from earlier experimental databases.
 
 - Import normalized provider billing evidence locally, reconcile unique request IDs, and keep imported charges and credits separate from provider-reported costs, estimates and historical accounting in Usage and CSV exports.

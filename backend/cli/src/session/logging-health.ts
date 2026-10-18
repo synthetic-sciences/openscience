@@ -30,7 +30,21 @@ export namespace LoggingHealth {
         unknown_cache_read: Count,
         unknown_cache_write: Count,
       }),
+      attempts: z
+        .object({
+          calls: Count,
+          dispatched: Count,
+          completed: Count,
+          failed: Count,
+          cancelled: Count,
+          timed_out: Count,
+          pending: Count,
+          unclassified_requests: Count,
+        })
+        .optional(),
       managed: z.object({
+        attempts_without_response: Count.optional(),
+        unknown_attempt_charge: Count.optional(),
         responses: Count,
         pending: Count,
         settled: Count,
