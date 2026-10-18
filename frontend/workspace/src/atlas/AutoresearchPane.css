@@ -993,3 +993,25 @@
   font-size: var(--font-size-x-small);
   line-height: 1.45;
 }
+
+.ar-framing {
+  display: grid;
+  gap: 8px;
+}
+
+.ar-framing label {
+  display: grid;
+  gap: 4px;
+}
+
+.ar-framing textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  resize: vertical;
+}

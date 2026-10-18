@@ -35,6 +35,8 @@ at most 2 runs at a time on this machine, kill a run after 1 hour or if
 val_loss plateaus for 500 steps, stop after 20 runs or 8 hours.
 ```
 
+Give the study a research question and a testable hypothesis as well as its metric, for example: “Does momentum improve validation loss at equal compute? I predict it will reach the same loss in fewer steps.” These are stored separately from the study’s purpose and appear in **About** and `study.md`. Use **Edit question and hypothesis** in About, or ask the agent to update either field. Existing studies show “Not recorded” until you supply them; OpenScience does not infer them from the purpose. Driver updates carry the recorded question and hypothesis forward.
+
 The agent agrees the objective, creates the study, proposes the baseline and the first ideas ranked by expected value, and starts the baseline through the compute permissions you already use. From then on:
 
 - OpenScience follows each run's metrics, ends runs that break the kill criteria, and when a run finishes wakes the session with a **Study update** that reports the metric against the baseline. You can read every wake-up in the transcript.
@@ -52,7 +54,7 @@ Studies run on the local machine (one run per GPU when `nvidia-smi` is present),
 
 ## Tools the agent uses
 
-- `study`: create, status, propose, start, record, drop, conclude.
+- `study`: create, update (question/hypothesis), status, propose, start, record, drop, conclude, reopen.
 - `experiments`: runs, keys, series, compare.
 
 Both are ordinary tools with their own permission entries (`study` is contained, `experiments` is read-only). Runs still go through `compute_job`.

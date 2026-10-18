@@ -52,6 +52,8 @@ describe("study driver", () => {
           sessionID: "ses_driver",
           name: "loop",
           purpose: "test",
+          question: "Does momentum reduce validation loss?",
+          hypothesis: "Momentum lowers loss at equal compute.",
           metric: "val_loss",
           direction: "minimize",
           root: path.join(tmp.path, "study"),
@@ -91,6 +93,8 @@ describe("study driver", () => {
         expect(h.prompts).toHaveLength(1)
         expect(h.prompts[0]).toContain('Study update for "loop"')
         expect(h.prompts[0]).toContain("val_loss 0.65")
+        expect(h.prompts[0]).toContain("Does momentum reduce validation loss?")
+        expect(h.prompts[0]).toContain("Momentum lowers loss at equal compute.")
         expect(h.prompts[0]).toContain("study record")
         // The ledger files are rendered into the study root.
         expect(await Bun.file(path.join(tmp.path, "study", "results.tsv")).text()).toContain("baseline")

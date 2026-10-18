@@ -68,6 +68,8 @@ import type {
   ExperimentsStudyControlResponses,
   ExperimentsStudyErrors,
   ExperimentsStudyResponses,
+  ExperimentsStudyUpdateErrors,
+  ExperimentsStudyUpdateResponses,
   FileAnnotationsCreateResponses,
   FileAnnotationsDeleteResponses,
   FileAnnotationsHistoryResponses,
@@ -5485,6 +5487,47 @@ export class Experiments extends HeyApiClient {
       url: "/experiments/studies/{studyID}",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Update a study's research question and hypothesis
+   */
+  public studyUpdate<ThrowOnError extends boolean = false>(
+    parameters: {
+      studyID: string
+      directory?: string
+      question?: string
+      hypothesis?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "studyID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "question" },
+            { in: "body", key: "hypothesis" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      ExperimentsStudyUpdateResponses,
+      ExperimentsStudyUpdateErrors,
+      ThrowOnError
+    >({
+      url: "/experiments/studies/{studyID}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

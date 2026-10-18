@@ -463,7 +463,12 @@ export namespace StudyDriver {
     current.turnsAt = current.turnsAt.filter((at) => now - at < 3_600_000)
     if (!urgent && current.turnsAt.length >= MAX_TURNS_PER_HOUR) return
     const lines = current.pending.splice(0)
-    const text = [`Study update for "${study.name}":`, ...lines.map((line) => `- ${line}`)].join("\n")
+    const text = [
+      `Study update for "${study.name}":`,
+      ...(study.question ? [`Research question: ${study.question}`] : []),
+      ...(study.hypothesis ? [`Hypothesis: ${study.hypothesis}`] : []),
+      ...lines.map((line) => `- ${line}`),
+    ].join("\n")
     const label = `Study update: ${lines.map((line) => line.split(/(?<=\.)\s/)[0]!.replace(/\.$/, "")).join(" · ")}`
     const sent = await prompt(study.sessionID, text, label)
       .then(() => true)

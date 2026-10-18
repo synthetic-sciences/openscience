@@ -169,6 +169,38 @@ export const ExperimentsRoutes = lazy(() =>
         return c.json(overview)
       },
     )
+    .patch(
+      "/studies/:studyID",
+      describeRoute({
+        summary: "Update a study's research question and hypothesis",
+        operationId: "experiments.studyUpdate",
+        responses: {
+          200: { description: "Study", content: { "application/json": { schema: resolver(Experiments.Study) } } },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ studyID: z.string() })),
+      validator(
+        "json",
+        z
+          .object({
+            question: z.string().trim().max(4_000).optional(),
+            hypothesis: z.string().trim().max(4_000).optional(),
+          })
+          .strict()
+          .refine(
+            (body) => body.question !== undefined || body.hypothesis !== undefined,
+            "Provide question or hypothesis",
+          ),
+      ),
+      async (c) => {
+        const id = c.req.valid("param").studyID
+        const updated = await Experiments.updateStudy(id, c.req.valid("json"))
+        if (!updated) return c.json({ error: "Study not found" }, 404)
+        await StudyLedger.render(id)
+        return c.json(updated)
+      },
+    )
     .post(
       "/studies/:studyID/:action",
       describeRoute({

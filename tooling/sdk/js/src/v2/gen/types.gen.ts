@@ -1054,6 +1054,8 @@ export type Study = {
   sessionID: string
   name: string
   purpose: string
+  question?: string
+  hypothesis?: string
   metric: string
   direction: "minimize" | "maximize"
   status: "running" | "paused" | "halted" | "concluded"
@@ -13669,6 +13671,42 @@ export type ExperimentsStudyResponses = {
 }
 
 export type ExperimentsStudyResponse = ExperimentsStudyResponses[keyof ExperimentsStudyResponses]
+
+export type ExperimentsStudyUpdateData = {
+  body?: {
+    question?: string
+    hypothesis?: string
+  }
+  path: {
+    studyID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/experiments/studies/{studyID}"
+}
+
+export type ExperimentsStudyUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type ExperimentsStudyUpdateError = ExperimentsStudyUpdateErrors[keyof ExperimentsStudyUpdateErrors]
+
+export type ExperimentsStudyUpdateResponses = {
+  /**
+   * Study
+   */
+  200: Study
+}
+
+export type ExperimentsStudyUpdateResponse = ExperimentsStudyUpdateResponses[keyof ExperimentsStudyUpdateResponses]
 
 export type ExperimentsStudyControlData = {
   body?: never

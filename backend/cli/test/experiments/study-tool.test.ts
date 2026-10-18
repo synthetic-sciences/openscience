@@ -65,6 +65,8 @@ describe("study and experiments tools", () => {
             action: "create",
             name: "line fit",
             purpose: "fit y = 3x + 2",
+            question: "Can momentum improve the fit?",
+            hypothesis: "Momentum reduces validation MSE at the same step count.",
             metric: "val_mse",
             direction: "minimize",
             concurrency: 1,
@@ -83,6 +85,16 @@ describe("study and experiments tools", () => {
         )
         expect(await Bun.file(path.join(workspace, ".openscience/sdk/shim/wandb.py")).exists()).toBe(true)
         expect(await Bun.file(path.join(workspace, "study.md")).text()).toContain("fit y = 3x + 2")
+
+        expect((await Experiments.studyForSession(session.id))?.question).toBe("Can momentum improve the fit?")
+        const revised = await study.execute(
+          { action: "update", hypothesis: "Momentum reaches the same MSE sooner." },
+          ctx,
+        )
+        expect(revised.output).toContain("Momentum reaches the same MSE sooner.")
+        const ledger = await Bun.file(path.join(workspace, "study.md")).text()
+        expect(ledger).toContain("Can momentum improve the fit?")
+        expect(ledger).toContain("Momentum reaches the same MSE sooner.")
 
         await expect(
           study.execute({ action: "create", name: "again", purpose: "p", metric: "m", direction: "maximize" }, ctx),

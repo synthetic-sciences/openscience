@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Add editable research question and hypothesis fields to autoresearch studies, preserved in the database, study ledger, agent tools and driver updates.
+
 - Preserve nullable provider token counts and cost provenance on completed steps. Show per-call routes, unknown usage, separate cost categories and call/hold identities in the conversation context panel.
 
 - Label subscription coverage and unknown costs in model-call audits, retaining provider-reported costs separately from historical step accounting.

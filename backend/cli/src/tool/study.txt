@@ -1,7 +1,8 @@
 Run a research study: an autoresearch loop that hill-climbs one metric over many runs. You own the science (ideas, code, verdicts); OpenScience owns the clock (metrics, run endings, kill criteria, budget) and wakes this session with a "Study update" when there is news. Load the autoresearch skill for the method.
 
 Actions (one per call):
-- create: name, purpose, metric, direction, optional target/concurrency/kill_criteria/budget/review. Once per session, after the plan is agreed.
+- create: name, purpose, metric, direction, optional question/hypothesis/target/concurrency/kill_criteria/budget/review. Once per session, after the plan is agreed.
+- update: question and/or hypothesis. Record the agreed research question and a testable prediction; an empty string clears a field. Do not invent either from the purpose.
 - status: baseline, best, queue, live runs, budget, lessons.
 - propose: ideas[] with title, description, why, ev (metric units × confidence), config; baseline first with priority 1000.
 - start: idea_id + command (the script must log the metric through openscience_track or wandb). One run per idea, never two. The run executes in the study root by default, so the command is "python train.py ...", uploads and artifacts are named relative to that root, and the data the script reads lives inside it; the tracking SDK is added to the uploads for you.

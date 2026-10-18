@@ -1,3 +1,5 @@
+import { Database } from "bun:sqlite"
+import path from "node:path"
 import { afterEach, describe, expect, test } from "bun:test"
 import { Experiments } from "../../src/experiments"
 
@@ -131,4 +133,55 @@ test("a study's hour budget counts from its first run, not from its creation", (
   // The earliest start is the clock's origin, whatever order runs are listed in.
   expect(Experiments.clockStart([run(5_000), run(2_000), run(null)])).toBe(2_000)
   expect(Experiments.elapsedMs([run(5_000), run(2_000)], 62_000)).toBe(60_000)
+})
+
+test("study question and hypothesis survive updates and database reopening", async () => {
+  const study = await Experiments.createStudy({
+    projectID,
+    sessionID: "ses_framing",
+    name: "Question",
+    purpose: "Compare optimizers",
+    question: "Does momentum converge sooner?",
+    hypothesis: "Momentum lowers validation error within 100 steps.",
+    metric: "val_loss",
+    direction: "minimize",
+    root: "/tmp/study",
+  })
+  await Experiments.updateStudy(
+    study.id,
+    { hypothesis: "Momentum improves validation error at equal compute." },
+    { projectID },
+  )
+  Experiments.close()
+  const loaded = await Experiments.getStudy(study.id, { projectID })
+  expect(loaded?.question).toBe("Does momentum converge sooner?")
+  expect(loaded?.hypothesis).toBe("Momentum improves validation error at equal compute.")
+  expect(loaded?.purpose).toBe("Compare optimizers")
+  await Experiments.updateStudy(study.id, { question: "" }, { projectID })
+  expect((await Experiments.getStudy(study.id, { projectID }))?.question).toBe("")
+})
+
+test("older study databases gain nullable framing fields without inventing a hypothesis", async () => {
+  const project = `${projectID}_legacy`
+  const study = await Experiments.createStudy({
+    projectID: project,
+    sessionID: "ses_legacy",
+    name: "Legacy",
+    purpose: "A purpose is not a hypothesis",
+    metric: "loss",
+    direction: "minimize",
+    root: "/tmp/study",
+  })
+  Experiments.close()
+  const database = new Database(path.join(Experiments.directory(), `${project}.sqlite`))
+  database.exec("ALTER TABLE study DROP COLUMN question")
+  database.exec("ALTER TABLE study DROP COLUMN hypothesis")
+  database.close()
+  const migrated = await Experiments.getStudy(study.id, { projectID: project })
+  expect(migrated?.question).toBeUndefined()
+  expect(migrated?.hypothesis).toBeUndefined()
+  expect(migrated?.purpose).toBe("A purpose is not a hypothesis")
+  await Experiments.updateStudy(study.id, { question: "Can we lower loss?" }, { projectID: project })
+  Experiments.close()
+  expect((await Experiments.getStudy(study.id, { projectID: project }))?.question).toBe("Can we lower loss?")
 })

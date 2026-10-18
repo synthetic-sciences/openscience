@@ -97,6 +97,8 @@ export namespace Experiments {
       sessionID: z.string(),
       name: z.string(),
       purpose: z.string(),
+      question: z.string().max(4_000).optional(),
+      hypothesis: z.string().max(4_000).optional(),
       metric: z.string(),
       direction: Direction,
       status: StudyStatus,
@@ -180,6 +182,8 @@ export namespace Experiments {
       session_id TEXT NOT NULL,
       name TEXT NOT NULL,
       purpose TEXT NOT NULL,
+      question TEXT,
+      hypothesis TEXT,
       metric TEXT NOT NULL,
       direction TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -281,6 +285,9 @@ export namespace Experiments {
     if (!columns.some((column) => column.name === "directives")) {
       database.exec("ALTER TABLE study ADD COLUMN directives TEXT NOT NULL DEFAULT '[]'")
     }
+    for (const name of ["question", "hypothesis"]) {
+      if (!columns.some((column) => column.name === name)) database.exec(`ALTER TABLE study ADD COLUMN ${name} TEXT`)
+    }
     databases.set(projectID, database)
     return database
   }
@@ -362,6 +369,8 @@ export namespace Experiments {
     session_id: string
     name: string
     purpose: string
+    question: string | null
+    hypothesis: string | null
     metric: string
     direction: string
     status: string
@@ -389,6 +398,8 @@ export namespace Experiments {
       sessionID: row.session_id,
       name: row.name,
       purpose: row.purpose,
+      question: row.question ?? undefined,
+      hypothesis: row.hypothesis ?? undefined,
       metric: row.metric,
       direction: Direction.parse(row.direction),
       status: StudyStatus.parse(row.status),
@@ -812,6 +823,8 @@ export namespace Experiments {
     sessionID: string
     name: string
     purpose: string
+    question?: string
+    hypothesis?: string
     metric: string
     direction: Direction
     root: string
@@ -827,8 +840,8 @@ export namespace Experiments {
     const id = Identifier.ascending("study")
     database
       .query(
-        `INSERT INTO study (id, project_id, session_id, name, purpose, metric, direction, status, root, target, concurrency, kill_criteria, budget, review, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO study (id, project_id, session_id, name, purpose, question, hypothesis, metric, direction, status, root, target, concurrency, kill_criteria, budget, review, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -836,6 +849,8 @@ export namespace Experiments {
         input.sessionID,
         input.name,
         input.purpose,
+        input.question ?? null,
+        input.hypothesis ?? null,
         input.metric,
         input.direction,
         input.root,
@@ -903,6 +918,8 @@ export namespace Experiments {
         | "budget"
         | "review"
         | "purpose"
+        | "question"
+        | "hypothesis"
         | "name"
         | "sessionID"
       >
@@ -916,7 +933,7 @@ export namespace Experiments {
     const next = { ...existing, ...patch, updatedAt: Date.now() }
     database
       .query(
-        `UPDATE study SET status = ?, baseline_run_id = ?, best_run_id = ?, lessons = ?, conclusion = ?, concurrency = ?, kill_criteria = ?, budget = ?, review = ?, purpose = ?, name = ?, turns = ?, cost_usd = ?, session_id = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE study SET status = ?, baseline_run_id = ?, best_run_id = ?, lessons = ?, conclusion = ?, concurrency = ?, kill_criteria = ?, budget = ?, review = ?, purpose = ?, question = ?, hypothesis = ?, name = ?, turns = ?, cost_usd = ?, session_id = ?, updated_at = ? WHERE id = ?`,
       )
       .run(
         next.status,
@@ -929,6 +946,8 @@ export namespace Experiments {
         json(next.budget),
         next.review ? 1 : 0,
         next.purpose,
+        next.question ?? null,
+        next.hypothesis ?? null,
         next.name,
         next.turns,
         next.costUSD,
