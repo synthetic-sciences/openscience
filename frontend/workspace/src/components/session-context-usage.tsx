@@ -134,7 +134,20 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
         <Switch>
           <Match when={variant() === "indicator"}>{circle()}</Match>
           <Match when={variant() === "header"}>
-            <Show when={context()}>
+            <Show
+              when={context()}
+              fallback={
+                <button
+                  type="button"
+                  class="workspace-header__context"
+                  onClick={openContext}
+                  aria-label={language.t("context.usage.view")}
+                >
+                  {circle()}
+                  <span class="workspace-header__context-tokens">{language.t("session.tab.context")}</span>
+                </button>
+              }
+            >
               {(ctx) => (
                 <button
                   type="button"

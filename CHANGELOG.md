@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Keep the task context and settled-charge lookup accessible before the first model response, including failed or cancelled first attempts.
+
 - Show server-side HTTP dispatch, failure, cancellation and timeout coverage in logging health, including Ace settlement checks for calls without model responses.
 
 - Import later legacy-root session records without reviving deleted backups, and provide `debug legacy-import` to recover ambiguous records from earlier experimental databases.
