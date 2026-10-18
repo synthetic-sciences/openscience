@@ -8,6 +8,7 @@ export const MANAGED_OPENROUTER_MODELS = Object.freeze([
   "anthropic/claude-haiku-4.5",
   "google/gemini-3.1-pro-preview",
   "google/gemini-3.8-flash",
+  "google/gemini-4-argon",
   "x-ai/grok-4.7",
   "z-ai/glm-5.3",
   "z-ai/glm-5.3-flash",
@@ -103,6 +104,18 @@ export const MANAGED_MODEL_DETAILS: Record<(typeof MANAGED_OPENROUTER_MODELS)[nu
     context: 1_048_576,
     output: 65_536,
     input: ["text", "image", "video", "audio", "pdf"],
+  },
+  // Native GenerateContent metadata for the deployed key, checked 2026-10-18.
+  // Long decode is not enabled on this synchronous Ace route.
+  "google/gemini-4-argon": {
+    name: "Gemini 4 Argon",
+    context: 1_048_576,
+    output: 32_768,
+    input: ["text", "image", "video", "audio", "pdf"],
+    temperature: false,
+    efforts: ["low", "medium", "high"],
+    defaultEffort: "medium",
+    requiresApproval: true,
   },
   "google/gemini-3.8-flash": {
     name: "Gemini 3.8 Flash",
