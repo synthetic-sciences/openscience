@@ -3,6 +3,7 @@
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
+    "types": ["node"],
     "module": "preserve",
     "declaration": true,
     "moduleResolution": "bundler",
