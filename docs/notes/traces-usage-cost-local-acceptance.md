@@ -189,3 +189,31 @@ the explicit requested-model annotation and unverified-alias guidance. This
 verifies rendering against the actual imported provider record. Native file-picker
 automation remains unavailable in the browser tool. No inference was made during
 this browser check, and the isolated provider credential remains removed.
+
+## Real Task-tool execution and replay
+
+The actual Task tool dispatched a configured subscription worker from a prepared
+durable parent assistant record. The worker ran through SessionPrompt and returned
+its answer in the Task result. This exercises real Task dispatch, child creation,
+provider streaming and result reuse; the parent tool selection was prepared by
+the audit rather than chosen by a live parent model. Tools were denied and the
+worker was restricted to one iteration with a 90-second abort bound.
+
+The run produced two completed HTTP calls: a worker call (4,476 input, 19 output,
+12 reasoning, zero cache read/write) and an internal summary call (547 input, nine
+output, zero reasoning/cache read/cache write). The root audit retained two
+sessions and both call identities without double-counting the completed step.
+The worker's raw provider usage matched its saved fields. Both calls matched
+the corresponding server projection by HTTP and provider request identity;
+subscription cost remained null, with no fabricated Wallet charge.
+
+Repeating the same durable Task invocation returned the same result and retained
+exactly the same two calls. No credential was available during replay. Health
+reported seven completed calls and seven projected responses across the isolated
+subscription audit history, with no pending calls or missing projections. Earlier
+unknown cache-write observations remain unknown. The copied access credential
+was used without refresh and removed after execution. Assertions are recorded in
+`task-tool-verified.json` in the isolated subscription audit directory.
+
+Model-selected parent delegation, background cancellation and mixed-route live
+Task orchestration remain outside this run's acceptance scope.
