@@ -253,9 +253,13 @@ async function materializeImage(
     { signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]) },
     { authorize, maxResponseBytes: MAX_IMAGE_BYTES, streamResponse: true },
   )
-  if (!response.ok) throw new Error(`The generated image could not be downloaded (${response.status}).`)
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => {})
+    throw new Error(`The generated image could not be downloaded (${response.status}).`)
+  }
   const mime = response.headers.get("content-type")?.split(";")[0]?.trim() ?? ""
   if (!/^image\/(?:png|jpeg|webp|gif)$/.test(mime)) {
+    await response.body?.cancel().catch(() => {})
     throw new Error(`The generated image URL returned an unsupported format (${mime || "unknown"}).`)
   }
   const bytes = await readBoundedImageResponse(response, MAX_IMAGE_BYTES)
