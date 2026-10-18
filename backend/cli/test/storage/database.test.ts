@@ -137,7 +137,7 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 6 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 7 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })
@@ -258,4 +258,29 @@ test("a failed later rescan imports nothing and retries after the new source is 
   verify.close()
   await Bun.write(invalid, JSON.stringify({ id: "bad" }))
   expect(await store.list([])).toHaveLength(3)
+})
+
+test("version-six upgrades import Task attempts and preserve completed replay evidence", async () => {
+  await using tmp = await tmpdir()
+  const initial = ResearchDatabase.create(tmp.path)
+  await initial.write(["session", "project", "parent"], { id: "parent" })
+  const previous = new Database(initial.filepath)
+  previous.exec("DROP TABLE task_attempt; PRAGMA user_version=6;")
+  previous.close()
+  const key = ["task_attempt", "project", "attempt"]
+  const file = path.join(tmp.path, "storage", ...key) + ".json"
+  const attempt = { callID: "tool_call", childSessionID: "child", state: "completed", output: "saved result" }
+  await Bun.write(file, JSON.stringify(attempt))
+  const upgraded = ResearchDatabase.create(tmp.path)
+  expect(await upgraded.read<typeof attempt>(key)).toEqual(attempt)
+  await upgraded.update<typeof attempt>(key, (record) => {
+    record.output = "authoritative result"
+  })
+  expect(await ResearchDatabase.create(tmp.path).read<typeof attempt>(key)).toEqual({
+    ...attempt,
+    output: "authoritative result",
+  })
+  expect(await Bun.file(file).json()).toEqual(attempt)
+  await upgraded.remove(key)
+  await expect(ResearchDatabase.create(tmp.path).read(key)).rejects.toMatchObject({ code: "ENOENT" })
 })

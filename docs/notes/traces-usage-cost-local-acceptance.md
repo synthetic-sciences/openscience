@@ -217,3 +217,18 @@ was used without refresh and removed after execution. Assertions are recorded in
 
 Model-selected parent delegation, background cancellation and mixed-route live
 Task orchestration remain outside this run's acceptance scope.
+
+## Task replay records join the research database
+
+The live Task audit exposed `task_attempt` records still using legacy JSON
+files. Schema 7 adds project-scoped Task attempts to the same transactional
+research database as messages and traces. Existing attempts migrate with their
+identities, fingerprints and saved results intact. Original files remain backups;
+authoritative changes and deletions survive database reopening without restoring
+stale backup content. Older clients reject the newer schema.
+
+The actual completed Task from the subscription audit migrated from its existing
+JSON record into SQLite and replayed successfully without credentials or new
+model calls. Verification: 33 storage tests, 32 focused database/Task tests and
+backend typechecking passed. The schema-six upgrade regression covers retained
+results, changed authoritative content and deletion without resurrection.

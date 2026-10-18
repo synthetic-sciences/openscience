@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Keep delegated Task replay records in the research database, including migration of existing attempts.
+
 - Preserve distinct billed and requested model names in provider billing imports; explicit alias annotations support reconciliation without guessing model mappings.
 
 - Preserve provider-reported cache-write counters from OpenAI and Azure Responses, including explicit zero, instead of losing them in SDK parsing or replacing them with catalog estimates.
