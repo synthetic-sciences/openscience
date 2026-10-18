@@ -17,6 +17,7 @@ import { Lock } from "@/util/lock"
 import { Token } from "@/util/token"
 import { Inference } from "@/provider/inference"
 import { CredentialRevocation } from "@/credentials/revocation"
+import { UsageEvidence } from "./usage-evidence"
 import { SessionRestart } from "./restart"
 import { PayloadIntegrity } from "@/tool/payload-integrity"
 import { Log } from "@/util/log"
@@ -293,6 +294,10 @@ export namespace MessageV2 {
         hold: z.string().optional(),
         /** Provider-owned response or request identity, when the route exposes one. */
         providerRequest: z.string().optional(),
+        /** Exact provider counts, with null for unreported dimensions. */
+        reported: UsageEvidence.Reported.optional(),
+        reportedCostUSD: z.number().finite().nonnegative().nullable().optional(),
+        cost: UsageEvidence.Cost.optional(),
       })
       .optional(),
     /** Delivered speed when the provider reports it; otherwise the selected speed. */

@@ -567,6 +567,19 @@ export type StepFinishPart = {
     call?: string
     hold?: string
     providerRequest?: string
+    reported?: {
+      input_tokens: number | null
+      output_tokens: number | null
+      total_tokens: number | null
+      reasoning_tokens: number | null
+      cached_input_tokens: number | null
+      cache_creation_input_tokens: number | null
+    }
+    reportedCostUSD?: number | null
+    cost?: {
+      source: "subscription" | "provider_response" | "wallet_calculated" | "catalog_estimate" | "unknown"
+      amountUSD: number | null
+    }
   }
   tier?: string
   reason: string

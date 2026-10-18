@@ -28,7 +28,7 @@ Temporary delivery failures can leave queued records waiting for automatic retry
 
 For support investigations, `openscience debug audit <session>` prints a local, content-free report for that conversation, its internal title and summary calls, and its worker sessions. It includes local and opaque telemetry session IDs, routes, models, timestamps, call IDs, provider request IDs, recorded token counts when a visible step has them, and any managed hold IDs, but not prompts, responses, tool payloads, or session titles. The command does not upload anything or bypass trace-sharing preferences.
 
-The audit’s `cost` field labels ChatGPT and other subscription routes as `subscription` with a null amount, rather than implying that subscription access is free. New calls retain `reportedCostUSD` separately when the provider supplies it; a reported zero remains zero. `recordedCostUSD` preserves historical step accounting and may be a calculation rather than a receipt. Without provider cost evidence, a saved step is labelled `recorded_unclassified`; calls without either value are `unknown`. Provider-reported amounts are not proof of a settled Ace charge, and subscription fees are not allocated per call.
+The audit’s `cost` field labels ChatGPT and other subscription routes as `subscription` with a null amount, rather than implying that subscription access is free. New calls retain `reportedCostUSD` separately when the provider supplies it; a reported zero remains zero. `recordedCostUSD` preserves historical step accounting and may be a calculation rather than a receipt. New completed steps label catalog estimates as `catalog_estimate` and calculated Ace amounts as `wallet_calculated`; these are not settled receipts. Older saved steps without cost provenance remain `recorded_unclassified`; calls without cost evidence are `unknown`. Provider-reported amounts are not proof of a settled Ace charge, and subscription fees are not allocated per call.
 
 The [privacy policy](https://openscience.sh/privacy) describes retention and account deletion controls. Disabling future uploads and deleting already stored account data are different actions. Review the scope of the deletion control before confirming it; telemetry deletion does not remove your local project, revoke external credentials, or reverse billing records.
 
@@ -47,3 +47,10 @@ Conversation exports and saved Results can contain research material. Inspect th
 ## Report a privacy or security issue
 
 Use private account support for account data and payment details. Follow the [security reporting policy](https://github.com/synthetic-sciences/openscience/blob/main/SECURITY.md) for vulnerabilities. A public issue should contain a minimal reproduction with credentials and private research removed.
+
+
+## Inspect per-call usage
+
+Open a conversation’s context indicator to see **Model call usage**. Each completed step shows its access route, model, provider token counts, cost basis, call ID and any recorded Ace hold ID. Provider-reported input, output, reasoning, cache-read and cache-write counts remain separate; an omitted field or an older record without that evidence shows **Unknown**, while a reported zero stays zero. Counts are not added together because some providers include reasoning in output and cache reads in input.
+
+Provider-reported amounts, calculated Ace amounts and catalog estimates have separate subtotals for this session. Child agents have their own sessions. Subscription fees are not allocated per call. The historical accounting total may include estimates; use the per-call basis before interpreting a value as a charge.

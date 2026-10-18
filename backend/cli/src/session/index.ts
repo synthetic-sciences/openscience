@@ -859,6 +859,16 @@ export namespace Session {
                   .div(1_000_000)
       return {
         cost: safe(cost.toNumber()),
+        costSource:
+          wallet?.calculatedWalletCostMicrousd !== undefined
+            ? ("wallet_calculated" as const)
+            : reported !== undefined
+              ? input.fundingFeeBps === undefined
+                ? ("provider_response" as const)
+                : ("wallet_calculated" as const)
+              : costInfo
+                ? ("catalog_estimate" as const)
+                : ("unknown" as const),
         tier,
         tokens,
       }

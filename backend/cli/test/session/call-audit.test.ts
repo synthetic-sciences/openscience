@@ -2,11 +2,20 @@ import { expect, test } from "bun:test"
 import { CallAudit } from "../../src/session/call-audit"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import type { MessageV2 } from "../../src/session/message-v2"
 import { UsageLogging } from "../../src/session/usage-logging"
 import { SessionTraceStore } from "../../src/session/trace-store"
 import { tmpdir } from "../fixture/fixture"
 
-async function step(sessionID: string, messageID: string, input: { route: "byok" | "chatgpt"; call: string }) {
+async function step(
+  sessionID: string,
+  messageID: string,
+  input: {
+    route: "byok" | "chatgpt"
+    call: string
+    evidence?: Pick<NonNullable<MessageV2.StepFinishPart["usage"]>, "reported" | "reportedCostUSD" | "cost">
+  },
+) {
   await Session.updateMessage({
     id: messageID,
     sessionID,
@@ -36,6 +45,7 @@ async function step(sessionID: string, messageID: string, input: { route: "byok"
       time: 1_750_000_000_000,
       call: input.call,
       providerRequest: `resp_${input.call}`,
+      ...input.evidence,
     },
   })
 }
@@ -142,6 +152,40 @@ test("audit separates provider-reported zero and positive costs from unknown and
           amountUSD: null,
         })
       }
+    },
+  })
+})
+
+test("audit reads nullable usage and estimate provenance from a step without a retained call trace", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      const reported = {
+        input_tokens: 10,
+        output_tokens: 2,
+        total_tokens: null,
+        reasoning_tokens: null,
+        cached_input_tokens: 0,
+        cache_creation_input_tokens: null,
+      }
+      await step(session.id, "msg_current", {
+        route: "byok",
+        call: "current",
+        evidence: {
+          reported,
+          reportedCostUSD: null,
+          cost: { source: "catalog_estimate", amountUSD: 0.001 },
+        },
+      })
+      const report = await CallAudit.report(session.id)
+      expect(report.calls).toHaveLength(1)
+      expect(report.calls[0]).toMatchObject({
+        reportedTokens: reported,
+        reportedCostUSD: null,
+        cost: { source: "catalog_estimate", amountUSD: 0.001 },
+      })
     },
   })
 })

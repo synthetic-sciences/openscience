@@ -1,5 +1,6 @@
 import { Session } from "."
 import { SessionTraceStore } from "./trace-store"
+import type { MessageV2 } from "./message-v2"
 import { UsageLogging } from "./usage-logging"
 
 export namespace CallAudit {
@@ -35,8 +36,15 @@ export namespace CallAudit {
       /** Historical step accounting; may be calculated, not a billing receipt. */
       recordedCostUSD?: number
       reportedCostUSD?: number | null
+      reportedTokens?: NonNullable<MessageV2.StepFinishPart["usage"]>["reported"]
       cost: {
-        source: "subscription" | "provider_response" | "recorded_unclassified" | "unknown"
+        source:
+          | "subscription"
+          | "provider_response"
+          | "recorded_unclassified"
+          | "unknown"
+          | "wallet_calculated"
+          | "catalog_estimate"
         amountUSD: number | null
       }
     }[] = []
@@ -83,11 +91,16 @@ export namespace CallAudit {
             ...(part.usage.hold && { hold: part.usage.hold }),
             recordedTokens: part.tokens,
             recordedCostUSD: part.cost,
-            cost: cost(
-              part.usage.route,
-              part.usage.call ? calls[recorded.get(part.usage.call) ?? -1]?.reportedCostUSD : undefined,
-              part.cost,
-            ),
+            ...(part.usage.reported && { reportedTokens: part.usage.reported }),
+            ...(part.usage.reportedCostUSD !== undefined && { reportedCostUSD: part.usage.reportedCostUSD }),
+            cost:
+              part.usage.cost ??
+              cost(
+                part.usage.route,
+                part.usage.reportedCostUSD ??
+                  (part.usage.call ? calls[recorded.get(part.usage.call) ?? -1]?.reportedCostUSD : undefined),
+                part.cost,
+              ),
           }
           const index = part.usage.call ? recorded.get(part.usage.call) : undefined
           if (index === undefined) calls.push(call)

@@ -14,6 +14,7 @@ import { Markdown } from "@synsci/ui/markdown"
 import type { AssistantMessage, Message, Part, UserMessage } from "@synsci/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { contextWindow } from "@/pages/session-context"
+import { SessionCallUsage } from "./session-call-usage"
 import { sessionCost, sessionCostFormatter, sessionProviderLabel } from "./session-usage"
 import {
   CONTEXT_BUCKET_COLORS,
@@ -50,6 +51,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
     }) as AssistantMessage
     if (!last) return
 
+    const step = findLast(sync.data.part[last.id] ?? [], (part) => part.type === "step-finish")
+    const observed = step?.type === "step-finish" ? step.usage?.reported : undefined
     const provider = sync.data.provider.all.find((x) => x.id === last.providerID)
     const model = provider?.models[last.modelID]
     const window = contextWindow(props.messages(), model)
@@ -64,11 +67,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
       window: window.window,
       full: window.full,
       capped: window.capped,
-      input: last.tokens.input,
-      output: last.tokens.output,
-      reasoning: last.tokens.reasoning,
-      cacheRead: last.tokens.cache.read,
-      cacheWrite: last.tokens.cache.write,
+      input: observed?.input_tokens,
+      output: observed?.output_tokens,
+      reasoning: observed?.reasoning_tokens,
+      cacheRead: observed?.cached_input_tokens,
+      cacheWrite: observed?.cache_creation_input_tokens,
       reported,
       total,
       usage,
@@ -326,20 +329,27 @@ export function SessionContextTab(props: SessionContextTabProps) {
         </section>
       </Show>
 
+      <SessionCallUsage
+        steps={props
+          .messages()
+          .flatMap((message) => (sync.data.part[message.id] ?? []).filter((part) => part.type === "step-finish"))}
+        locale={language.locale()}
+      />
+
       <div class="context-panel__cards">
         <section class="context-panel__card" aria-label={language.t("context.section.lastRequest")}>
           <h3 class="context-panel__title">{language.t("context.section.lastRequest")}</h3>
           <dl>
             <dt>{language.t("context.stats.inputTokens")}</dt>
-            <dd>{number(ctx()?.input)}</dd>
+            <dd>{ctx()?.input == null ? "Unknown" : number(ctx()?.input)}</dd>
             <dt>{language.t("context.stats.cacheRead")}</dt>
-            <dd>{number(ctx()?.cacheRead)}</dd>
+            <dd>{ctx()?.cacheRead == null ? "Unknown" : number(ctx()?.cacheRead)}</dd>
             <dt>{language.t("context.stats.cacheWrite")}</dt>
-            <dd>{number(ctx()?.cacheWrite)}</dd>
+            <dd>{ctx()?.cacheWrite == null ? "Unknown" : number(ctx()?.cacheWrite)}</dd>
             <dt>{language.t("context.stats.outputTokens")}</dt>
-            <dd>{number(ctx()?.output)}</dd>
+            <dd>{ctx()?.output == null ? "Unknown" : number(ctx()?.output)}</dd>
             <dt>{language.t("context.stats.reasoningTokens")}</dt>
-            <dd>{number(ctx()?.reasoning)}</dd>
+            <dd>{ctx()?.reasoning == null ? "Unknown" : number(ctx()?.reasoning)}</dd>
             <dt>{language.t("context.stats.limit")}</dt>
             <dd>
               {number(ctx()?.window)}
@@ -362,7 +372,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
                 })}
               </small>
             </dd>
-            <dt>{language.t("context.stats.totalCost")}</dt>
+            <dt>Recorded accounting total</dt>
             <dd>{cost()}</dd>
             <dt>{language.t("context.stats.sessionCreated")}</dt>
             <dd>{time(props.info()?.time.created)}</dd>

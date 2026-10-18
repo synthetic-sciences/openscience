@@ -371,3 +371,23 @@ describe("route-specific Wallet accounting", () => {
     expect(Session.getUsage({ model: priced, usage, fundingFeeBps: 550 }).cost).toBe(0.0047475)
   })
 })
+
+test("cost provenance distinguishes estimates, provider reports, wallet calculations and missing prices", () => {
+  const usage = {
+    inputTokens: 100,
+    outputTokens: 10,
+    totalTokens: 110,
+    reasoningTokens: undefined,
+    cachedInputTokens: undefined,
+  }
+  expect(Session.getUsage({ model: model(), usage }).costSource).toBe("catalog_estimate")
+  expect(Session.getUsage({ model: { ...model(), cost: undefined }, usage }).costSource).toBe("unknown")
+  expect(Session.getUsage({ model: model(), usage, metadata: { openrouter: { usage: { cost: 0 } } } })).toMatchObject({
+    cost: 0,
+    costSource: "provider_response",
+  })
+  expect(
+    Session.getUsage({ model: model(), usage, fundingFeeBps: 550, metadata: { openrouter: { usage: { cost: 0.02 } } } })
+      .costSource,
+  ).toBe("wallet_calculated")
+})

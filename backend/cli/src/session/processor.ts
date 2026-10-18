@@ -24,6 +24,7 @@ import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
 import { ManagedPricing } from "@/provider/managed-pricing"
 import { CallLink } from "@/provider/call-link"
+import { UsageLogging } from "./usage-logging"
 import { SessionTraceStore } from "./trace-store"
 import type { NamedError } from "@synsci/util/error"
 import { ToolRetryGuard } from "./tool-retry-guard"
@@ -1249,6 +1250,9 @@ export namespace SessionProcessor {
                   // moment after its stream ends; announce it here rather than
                   // at the response headers, which predate the charge.
                   if (funded) OpenScience.noteManagedSpend()
+                  const observation = UsageLogging.reported(value.usage, value.providerMetadata)
+                  const route = accessRoute(credentialSource, resolved.model)
+                  const subscription = route === "chatgpt" || route === "subscription"
                   const stepPartID = Identifier.ascending("part")
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.modelID = resolved.model.id
@@ -1263,7 +1267,13 @@ export namespace SessionProcessor {
                     sessionID: input.assistantMessage.sessionID,
                     type: "step-finish",
                     usage: {
-                      route: accessRoute(credentialSource, resolved.model),
+                      route,
+                      reported: observation.usage,
+                      reportedCostUSD: observation.cost_usd,
+                      cost: {
+                        source: subscription ? "subscription" : usage.costSource,
+                        amountUSD: subscription || usage.costSource === "unknown" ? null : usage.cost,
+                      },
                       provider: resolved.model.providerID,
                       model: resolved.model.id,
                       time: Date.now(),

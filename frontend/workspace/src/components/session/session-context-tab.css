@@ -272,3 +272,24 @@
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--color-text) 2.5%, transparent);
 }
+
+.context-panel__calls {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.context-panel__calls th,
+.context-panel__calls td {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-border-weak, var(--color-border));
+  text-align: left;
+  vertical-align: top;
+}
+
+.context-panel__calls td:last-child {
+  min-width: 140px;
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
