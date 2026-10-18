@@ -22150,6 +22150,287 @@
         ]
       }
     },
+    "/settings/usage-logging/health": {
+      "get": {
+        "operationId": "settings.usageLogging.health",
+        "summary": "Read account, device and workspace-scoped server logging health for the last 24 hours",
+        "responses": {
+          "200": {
+            "description": "Server reconciliation or an explicit unavailable state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "const": "available"
+                        },
+                        "report": {
+                          "type": "object",
+                          "properties": {
+                            "schema_version": {
+                              "type": "number",
+                              "const": 1
+                            },
+                            "scope": {
+                              "type": "string",
+                              "const": "account_installation_workspace"
+                            },
+                            "since": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "until": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "checked_at": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "healthy",
+                                "attention",
+                                "no_data",
+                                "incomplete"
+                              ]
+                            },
+                            "receipts": {
+                              "type": "object",
+                              "properties": {
+                                "deliveries": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "anomalous": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "orphaned_events": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "deliveries",
+                                "anomalous",
+                                "orphaned_events"
+                              ]
+                            },
+                            "usage": {
+                              "type": "object",
+                              "properties": {
+                                "responses": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "projected": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "missing_projection": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_input": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_output": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_reasoning": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_cache_read": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_cache_write": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "responses",
+                                "projected",
+                                "missing_projection",
+                                "unknown_input",
+                                "unknown_output",
+                                "unknown_reasoning",
+                                "unknown_cache_read",
+                                "unknown_cache_write"
+                              ]
+                            },
+                            "managed": {
+                              "type": "object",
+                              "properties": {
+                                "responses": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "pending": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "settled": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "not_charged": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "missing_call_id": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "missing_link": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "ambiguous_link": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "missing_hold": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "hold_mismatch": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "settled_missing_charge": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "duplicate_charge": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "token_mismatch": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "charge_amount_mismatch": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "unknown_charge_amount": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": [
+                                "responses",
+                                "pending",
+                                "settled",
+                                "not_charged",
+                                "missing_call_id",
+                                "missing_link",
+                                "ambiguous_link",
+                                "missing_hold",
+                                "hold_mismatch",
+                                "settled_missing_charge",
+                                "duplicate_charge",
+                                "token_mismatch",
+                                "charge_amount_mismatch",
+                                "unknown_charge_amount"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "schema_version",
+                            "scope",
+                            "since",
+                            "until",
+                            "checked_at",
+                            "status",
+                            "receipts",
+                            "usage",
+                            "managed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "report"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "const": "unavailable"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "enum": [
+                            "signed_out",
+                            "unsupported",
+                            "unauthorized",
+                            "server_unavailable",
+                            "invalid_report",
+                            "account_changed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "reason"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.settings.usageLogging.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/settings/usage/local": {
       "get": {
         "operationId": "settings.usage.local",

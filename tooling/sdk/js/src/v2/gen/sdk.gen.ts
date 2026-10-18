@@ -433,6 +433,7 @@ import type {
   SettingsUpdatesStateResponses,
   SettingsUsageLocalResponses,
   SettingsUsageLoggingGetResponses,
+  SettingsUsageLoggingHealthResponses,
   SettingsUsageLoggingUpdateResponses,
   SettingsUsageManagedResponses,
   SettingsWalletGetResponses,
@@ -2023,6 +2024,16 @@ export class UsageLogging extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Read account, device and workspace-scoped server logging health for the last 24 hours
+   */
+  public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<SettingsUsageLoggingHealthResponses, unknown, ThrowOnError>({
+      url: "/settings/usage-logging/health",
+      ...options,
     })
   }
 }

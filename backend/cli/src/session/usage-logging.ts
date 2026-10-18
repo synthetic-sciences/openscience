@@ -237,6 +237,11 @@ export namespace UsageLogging {
     }
   }
 
+  export async function installationID(): Promise<string> {
+    if (!(await Bun.file(filepath).exists())) await update(() => {})
+    return (await read()).installation
+  }
+
   /** Opaque session identity used by the server. It lets a local audit name
    * its consented trace without revealing the user's local session id. */
   export async function telemetrySessionID(sessionID: string) {

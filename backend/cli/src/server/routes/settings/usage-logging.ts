@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
 import { lazy } from "@synsci/util/lazy"
+import { LoggingHealth } from "@/session/logging-health"
 import { UsageLogging } from "@/session/usage-logging"
 
 export const UsageLoggingRoutes = lazy(() =>
@@ -19,6 +20,23 @@ export const UsageLoggingRoutes = lazy(() =>
         },
       }),
       async (c) => c.json(await UsageLogging.status()),
+    )
+    .get(
+      "/health",
+      describeRoute({
+        summary: "Read account, device and workspace-scoped server logging health for the last 24 hours",
+        operationId: "settings.usageLogging.health",
+        responses: {
+          200: {
+            description: "Server reconciliation or an explicit unavailable state",
+            content: { "application/json": { schema: resolver(LoggingHealth.Result) } },
+          },
+        },
+      }),
+      async (c) => {
+        c.header("Cache-Control", "no-store")
+        return c.json(await LoggingHealth.check())
+      },
     )
     .put(
       "/",

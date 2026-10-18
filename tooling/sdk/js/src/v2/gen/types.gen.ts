@@ -9850,6 +9850,70 @@ export type SettingsUsageLoggingUpdateResponses = {
 export type SettingsUsageLoggingUpdateResponse =
   SettingsUsageLoggingUpdateResponses[keyof SettingsUsageLoggingUpdateResponses]
 
+export type SettingsUsageLoggingHealthData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/settings/usage-logging/health"
+}
+
+export type SettingsUsageLoggingHealthResponses = {
+  /**
+   * Server reconciliation or an explicit unavailable state
+   */
+  200:
+    | {
+        state: "available"
+        report: {
+          schema_version: 1
+          scope: "account_installation_workspace"
+          since: string
+          until: string
+          checked_at: string
+          status: "healthy" | "attention" | "no_data" | "incomplete"
+          receipts: {
+            deliveries: number
+            anomalous: number
+            orphaned_events: number
+          }
+          usage: {
+            responses: number
+            projected: number
+            missing_projection: number
+            unknown_input: number
+            unknown_output: number
+            unknown_reasoning: number
+            unknown_cache_read: number
+            unknown_cache_write: number
+          }
+          managed: {
+            responses: number
+            pending: number
+            settled: number
+            not_charged: number
+            missing_call_id: number
+            missing_link: number
+            ambiguous_link: number
+            missing_hold: number
+            hold_mismatch: number
+            settled_missing_charge: number
+            duplicate_charge: number
+            token_mismatch: number
+            charge_amount_mismatch: number
+            unknown_charge_amount: number
+          }
+        }
+      }
+    | {
+        state: "unavailable"
+        reason:
+          "signed_out" | "unsupported" | "unauthorized" | "server_unavailable" | "invalid_report" | "account_changed"
+      }
+}
+
+export type SettingsUsageLoggingHealthResponse =
+  SettingsUsageLoggingHealthResponses[keyof SettingsUsageLoggingHealthResponses]
+
 export type SettingsUsageLocalData = {
   body?: never
   path?: never

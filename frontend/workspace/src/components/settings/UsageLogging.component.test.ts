@@ -1,3 +1,4 @@
+import type { SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
 import { afterAll, afterEach, expect, test } from "bun:test"
 import { once } from "node:events"
 import { createServer } from "node:http"
@@ -37,6 +38,8 @@ async function mount(error?: string) {
       error,
     },
     reject: false,
+    health: undefined as SettingsUsageLoggingHealthResponses[200] | undefined,
+    healthReads: 0,
     writes: [] as { enabled: boolean }[],
   }
   const server = createServer(async (request, response) => {
@@ -50,6 +53,10 @@ async function mount(error?: string) {
       response.end(JSON.stringify(value))
     }
     if (request.method === "OPTIONS") return json(null, 204)
+    if (request.url === "/settings/usage-logging/health") {
+      state.healthReads++
+      return json(state.health ?? { state: "unavailable", reason: "unsupported" })
+    }
     if (request.url !== "/settings/usage-logging") return json({}, 404)
     if (request.method === "PUT") {
       const chunks: Buffer[] = []
@@ -138,4 +145,72 @@ test("delivery errors preserve counts and refresh shows rejected records and ack
   expect(host.textContent).toContain("does not verify complete model usage")
   expect(state.writes).toEqual([])
   expect(host.querySelector<HTMLInputElement>("input")?.checked).toBe(true)
+})
+
+const healthy: SettingsUsageLoggingHealthResponses[200] = {
+  state: "available",
+  report: {
+    schema_version: 1,
+    scope: "account_installation_workspace",
+    status: "healthy",
+    since: "2026-10-18T00:00:00Z",
+    until: "2026-10-18T01:00:00Z",
+    checked_at: "2026-10-18T01:00:01Z",
+    receipts: { deliveries: 1, anomalous: 0, orphaned_events: 0 },
+    usage: {
+      responses: 1,
+      projected: 1,
+      missing_projection: 0,
+      unknown_input: 0,
+      unknown_output: 0,
+      unknown_reasoning: 1,
+      unknown_cache_read: 0,
+      unknown_cache_write: 1,
+    },
+    managed: {
+      responses: 0,
+      pending: 0,
+      settled: 0,
+      not_charged: 0,
+      missing_call_id: 0,
+      missing_link: 0,
+      ambiguous_link: 0,
+      missing_hold: 0,
+      hold_mismatch: 0,
+      settled_missing_charge: 0,
+      duplicate_charge: 0,
+      token_mismatch: 0,
+      charge_amount_mismatch: 0,
+      unknown_charge_amount: 0,
+    },
+  },
+}
+const checkServer = (host: HTMLElement) =>
+  [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Check server")!
+
+test("server checks are explicit and keep local queue evidence separate from stored evidence", async () => {
+  const { state, host } = await mount()
+  state.health = healthy
+  expect(state.healthReads).toBe(0)
+  checkServer(host).click()
+  await ready(() => host.textContent?.includes("No discrepancies found") === true)
+  expect(state.healthReads).toBe(1)
+  expect(host.textContent).toContain("3 queued · 7 acknowledged")
+  expect(host.textContent).toContain("3 queued and 0 rejected records are outside the server report")
+  expect(host.textContent).toContain("1 model responses · 1 usage records")
+  expect(host.textContent).toContain("An omitted field is not a token-count mismatch")
+  state.status.signedIn = false
+  window.dispatchEvent(new Event("openscience:account-changed"))
+  await ready(() => checkServer(host).disabled)
+  await ready(() => host.textContent?.includes("No records are sent while signed out") === true)
+  await ready(() => host.querySelector<HTMLInputElement>("input")?.disabled === false)
+  expect(host.textContent).not.toContain("No discrepancies found")
+})
+
+test("older servers remain explicitly unavailable and do not hide device delivery status", async () => {
+  const { host } = await mount()
+  checkServer(host).click()
+  await ready(() => host.textContent?.includes("does not support logging-health reports yet") === true)
+  expect(host.textContent).toContain("3 queued · 7 acknowledged")
+  expect(host.textContent).not.toContain("No discrepancies found")
 })

@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Add an explicit server logging-health check under Permissions → Data & privacy, separating account/device/workspace-scoped receipt, usage and Ace settlement findings from local queue state. Older servers and incomplete evidence remain explicit.
+
 - Retain bound compute-job provenance with experiment runs and expose it in run details, preserving explicit gaps and execution evidence after database reopening.
 
 - Add editable research question and hypothesis fields to autoresearch studies, preserved in the database, study ledger, agent tools and driver updates.

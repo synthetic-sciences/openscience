@@ -1,9 +1,11 @@
-import { Show, onMount } from "solid-js"
+import { Show, onCleanup, onMount } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { usePlatform } from "@/context/platform"
 import { Card, Row, RowCopy, Section } from "./_shared"
+import type { SettingsUsageLoggingHealthResponses } from "@synsci/sdk/v2/client"
+import { ServerLoggingHealth } from "./ServerLoggingHealth"
 import { settingsApi } from "./api"
 
 type Status = {
@@ -24,9 +26,13 @@ type Services = {
 export function UsageLogging(props: { services?: Services } = {}) {
   const sdk = props.services?.sdk ?? useGlobalSDK()
   const platform = props.services?.platform ?? usePlatform()
-  const [state, setState] = createStore<{ status?: Status; busy: boolean; error?: string }>({ busy: false })
+  const [state, setState] = createStore<{ status?: Status; busy: boolean; error?: string; revision: number }>({
+    busy: false,
+    revision: 0,
+  })
   const load = (enabled?: boolean) => {
     if (state.busy) return
+    const revision = state.revision
     setState({ busy: true, error: undefined })
     void settingsApi<Status>(
       sdk.url,
@@ -34,11 +40,25 @@ export function UsageLogging(props: { services?: Services } = {}) {
       "/settings/usage-logging",
       enabled === undefined ? undefined : { method: "PUT", body: JSON.stringify({ enabled }) },
     )
-      .then((status) => setState("status", reconcile(status)))
-      .catch(() => setState({ error: "Could not read or save trace sharing. Please retry." }))
-      .finally(() => setState({ busy: false }))
+      .then((status) => {
+        if (revision === state.revision) setState("status", reconcile(status))
+      })
+      .catch(() => {
+        if (revision === state.revision) setState({ error: "Could not read or save trace sharing. Please retry." })
+      })
+      .finally(() => {
+        if (revision === state.revision) setState({ busy: false })
+      })
   }
-  onMount(() => load())
+  const accountChanged = () => {
+    setState({ revision: state.revision + 1, status: undefined, busy: false, error: undefined })
+    load()
+  }
+  onMount(() => {
+    load()
+    window.addEventListener("openscience:account-changed", accountChanged)
+  })
+  onCleanup(() => window.removeEventListener("openscience:account-changed", accountChanged))
 
   return (
     <Section title="Data & privacy" description="Control session trace sharing from this device.">
@@ -94,13 +114,25 @@ export function UsageLogging(props: { services?: Services } = {}) {
               <Row>
                 <RowCopy
                   title="What this checks"
-                  description="These counts describe trace delivery from this device. Acknowledgement does not verify complete model usage or agreement with Ace charges. Server reconciliation is not available here yet. Refresh reads the latest status; it does not retry uploads."
+                  description="These counts describe trace delivery from this device. Acknowledgement does not verify complete model usage or agreement with Ace charges. Check server reads stored evidence separately; it cannot see records still queued or rejected on this device, or requests rejected before a receipt. Refresh reads device status; it does not retry uploads."
                 />
               </Row>
             </>
           )}
         </Show>
       </Card>
+      <ServerLoggingHealth
+        signedIn={state.status?.signedIn ?? false}
+        queued={state.status?.queued ?? 0}
+        quarantined={state.status?.quarantined ?? 0}
+        check={() =>
+          settingsApi<SettingsUsageLoggingHealthResponses[200]>(
+            sdk.url,
+            platform.fetch ?? fetch,
+            "/settings/usage-logging/health",
+          )
+        }
+      />
       <Show when={state.status?.error}>
         <p role="alert">{state.status?.error}</p>
       </Show>
