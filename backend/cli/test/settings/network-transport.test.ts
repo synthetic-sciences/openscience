@@ -31,9 +31,9 @@ test.each([false, true])("chunked response limits cover actual bytes (stream=%s)
 
 test.each([false, true])("compressed responses are decoded and bounded (stream=%s)", async (stream) => {
   for (const [coding, compress] of [
-    ["gzip", gzipSync],
-    ["deflate", deflateSync],
-    ["br", brotliCompressSync],
+    ["gzip", (input: string) => gzipSync(input)],
+    ["deflate", (input: string) => deflateSync(input)],
+    ["br", (input: string) => brotliCompressSync(input)],
   ] as const) {
     const payload = JSON.stringify({ data: "x".repeat(500) })
     const compressed = compress(payload)
