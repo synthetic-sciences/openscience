@@ -301,3 +301,22 @@ isolated subscription audit directory.
 
 This checks real child cancellation through SessionPrompt. It does not yet
 exercise a background Task's parent notification or mixed access routes.
+
+## Real background Task completion and parent notification
+
+A live subscription parent selected one Task with background enabled. The child
+completed independently, delivered its completed result as a synthetic parent
+message, and the parent answered that notification. The audit waited for the
+notification reply and all call outcomes before inspecting records. The parent's
+tool part retained its completed background metadata and stable child job ID.
+
+The root audit contains two sessions and six completed HTTP calls, covering
+parent dispatch, child work, internal summaries and notification handling. Every
+reported token dimension and provider request ID matches its server projection.
+All costs remain unallocated subscription amounts. The copied provider credential
+was removed. Assertions are retained in `background-task-verified.json` in the
+isolated subscription audit directory. Historical health still includes the
+previous deliberately retained pending summary from the earlier process exit.
+
+This closes real background completion and parent-notification coverage; a live
+mixed-provider task and hosted Ace receipts remain outstanding.
