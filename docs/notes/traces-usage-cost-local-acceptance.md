@@ -320,3 +320,26 @@ previous deliberately retained pending summary from the earlier process exit.
 
 This closes real background completion and parent-notification coverage; a live
 mixed-provider task and hosted Ace receipts remain outstanding.
+
+## Live subscription parent with a BYOK child
+
+A live subscription parent selected a Task configured for the OpenRouter free
+Liquid model. The parent processed the child result and finished. The root audit
+retained two sessions, four completed HTTP calls across subscription and BYOK
+routes, and one failed internal attempt. Successful local records matched every
+reported token dimension and provider request identity in their server projections.
+
+The BYOK child reported 1,489 input, 256 output, 151 reasoning and zero cache
+read/write tokens. Its raw provider response confirmed those counts and explicit
+zero cost. The output was capped at 256 tokens; bounded accounting does not prove
+a full unrestricted answer. Its provider-response cost stays separate from the
+parent's null subscription allocation. No combined bill is fabricated.
+
+The request guard required the exact free model, zero prompt/completion maximum
+prices and disabled fallback. An independent internal summary selected a paid
+Haiku model; the guard rejected it before network dispatch. That attempted call
+is retained locally and on the server as failed with unknown usage and cost.
+It is not claimed as a provider-billed zero. The copied credentials were removed.
+Assertions remain in `mixed-task-verified.json` in the isolated subscription
+audit directory. This closes live subscription/BYOK task routing coverage, not
+Ace mixing, nonzero billing or hosted receipt acceptance.
