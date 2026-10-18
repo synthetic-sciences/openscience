@@ -257,3 +257,25 @@ production deployment was performed. The release path is to review those changes
 squash merge after required checks, and explicitly promote the resulting main
 commit using the existing workflow. Then verify scoped receipt and health
 availability before doing the remaining real Ace audit.
+
+## Live model-selected delegation
+
+A subsequent subscription audit used SessionPrompt for the parent as well as
+the child. The live parent model selected the Task tool exactly once, dispatched
+`audit-worker`, received its completed result and finished its own turn. The
+parent was limited to three iterations, the worker to one, other tools were
+denied and the run had a 90-second cancellation bound. This closes the prepared
+parent limitation of the earlier Task audit.
+
+The root audit retained two sessions and five distinct completed HTTP calls,
+including internal work. Each call's provider request identity and all nullable
+reported token dimensions matched its server projection. Every call retained
+subscription cost with a null amount. Logging health was healthy and the copied
+credential was removed after execution. No paid route or payment method was used.
+Assertions remain in `live-task-verified.json` in the isolated subscription audit
+directory. Raw-stream comparison was not repeated for every call in this run;
+the earlier bounded provider observations remain separate evidence.
+
+All 90 broader storage/trace/receipt/billing regressions pass on schema 7.
+Background cancellation, mixed-route live execution and hosted Ace receipt
+acceptance remain outstanding.
