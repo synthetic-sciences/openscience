@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Find Git Bash in Git for Windows UCRT64 installations so local compute jobs can start.
+
 - Decode compressed network responses, enforce streamed byte limits, reject partial/aborted data before caching, and cancel DNS waits promptly. Add opt-in Cloudflare DNS-over-HTTPS for TUN Fake IP environments while retaining private-address protection.
 - Add Gemini 4 Argon to Ace with verified native-route limits and explicit server availability. Document choosing ChatGPT while retaining a separate OpenAI API key.
 

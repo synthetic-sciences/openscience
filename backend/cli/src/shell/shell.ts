@@ -226,7 +226,7 @@ export namespace Shell {
     const directory = path.win32.dirname(git)
     const name = path.win32.basename(directory).toLowerCase()
     const parent = path.win32.dirname(directory)
-    const nested = ["mingw64", "mingw32", "usr"].includes(path.win32.basename(parent).toLowerCase())
+    const nested = ["mingw64", "mingw32", "ucrt64", "usr"].includes(path.win32.basename(parent).toLowerCase())
     const root = name === "cmd" ? parent : name === "bin" ? (nested ? path.win32.dirname(parent) : parent) : undefined
     if (!root) return
     return [path.win32.join(root, "bin", "bash.exe"), path.win32.join(root, "usr", "bin", "bash.exe")].find(available)
