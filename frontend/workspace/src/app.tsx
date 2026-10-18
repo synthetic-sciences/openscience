@@ -1,6 +1,6 @@
 import "@/index.css"
 import { ErrorBoundary, Show, Suspense, onCleanup, onMount, type ParentProps } from "solid-js"
-import { A, Router, Route, Navigate } from "@solidjs/router"
+import { A, Router, Route, Navigate, type RouteSectionProps } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
 import { I18nProvider } from "@synsci/ui/context"
 import { ThemeProvider } from "@synsci/ui/theme"
@@ -171,7 +171,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
                   <Route path="/" component={() => <Navigate href="session" />} />
                   <Route
                     path="/session/:id?"
-                    component={(p) => (
+                    component={(p: RouteSectionProps) => (
                       <Show when={p.params.id ?? "new"}>
                         <CommentsProvider>
                           <Session fallback={<LoadingScreen caption="Opening session" />} />

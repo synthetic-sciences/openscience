@@ -44,7 +44,7 @@
       "@tsconfig/node22": "22.0.2",
       "@tsconfig/bun": "1.0.9",
       "@pierre/diffs": "1.0.2",
-      "@solid-primitives/storage": "4.3.3",
+      "@solid-primitives/storage": "4.4.0",
       "@tailwindcss/vite": "4.3.3",
       "diff": "8.0.4",
       "dompurify": "3.4.14",
@@ -65,8 +65,8 @@
       "tailwindcss": "4.3.3",
       "vite": "7.3.6",
       "@solidjs/meta": "0.29.4",
-      "@solidjs/router": "0.15.4",
-      "solid-js": "1.9.15",
+      "@solidjs/router": "0.16.3",
+      "solid-js": "1.9.17",
       "vite-plugin-solid": "2.11.14"
     }
   },
