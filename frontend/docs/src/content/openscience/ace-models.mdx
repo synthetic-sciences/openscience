@@ -3,7 +3,7 @@ title: "Ace model directory"
 description: "Browse the reviewed managed model identities and token limits shipped with this documentation version."
 ---
 
-This directory is generated from the reviewed Ace roster shipped with OpenScience. It contains 21 chat models. Live account access, route availability, pricing, and supported controls still come from the managed service. A listed model is not a guarantee that it is available to your account at this moment.
+This directory is generated from the reviewed Ace roster shipped with OpenScience. It contains 22 chat models. Live account access, route availability, pricing, and supported controls still come from the managed service. A listed model is not a guarantee that it is available to your account at this moment.
 
 ## Choose and verify a model
 
@@ -23,6 +23,7 @@ Context and maximum output are token limits, not a promise that both can be used
 | Claude Haiku 4.5 | `anthropic/claude-haiku-4.5` | 200,000 | 64,000 |
 | Gemini 3.1 Pro Preview | `google/gemini-3.1-pro-preview` | 1,048,576 | 65,536 |
 | Gemini 3.8 Flash | `google/gemini-3.8-flash` | 1,048,576 | 65,536 |
+| Gemini 4 Argon | `google/gemini-4-argon` | 1,048,576 | 32,768 |
 | Grok 4.7 | `x-ai/grok-4.7` | 500,000 | 450,000 |
 | GLM 5.3 | `z-ai/glm-5.3` | 1,310,720 | 131,072 |
 | GLM 5.3 Flash | `z-ai/glm-5.3-flash` | 1,310,720 | 131,072 |
@@ -36,6 +37,8 @@ Context and maximum output are token limits, not a promise that both can be used
 | MiMo V2.6 Pro | `xiaomi/mimo-v2.6-pro` | 1,048,576 | 131,072 |
 | Muse Spark 1.3 | `meta/muse-spark-1.3` | 1,048,576 | 943,718 |
 | Nemotron 3 Ultra | `nvidia/nemotron-3-ultra-550b-a55b` | 262,144 | 16,384 |
+
+Gemini 4 Argon uses the backend Gemini route with Low, Medium and High reasoning (Medium by default). Ace currently limits synchronous output to the deployed key’s verified 32,768 tokens. It appears only after the managed service explicitly confirms availability.
 
 ## Effort and Fast mode
 

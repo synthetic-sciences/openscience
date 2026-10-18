@@ -92,7 +92,7 @@
     "ulid": "catalog:",
     "unpdf": "1.8.1",
     "vscode-jsonrpc": "8.2.1",
-    "web-tree-sitter": "0.25.10",
+    "web-tree-sitter": "0.27.1",
     "xdg-basedir": "5.1.0",
     "yargs": "18.1.0",
     "zod": "catalog:",
