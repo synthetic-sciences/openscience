@@ -59,24 +59,51 @@ export function UsageLogging(props: { services?: Services } = {}) {
         </Row>
         <Row>
           <RowCopy
-            title="Delivery"
+            title="Logging health"
             description={
-              state.error ??
-              state.status?.error ??
-              (!state.status
+              !state.status
                 ? "Loading…"
                 : !state.status.enabled
                   ? "Sharing is off. Queued records have been cleared."
                   : !state.status.signedIn
                     ? "Sign in to share traces. No records are sent while signed out."
-                    : `${state.status.queued} queued · ${state.status.delivered} acknowledged · ${state.status.quarantined} need attention`)
+                    : `${state.status.queued} queued · ${state.status.delivered} acknowledged · ${state.status.quarantined} need attention`
             }
           />
           <button type="button" class="settings-preference-action" disabled={state.busy} onClick={() => load()}>
             Refresh
           </button>
         </Row>
+        <Show when={state.status}>
+          {(status) => (
+            <>
+              <Row>
+                <RowCopy
+                  title="Last acknowledgement"
+                  description={status().lastDelivery ?? "No delivery has been acknowledged on this device yet."}
+                />
+              </Row>
+              <Show when={status().quarantined > 0}>
+                <Row>
+                  <RowCopy
+                    title="Rejected records"
+                    description={`${status().quarantined} rejected records are kept on this device and are not retried automatically. Turning off sharing discards queued and rejected records.`}
+                  />
+                </Row>
+              </Show>
+              <Row>
+                <RowCopy
+                  title="What this checks"
+                  description="These counts describe trace delivery from this device. Acknowledgement does not verify complete model usage or agreement with Ace charges. Server reconciliation is not available here yet. Refresh reads the latest status; it does not retry uploads."
+                />
+              </Row>
+            </>
+          )}
+        </Show>
       </Card>
+      <Show when={state.status?.error}>
+        <p role="alert">{state.status?.error}</p>
+      </Show>
       <Show when={state.error}>
         <p role="alert">{state.error}</p>
       </Show>

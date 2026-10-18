@@ -48,6 +48,7 @@ export namespace SessionTraceStore {
     occurredAt: z.number(),
     providerRequest: z.string().optional(),
     hold: z.string().optional(),
+    reportedCostUSD: z.number().finite().nonnegative().nullable().optional(),
   })
   export type ModelCall = z.infer<typeof ModelCall>
 

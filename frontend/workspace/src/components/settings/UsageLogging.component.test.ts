@@ -27,7 +27,15 @@ const ready = async (check: () => boolean) => {
 
 async function mount(error?: string) {
   const state = {
-    status: { enabled: true, signedIn: true, queued: 3, delivered: 7, quarantined: 0, error },
+    status: {
+      enabled: true,
+      signedIn: true,
+      queued: 3,
+      delivered: 7,
+      quarantined: 0,
+      lastDelivery: undefined as string | undefined,
+      error,
+    },
     reject: false,
     writes: [] as { enabled: boolean }[],
   }
@@ -114,4 +122,20 @@ test("refresh removes a resolved delivery error instead of retaining stale statu
   host.querySelector<HTMLButtonElement>("button")!.click()
   await ready(() => host.textContent?.includes("10 acknowledged") === true)
   expect(host.textContent).not.toContain("could not be verified")
+})
+
+test("delivery errors preserve counts and refresh shows rejected records and acknowledgement time", async () => {
+  const { state, host } = await mount("Trace delivery was not accepted (HTTP 503).")
+  expect(host.textContent).toContain("3 queued · 7 acknowledged")
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("HTTP 503")
+  expect(host.textContent).toContain("No delivery has been acknowledged")
+  state.status.quarantined = 2
+  state.status.lastDelivery = "2026-10-18T10:00:00.000Z"
+  host.querySelector<HTMLButtonElement>("button")!.click()
+  await ready(() => host.textContent?.includes("2 rejected records") === true)
+  expect(host.textContent).toContain("2026-10-18T10:00:00.000Z")
+  expect(host.textContent).toContain("not retried automatically")
+  expect(host.textContent).toContain("does not verify complete model usage")
+  expect(state.writes).toEqual([])
+  expect(host.querySelector<HTMLInputElement>("input")?.checked).toBe(true)
 })

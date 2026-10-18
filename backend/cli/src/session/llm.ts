@@ -342,6 +342,7 @@ export namespace LLM {
             provider: routed.providerID,
             model: routed.api.id,
             occurredAt: Date.now(),
+            reportedCostUSD: UsageLogging.reported(step.usage, step.providerMetadata).cost_usd,
             ...(call.providerRequest && { providerRequest: call.providerRequest }),
             ...(call.hold && { hold: call.hold }),
           })

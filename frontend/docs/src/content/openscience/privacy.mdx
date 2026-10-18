@@ -22,9 +22,13 @@ While signed in, session traces are shared by default, including sessions using 
 
 Open **Customize → General → Data & privacy → Share session traces** to turn off uploads from this device and discard queued and rejected records. Account preferences can disable sharing across devices or exclude user-owned routes. The device setting does not override an account opt-out. Signing out also stops uploads.
 
-The **Delivery** row distinguishes queued, acknowledged, and rejected records. Temporary failures can leave records waiting for retry. Large text may be truncated and binary attachments represented by metadata. Known credentials are redacted, but private research can still appear in prompts and tool output.
+The **Logging health** row shows queued, acknowledged and rejected-record counts from this device. Delivery errors appear separately so the counts stay visible. **Last acknowledgement** shows the most recent confirmed delivery time; rejected records remain local and are not retried automatically. **Refresh** reads current status without forcing an upload. These indicators do not verify complete model usage or reconcile Ace charges with server records.
+
+Temporary delivery failures can leave queued records waiting for automatic retry. Large text may be truncated and binary attachments represented by metadata. Known credentials are redacted, but private research can still appear in prompts and tool output.
 
 For support investigations, `openscience debug audit <session>` prints a local, content-free report for that conversation, its internal title and summary calls, and its worker sessions. It includes local and opaque telemetry session IDs, routes, models, timestamps, call IDs, provider request IDs, recorded token counts when a visible step has them, and any managed hold IDs, but not prompts, responses, tool payloads, or session titles. The command does not upload anything or bypass trace-sharing preferences.
+
+The audit’s `cost` field labels ChatGPT and other subscription routes as `subscription` with a null amount, rather than implying that subscription access is free. New calls retain `reportedCostUSD` separately when the provider supplies it; a reported zero remains zero. `recordedCostUSD` preserves historical step accounting and may be a calculation rather than a receipt. Without provider cost evidence, a saved step is labelled `recorded_unclassified`; calls without either value are `unknown`. Provider-reported amounts are not proof of a settled Ace charge, and subscription fees are not allocated per call.
 
 The [privacy policy](https://openscience.sh/privacy) describes retention and account deletion controls. Disabling future uploads and deleting already stored account data are different actions. Review the scope of the deletion control before confirming it; telemetry deletion does not remove your local project, revoke external credentials, or reverse billing records.
 

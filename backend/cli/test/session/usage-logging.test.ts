@@ -450,6 +450,7 @@ describe("usage delivery", () => {
             provider: "stress",
             model: "fixture-model",
             providerRequest: "chatcmpl-usage",
+            reportedCostUSD: null,
           }),
         ])
         expect(calls[0].id).toBe(httpCallID)

@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Label subscription coverage and unknown costs in model-call audits, retaining provider-reported costs separately from historical step accounting.
+
+- Expand device logging health in Data & privacy with queue counts visible during errors, rejected-record guidance, and the last delivery acknowledgement.
+
 - Find Git Bash in Git for Windows UCRT64 installations so local compute jobs can start.
 
 - Decode compressed network responses, enforce streamed byte limits, reject partial/aborted data before caching, and cancel DNS waits promptly. Add opt-in Cloudflare DNS-over-HTTPS for TUN Fake IP environments while retaining private-address protection.

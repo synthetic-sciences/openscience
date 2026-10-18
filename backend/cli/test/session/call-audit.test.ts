@@ -84,8 +84,64 @@ test("a session audit includes BYOK and ChatGPT calls from child sessions withou
       ])
       expect(report.calls.find((call) => call.httpCall === "call-summary")?.stepID).toBeUndefined()
       expect(report.calls.filter((call) => call.httpCall === "call-byok")).toHaveLength(1)
+      expect(report.calls.find((call) => call.httpCall === "call-summary")?.cost).toEqual({
+        source: "subscription",
+        amountUSD: null,
+      })
+      expect(report.calls.find((call) => call.httpCall === "call-chatgpt")?.cost).toEqual({
+        source: "subscription",
+        amountUSD: null,
+      })
+      expect(report.calls.find((call) => call.httpCall === "call-byok")?.cost).toEqual({
+        source: "recorded_unclassified",
+        amountUSD: 0,
+      })
       expect(JSON.stringify(report)).not.toContain("Private research title")
       expect(JSON.stringify(report)).not.toContain("Private worker title")
+    },
+  })
+})
+
+test("audit separates provider-reported zero and positive costs from unknown and legacy accounting", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const session = await Session.create({})
+      for (const receipt of [
+        { id: "zero", cost: 0 },
+        { id: "paid", cost: 0.0123 },
+        { id: "unknown", cost: null },
+        { id: "legacy", cost: undefined },
+      ]) {
+        await SessionTraceStore.recordModelCall({
+          id: receipt.id,
+          sessionID: session.id,
+          messageID: `msg_${receipt.id}`,
+          route: "byok",
+          provider: "openrouter",
+          model: "fixture-model",
+          occurredAt: 1_750_000_000_000,
+          reportedCostUSD: receipt.cost,
+        })
+      }
+      await step(session.id, "msg_paid", { route: "byok", call: "paid" })
+      const report = await CallAudit.report(session.id)
+      expect(report.calls.find((call) => call.httpCall === "zero")?.cost).toEqual({
+        source: "provider_response",
+        amountUSD: 0,
+      })
+      expect(report.calls.find((call) => call.httpCall === "paid")).toMatchObject({
+        recordedCostUSD: 0,
+        reportedCostUSD: 0.0123,
+        cost: { source: "provider_response", amountUSD: 0.0123 },
+      })
+      for (const id of ["unknown", "legacy"]) {
+        expect(report.calls.find((call) => call.httpCall === id)?.cost).toEqual({
+          source: "unknown",
+          amountUSD: null,
+        })
+      }
     },
   })
 })
