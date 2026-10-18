@@ -285,6 +285,8 @@ const models = [
     )
   }),
   "",
+  "Gemini 4 Argon uses the backend Gemini route with Low, Medium and High reasoning (Medium by default). Ace currently limits synchronous output to the deployed key’s verified 32,768 tokens. It appears only after the managed service explicitly confirms availability.",
+  "",
   "## Effort and Fast mode",
   "",
   "Supported effort choices vary by model and connection. GPT-6 Astra, Claude Opus 5.5, and Claude Fable 5.1 expose Low through Max; Sol and Luna also support a no-reasoning option. The picker is authoritative for the route you selected. Research effort (Normal or Ultra) and worker delegation are separate controls from model reasoning effort.",
