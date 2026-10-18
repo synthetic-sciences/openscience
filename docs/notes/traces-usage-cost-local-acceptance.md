@@ -4,6 +4,29 @@ Verified on 2026-10-18 against OpenScience `9fac1706` and Dashboard `83ae327f`.
 These checks use explicitly synthetic local fixtures. They do not establish
 real provider invoice reconciliation or hosted deployment acceptance.
 
+## Current completion audit
+
+The following maps the seven requested items to evidence below. Earlier sections
+retain the exact versions and fixture scope of each historical check. Live
+subscription/BYOK evidence supplements those fixtures; it does not turn synthetic
+Wallet charges into real hosted receipts.
+
+| Item                             | Current evidence                                                                                                                              | Open acceptance                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| 1. Real route audit              | Raw subscription and BYOK comparisons; real Task, parent-selected/background/mixed-provider execution; local/server identity and usage checks | Real Ace per-call charge reconciliation after hosted receipt rollout             |
+| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending     | Release acceptance on deployed versions                                          |
+| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                  | Release acceptance on deployed versions                                          |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance                                                | Hosted receipt endpoint currently returns 404; actual Ace receipt audit          |
+| 5. BYOK cost provenance          | Exact separate provider/estimate/import totals, real zero-price provider billing lookup/import, API and rebuilt-browser rendering             | Release acceptance; native file picker not automatable with current browser tool |
+| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                     | Release acceptance                                                               |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out, live pending-work visibility                                     | Hosted health endpoint currently returns 404; release acceptance                 |
+
+Nonzero real-provider invoices and mixed Ace routing would add coverage, but are
+not substituted for the explicit outstanding real Ace audit. No item is marked
+released solely on local tests. Current post-schema-7 checks include 90 broader
+storage/trace/receipt/billing tests and 72 data-root/storage-route tests (one
+skipped). No production promotion has been performed.
+
 ## Deployment
 
 `bun run build --single` completed twice: first for `71ff6de1`, then with the
@@ -343,3 +366,13 @@ It is not claimed as a provider-billed zero. The copied credentials were removed
 Assertions remain in `mixed-task-verified.json` in the isolated subscription
 audit directory. This closes live subscription/BYOK task routing coverage, not
 Ace mixing, nonzero billing or hosted receipt acceptance.
+
+## Final schema-7 packaging checks
+
+The final native `bun run build --single` completed successfully. Its packaged
+`stats --days 1 --models` command opened the real schema-7 subscription/mixed-route
+audit database successfully and displayed provider-reported zero as partial,
+subscription covered as not allocated, and the blocked paid-summary attempt as
+unknown. Data-root, relocation and storage-route checks passed: 72 tests, one
+skipped, no failures. The pending hosted release question does not authorize
+a push or deployment by silence.
