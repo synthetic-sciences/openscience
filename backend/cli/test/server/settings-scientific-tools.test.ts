@@ -42,7 +42,16 @@ describe("scientific tools settings catalog", () => {
       "box",
       "dropbox",
       "s3",
+      "parallel-search",
     ])
+    expect(body.connectors.find((entry) => entry.id === "parallel-search")).toMatchObject({
+      setup: {
+        type: "remote",
+        url: "https://search.parallel.ai/mcp",
+        oauth: "off",
+        one_click_disabled: true,
+      },
+    })
     expect(body.connectors.every((entry) => entry.writes_enabled_by_catalog === false)).toBe(true)
     expect(body.connectors.every((entry) => /^[a-f0-9]{64}$/.test(entry.revision))).toBe(true)
     expect(
