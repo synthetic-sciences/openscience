@@ -195,8 +195,8 @@ function Stat({
 
 export default function Benchmark() {
   useMeta({
-    title: "OpenScience | Benchmarks: the #1 scientific agent, open source",
-    description: `OpenScience solves ${N.tbs_pct}% of Terminal-Bench Science, ${N.tb4_pct}% of the science tasks in Terminal-Bench 4.0, and averages ${N.bio_mean} on BiomniBench-DA. Every figure, trace and method.`,
+    title: "OpenScience | Benchmarks: the #1 scientific agent",
+    description: `OpenScience solves ${N.tbs_pct}% of Terminal-Bench Science and ${N.tb4_pct}% of Terminal-Bench 4.0 science tasks, and averages ${N.bio_mean} on BiomniBench-DA.`,
     path: "/benchmark",
   })
 

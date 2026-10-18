@@ -5,7 +5,8 @@ import { lookup } from "node:dns/promises"
 import { request as httpRequest } from "node:http"
 import { request as httpsRequest } from "node:https"
 import { randomUUID } from "node:crypto"
-import { Readable } from "node:stream"
+import { Transform, pipeline } from "node:stream"
+import { createGunzip, createInflate, createBrotliDecompress } from "node:zlib"
 import { domainToASCII } from "url"
 import z from "zod"
 import { Global } from "../global"
@@ -521,7 +522,75 @@ export namespace Network {
 
   type Resolver = (hostname: string) => Promise<readonly string[]>
 
-  async function systemResolve(hostname: string): Promise<readonly string[]> {
+  export class PolicyError extends Error {
+    constructor(message: string) {
+      super(message)
+      this.name = "NetworkPolicyError"
+    }
+  }
+
+  async function cancellable<T>(pending: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return pending
+    signal.throwIfAborted()
+    return new Promise<T>((resolve, reject) => {
+      const abort = () => {
+        signal.removeEventListener("abort", abort)
+        reject(signal.reason)
+      }
+      signal.addEventListener("abort", abort, { once: true })
+      pending.then(
+        (value) => {
+          signal.removeEventListener("abort", abort)
+          resolve(value)
+        },
+        (error) => {
+          signal.removeEventListener("abort", abort)
+          reject(error)
+        },
+      )
+    })
+  }
+
+  export async function cloudflareResolve(
+    hostname: string,
+    signal?: AbortSignal,
+    transport = pinnedFetch,
+  ): Promise<string[]> {
+    const name = canonicalDomain(hostname)
+    const deadline = AbortSignal.any([AbortSignal.timeout(5000), ...(signal ? [signal] : [])])
+    const answers = await Promise.all(
+      [1, 28].map(async (type) => {
+        const target = new URL("https://cloudflare-dns.com/dns-query")
+        target.search = new URLSearchParams({ name, type: String(type) }).toString()
+        // Bootstrap over a fixed public address so a TUN resolver cannot replace
+        // the resolver itself with a synthetic address. TLS still verifies its hostname.
+        const response = await transport(
+          target,
+          { signal: deadline, headers: { accept: "application/dns-json" } },
+          "1.1.1.1",
+          64 * 1024,
+        )
+        if (!response.ok) throw new Error(`Public DNS lookup failed (${response.status})`)
+        const answer = z
+          .object({
+            Status: z.literal(0),
+            TC: z.literal(false).optional(),
+            Answer: z.array(z.object({ type: z.number().int(), data: z.string() })).default([]),
+          })
+          .parse(await response.json())
+        return answer.Answer.filter((record) => record.type === type).map((record) => {
+          if (isIP(record.data) !== (type === 1 ? 4 : 6)) throw new Error("Public DNS returned an invalid address")
+          return record.data
+        })
+      }),
+    )
+    return [...new Set(answers.flat())]
+  }
+
+  async function systemResolve(hostname: string, signal?: AbortSignal): Promise<readonly string[]> {
+    const resolver = process.env.OPENSCIENCE_DNS_RESOLVER ?? "system"
+    if (resolver === "cloudflare") return cloudflareResolve(hostname, signal)
+    if (resolver !== "system") throw new PolicyError("OPENSCIENCE_DNS_RESOLVER must be system or cloudflare")
     return (await lookup(hostname, { all: true, verbatim: true })).map((item) => item.address)
   }
 
@@ -531,16 +600,23 @@ export namespace Network {
     return !nonPublic.check(address, family === 4 ? "ipv4" : "ipv6")
   }
 
-  async function assertPublicResolution(target: URL, resolveAddresses: Resolver = systemResolve) {
+  async function assertPublicResolution(target: URL, resolveAddresses?: Resolver, signal?: AbortSignal) {
     let addresses: readonly string[]
     try {
-      addresses = await resolveAddresses(target.hostname)
+      addresses = await (resolveAddresses ? resolveAddresses(target.hostname) : systemResolve(target.hostname, signal))
     } catch (error) {
+      signal?.throwIfAborted()
+      if (error instanceof PolicyError) throw error
       throw new Error(`Could not safely resolve ${target.hostname}: ${error}`)
     }
     if (!addresses.length) throw new Error(`Could not safely resolve ${target.hostname}: no addresses returned`)
     const blocked = addresses.find((address) => !addressPublic(address))
-    if (blocked) throw new Error(`Network access to non-public address ${blocked} for ${target.hostname} is blocked`)
+    if (blocked) {
+      const hint = /^198\.(?:18|19)\./.test(blocked)
+        ? ". If a TUN proxy supplies synthetic DNS, exclude this host from fake-IP mapping or opt into OPENSCIENCE_DNS_RESOLVER=cloudflare."
+        : ""
+      throw new PolicyError(`Network access to non-public address ${blocked} for ${target.hostname} is blocked${hint}`)
+    }
     return addresses
   }
 
@@ -554,7 +630,9 @@ export namespace Network {
 
   const originalFetch = globalThis.fetch
 
-  async function pinnedFetch(
+  // Export the real socket transport so conformance tests can use loopback
+  // fixtures without weakening the public-address policy in fetch().
+  export async function pinnedFetch(
     target: URL,
     init: RequestInit,
     address: string,
@@ -562,22 +640,39 @@ export namespace Network {
     streamResponse = false,
   ): Promise<Response> {
     const request = new Request(target, init)
+    const cancellation = new AbortController()
+    const signal = AbortSignal.any([init.signal ?? request.signal, cancellation.signal])
+    signal.throwIfAborted()
     const body = request.body ? Buffer.from(await request.arrayBuffer()) : undefined
+    signal.throwIfAborted()
     const headers = Object.fromEntries(request.headers.entries())
     headers.host = target.host
+    headers["accept-encoding"] ??= "gzip, deflate, br"
     if (body && !request.headers.has("content-length")) headers["content-length"] = String(body.byteLength)
     const family = isIP(address)
     if (!family) throw new Error(`Resolver returned an invalid address for ${target.hostname}: ${address}`)
 
     return new Promise<Response>((resolve, reject) => {
+      const state: { body?: Transform; cancelled?: boolean; failed?: boolean } = {}
+      const cleanup = () => signal.removeEventListener("abort", abort)
+      const fail = (error: Error) => {
+        if (state.failed) return
+        state.failed = true
+        reject(error)
+        cancellation.abort(error)
+        state.body?.destroy(error)
+        req.destroy()
+        cleanup()
+      }
+      const abort = () =>
+        fail(signal.reason instanceof Error ? signal.reason : new DOMException("Aborted", "AbortError"))
       const send = target.protocol === "https:" ? httpsRequest : httpRequest
       const req = send(
         target,
         {
           method: request.method,
+          signal,
           headers,
-          // Keep the original hostname for certificate verification/SNI while
-          // returning only the validated address to the socket layer.
           servername: target.hostname,
           lookup: ((_hostname: string, options: { all?: boolean } | number, callback: (...args: unknown[]) => void) => {
             if (typeof options === "object" && options.all) {
@@ -588,84 +683,122 @@ export namespace Network {
           }) as never,
         },
         (incoming) => {
-          const contentType = Array.isArray(incoming.headers["content-type"])
-            ? incoming.headers["content-type"][0]
-            : incoming.headers["content-type"]
-          const contentDisposition = Array.isArray(incoming.headers["content-disposition"])
-            ? incoming.headers["content-disposition"][0]
-            : incoming.headers["content-disposition"]
-          const declared = Number.parseInt(String(incoming.headers["content-length"] ?? ""), 10)
-          if (maxResponseBytes !== undefined && Number.isFinite(declared) && declared > maxResponseBytes) {
-            const error = new ResponseTooLargeError({
-              limitBytes: maxResponseBytes,
-              declaredBytes: declared,
-              contentType,
-              contentDisposition,
-            })
-            incoming.destroy()
-            req.destroy()
-            reject(error)
-            return
-          }
-
           const responseHeaders = new Headers()
           for (const [name, value] of Object.entries(incoming.headers)) {
             if (value === undefined) continue
             if (Array.isArray(value)) for (const item of value) responseHeaders.append(name, item)
             else responseHeaders.set(name, String(value))
           }
+          const size = (receivedBytes?: number, declaredBytes?: number) =>
+            new ResponseTooLargeError({
+              limitBytes: maxResponseBytes!,
+              receivedBytes,
+              declaredBytes,
+              contentType: responseHeaders.get("content-type") ?? undefined,
+              contentDisposition: responseHeaders.get("content-disposition") ?? undefined,
+            })
+          const declared = Number.parseInt(responseHeaders.get("content-length") ?? "", 10)
+          if (maxResponseBytes !== undefined && Number.isFinite(declared) && declared > maxResponseBytes) {
+            incoming.destroy()
+            fail(size(undefined, declared))
+            return
+          }
           const status = incoming.statusCode ?? 500
-          const empty = status === 101 || status === 204 || status === 205 || status === 304
-          if (streamResponse) {
-            resolve(
-              new Response(empty ? null : (Readable.toWeb(incoming) as unknown as ReadableStream<Uint8Array>), {
-                status,
-                statusText: incoming.statusMessage,
-                headers: responseHeaders,
-              }),
-            )
+          const empty = request.method === "HEAD" || status === 204 || status === 205 || status === 304
+          if (empty) {
+            incoming.resume()
+            incoming.once("end", cleanup)
+            incoming.once("error", fail)
+            resolve(new Response(null, { status, statusText: incoming.statusMessage, headers: responseHeaders }))
             return
           }
 
-          const chunks: Buffer[] = []
-          let received = 0
-          let rejected = false
-          incoming.on("data", (chunk) => {
-            if (rejected) return
-            const buffer = Buffer.from(chunk)
-            received += buffer.byteLength
-            if (maxResponseBytes !== undefined && received > maxResponseBytes) {
-              rejected = true
-              const error = new ResponseTooLargeError({
-                limitBytes: maxResponseBytes,
-                receivedBytes: received,
-                contentType,
-                contentDisposition,
-              })
+          const decoders: Transform[] = []
+          const encodings = (responseHeaders.get("content-encoding") ?? "")
+            .split(",")
+            .map((coding) => coding.trim().toLowerCase())
+            .filter(Boolean)
+          for (const coding of encodings.toReversed()) {
+            if (coding === "identity") continue
+            const decoder =
+              coding === "gzip" || coding === "x-gzip"
+                ? createGunzip()
+                : coding === "deflate"
+                  ? createInflate()
+                  : coding === "br"
+                    ? createBrotliDecompress()
+                    : undefined
+            if (!decoder) {
               incoming.destroy()
-              req.destroy()
-              reject(error)
+              fail(new Error(`Unsupported response content encoding: ${coding}`))
               return
             }
-            chunks.push(buffer)
+            decoders.push(decoder)
+          }
+          if (decoders.length) {
+            responseHeaders.delete("content-encoding")
+            responseHeaders.delete("content-length")
+          }
+          let received = 0
+          const bounded = new Transform({
+            transform(chunk, _encoding, callback) {
+              if (signal.aborted) return callback(signal.reason)
+              received += chunk.byteLength
+              if (maxResponseBytes !== undefined && received > maxResponseBytes) return callback(size(received))
+              callback(null, chunk)
+            },
+            flush(callback) {
+              if (signal.aborted) return callback(signal.reason)
+              if (!incoming.complete) return callback(new Error("Response body was interrupted before completion"))
+              callback()
+            },
           })
-          incoming.once("error", reject)
-          incoming.once("end", () => {
-            if (rejected) return
-            resolve(
-              new Response(empty ? null : Buffer.concat(chunks), {
-                status,
-                statusText: incoming.statusMessage,
-                headers: responseHeaders,
-              }),
-            )
+          state.body = bounded
+          pipeline([incoming, ...decoders, bounded], (error) => {
+            cleanup()
+            if (error) fail(error)
           })
+          const iterator = bounded[Symbol.asyncIterator]()
+          // Bun's Node-to-Web adapter can enqueue after cancel. The iterator
+          // bridge keeps cancellation and backpressure under one owner.
+          const stream = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              const item = await iterator.next().catch((error) => {
+                if (!state.cancelled) controller.error(error)
+                return undefined
+              })
+              if (!item || state.cancelled) return
+              if (item.done) controller.close()
+              else controller.enqueue(item.value)
+            },
+            async cancel() {
+              state.cancelled = true
+              cancellation.abort()
+              incoming.destroy()
+              bounded.destroy()
+              req.destroy()
+              cleanup()
+              await iterator.return?.().catch(() => {})
+            },
+          })
+          const response = new Response(stream, {
+            status,
+            statusText: incoming.statusMessage,
+            headers: responseHeaders,
+          })
+          if (streamResponse) return resolve(response)
+          response
+            .arrayBuffer()
+            .then((bytes) => {
+              signal.throwIfAborted()
+              resolve(new Response(bytes, { status, statusText: incoming.statusMessage, headers: responseHeaders }))
+            })
+            .catch(fail)
         },
       )
-      req.once("error", reject)
-      const abort = () => req.destroy(request.signal.reason instanceof Error ? request.signal.reason : undefined)
-      if (request.signal.aborted) abort()
-      else request.signal.addEventListener("abort", abort, { once: true })
+      req.once("error", fail)
+      if (signal.aborted) abort()
+      else signal.addEventListener("abort", abort, { once: true })
       if (body) req.end(body)
       else req.end()
     })
@@ -681,14 +814,18 @@ export namespace Network {
     const maxRedirects = policy.maxRedirects ?? 5
 
     for (let redirects = 0; ; redirects++) {
+      init.signal?.throwIfAborted()
       const host = await blocked(target.href)
       if (host) {
         if (!policy.authorize) {
-          throw new Error(`Network access to ${host} is not in the configured allow-list`)
+          throw new PolicyError(`Network access to ${host} is not in the configured allow-list`)
         }
         await policy.authorize({ host, url: target.href })
       }
-      const addresses = await assertPublicResolution(target, policy.resolveAddresses)
+      const addresses = await cancellable(
+        assertPublicResolution(target, policy.resolveAddresses, init.signal ?? undefined),
+        init.signal ?? undefined,
+      )
       const requestInit: RequestInit = {
         ...init,
         method,

@@ -1,13 +1,20 @@
 import { useEffect } from "react"
-import { SITE } from "@/data/links"
+import { CANONICAL } from "@/data/links"
 
-/* Per-route document metadata. The site is a single HTML file behind a
-   catch-all rewrite, so each page sets its own title, description, and
-   canonical URL on mount and restores the defaults on unmount. */
-export function useMeta({ title, description, path }: { title: string; description: string; path: string }) {
+type Meta = { title: string; description: string; path: string }
+
+/* Server renders record each page's metadata here; scripts/prerender.mjs
+   writes it into that page's static HTML. */
+export const rendered: { meta?: Meta } = {}
+
+/* Per-route document metadata. Each page's prerendered HTML already carries
+   it; this keeps the head right during client-side changes and restores the
+   defaults on unmount. */
+export function useMeta({ title, description, path }: Meta) {
+  if (typeof window === "undefined") rendered.meta = { title, description, path }
   useEffect(() => {
     const previousTitle = document.title
-    const url = `${SITE}${path}`
+    const url = `${CANONICAL}${path}`
     const entries = [
       ["name", "description", description],
       ["property", "og:title", title],

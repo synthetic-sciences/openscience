@@ -333,7 +333,7 @@ export async function request(url: string, opts: HttpOptions = {}) {
           },
         )
         const body = await res.text()
-        opts.signal?.throwIfAborted()
+        signal.throwIfAborted()
         if (!res.ok && isRetryable(res.status) && attempt < retries) {
           const backoff = backoffMs(res, attempt)
           if (backoff > MAX_BACKOFF) {
@@ -397,7 +397,8 @@ export async function request(url: string, opts: HttpOptions = {}) {
         if (opts.signal?.aborted) throw err
         // A non-retryable HTTP status is terminal — don't burn retries on a 404.
         if (err instanceof HttpStatusError) throw err
-        if (err instanceof SourceResponseError || err instanceof SyntaxError) throw err
+        if (err instanceof SourceResponseError || err instanceof SyntaxError || err instanceof Network.PolicyError)
+          throw err
         if (attempt < retries) {
           await sleep(backoffMs(undefined, attempt), opts.signal)
           continue

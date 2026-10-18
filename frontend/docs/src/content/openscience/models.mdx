@@ -58,6 +58,22 @@ Complete the browser sign-in and select an available model. Access and limits de
 
 ChatGPT access tokens renew automatically while work continues. Disconnecting or replacing a provider connection still stops work using the previous credentials.
 
+### Keep ChatGPT and an API key connected
+
+The two connections remain separate. In the conversation model controls, select
+**ChatGPT** as the access route for a supported model. Its CLI provider is
+`openai-codex`, for example:
+
+```bash
+openscience run --model openai-codex/gpt-6.1-sol "Review this project"
+```
+
+Automatic access prefers a connected ChatGPT subscription when choosing a new
+route. An existing conversation's exact route stays selected: changing effort
+or speed must not silently switch credentials or billing. If that conversation
+still says **Your key**, select **ChatGPT** explicitly; deleting credential
+files is unnecessary. An API-only model still requires an OpenAI API key.
+
 To disconnect that connection:
 
 ```bash

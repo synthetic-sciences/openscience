@@ -67,7 +67,7 @@ export function Footer() {
         </div>
         <div data-slot="footer-bottom">
           <span>
-            &copy; {new Date().getFullYear()} InkVell Inc. (dba{" "}
+            &copy; <span suppressHydrationWarning>{new Date().getFullYear()}</span> InkVell Inc. (dba{" "}
             <a href={SYNTHETIC_SCIENCES} target="_blank" rel="noreferrer">
               Synthetic Sciences
             </a>

@@ -24,6 +24,8 @@ Open **Customize → General → Data & privacy → Share session traces** to tu
 
 The **Delivery** row distinguishes queued, acknowledged, and rejected records. Temporary failures can leave records waiting for retry. Large text may be truncated and binary attachments represented by metadata. Known credentials are redacted, but private research can still appear in prompts and tool output.
 
+For support investigations, `openscience debug audit <session>` prints a local, content-free report for that conversation, its internal title and summary calls, and its worker sessions. It includes local and opaque telemetry session IDs, routes, models, timestamps, call IDs, provider request IDs, recorded token counts when a visible step has them, and any managed hold IDs, but not prompts, responses, tool payloads, or session titles. The command does not upload anything or bypass trace-sharing preferences.
+
 The [privacy policy](https://openscience.sh/privacy) describes retention and account deletion controls. Disabling future uploads and deleting already stored account data are different actions. Review the scope of the deletion control before confirming it; telemetry deletion does not remove your local project, revoke external credentials, or reverse billing records.
 
 ## Control file and tool access

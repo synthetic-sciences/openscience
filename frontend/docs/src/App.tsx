@@ -1,5 +1,5 @@
 import { DocumentationPage } from "./DocsApp"
 
-export function App() {
-  return <DocumentationPage />
+export function App({ initialPath }: { initialPath?: string } = {}) {
+  return <DocumentationPage initialPath={initialPath} />
 }

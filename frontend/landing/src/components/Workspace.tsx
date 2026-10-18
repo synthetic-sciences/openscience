@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import "./Workspace.css"
 
+// Prerendering runs this on the server, where layout effects warn and do nothing.
+const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect
+
 /* A pixel-faithful replica of the OpenScience workspace, in the product's
    own font, tokens, and icon set (Iconoir, as vendored by frontend/ui). The
    frame is 1440 × 810 and scales to its container. The sidebar's Files,
@@ -369,7 +372,7 @@ function Hill() {
 
 function useScale(ref: React.RefObject<HTMLDivElement>) {
   const [scale, setScale] = useState(1)
-  useLayoutEffect(() => {
+  useIsoLayoutEffect(() => {
     const node = ref.current
     if (!node) return
     const update = () => setScale(node.getBoundingClientRect().width / 1440)

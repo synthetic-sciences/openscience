@@ -1234,7 +1234,7 @@ export namespace SessionProcessor {
                   // The call and hold travel on this step's own response: in
                   // a multi-step tool stream the SDK may already be fetching
                   // the next step, so shared request state would name it.
-                  const stepCall = CallLink.fromResponse(value.response?.headers)
+                  const stepCall = CallLink.fromResponse(value.response?.headers, value.response?.id)
                   const funded = requiresWalletBalance(credentialSource)
                   const usage = Session.getUsage({
                     model: resolved.model,
@@ -1270,6 +1270,7 @@ export namespace SessionProcessor {
                       ...(stepCall && {
                         call: stepCall.id,
                         ...(stepCall.hold && { hold: stepCall.hold }),
+                        ...(stepCall.providerRequest && { providerRequest: stepCall.providerRequest }),
                       }),
                     },
                     tier: usage.tier,

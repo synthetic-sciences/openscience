@@ -13,6 +13,7 @@ import { Identifier } from "../../src/id/id"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { stressProviderConfig } from "../fixture/stress-provider"
 import { tracePayload } from "../../src/session/trace-payload"
+import { SessionTraceStore } from "../../src/session/trace-store"
 
 const store = path.join(Global.Path.data, "usage-logging.json")
 const session = path.join(Global.Path.data, "openscience-session.json")
@@ -421,8 +422,12 @@ describe("usage delivery", () => {
         const events = remote.batches.flatMap((batch) => batch.events)
         const request = events.find((event) => event.event_type === "model.request")!
         const response = events.find((event) => event.event_type === "model.response")!
+        const httpCallID = response.payload.http_call_id
+        if (typeof httpCallID !== "string") throw new Error("model response is missing its HTTP call id")
         expect(events).toHaveLength(2)
         expect(response.payload).toMatchObject({
+          http_call_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+          provider_request_id: "chatcmpl-usage",
           usage: {
             input_tokens: 917,
             output_tokens: 83,
@@ -437,6 +442,17 @@ describe("usage delivery", () => {
         expect(JSON.stringify(request.payload)).toContain("PRIVATE_PROMPT")
         expect(JSON.stringify(response.payload)).toContain("PRIVATE_COMPLETION")
         expect(response.parent_span_id).toBe(request.span_id)
+        const calls = (await SessionTraceStore.read(session.id)).modelCalls
+        expect(calls).toEqual([
+          expect.objectContaining({
+            sessionID: session.id,
+            route: "local",
+            provider: "stress",
+            model: "fixture-model",
+            providerRequest: "chatcmpl-usage",
+          }),
+        ])
+        expect(calls[0].id).toBe(httpCallID)
         await Instance.dispose()
       },
     })
@@ -747,7 +763,11 @@ describe("usage delivery", () => {
       model: "anthropic/claude-sonnet-4",
       usage: measured,
       duration: 10,
-      call: { id: "7f3c1e9a-0000-4000-8000-000000000001", hold: "orgh_0123456789abcdef" },
+      call: {
+        id: "7f3c1e9a-0000-4000-8000-000000000001",
+        hold: "orgh_0123456789abcdef",
+        providerRequest: "gen-provider-012345",
+      },
     })
     await UsageLogging.flush()
     const payload = remote.batches[0].events[0].payload
@@ -756,6 +776,7 @@ describe("usage delivery", () => {
     expect(payload).toMatchObject({
       http_call_id: "7f3c1e9a-0000-4000-8000-000000000001",
       hold: "orgh_0123456789abcdef",
+      provider_request_id: "gen-provider-012345",
     })
     expect(payload).not.toHaveProperty("call_id")
     expect(JSON.stringify(remote.batches)).not.toContain("private-conversation")

@@ -147,10 +147,13 @@ export default function Download() {
     path: "/download",
   })
 
-  const [target, setTarget] = useState<Target>(detect)
+  // Starts on the prerendered default; the visitor's platform is detected after hydration.
+  const [target, setTarget] = useState<Target>("mac-arm64")
 
   useEffect(() => {
-    const platform = DOWNLOADS[detect()].platform
+    const detected = detect()
+    setTarget(detected)
+    const platform = DOWNLOADS[detected].platform
     if (platform === "windows") return
     const data = (
       navigator as Navigator & {

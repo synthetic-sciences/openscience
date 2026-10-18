@@ -58,7 +58,12 @@ export async function downloadBioNemoResult(
       maxRedirects: 0,
       maxResponseBytes: LIMIT,
     },
-  ).catch(() => {
+  ).catch((error) => {
+    if (error instanceof Network.PolicyError) {
+      throw new Error(
+        "NVIDIA result download was blocked by network address policy; for TUN fake-IP DNS, configure a real-IP exclusion or OPENSCIENCE_DNS_RESOLVER=cloudflare",
+      )
+    }
     // Signed URLs are bearer credentials too; never persist transport errors
     // that may contain the URL/query string in the durable dispatch ledger.
     throw new Error("NVIDIA large-result download failed; retry this dispatch to obtain a fresh link")

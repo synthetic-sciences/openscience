@@ -38,14 +38,28 @@ export namespace SessionTraceStore {
   export const Harness = SessionHarness.Entry
   export type Harness = z.infer<typeof Harness>
 
+  export const ModelCall = z.object({
+    id: z.string(),
+    sessionID: z.string(),
+    messageID: z.string(),
+    route: z.enum(["managed", "byok", "chatgpt", "subscription", "local", "custom"]),
+    provider: z.string(),
+    model: z.string(),
+    occurredAt: z.number(),
+    providerRequest: z.string().optional(),
+    hold: z.string().optional(),
+  })
+  export type ModelCall = z.infer<typeof ModelCall>
+
   const State = z.object({
     approvals: z.record(z.string(), Approval).default({}),
     retries: z.array(Retry).default([]),
     harness: z.array(Harness).default([]),
+    modelCalls: z.array(ModelCall).default([]),
   })
   export type State = z.infer<typeof State>
 
-  const empty = (): State => ({ approvals: {}, retries: [], harness: [] })
+  const empty = (): State => ({ approvals: {}, retries: [], harness: [], modelCalls: [] })
   const file = (sessionID: string) => path.join(Global.Path.data, "trace", `${encodeURIComponent(sessionID)}.json`)
 
   async function update(sessionID: string, fn: (state: State) => State) {
@@ -131,6 +145,16 @@ export namespace SessionTraceStore {
       createdAt: Date.now(),
     })
     return update(input.sessionID, (state) => ({ ...state, harness: [...state.harness, item] }))
+  }
+
+  /** Durable, content-free identity for every completed provider call,
+   * including internal title/summary calls that do not create message parts. */
+  export function recordModelCall(input: ModelCall) {
+    const item = ModelCall.parse(input)
+    return update(input.sessionID, (state) => ({
+      ...state,
+      modelCalls: [...state.modelCalls.filter((call) => call.id !== item.id), item].slice(-2_048),
+    }))
   }
 
   export async function remove(sessionID: string) {

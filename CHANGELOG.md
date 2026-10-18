@@ -8,6 +8,19 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Find Git Bash in Git for Windows UCRT64 installations so local compute jobs can start.
+
+- Decode compressed network responses, enforce streamed byte limits, reject partial/aborted data before caching, and cancel DNS waits promptly. Add opt-in Cloudflare DNS-over-HTTPS for TUN Fake IP environments while retaining private-address protection.
+- Add Gemini 4 Argon to Ace with verified native-route limits and explicit server availability. Document choosing ChatGPT while retaining a separate OpenAI API key.
+
+- Cancel image-download response streams before reporting HTTP or unsupported-format errors.
+
+- Anthropic API-key requests no longer send the `claude-code-20250219` beta header, which billed them as Claude Code usage and made Console orgs funded only by Max/Team plan API credits fail with "credit balance is too low".
+
+- Stop advertising GPT-5.4 and GPT-5.4 Mini through ChatGPT/Codex subscriptions, whose endpoint rejects those models; they remain available through OpenAI API-key connections.
+
+- Model calls now retain provider request IDs across managed, API-key, and ChatGPT subscription routes, and `openscience debug audit <session>` reports content-free call identities for visible, internal, and worker calls.
+
 - Managed model steps record the HTTP call and Ace hold that produced them, making each charge auditable.
 
 - Settings → Usage no longer fails when a saved session or message record has no id; such records are skipped.
@@ -1193,6 +1206,8 @@ public 50 the old detector named an example's `samples.csv` and the input
 - **An approval says what it is for.** Asking to run Python, R or a shell command showed a card that read "Approval required" twice, over a code cell folded shut, so the most common request in the app asked for a decision about code you could not see. The card now names it ("Run Python code", with the step's title and length, or "Run a shell command" with the command), and the cell's source stays open for as long as the request is.
 
 - File previews handle extensionless text files, balanced brackets in figure labels, Windows path casing, and files at filesystem roots. CSV previews skip blank lines while retaining quoted empty records, and large mzML runs compute scan ranges without overflowing the argument stack.
+
+- Add an opt-in Parallel Search MCP preset, saved disabled with authentication off, without replacing existing connections.
 
 ## v2.0.115 – v2.0.119 — 2026-09-17
 

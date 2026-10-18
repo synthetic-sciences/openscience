@@ -1,6 +1,8 @@
 /* Every external destination the site links to, in one place. */
 
 export const SITE = "https://openscience.sh"
+// The apex redirects to www (a Vercel domain setting), so canonical URLs name the final host.
+export const CANONICAL = "https://www.openscience.sh"
 export const GITHUB = "https://github.com/synthetic-sciences/OpenScience"
 export const RELEASES = `${GITHUB}/releases`
 export const RELEASE_DOWNLOAD = `${GITHUB}/releases/latest/download`
@@ -12,7 +14,7 @@ export const NPM = "https://www.npmjs.com/package/@synsci/openscience"
 export const NPM_SDK = "https://www.npmjs.com/package/@synsci/sdk"
 
 export const DOCS = `${SITE}/docs`
-export const docs = (page: string, hash = "") => `${DOCS}/#/openscience/${page}${hash}`
+export const docs = (page: string, hash = "") => (page === "index" ? DOCS : `${DOCS}/${page}`) + hash
 
 export const SYNTHETIC_SCIENCES = "https://syntheticsciences.ai"
 export const DASHBOARD = "https://app.syntheticsciences.ai"

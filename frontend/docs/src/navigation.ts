@@ -1,5 +1,10 @@
 export type Route = { section: "openscience"; path: string; anchor?: string }
 
+// Pages live at /docs/<page>. Before that they lived at /docs/#/openscience/<page>,
+// and those links (in the CLI, the apps, READMEs) still resolve through parseRoute.
+export const BASE = "/docs"
+export const SITE = "https://www.openscience.sh"
+
 export const aliases: Record<string, string> = {
   "first-session": "sessions",
   "sub-agents": "agents",
@@ -30,17 +35,60 @@ function decode(value: string): string {
   }
 }
 
-export function parseRoute(hash: string): Route {
-  const raw = hash.replace(/^#\/?/, "")
-  const split = raw.indexOf("#")
-  const location = decode(split < 0 ? raw : raw.slice(0, split)).replace(/\/$/, "")
-  const anchor = split < 0 ? undefined : decode(raw.slice(split + 1)) || undefined
+function route(location: string, anchor: string | undefined): Route {
   const path = location.replace(/^(openscience|agent-cli|cli)(\/|$)/, "") || "index"
-  return { section: "openscience", path: aliases[path] ?? path, ...(anchor ? { anchor } : {}) }
+  return {
+    section: "openscience",
+    path: Object.hasOwn(aliases, path) ? aliases[path] : path,
+    ...(anchor ? { anchor } : {}),
+  }
 }
 
-export function pageHref(section: Route["section"], path: string, anchor?: string): string {
-  return "#/" + section + "/" + path + (anchor ? "#" + encodeURIComponent(anchor) : "")
+/* Accepts a docs path ("/docs/sessions#exit-codes") or a legacy hash route
+   ("#/openscience/sessions#exit-codes", "#sessions"). */
+export function parseRoute(location: string): Route {
+  if (location.startsWith("#")) {
+    const raw = location.replace(/^#\/?/, "")
+    const split = raw.indexOf("#")
+    const path = decode(split < 0 ? raw : raw.slice(0, split)).replace(/\/$/, "")
+    return route(path, split < 0 ? undefined : decode(raw.slice(split + 1)) || undefined)
+  }
+  const split = location.indexOf("#")
+  const pathname = split < 0 ? location : location.slice(0, split)
+  const path = decode(pathname)
+    .replace(new RegExp("^" + BASE + "(?=/|$)"), "")
+    .replace(/^\/+|\/+$/g, "")
+  return route(path, split < 0 ? undefined : decode(location.slice(split + 1)) || undefined)
+}
+
+// Where an old link now lives: /docs/#/openscience/<page>, /docs/#<renamed page>, or /docs/<renamed page>.
+export function movedHref(pathname: string, hash: string): string | null {
+  const atRoot = new RegExp("^" + BASE + "/?$").test(pathname)
+  if (hash.startsWith("#/") || (atRoot && Object.hasOwn(aliases, decode(hash.slice(1))))) {
+    const target = parseRoute(hash)
+    return pageHref(target.section, target.path, target.anchor)
+  }
+  const leaf = decode(pathname)
+    .replace(new RegExp("^" + BASE + "/?"), "")
+    .replace(/\/+$/, "")
+  return Object.hasOwn(aliases, leaf) ? pageHref("openscience", aliases[leaf]) + hash : null
+}
+
+export function pageHref(_section: Route["section"], path: string, anchor?: string): string {
+  return (path === "index" ? BASE : BASE + "/" + path) + (anchor ? "#" + encodeURIComponent(anchor) : "")
+}
+
+export function pageUrl(path: string): string {
+  return SITE + pageHref("openscience", path)
+}
+
+// Search results show about 60 characters of a title; the suffix gives way first.
+export function documentTitle(title: string, path?: string): string {
+  if (path === "index") return "OpenScience Docs"
+  for (const candidate of [title + " · OpenScience Docs", title + " · OpenScience"]) {
+    if (candidate.length <= 60) return candidate
+  }
+  return title
 }
 
 export function resolveLink(href: string | undefined, current: Route): string | undefined {
@@ -48,8 +96,8 @@ export function resolveLink(href: string | undefined, current: Route): string | 
   if (href.startsWith("#") && !href.startsWith("#/")) {
     return pageHref(current.section, current.path, decode(href.slice(1)))
   }
-  const route = parseRoute(href.replace(/^\//, "#/"))
-  return pageHref(route.section, route.path.replace(/\.(mdx|md)$/, ""), route.anchor)
+  const target = parseRoute(href.startsWith("#") ? href : "/" + href.replace(/^\//, ""))
+  return pageHref(target.section, target.path.replace(/\.(mdx|md)$/, ""), target.anchor)
 }
 
 export function headings(markdown: string, depth = 2): string[] {

@@ -446,7 +446,12 @@ test("builds one local observable harness trace without reasoning or copied outp
       expect(SessionTrace.Info.parse(trace)).toEqual(trace)
 
       await Session.remove(session.id)
-      expect(await SessionTraceStore.read(session.id)).toEqual({ approvals: {}, retries: [], harness: [] })
+      expect(await SessionTraceStore.read(session.id)).toEqual({
+        approvals: {},
+        retries: [],
+        harness: [],
+        modelCalls: [],
+      })
       expect(await SessionResearch.read(session.id)).toBeUndefined()
     },
   })

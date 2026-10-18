@@ -38,7 +38,7 @@ export interface CatalogConnectorSetup {
   type: "remote"
   name: string
   url: string
-  oauth: "auto" | "client"
+  oauth: "auto" | "client" | "off"
   scope?: string
   confidential_client?: boolean
   one_click_disabled?: boolean
@@ -76,9 +76,13 @@ export function connectorFormFromCatalog(setup: CatalogConnectorSetup): Connecto
 }
 
 /** Build the only state a reviewed one-click preset may persist. It lands off;
- * the browser OAuth transaction is the separate step that may enable it. */
+ * enabling it or starting browser OAuth remains a separate user action. */
 export function catalogPresetConfig(setup: CatalogConnectorSetup) {
-  if ((!setup.one_click_disabled && !setup.one_click_connect) || setup.oauth !== "auto") {
+  if (
+    (!setup.one_click_disabled && !setup.one_click_connect) ||
+    setup.oauth === "client" ||
+    (setup.one_click_connect && setup.oauth !== "auto")
+  ) {
     throw new Error("This catalog entry requires setup review")
   }
   const disabled = buildConnectorConfig(connectorFormFromCatalog(setup))
@@ -103,7 +107,7 @@ export function connectorMatchesCatalogSetup(
   setup: {
     type: "remote"
     url: string
-    oauth: "auto" | "client"
+    oauth: "auto" | "client" | "off"
     scope?: string
     confidential_client?: boolean
   },
@@ -111,6 +115,7 @@ export function connectorMatchesCatalogSetup(
   if (config?.type !== "remote") return false
   try {
     if (new URL(config.url).href !== new URL(setup.url).href) return false
+    if (setup.oauth === "off") return config.oauth === false
     if (setup.oauth === "auto") {
       return config.oauth !== false && (!config.oauth || !("clientId" in config.oauth))
     }

@@ -6,7 +6,7 @@ const Setup = z
     type: z.literal("remote"),
     name: z.string(),
     url: z.string().url(),
-    oauth: z.enum(["auto", "client"]),
+    oauth: z.enum(["auto", "client", "off"]),
     scope: z.string().optional(),
     confidential_client: z.boolean().optional(),
     one_click_disabled: z.boolean().optional(),
@@ -17,7 +17,7 @@ const Setup = z
 export const ConnectorCatalogEntry = z
   .object({
     schema_version: z.literal(1),
-    id: z.enum(["github", "benchling", "box", "dropbox", "s3", "givemeanode"]),
+    id: z.enum(["github", "benchling", "box", "dropbox", "s3", "givemeanode", "parallel-search"]),
     name: z.string(),
     provider: z.string(),
     recommended: z.boolean().default(false),
@@ -202,6 +202,29 @@ const entries = ConnectorCatalogEntry.array().parse([
       // plain endpoint starts the same sign-in through discovery.
       url: "https://aws-mcp.us-east-1.api.aws/mcp",
       oauth: "auto",
+    },
+  },
+  {
+    schema_version: 1,
+    id: "parallel-search",
+    name: "Parallel Search",
+    provider: "Parallel",
+    status: "official_setup",
+    summary: "Optional public web search and page extraction without a separate API credential.",
+    source_url: "https://docs.parallel.ai/integrations/mcp/search-mcp",
+    reviewed_at: "2026-10-18",
+    read_operations: ["Public web search", "Fetch and extract public pages"],
+    upstream_write_operations: [],
+    writes_enabled_by_catalog: false,
+    safety:
+      "Saved disabled with authentication off. Enabling connects to Parallel and shares requested search queries and page URLs with that service. Tool calls still require MCP permissions; the preset never starts a search or changes existing connections.",
+    requirements: ["Internet access", "Anonymous service rate limits apply; model inference is billed separately"],
+    setup: {
+      type: "remote",
+      name: "parallel-search",
+      url: "https://search.parallel.ai/mcp",
+      oauth: "off",
+      one_click_disabled: true,
     },
   },
 ])

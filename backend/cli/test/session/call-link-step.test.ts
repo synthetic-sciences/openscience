@@ -5,9 +5,9 @@ import z from "zod"
 import { CallLink } from "../../src/provider/call-link"
 import { Provider } from "../../src/provider/provider"
 
-function chunk(delta: Record<string, unknown>, finish: string | null) {
+function chunk(id: string, delta: Record<string, unknown>, finish: string | null) {
   return `data: ${JSON.stringify({
-    id: "chatcmpl-link",
+    id,
     object: "chat.completion.chunk",
     created: 1,
     model: "openai/test",
@@ -16,17 +16,19 @@ function chunk(delta: Record<string, unknown>, finish: string | null) {
   })}\n\n`
 }
 
-const toolStep = () =>
+const toolStep = (id: string) =>
   chunk(
+    id,
     {
       role: "assistant",
       tool_calls: [{ index: 0, id: "call_tool_1", type: "function", function: { name: "lookup", arguments: "{}" } }],
     },
     null,
   ) +
-  chunk({}, "tool_calls") +
+  chunk(id, {}, "tool_calls") +
   "data: [DONE]\n\n"
-const textStep = () => chunk({ role: "assistant", content: "done" }, null) + chunk({}, "stop") + "data: [DONE]\n\n"
+const textStep = (id: string) =>
+  chunk(id, { role: "assistant", content: "done" }, null) + chunk(id, {}, "stop") + "data: [DONE]\n\n"
 
 async function until(check: () => boolean, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs
@@ -44,8 +46,9 @@ test("each step reads the call and hold of its own response, even when the next 
     port: 0,
     fetch(request) {
       const hold = `hold_step${sent.length + 1}`
+      const providerRequest = `chatcmpl-step${sent.length + 1}`
       sent.push({ call: request.headers.get("x-openscience-call")!, hold })
-      return new Response(sent.length === 1 ? toolStep() : textStep(), {
+      return new Response(sent.length === 1 ? toolStep(providerRequest) : textStep(providerRequest), {
         headers: { "content-type": "text/event-stream", "x-openscience-hold-id": hold },
       })
     },
@@ -60,7 +63,7 @@ test("each step reads the call and hold of its own response, even when the next 
         managed: true,
       })) as typeof fetch,
   })
-  const onStep: ({ id: string; hold?: string } | undefined)[] = []
+  const onStep: ({ id: string; hold?: string; providerRequest?: string } | undefined)[] = []
   const context: Provider.RequestContext = { sessionID: "ses_step", messageID: "msg_step", attempt: 1 }
   const finished = await Provider.withRequestContext(context, async () => {
     const result = streamText({
@@ -71,10 +74,10 @@ test("each step reads the call and hold of its own response, even when the next 
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(5_000),
       onStepFinish(step) {
-        onStep.push(CallLink.fromResponse(step.response?.headers))
+        onStep.push(CallLink.fromResponse(step.response?.headers, step.response?.id))
       },
     })
-    const steps: ({ id: string; hold?: string } | undefined)[] = []
+    const steps: ({ id: string; hold?: string; providerRequest?: string } | undefined)[] = []
     for await (const part of Provider.withRequestContextIterable(context, result.fullStream)) {
       if (part.type !== "finish-step") continue
       // Lag like a busy consumer: let the SDK send the next step first.
@@ -83,14 +86,18 @@ test("each step reads the call and hold of its own response, even when the next 
         // The next step was already sent while this step was unread.
         expect(sent).toHaveLength(2)
       }
-      steps.push(CallLink.fromResponse(part.response?.headers))
+      steps.push(CallLink.fromResponse(part.response?.headers, part.response?.id))
     }
     return steps
   })
 
   expect(sent).toHaveLength(2)
   expect(sent[0]!.call).not.toBe(sent[1]!.call)
-  const expected = sent.map((item) => ({ id: item.call, hold: item.hold }))
+  const expected = sent.map((item, index) => ({
+    id: item.call,
+    hold: item.hold,
+    providerRequest: `chatcmpl-step${index + 1}`,
+  }))
   expect(finished).toEqual(expected)
   expect(onStep).toEqual(expected)
 })

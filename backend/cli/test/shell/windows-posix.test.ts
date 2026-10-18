@@ -7,7 +7,7 @@ import { Shell } from "../../src/shell/shell"
 const root = "C:\\Program Files\\Git"
 const bash = `${root}\\bin\\bash.exe`
 
-for (const directory of ["cmd", "bin", "mingw64\\bin", "mingw32\\bin", "usr\\bin"]) {
+for (const directory of ["cmd", "bin", "mingw64\\bin", "mingw32\\bin", "ucrt64\\bin", "usr\\bin"]) {
   test(`finds the same Git Bash from Git/${directory.replaceAll("\\", "/")}/git.exe`, () => {
     expect(Shell.windowsGitBash(`${root}\\${directory}\\git.exe`, (file) => file === bash)).toBe(bash)
   })
@@ -61,8 +61,8 @@ function windows(input: { git?: string; configured?: string; files: string[] }, 
   }
 }
 
-test("compute selects Git Bash while ordinary terminals retain their cmd preference", () => {
-  windows({ git: `${root}\\mingw64\\bin\\git.exe`, files: [bash] }, () => {
+test.each(["mingw64", "ucrt64"])("compute selects Git Bash from %s while terminals retain cmd", (directory) => {
+  windows({ git: `${root}\\${directory}\\bin\\git.exe`, files: [bash] }, () => {
     expect(Shell.preferred()).toBe("cmd.exe")
     expect(Shell.acceptable()).toBe("cmd.exe")
     expect(ComputeJobs.command({ id: "job-fixture", name: "Shell contract", command: "printf executed" }).argv).toEqual(

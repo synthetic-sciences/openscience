@@ -125,7 +125,7 @@ jobs:
                 "Run it from main with packaged E2E, OS smoke, and scientific canary enabled.",
             )
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -271,7 +271,7 @@ jobs:
           fail-on-cache-miss: true
       - name: Import Developer ID
         if: steps.signed.outputs.cache-hit != 'true'
-        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+        uses: Apple-Actions/import-codesign-certs@77ba2a2a8f5cfc8c405ebf3159f767c323e238f9 # v7.1.0
         with:
           p12-file-base64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
           p12-password: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
@@ -409,7 +409,7 @@ jobs:
             git show "$WORKFLOW_SOURCE:$file" > "$file"
           done
       - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -588,7 +588,7 @@ jobs:
               --trusted true
           fi
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.existing.outputs.found != 'true'
         with:
           node-version: "24"
@@ -804,7 +804,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
         if: steps.existing.outputs.found != 'true'
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.existing.outputs.found != 'true'
         with:
           node-version: "24"
@@ -1000,6 +1000,16 @@ jobs:
         with:
           ref: ${{ needs.version.outputs.source }}
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Overlay reviewed download canary repair
+        if: needs.version.outputs.workflow_source != needs.version.outputs.source
+        shell: bash
+        env:
+          WORKFLOW_SOURCE: ${{ needs.version.outputs.workflow_source }}
+        run: |
+          set -euo pipefail
+          git show "$WORKFLOW_SOURCE:frontend/desktop/script/update-download-canary.mjs" > frontend/desktop/script/update-download-canary.mjs
 
       # Includes the pinned block-map generator and differential planner.
       - uses: ./.github/actions/setup-bun
@@ -1175,7 +1185,7 @@ jobs:
           OPENSCIENCE_PREVIOUS_ZIP: ${{ steps.previous.outputs.zip }}
           OPENSCIENCE_ZIP: ${{ matrix.zip }}
         run: bun frontend/desktop/script/update-download-canary.mjs "$OPENSCIENCE_PREVIOUS_ZIP" "$OPENSCIENCE_ZIP" differential-download.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: differential-download-${{ matrix.arch }}
           path: differential-download.json
@@ -1224,7 +1234,7 @@ jobs:
             git show "$WORKFLOW_SOURCE:$file" > "$file"
           done
       - uses: ./.github/actions/setup-bun
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"

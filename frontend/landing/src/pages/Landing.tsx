@@ -162,17 +162,6 @@ const FAQ = [
     ),
   },
   {
-    q: "What about data and privacy?",
-    a: (
-      <p>
-        Sessions, files, credentials, and results are stored on your machine. If you sign in to Synthetic Sciences,
-        session traces are shared by default to improve the agent, including prompts, model responses, tool activity,
-        and reported usage. Saved opt-outs are preserved, and you can turn sharing off in General settings or your
-        account. Read the <a href="/privacy">privacy page</a> for controls and deletion.
-      </p>
-    ),
-  },
-  {
     q: "Is OpenScience open source?",
     a: (
       <p>
@@ -198,7 +187,7 @@ const FAQ = [
 
 export default function Landing() {
   useMeta({
-    title: "OpenScience | The open-source AI workbench for scientific research",
+    title: "OpenScience | Open-source AI co-scientist for research",
     description:
       "OpenScience is the open-source AI co-scientist. Free models included or connect any model from any provider, including Claude, GPT, Gemini and more.",
     path: "/",

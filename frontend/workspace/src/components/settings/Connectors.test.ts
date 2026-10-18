@@ -154,6 +154,25 @@ describe("Connector Settings form behavior", () => {
     ).toThrow("requires setup review")
   })
 
+  test("saves anonymous Parallel off and preserves existing custom connections", () => {
+    const setup = {
+      type: "remote",
+      name: "parallel-search",
+      url: "https://search.parallel.ai/mcp",
+      oauth: "off",
+      one_click_disabled: true,
+    } as const
+    const config = catalogPresetConfig(setup)
+    expect(config).toEqual({ type: "remote", url: setup.url, oauth: false, enabled: false })
+    expect(connectorConflictsWithCatalogPreset(config, setup)).toBe(false)
+    expect(connectorConflictsWithCatalogPreset({ ...config, oauth: {} }, setup)).toBe(true)
+    expect(connectorConflictsWithCatalogPreset({ ...config, headers: { Authorization: "Bearer custom" } }, setup)).toBe(
+      true,
+    )
+    expect(connectorConflictsWithCatalogPreset({ ...config, url: "https://other.example/mcp" }, setup)).toBe(true)
+    expect(() => catalogPresetConfig({ ...setup, one_click_connect: true })).toThrow("requires setup review")
+  })
+
   test("uses recognizable connector identities and transport-specific fallbacks", () => {
     expect(
       connectorIdentity("code", {

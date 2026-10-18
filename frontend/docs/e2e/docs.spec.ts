@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { aliases, headings, slug } from "../src/navigation"
+import { aliases, documentTitle, headings, slug } from "../src/navigation"
 import { readFileSync } from "node:fs"
 
 const config = JSON.parse(readFileSync(new URL("../src/content/openscience/docs.json", import.meta.url), "utf8")) as {
@@ -13,9 +13,9 @@ test("all pages render with working section links and page metadata", async ({ p
   for (const name of pages) {
     const source = readFileSync(new URL("../src/content/openscience/" + name + ".mdx", import.meta.url), "utf8")
     const title = source.match(/^title: "(.+)"$/m)![1]
-    await page.goto("#/openscience/" + name)
+    await page.goto(name === "index" ? "./" : name)
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title)
-    await expect(page).toHaveTitle(title + " · OpenScience Docs")
+    await expect(page).toHaveTitle(documentTitle(title, name))
     for (const heading of headings(source, 3)) await expect(page.locator('[id="' + slug(heading) + '"]')).toHaveCount(1)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
     expect(overflow, name + " must fit the viewport").toBe(false)
@@ -24,7 +24,7 @@ test("all pages render with working section links and page metadata", async ({ p
 })
 
 test("section navigation, old links, and back navigation keep the right page", async ({ page }) => {
-  await page.goto("#/openscience/sessions")
+  await page.goto("sessions")
   await page.getByRole("complementary", { name: "on this page" }).getByRole("link", { name: "Exit codes" }).click()
   await expect(page).toHaveURL(/sessions#exit-codes$/)
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sessions and terminal runs")
@@ -33,15 +33,15 @@ test("section navigation, old links, and back navigation keep the right page", a
   await expect(page).toHaveURL(/sessions#exit-codes$/)
   for (const [old, current] of Object.entries(aliases)) {
     await page.goto("#/openscience/" + old)
-    await expect(page).toHaveURL(new RegExp("/openscience/" + current + "$"))
+    await expect(page).toHaveURL(new RegExp("/docs/" + current + "$"))
     await expect(page.getByRole("heading", { level: 1 })).not.toHaveText("Page not found")
   }
-  await page.goto("#/openscience/missing")
+  await page.goto("missing")
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Page not found")
 })
 
 test("keyboard search selects a result and escape dismisses it", async ({ page }) => {
-  await page.goto("#/openscience/index")
+  await page.goto("./")
   const search = page.getByRole("combobox", { name: "Search documentation" })
   await search.fill("pricing")
   await search.press("Enter")
@@ -54,7 +54,7 @@ test("keyboard search selects a result and escape dismisses it", async ({ page }
 
 test("mobile navigation, search, and wide tables remain usable", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("#/openscience/index")
+  await page.goto("./")
   await expect(page.getByRole("combobox", { name: "Search documentation" })).toBeVisible()
   const menu = page.getByRole("button", { name: "Browse documentation" })
   await expect(menu).toHaveAttribute("aria-expanded", "false")
@@ -68,7 +68,7 @@ test("mobile navigation, search, and wide tables remain usable", async ({ page }
 
 test("code copy reports success and exports are served", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
-  await page.goto("#/openscience/quickstart")
+  await page.goto("quickstart")
   await page.getByRole("button", { name: "Copy code", exact: true }).first().click()
   await expect(page.getByRole("button", { name: "Copy code", exact: true }).first()).toContainText("Copied")
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain("npm install -g @synsci/openscience")
@@ -78,12 +78,12 @@ test("code copy reports success and exports are served", async ({ page, context 
   const full = await page.request.get("llms-full.txt")
   expect(full.ok()).toBe(true)
   expect(await full.text()).toContain("## Ace terms")
-  await page.goto("#/openscience/index")
+  await page.goto("./")
   await page.screenshot({ path: "test-results/docs-desktop.png", fullPage: false })
 })
 
 test("tools and skills tabs expose complete catalogs with usable deep links", async ({ page }) => {
-  await page.goto("#/openscience/index")
+  await page.goto("./")
   const sections = page.getByRole("navigation", { name: "documentation sections" })
   await expect(sections.getByRole("link")).toHaveCount(5)
   await sections.getByRole("link", { name: "Explore tools", exact: true }).click()
