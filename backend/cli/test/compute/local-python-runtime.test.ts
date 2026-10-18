@@ -158,99 +158,109 @@ test.skipIf(process.platform === "win32" || !alternate)(
   },
 )
 
-test.skipIf(process.platform !== "win32")("Windows login shell retains the selected native Python path", async () => {
-  if (!host) throw new Error("Local runtime fixture needs Python")
-  await using tmp = await tmpdir()
-  const prefix = path.join(tmp.path, ".venv")
-  // No pip or package installation: this creates only a disposable interpreter
-  // launcher pointing to the already installed native Python runtime.
-  const prepared = Bun.spawnSync([host, "-m", "venv", "--without-pip", prefix])
-  expect(prepared.exitCode, prepared.stderr.toString()).toBe(0)
-  const previous = await Config.trustedSandbox()
-  await Config.setSandbox({ enabled: false })
-  try {
-    await Instance.provide({
-      directory: tmp.path,
-      fn: async () => {
-        const session = await executionSession()
-        const workspace = await SessionFilesystem.workspace(session.id)
-        const options = { root: path.join(tmp.path, ".jobs"), projectDirectory: tmp.path, workspace }
-        const job = await ComputeJobs.start(
-          {
-            name: "Windows selected interpreter",
-            command: [
-              "printf '/fixture startup diagnostic\\n' >&2",
-              'printf %s "$?" > builtin-before.exit',
-              "printf 'builtin before stdout\\n'",
-              `python -c ${quote('import sys,json; json.dump({"executable":sys.executable,"version":sys.version.split()[0]},open("runtime-windows.json","w")); print("runtime stdout sentinel",flush=True); print("runtime stderr sentinel",file=sys.stderr,flush=True)')}`,
-              "code=$?",
-              "printf 'builtin middle stdout\\n'; printf 'builtin middle stderr\\n' >&2",
-              `python -c ${quote('import sys; print("second native stdout",flush=True); print("second native stderr",file=sys.stderr,flush=True)')}`,
-              "printf 'builtin after stdout\\n'; printf 'builtin after stderr\\n' >&2",
-              'exit "$code"',
-            ].join("; "),
-            target: { kind: "local" },
-            sessionID: session.id,
-          },
-          options,
-        )
-        try {
-          const result = await ComputeJobs.wait(job.id, { ...options, timeout: 5_000 })
-          const log = await ComputeJobs.log(job.id, options)
-          expect(result.status, log).toBe("succeeded")
-          const receipt = Bun.file(path.join(workspace, "runtime-windows.json"))
-          expect(
-            await receipt.exists(),
-            JSON.stringify({
-              shell: Shell.posix(),
-              terminalShell: Shell.acceptable(),
-              git: Bun.which("git"),
-              job: result.status,
-              log,
-            }),
-          ).toBe(true)
-          const actual = await receipt.json()
-          expect(await Bun.file(path.join(workspace, "builtin-before.exit")).text()).toBe("0")
-          expect(await fs.realpath(actual.executable)).toBe(
-            await fs.realpath(path.join(prefix, "Scripts", "python.exe")),
+test.skipIf(process.platform !== "win32")(
+  "Windows login shell retains the selected native Python path",
+  async () => {
+    if (!host) throw new Error("Local runtime fixture needs Python")
+    await using tmp = await tmpdir()
+    const prefix = path.join(tmp.path, ".venv")
+    // No pip or package installation: this creates only a disposable interpreter
+    // launcher pointing to the already installed native Python runtime.
+    const prepared = Bun.spawnSync([host, "-m", "venv", "--without-pip", prefix])
+    expect(prepared.exitCode, prepared.stderr.toString()).toBe(0)
+    const previous = await Config.trustedSandbox()
+    await Config.setSandbox({ enabled: false })
+    try {
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const session = await executionSession()
+          const workspace = await SessionFilesystem.workspace(session.id)
+          const options = { root: path.join(tmp.path, ".jobs"), projectDirectory: tmp.path, workspace }
+          const job = await ComputeJobs.start(
+            {
+              name: "Windows selected interpreter",
+              command: [
+                "printf '/fixture startup diagnostic\\n' >&2",
+                'printf %s "$?" > builtin-before.exit',
+                "printf 'builtin before stdout\\n'",
+                `python -c ${quote('import sys,json; json.dump({"executable":sys.executable,"version":sys.version.split()[0]},open("runtime-windows.json","w")); print("runtime stdout sentinel",flush=True); print("runtime stderr sentinel",file=sys.stderr,flush=True)')}`,
+                "code=$?",
+                "printf 'builtin middle stdout\\n'; printf 'builtin middle stderr\\n' >&2",
+                `python -c ${quote('import sys; print("second native stdout",flush=True); print("second native stderr",file=sys.stderr,flush=True)')}`,
+                "printf 'builtin after stdout\\n'; printf 'builtin after stderr\\n' >&2",
+                'exit "$code"',
+              ].join("; "),
+              target: { kind: "local" },
+              sessionID: session.id,
+            },
+            options,
           )
-          expect(result.reproducibility?.execution_environment?.python).toEqual({
-            role: "selected_default",
-            executable: path.join(prefix, "Scripts", "python.exe"),
-            version: actual.version,
-          })
-          const logFile = path.join(options.root, "jobs", `${job.id}.log`)
-          const diagnostic = JSON.stringify({
-            shell: Shell.posix(),
-            logFile,
-            bytes: await fs.stat(logFile).then((stat) => stat.size),
-            direct: await fs.readFile(logFile, "utf8"),
-            events: await ComputeJobs.events(job.id, options),
-          })
-          expect(log, diagnostic).toContain("/fixture startup diagnostic")
-          expect(log, diagnostic).toContain("runtime stdout sentinel")
-          expect(log, diagnostic).toContain("runtime stderr sentinel")
-          for (const marker of [
-            "builtin before stdout",
-            "builtin middle stdout",
-            "builtin middle stderr",
-            "second native stdout",
-            "second native stderr",
-            "builtin after stdout",
-            "builtin after stderr",
-          ]) {
-            expect(log, diagnostic).toContain(marker)
+          try {
+            // The first Windows job may compile its native ownership helpers;
+            // keep the receipt assertions while allowing that cold startup.
+            const result = await ComputeJobs.wait(job.id, { ...options, timeout: 15_000 }).catch(async (error) => {
+              throw new Error(`Windows runtime fixture did not settle: ${await ComputeJobs.log(job.id, options)}`, {
+                cause: error,
+              })
+            })
+            const log = await ComputeJobs.log(job.id, options)
+            expect(result.status, log).toBe("succeeded")
+            const receipt = Bun.file(path.join(workspace, "runtime-windows.json"))
+            expect(
+              await receipt.exists(),
+              JSON.stringify({
+                shell: Shell.posix(),
+                terminalShell: Shell.acceptable(),
+                git: Bun.which("git"),
+                job: result.status,
+                log,
+              }),
+            ).toBe(true)
+            const actual = await receipt.json()
+            expect(await Bun.file(path.join(workspace, "builtin-before.exit")).text()).toBe("0")
+            expect(await fs.realpath(actual.executable)).toBe(
+              await fs.realpath(path.join(prefix, "Scripts", "python.exe")),
+            )
+            expect(result.reproducibility?.execution_environment?.python).toEqual({
+              role: "selected_default",
+              executable: path.join(prefix, "Scripts", "python.exe"),
+              version: actual.version,
+            })
+            const logFile = path.join(options.root, "jobs", `${job.id}.log`)
+            const diagnostic = JSON.stringify({
+              shell: Shell.posix(),
+              logFile,
+              bytes: await fs.stat(logFile).then((stat) => stat.size),
+              direct: await fs.readFile(logFile, "utf8"),
+              events: await ComputeJobs.events(job.id, options),
+            })
+            expect(log, diagnostic).toContain("/fixture startup diagnostic")
+            expect(log, diagnostic).toContain("runtime stdout sentinel")
+            expect(log, diagnostic).toContain("runtime stderr sentinel")
+            for (const marker of [
+              "builtin before stdout",
+              "builtin middle stdout",
+              "builtin middle stderr",
+              "second native stdout",
+              "second native stderr",
+              "builtin after stdout",
+              "builtin after stderr",
+            ]) {
+              expect(log, diagnostic).toContain(marker)
+            }
+          } finally {
+            const current = await ComputeJobs.get(job.id, options)
+            if (current && ["pending", "running"].includes(current.status)) await ComputeJobs.cancel(job.id, options)
           }
-        } finally {
-          const current = await ComputeJobs.get(job.id, options)
-          if (current && ["pending", "running"].includes(current.status)) await ComputeJobs.cancel(job.id, options)
-        }
-      },
-    })
-  } finally {
-    await Config.setSandbox(previous)
-  }
-})
+        },
+      })
+    } finally {
+      await Config.setSandbox(previous)
+    }
+  },
+  30_000,
+)
 
 for (const mode of ["cancel", "background", "write-error"] as const) {
   test.skipIf(process.platform !== "win32")(`Windows compute output closes after ${mode}`, async () => {
