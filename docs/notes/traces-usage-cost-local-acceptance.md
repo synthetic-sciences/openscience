@@ -279,3 +279,25 @@ the earlier bounded provider observations remain separate evidence.
 All 90 broader storage/trace/receipt/billing regressions pass on schema 7.
 Background cancellation, mixed-route live execution and hosted Ace receipt
 acceptance remain outstanding.
+
+## Real child cancellation and unfinished-work visibility
+
+A real subscription child was cancelled after its HTTP attempt became durably
+pending. Its final local outcome was cancelled, with no fabricated usage, cost
+or response status. The server retained both its dispatch and cancellation event
+under the same HTTP call identity. The independently running internal summary
+completed with 542 input, 10 output and zero reasoning/cache counters. The audit
+waited for those terminal outcomes before flushing and inspecting evidence.
+The provider credential was removed afterward.
+
+The first cancellation probe exited its process while its summary was still
+running. That older summary remains pending in the durable call records and
+server health. The later probe does not rewrite it into a success or invent token
+counts. Consequently the combined historical health status is incomplete, with
+one pending call, rather than healthy. This is genuine unfinished-work evidence
+from the audit process exit, not a claimed cancellation failure in the repeated
+run. Content-free evidence is in `cancelled-child-settled-evidence.json` in the
+isolated subscription audit directory.
+
+This checks real child cancellation through SessionPrompt. It does not yet
+exercise a background Task's parent notification or mixed access routes.
