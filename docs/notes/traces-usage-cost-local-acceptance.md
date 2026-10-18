@@ -176,3 +176,16 @@ real document.
 
 Real Ace billing, nonzero real-provider billing evidence, full live delegated-task
 coverage and hosted rollout remain unproven.
+
+## Rebuilt real-BYOK browser acceptance
+
+The native build at `c4bfa1e9` passed `bun run build --single`. A separate
+server on port 4202 opened the isolated real-BYOK audit database; existing servers
+were not restarted. Settings → Usage → API keys displayed three requests and 66
+recorded tokens, provider reported $0.00 marked partial with two unknown cost
+observations, and imported billing $0.00 as a separate category. Manage billing
+imports displayed one matched, zero unmatched and zero ambiguous records, plus
+the explicit requested-model annotation and unverified-alias guidance. This
+verifies rendering against the actual imported provider record. Native file-picker
+automation remains unavailable in the browser tool. No inference was made during
+this browser check, and the isolated provider credential remains removed.
