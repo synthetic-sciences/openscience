@@ -1,0 +1,112 @@
+import { expect, test } from "bun:test"
+import path from "node:path"
+import { Database } from "bun:sqlite"
+import { ResearchDatabase } from "../../src/storage/database"
+import { tmpdir } from "../fixture/fixture"
+
+test("legacy session records migrate atomically with IDs and original files preserved", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const records = [
+    { key: ["session", "project_one", "ses_parent"], data: { id: "ses_parent", projectID: "project_one" } },
+    { key: ["session", "project_one", "ses_child"], data: { id: "ses_child", parentID: "ses_parent" } },
+    { key: ["message", "ses_child", "msg_one"], data: { id: "msg_one", sessionID: "ses_child" } },
+    {
+      key: ["part", "msg_one", "prt_tool"],
+      data: { id: "prt_tool", sessionID: "ses_child", callID: "tool_stable", type: "tool" },
+    },
+    { key: ["todo", "ses_child"], data: [{ content: "continue" }] },
+  ]
+  for (const record of records)
+    await Bun.write(path.join(tmp.path, "storage", ...record.key) + ".json", JSON.stringify(record.data))
+  for (const record of records) expect(await store.read<typeof record.data>(record.key)).toEqual(record.data)
+  expect(await store.list(["session", "project_one"])).toHaveLength(2)
+  expect(await store.list(["part", "msg_one"])).toEqual([["part", "msg_one", "prt_tool"]])
+  const db = new Database(store.filepath, { readonly: true })
+  expect(db.query("SELECT id FROM part WHERE json_extract(data,'$.callID')='tool_stable'").get()).toEqual({
+    id: "prt_tool",
+  })
+  db.close()
+  await store.remove(records[0]!.key)
+  await expect(ResearchDatabase.create(tmp.path).read(records[0]!.key)).rejects.toMatchObject({ code: "ENOENT" })
+  expect(await Bun.file(path.join(tmp.path, "storage", ...records[0]!.key) + ".json").json()).toEqual(records[0]!.data)
+})
+
+test("a corrupt legacy record cannot commit a partial import or erase its source", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const damaged = path.join(tmp.path, "storage", "message", "session", "bad.json")
+  await Bun.write(damaged, "{truncated")
+  await Bun.write(path.join(tmp.path, "storage", "session", "project", "good.json"), JSON.stringify({ id: "good" }))
+  for (let index = 0; index < 255; index++)
+    await Bun.write(
+      path.join(tmp.path, "storage", "session", "project", `seed_${index}.json`),
+      JSON.stringify({ id: `seed_${index}` }),
+    )
+
+  await expect(store.list([])).rejects.toThrow("original file is unchanged")
+  expect(await Bun.file(damaged).text()).toBe("{truncated")
+  const db = new Database(store.filepath, { readonly: true })
+  expect(db.query("SELECT COUNT(*) AS count FROM session").get()).toEqual({ count: 0 })
+  db.close()
+  await Bun.write(damaged, JSON.stringify({ id: "bad" }))
+  expect(await store.list([])).toHaveLength(257)
+})
+
+test("database mutation rollback, scoped listing and JSON null survive reopening", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const key = ["message", "session_a", "message"]
+  await store.write(key, { count: 1 })
+  await store.write(["message", "session_b", "other"], null)
+  await expect(
+    store.update<{ count: number }>(key, (draft) => {
+      draft.count = 99
+      throw new Error("stop")
+    }),
+  ).rejects.toThrow("stop")
+  expect(await store.read<{ count: number }>(key)).toEqual({ count: 1 })
+  expect(await store.upsert<{ count: number }>(key, (current) => ({ count: (current?.count ?? 0) + 1 }))).toEqual({
+    count: 2,
+  })
+  expect(await ResearchDatabase.create(tmp.path).read(["message", "session_b", "other"])).toBeNull()
+  expect(await store.list(["message", "session_a"])).toEqual([key])
+  expect(await store.list(["message", "missing"])).toEqual([])
+})
+
+test("separate processes serialize updates without losing increments", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  const key = ["todo", "shared"]
+  await Bun.write(path.join(tmp.path, "storage", "session", "project", "legacy.json"), JSON.stringify({ id: "legacy" }))
+  const script = path.join(tmp.path, "increment.ts")
+  await Bun.write(
+    script,
+    `import { ResearchDatabase } from ${JSON.stringify(path.resolve(import.meta.dir, "../../src/storage/database.ts"))}; const store=ResearchDatabase.create(${JSON.stringify(tmp.path)}); for(let index=0;index<12;index++) await store.upsert<{count:number}>(["todo","shared"],current=>({count:(current?.count??0)+1}));`,
+  )
+  const results = await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      const child = Bun.spawn([process.execPath, script], { stdout: "pipe", stderr: "pipe" })
+      const error = await new Response(child.stderr).text()
+      expect(await child.exited, error).toBe(0)
+    }),
+  )
+  expect(results).toHaveLength(3)
+  expect(await store.read<{ count: number }>(key)).toEqual({ count: 36 })
+})
+
+test("a newer database format is rejected without rewriting its records", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["todo", "session"], { content: "preserve" })
+  const future = new Database(store.filepath)
+  future.exec("PRAGMA user_version=99")
+  future.close()
+  await expect(store.read(["todo", "session"])).rejects.toThrow("requires a newer OpenScience")
+  const verify = new Database(store.filepath, { readonly: true })
+  expect(verify.query("PRAGMA user_version").get()).toEqual({ user_version: 99 })
+  expect(verify.query("SELECT data FROM todo WHERE id='session'").get()).toEqual({
+    data: JSON.stringify({ content: "preserve" }),
+  })
+  verify.close()
+})

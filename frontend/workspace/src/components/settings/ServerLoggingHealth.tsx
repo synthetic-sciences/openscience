@@ -100,7 +100,7 @@ export function ServerLoggingHealth(props: {
             <Row>
               <RowCopy
                 title="Delivery receipts"
-                description={`${value().receipts.deliveries} deliveries with stored events · ${value().receipts.anomalous} inconsistent receipts · ${value().receipts.orphaned_events} events without receipts`}
+                description={`${value().receipts.deliveries} deliveries · ${value().receipts.receipt_only} without stored events (${value().receipts.replayed_only} replay-only) · ${value().receipts.anomalous} inconsistent receipts · ${value().receipts.orphaned_events} events without receipts`}
               />
             </Row>
             <Row>

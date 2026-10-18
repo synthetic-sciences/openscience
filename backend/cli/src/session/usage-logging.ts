@@ -216,7 +216,8 @@ export namespace UsageLogging {
         cache_creation_input_tokens: count(
           metadata?.anthropic?.cacheCreationInputTokens ??
             object(metadata?.bedrock?.usage).cacheWriteInputTokens ??
-            object(metadata?.venice?.usage).cacheCreationInputTokens,
+            object(metadata?.venice?.usage).cacheCreationInputTokens ??
+            object(object(metadata?.openrouter?.usage).promptTokensDetails).cacheWriteTokens,
         ),
       },
       cost_usd: price,

@@ -13,7 +13,13 @@ export namespace LoggingHealth {
       until: z.string().datetime({ offset: true }),
       checked_at: z.string().datetime({ offset: true }),
       status: z.enum(["healthy", "attention", "no_data", "incomplete"]),
-      receipts: z.object({ deliveries: Count, anomalous: Count, orphaned_events: Count }),
+      receipts: z.object({
+        deliveries: Count,
+        receipt_only: Count.default(0),
+        replayed_only: Count.default(0),
+        anomalous: Count,
+        orphaned_events: Count,
+      }),
       usage: z.object({
         responses: Count,
         projected: Count,

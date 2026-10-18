@@ -5,6 +5,7 @@ import path from "node:path"
 import { ProcessIdentity } from "../../src/process/process-identity"
 
 const routes = new URL("../../src/server/routes/settings/storage.ts", import.meta.url).href
+const storageModule = new URL("../../src/storage/storage.ts", import.meta.url).href
 const globalModule = new URL("../../src/global/index.ts", import.meta.url).href
 const artifactModule = new URL("../../src/artifact/store.ts", import.meta.url).href
 const leaseModule = new URL("../../src/util/file-lease.ts", import.meta.url).href
@@ -360,6 +361,7 @@ describe("Storage Settings integration", () => {
     await waitFor(ready)
 
     const moverSource = [
+      `import { Storage } from ${JSON.stringify(storageModule)}`,
       `import { StorageRoutes } from ${JSON.stringify(routes)}`,
       `import { Global } from ${JSON.stringify(globalModule)}`,
       `import { ArtifactStore } from ${JSON.stringify(artifactModule)}`,
@@ -369,6 +371,7 @@ describe("Storage Settings integration", () => {
       "const target = process.argv.at(-1)",
       "await Log.init({ print: false, dev: true })",
       'Log.Default.info("before storage switch")',
+      'await Storage.write(["message","ses_storage","msg_storage"],{id:"msg_storage",sessionID:"ses_storage",count:1})',
       "await Log.flush()",
       'await fs.mkdir(path.join(Global.Path.data, "storage"), { recursive: true })',
       'await fs.writeFile(path.join(Global.Path.data, "storage", "before.json"), JSON.stringify({ source: true }))',
@@ -376,6 +379,7 @@ describe("Storage Settings integration", () => {
       'const response = await StorageRoutes().request("/location", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: target }) })',
       "if (response.status !== 200) throw new Error(`relocation failed ${response.status}: ${await response.text()}`)",
       'Log.Default.info("after storage switch")',
+      'await Storage.update<{count:number}>(["message","ses_storage","msg_storage"],draft=>{draft.count++})',
       "await Log.flush()",
       "console.log(JSON.stringify({ body: await response.json(), artifact: artifact.id }))",
     ].join("\n")
@@ -408,6 +412,9 @@ describe("Storage Settings integration", () => {
     expect(await Bun.file(path.join(target, "log", "dev.log")).text()).toContain("after storage switch")
 
     const verifySource = [
+      `import { Storage } from ${JSON.stringify(storageModule)}`,
+      'const message=await Storage.read<{count:number}>(["message","ses_storage","msg_storage"])',
+      'if(message.count!==2) throw new Error("research database did not follow the relocated data root")',
       `import { ArtifactStore } from ${JSON.stringify(artifactModule)}`,
       `import { Global } from ${JSON.stringify(globalModule)}`,
       'const item = await ArtifactStore.read("prj_storage", process.argv.at(-1))',

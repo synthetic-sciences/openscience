@@ -248,6 +248,11 @@ export namespace StudyDriver {
         current.followers.set(run.id, follower)
         await follower.poll().catch((error) => log.warn("follow failed", { run: run.id, error }))
         const fresh = (await Experiments.getRun(run.id)) ?? run
+        const info = await job(run.jobID, study.sessionID).catch(() => undefined)
+        if (info?.provenance) await Experiments.recordProvenance(run.id, run.jobID, info.provenance)
+        // Execution can finish before output delivery; keep following until the
+        // retained evidence includes the delivered artifacts and checkpoints.
+        if (info && terminal.has(info.status) && info.lifecycle?.delivery === "pending") continue
         const windows = await recentWindows(fresh.id, criteria.rules, study.metric)
         const reason =
           criteria.rules.length && !fresh.killReason
@@ -272,8 +277,6 @@ export namespace StudyDriver {
           current.pending.push(describe(await Experiments.getRun(fresh.id), study, `killed: ${reason}`))
           continue
         }
-        const info = await job(run.jobID, study.sessionID).catch(() => undefined)
-        if (info?.provenance) await Experiments.recordProvenance(run.id, run.jobID, info.provenance)
         if (!info) {
           // A job record that stays missing was lost with its store; the run
           // cannot end on its own and would hold a slot for the study's life.

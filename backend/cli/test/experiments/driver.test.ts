@@ -3,6 +3,8 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { Experiments } from "../../src/experiments"
 import { StudyDriver } from "../../src/experiments/driver"
+import { ProvenanceEnvelope } from "../../src/science/provenance/envelope"
+import { ComputeLifecycle } from "../../src/compute/lifecycle"
 import { TrackingSDK } from "../../src/experiments/sdk"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
@@ -12,7 +14,7 @@ import { tmpdir } from "../fixture/fixture"
 
 afterEach(() => Experiments.close())
 
-type FakeJob = { status: JobBroker.Job["status"]; error?: string }
+type FakeJob = Pick<JobBroker.Job, "status" | "error" | "lifecycle" | "provenance">
 
 function harness(root: string) {
   const jobs = new Map<string, FakeJob>()
@@ -42,6 +44,69 @@ function harness(root: string) {
 }
 
 describe("study driver", () => {
+  test("retains final artifact provenance before settling a job whose delivery is pending", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const h = harness(tmp.path)
+        const study = await Experiments.createStudy({
+          sessionID: "ses_delivery",
+          name: "delivery",
+          purpose: "retain outputs",
+          metric: "loss",
+          direction: "minimize",
+          root: path.join(tmp.path, "study"),
+          concurrency: 1,
+          killCriteria: "",
+          budget: {},
+        })
+        const run = await Experiments.createRun({
+          name: "baseline",
+          source: "job",
+          studyID: study.id,
+          jobID: "job_delivery",
+          sessionID: study.sessionID,
+        })
+        const initial = ProvenanceEnvelope.create({
+          kind: "remote_compute",
+          runID: "job_delivery",
+          status: "succeeded",
+        })
+        const pending = ComputeLifecycle.transition(ComputeLifecycle.from("succeeded"), { type: "collect" })
+        h.jobs.set("job_delivery", { status: "succeeded", lifecycle: pending, provenance: initial })
+        await StudyDriver.tick(study.id)
+        expect((await Experiments.getRun(run.id))?.status).toBe("running")
+        expect((await Experiments.getRun(run.id))?.provenance).toEqual(initial)
+        expect(h.prompts).toHaveLength(0)
+        const final = ProvenanceEnvelope.create({
+          kind: "remote_compute",
+          runID: "job_delivery",
+          status: "succeeded",
+          outputs: [
+            ProvenanceEnvelope.output({
+              kind: "artifact",
+              label: "weights",
+              content: "final weights",
+              artifactID: "artifact_weights",
+            }),
+          ],
+        })
+        h.jobs.set("job_delivery", {
+          status: "succeeded",
+          lifecycle: ComputeLifecycle.transition(pending, { type: "deliver" }),
+          provenance: final,
+        })
+        await StudyDriver.tick(study.id)
+        expect((await Experiments.getRun(run.id))?.status).toBe("finished")
+        expect((await Experiments.getRun(run.id))?.provenance).toEqual(final)
+        expect(h.prompts).toHaveLength(1)
+        Experiments.close()
+        expect((await Experiments.getRun(run.id))?.provenance).toEqual(final)
+      },
+    })
+  })
+
   test("follows a run's log, settles it when the job ends, and wakes the session once", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({

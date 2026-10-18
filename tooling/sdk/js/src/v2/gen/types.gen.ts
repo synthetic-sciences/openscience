@@ -9873,6 +9873,8 @@ export type SettingsUsageLoggingHealthResponses = {
           status: "healthy" | "attention" | "no_data" | "incomplete"
           receipts: {
             deliveries: number
+            receipt_only?: number
+            replayed_only?: number
             anomalous: number
             orphaned_events: number
           }

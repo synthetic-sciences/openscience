@@ -5,6 +5,23 @@ description: "Start, continue, export, and import a research conversation."
 
 A session is one conversation: your requests, the responses, and the recorded tool activity. OpenScience saves sessions so you can return to a task.
 
+## Local storage
+
+Session headers, messages, tool parts, todos and saved diffs are stored in
+`research.sqlite` under your OpenScience data directory. Existing identifiers
+are preserved, including parent sessions and tool call IDs. The first access
+imports older records atomically; their original `storage/` JSON files remain
+as migration backups. After import, the database is authoritative: editing an
+old JSON file does not edit the conversation, and deleting a conversation does
+not restore it from a backup file.
+
+Close older OpenScience versions before upgrading a shared data directory; they
+still write the legacy files and do not understand the database. Use the session
+export and import commands below to exchange conversations across versions.
+If migration reports a malformed legacy file, repair that original file and
+retry. No partial conversation import is committed. The database is included
+when relocating the application's data directory.
+
 ## Start a session
 
 Open the workspace with `openscience`, or send a single request from a terminal:

@@ -160,6 +160,15 @@ describe("provider usage", () => {
     ).toMatchObject({ usage: { input_tokens: 0, output_tokens: 0 }, cost_usd: 0, cost_source: "provider_response" })
   })
 
+  test("preserves OpenRouter cache writes including zero while rejecting invalid counts", () => {
+    for (const value of [500, 0, -1, 0.5, "500", null]) {
+      const result = UsageLogging.reported(measured, {
+        openrouter: { usage: { promptTokensDetails: { cacheWriteTokens: value } } },
+      })
+      expect(result.usage.cache_creation_input_tokens).toBe(value === 500 || value === 0 ? value : null)
+    }
+  })
+
   test("keeps cache creation as a provider-reported dimension without inferring a write", () => {
     expect(UsageLogging.reported(measured, { anthropic: { cacheCreationInputTokens: 75 } }).usage).toMatchObject({
       input_tokens: 1_000,

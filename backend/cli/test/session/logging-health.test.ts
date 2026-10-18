@@ -18,7 +18,7 @@ const report: z.infer<typeof LoggingHealth.Report> = {
   until: "2026-10-18T01:00:00+00:00",
   checked_at: "2026-10-18T01:00:01+00:00",
   status: "healthy",
-  receipts: { deliveries: 1, anomalous: 0, orphaned_events: 0 },
+  receipts: { deliveries: 1, receipt_only: 0, replayed_only: 0, anomalous: 0, orphaned_events: 0 },
   usage: {
     responses: 1,
     projected: 1,

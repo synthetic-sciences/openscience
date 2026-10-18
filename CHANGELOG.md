@@ -8,6 +8,12 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Store sessions, messages, tool parts, todos and diffs in a transactional SQLite database, preserving existing IDs and retaining original JSON migration backups.
+
+- Include workspace-scoped receipt-only deliveries in server logging health, separating valid replay-only acknowledgements from lost accepted events.
+
+- Retain experiment provenance after artifact delivery completes, preserve OpenRouter cache-write evidence, and honor approved token corrections in server logging-health checks.
+
 - Add an explicit server logging-health check under Permissions → Data & privacy, separating account/device/workspace-scoped receipt, usage and Ace settlement findings from local queue state. Older servers and incomplete evidence remain explicit.
 
 - Retain bound compute-job provenance with experiment runs and expose it in run details, preserving explicit gaps and execution evidence after database reopening.

@@ -156,7 +156,7 @@ const healthy: SettingsUsageLoggingHealthResponses[200] = {
     since: "2026-10-18T00:00:00Z",
     until: "2026-10-18T01:00:00Z",
     checked_at: "2026-10-18T01:00:01Z",
-    receipts: { deliveries: 1, anomalous: 0, orphaned_events: 0 },
+    receipts: { deliveries: 1, receipt_only: 0, replayed_only: 0, anomalous: 0, orphaned_events: 0 },
     usage: {
       responses: 1,
       projected: 1,
@@ -213,4 +213,20 @@ test("older servers remain explicitly unavailable and do not hide device deliver
   await ready(() => host.textContent?.includes("does not support logging-health reports yet") === true)
   expect(host.textContent).toContain("3 queued · 7 acknowledged")
   expect(host.textContent).not.toContain("No discrepancies found")
+})
+
+test("receipt-only deliveries remain visible when there are no stored responses", async () => {
+  const { state, host } = await mount()
+  state.health = {
+    ...healthy,
+    report: {
+      ...healthy.report,
+      status: "attention",
+      receipts: { deliveries: 2, receipt_only: 2, replayed_only: 1, anomalous: 1, orphaned_events: 0 },
+      usage: { ...healthy.report.usage, responses: 0, projected: 0 },
+    },
+  }
+  checkServer(host).click()
+  await ready(() => host.textContent?.includes("Stored evidence needs attention") === true)
+  expect(host.textContent).toContain("2 deliveries · 2 without stored events (1 replay-only) · 1 inconsistent receipts")
 })
