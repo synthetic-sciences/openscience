@@ -1,6 +1,8 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
+import { useSDK } from "@/context/sdk"
+import { TaskReceipts } from "./task-receipts"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@synsci/util/encode"
@@ -40,6 +42,7 @@ interface SessionContextTabProps {
 export function SessionContextTab(props: SessionContextTabProps) {
   const params = useParams()
   const sync = useSync()
+  const sdk = useSDK()
   const language = useLanguage()
 
   const usd = createMemo(() => sessionCostFormatter(language.locale()))
@@ -335,6 +338,19 @@ export function SessionContextTab(props: SessionContextTabProps) {
           .flatMap((message) => (sync.data.part[message.id] ?? []).filter((part) => part.type === "step-finish"))}
         locale={language.locale()}
       />
+
+      <Show when={params.id}>
+        {(sessionID) => (
+          <TaskReceipts
+            sessionID={sessionID()}
+            load={async () => {
+              const result = await sdk.client.session.receipts({ sessionID: sessionID() })
+              if (!result.data) throw new Error("Receipt lookup failed")
+              return result.data
+            }}
+          />
+        )}
+      </Show>
 
       <div class="context-panel__cards">
         <section class="context-panel__card" aria-label={language.t("context.section.lastRequest")}>

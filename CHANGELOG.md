@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Add an explicit settled Ace charge lookup in the task context panel, including worker calls, exact Wallet receipt amounts and separate pending, unknown and inconsistent settlement states.
+
 - Persist model HTTP attempts, tool trace bindings, upload events and delivery receipts in SQLite. Failed, cancelled and retried calls retain stable identities; logging health shows delayed uploads and safe rejection diagnostics.
 
 - Store sessions, messages, tool parts, todos and diffs in a transactional SQLite database, preserving existing IDs and retaining original JSON migration backups.

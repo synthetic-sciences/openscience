@@ -137,8 +137,36 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 3 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 4 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })
+})
+
+test("adding receipt tables preserves existing version-three model-call and outbox evidence", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["model_call", "session", "call"], { id: "call", outcome: "pending" })
+  const previous = new Database(store.filepath)
+  previous.exec("DROP TABLE charge; DROP TABLE task_receipt; PRAGMA user_version=3;")
+  previous
+    .query(`INSERT INTO trace_event(id,account,session_id,model_route,data,state,queued_at) VALUES (?,?,?,?,?,?,?)`)
+    .run("event_stable", "account", "session", "managed", "{}", "queued", 1)
+  previous.close()
+  const upgraded = ResearchDatabase.create(tmp.path)
+  expect(await upgraded.read<{ id: string; outcome: string }>(["model_call", "session", "call"])).toEqual({
+    id: "call",
+    outcome: "pending",
+  })
+  expect(await upgraded.query((db) => db.query("SELECT id,state FROM trace_event").all())).toEqual([
+    { id: "event_stable", state: "queued" },
+  ])
+  await upgraded.write(["charge", "account", "receipt"], { receipt_id: "receipt", charged_microusd: "1" })
+  expect(
+    await ResearchDatabase.create(tmp.path).read<{ receipt_id: string; charged_microusd: string }>([
+      "charge",
+      "account",
+      "receipt",
+    ]),
+  ).toEqual({ receipt_id: "receipt", charged_microusd: "1" })
 })

@@ -19,6 +19,7 @@ import { PermissionNext } from "@/permission/next"
 import { errors } from "../error"
 import { lazy } from "@synsci/util/lazy"
 import { SessionFilesystem } from "../../session/filesystem"
+import { TaskReceipts } from "@/session/task-receipts"
 import { SessionTrace } from "../../session/trace"
 import { RuntimeEvents } from "../../runtime/events"
 import { SessionLoopState } from "../../session/loop-state"
@@ -156,6 +157,27 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const session = await Session.children(sessionID)
         return c.json(session)
+      },
+    )
+    .post(
+      "/:sessionID/receipts",
+      describeRoute({
+        summary: "Check settled Ace receipts for a task and its workers",
+        operationId: "session.receipts",
+        responses: {
+          200: {
+            description: "Settled ledger evidence, with pending and missing calls explicit",
+            content: { "application/json": { schema: resolver(TaskReceipts.Info) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ sessionID: Session.get.schema })),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        await Session.assertDirectory(sessionID)
+        c.header("Cache-Control", "no-store")
+        return c.json(await TaskReceipts.check(sessionID))
       },
     )
     .get(

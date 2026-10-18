@@ -15,6 +15,8 @@ export namespace ResearchDatabase {
     todo: { scope: "scope_id", depth: 2 },
     trace: { scope: "scope_id", depth: 2 },
     model_call: { scope: "session_id", depth: 3 },
+    charge: { scope: "account_id", depth: 3 },
+    task_receipt: { scope: "account_id", depth: 3 },
   } as const
   type Kind = keyof typeof tables
 
@@ -67,8 +69,8 @@ export namespace ResearchDatabase {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 3) throw new Error("This research database requires a newer OpenScience version")
-        if (version < 3)
+        if (version > 4) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 4)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
@@ -103,7 +105,7 @@ export namespace ResearchDatabase {
             CREATE INDEX IF NOT EXISTS idx_part_session ON part(json_extract(data,'$.sessionID'));
             CREATE INDEX IF NOT EXISTS idx_part_call ON part(json_extract(data,'$.callID'));
             CREATE INDEX IF NOT EXISTS idx_part_model_call ON part(json_extract(data,'$.usage.call'));
-            PRAGMA user_version=3;`)
+            PRAGMA user_version=4;`)
           }).immediate()
         if (!db.query("SELECT 1 FROM migration WHERE name='legacy-session-records'").get()) {
           await using lease = await FileLease.acquire(`${filepath}.migration.lock`, 120_000)

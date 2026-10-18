@@ -22,6 +22,27 @@ If migration reports a malformed legacy file, repair that original file and
 retry. No partial conversation import is committed. The database is included
 when relocating the application's data directory.
 
+## Check settled Ace charges
+
+Open the session's context panel and choose **Check settled charges**. OpenScience
+looks up the task's recorded Ace HTTP call IDs, including descendant worker sessions,
+against the signed-in account and current workspace's Wallet ledger. This read-only
+check works independently of session trace sharing and does not send conversation
+content or authorize spending.
+
+The **Settled receipts subtotal** includes only matching settled holds and ledger
+receipts. Amounts retain six decimal places in USD so small charges are visible.
+Pending, unknown or missing, inconsistent, and released or expired calls are listed
+separately. A subtotal with unresolved calls is incomplete; missing evidence is never
+proof that the task was free. Calculated Ace amounts, provider-reported amounts and
+BYOK estimates remain separate in **Model call usage**. Older calls without HTTP IDs
+and older servers without receipt support remain explicit.
+
+Receipt IDs and charge evidence are saved in `research.sqlite`, scoped to the
+account, workspace and server. Changing accounts clears the displayed result. Run
+the check again to read the current workspace; the view does not reuse another
+account's saved charges. New calls or later settlement require another check.
+
 ## Start a session
 
 Open the workspace with `openscience`, or send a single request from a terminal:

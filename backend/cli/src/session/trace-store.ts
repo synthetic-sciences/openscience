@@ -192,6 +192,7 @@ export namespace SessionTraceStore {
       db.query("DELETE FROM model_call WHERE session_id=?").run(sessionID)
       db.query("DELETE FROM trace WHERE id=?").run(sessionID)
       db.query("DELETE FROM trace_binding WHERE session_id=?").run(sessionID)
+      db.query("DELETE FROM task_receipt WHERE id=?").run(sessionID)
     })
     await fs.unlink(file(sessionID)).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== "ENOENT") throw error

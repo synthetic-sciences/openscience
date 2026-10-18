@@ -12140,6 +12140,62 @@ export type SessionChildrenResponses = {
 
 export type SessionChildrenResponse = SessionChildrenResponses[keyof SessionChildrenResponses]
 
+export type SessionReceiptsData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/receipts"
+}
+
+export type SessionReceiptsErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionReceiptsError = SessionReceiptsErrors[keyof SessionReceiptsErrors]
+
+export type SessionReceiptsResponses = {
+  /**
+   * Settled ledger evidence, with pending and missing calls explicit
+   */
+  200: {
+    rootSessionID: string
+    sessions: number
+    managedCalls: number
+    missingCallIDs: number
+    state: "available" | "unavailable"
+    reason?: "signed_out" | "unsupported" | "unauthorized" | "server_unavailable" | "invalid_report" | "account_changed"
+    checkedAt?: string
+    chargedMicrousd?: string
+    calls: Array<{
+      call_id: string
+      state: "missing" | "pending" | "not_charged" | "settled" | "inconsistent" | "unknown"
+      hold_id: string | null
+      receipt_id: string | null
+    }>
+    receipts: Array<{
+      receipt_id: string
+      hold_id: string
+      charged_microusd: string
+      settled_at: string
+      provider: string
+      model: string
+    }>
+  }
+}
+
+export type SessionReceiptsResponse = SessionReceiptsResponses[keyof SessionReceiptsResponses]
+
 export type SessionTraceData = {
   body?: never
   path: {
