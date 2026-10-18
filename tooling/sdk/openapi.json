@@ -23891,7 +23891,8 @@
                               "box",
                               "dropbox",
                               "s3",
-                              "givemeanode"
+                              "givemeanode",
+                              "parallel-search"
                             ]
                           },
                           "name": {
@@ -23967,7 +23968,8 @@
                                 "type": "string",
                                 "enum": [
                                   "auto",
-                                  "client"
+                                  "client",
+                                  "off"
                                 ]
                               },
                               "scope": {

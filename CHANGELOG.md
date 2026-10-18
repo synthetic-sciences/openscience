@@ -1202,6 +1202,8 @@ public 50 the old detector named an example's `samples.csv` and the input
 
 - File previews handle extensionless text files, balanced brackets in figure labels, Windows path casing, and files at filesystem roots. CSV previews skip blank lines while retaining quoted empty records, and large mzML runs compute scan ranges without overflowing the argument stack.
 
+- Add an opt-in Parallel Search MCP preset, saved disabled with authentication off, without replacing existing connections.
+
 ## v2.0.115 – v2.0.119 — 2026-09-17
 
 ### Changed

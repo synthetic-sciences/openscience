@@ -5,7 +5,15 @@ import { ConnectorCatalog } from "../../src/mcp/catalog"
 describe("connector catalog", () => {
   test("lists reviewed setup records without claiming write-back", () => {
     const entries = ConnectorCatalog.list()
-    expect(entries.map((entry) => entry.id)).toEqual(["givemeanode", "github", "benchling", "box", "dropbox", "s3"])
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "givemeanode",
+      "github",
+      "benchling",
+      "box",
+      "dropbox",
+      "s3",
+      "parallel-search",
+    ])
     expect(entries.every((entry) => entry.writes_enabled_by_catalog === false)).toBe(true)
     expect(entries.every((entry) => /^[a-f0-9]{64}$/.test(entry.revision))).toBe(true)
     const benchling = entries.find((entry) => entry.id === "benchling")

@@ -9971,7 +9971,7 @@ export type SettingsScientificToolsResponses = {
     }
     connectors: Array<{
       schema_version: 1
-      id: "github" | "benchling" | "box" | "dropbox" | "s3" | "givemeanode"
+      id: "github" | "benchling" | "box" | "dropbox" | "s3" | "givemeanode" | "parallel-search"
       name: string
       provider: string
       recommended?: boolean
@@ -9988,7 +9988,7 @@ export type SettingsScientificToolsResponses = {
         type: "remote"
         name: string
         url: string
-        oauth: "auto" | "client"
+        oauth: "auto" | "client" | "off"
         scope?: string
         confidential_client?: boolean
         one_click_disabled?: boolean

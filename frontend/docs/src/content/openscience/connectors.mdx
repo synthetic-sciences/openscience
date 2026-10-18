@@ -99,3 +99,16 @@ For [Tavily's official MCP](https://github.com/tavily-ai/tavily-mcp), use `https
 `{"Authorization": "Bearer YOUR_TAVILY_API_KEY"}`
 
 Replace these placeholders in the form, save, inspect the server's Tools list, then request one small search. A connection or successful tool listing does not verify search quota. A 401 or invalid-key error means reconnect or replace the credential; a 403 means check account/tool permissions; a 429 or usage-limit error means check that service's quota, billing, and retry guidance. Changing the model API key does not repair an external search account.
+
+### Parallel Search
+
+The optional **Parallel Search** catalog preset saves
+`https://search.parallel.ai/mcp` disabled with authentication **Off**. Enable it
+when you want to use Parallel's anonymous public-web `web_search` and
+`web_fetch` tools, then inspect its current Tools list. Saving the preset does
+not connect, search, or replace an existing connection with the same name.
+
+Requested queries and page URLs go to Parallel. Anonymous use has lower service
+rate limits; model inference costs remain separate. An optional authenticated
+connection can be configured manually if you need a different quota. See
+[Parallel's Search MCP documentation](https://docs.parallel.ai/integrations/mcp/search-mcp).
