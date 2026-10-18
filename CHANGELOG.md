@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Add Gemini 4 Argon to Ace with verified native-route limits and explicit server availability. Document choosing ChatGPT while retaining a separate OpenAI API key.
+
 - Cancel image-download response streams before reporting HTTP or unsupported-format errors.
 
 - Anthropic API-key requests no longer send the `claude-code-20250219` beta header, which billed them as Claude Code usage and made Console orgs funded only by Max/Team plan API credits fail with "credit balance is too low".
