@@ -120,10 +120,27 @@ test("imports are explicit, post the selected JSON and expose reconciliation and
   expect(state.requests).toEqual([])
   button("Manage billing imports").click()
   await ready(() => state.requests.some((value) => value.includes("/billing")))
-  const document = { schema_version: 1, provider: "openai", currency: "USD", records: [] }
+  const document = {
+    schema_version: 1,
+    provider: "openai",
+    account_label: "Provider account",
+    currency: "USD",
+    records: [
+      {
+        billing_id: "line",
+        provider_request_id: "request",
+        occurred_at: "2026-10-18T00:00:00Z",
+        model: "dated-model",
+        requested_model: "requested-alias",
+        amount_usd: "0",
+      },
+    ],
+  }
   await file(host, JSON.stringify(document))
   await ready(() => host.textContent!.includes("1 matched · 1 unmatched"))
   expect(state.input).toEqual(document)
+  expect(host.textContent).toContain("requested_model must match")
+  expect(host.textContent).toContain("alias annotations are user")
   expect(state.changed).toBe(1)
   expect(host.textContent).toContain("Provider account")
   button("Remove import").click()

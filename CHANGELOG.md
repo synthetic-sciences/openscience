@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Preserve distinct billed and requested model names in provider billing imports; explicit alias annotations support reconciliation without guessing model mappings.
+
 - Preserve provider-reported cache-write counters from OpenAI and Azure Responses, including explicit zero, instead of losing them in SDK parsing or replacing them with catalog estimates.
 
 - Separate provider-reported, estimated, imported and historical cost evidence in `openscience stats`; retain exact amounts, mark missing evidence Unknown, and label compatibility accounting separately.

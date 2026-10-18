@@ -2070,6 +2070,7 @@ export class Usage extends HeyApiClient {
         provider_request_id?: string
         occurred_at: string
         model?: string
+        requested_model?: string
         amount_usd: string
       }>
     },

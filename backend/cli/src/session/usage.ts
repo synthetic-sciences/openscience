@@ -170,7 +170,10 @@ export async function localUsage(start: number, end: number, projectID?: string)
   for (const record of await BillingImport.records(start, end)) {
     if (scope && (!record.sessionID || !scope.has(record.sessionID))) continue
     const date = record.occurredAt.slice(0, 10)
-    const model = record.model ?? "Unknown billing model"
+    const model =
+      record.match === "matched" && record.requestedModel
+        ? record.requestedModel
+        : (record.model ?? "Unknown billing model")
     const id = JSON.stringify([date, record.provider, model, "byok"])
     const row = rows.get(id) ?? {
       date,

@@ -140,5 +140,39 @@ packages and documentation checks pass. Raw numeric usage, lineage and matching
 assertions remain in the isolated audit directory named by
 `/tmp/roadmap-real-chatgpt-root`; its provider access credential has been removed.
 
-Real Ace/BYOK provider billing reconciliation, full live delegated-task coverage
-and hosted rollout remain unproven.
+## Fresh BYOK audit and provider billing reconciliation
+
+A real OpenRouter request used `liquid/lfm-2.5-2.6b:free`, with prompt and
+completion maximum prices both zero, fallback disabled and output capped at 32
+tokens. Two HTTP 400 attempts were retained as failed calls with unknown usage
+and cost. The successful request reached the output limit during reasoning;
+it verifies accounting for a bounded response, not a completed answer.
+
+Raw usage, local call records and the server projection agreed on 34 input,
+32 output, 32 reasoning, zero cache-read and zero cache-write tokens. Reported
+cost was explicitly zero. A read-only lookup of the actual generation confirmed
+zero total cost and the same native token counters. Its normalized tokenizer
+counts differed and were not substituted for native usage. See OpenRouter's
+[generation metadata reference](https://openrouter.ai/docs/api/api-reference/generations/get-request-&-usage-metadata-for-a-generation)
+and [price routing controls](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+The provider billed a dated model name rather than the requested alias. Billing
+imports now accept an explicit `requested_model` annotation while preserving the
+original billed model. The actual generation record was normalized into the
+import document and accepted through the settings API. Its unique request ID
+matched the correct local call; the aggregate retained provider-response and
+imported-billing zero amounts as separate sources. Incorrect aliases and duplicate
+request IDs remain unmatched or ambiguous. The annotation is supplied by the
+importer and is not independent verification of model equivalence.
+
+The local server reconciled all three attempts, including both failures, with
+one response projection and no missing response. The isolated provider credential
+was removed afterward; original credentials and conversations were not written.
+Content-free comparison artifacts remain in the directory named by
+`/tmp/roadmap-real-byok-root`. Validation: 20 backend, eight UI and 31 SDK tests,
+all seven typecheck packages and documentation checks passed. The UI tests cover
+file ingestion; a native browser file chooser has not yet been driven for this
+real document.
+
+Real Ace billing, nonzero real-provider billing evidence, full live delegated-task
+coverage and hosted rollout remain unproven.

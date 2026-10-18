@@ -115,8 +115,9 @@ export function BillingImports(props: {
         <Show when={open()}>
           <p>
             Use the template to convert provider exports: stable billing ID, provider ID, account label, UTC timestamp,
-            exact nonnegative USD amount, charge/credit kind and optional provider request ID/model. Only USD is
-            supported; no exchange rate is inferred. Credits remain separate from charges. Maximum 2 MiB and 10,000
+            exact nonnegative USD amount, charge/credit kind and optional provider request ID/model. When a billed model
+            differs from the requested alias, retain it as model and add the original alias as requested_model. Only USD
+            is supported; no exchange rate is inferred. Credits remain separate from charges. Maximum 2 MiB and 10,000
             records per file.
           </p>
           <Button size="small" variant="secondary" onClick={template}>
@@ -136,8 +137,10 @@ export function BillingImports(props: {
             />
           </label>
           <p>
-            Matching uses exact provider/request IDs and unique local calls; account labels are user supplied and are
-            not verified. Amounts without a unique match remain imported evidence rather than an assigned task charge.
+            Matching uses exact provider/request IDs and unique local calls. The optional requested_model must match the
+            saved request model; without it, model is checked instead. Account labels and alias annotations are user
+            supplied and are not verified. Amounts without a unique match remain imported evidence rather than an
+            assigned task charge.
           </p>
           <p>
             Selected dates: {records().filter((record) => record.match === "matched").length} matched ·{" "}

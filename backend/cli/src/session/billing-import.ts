@@ -21,6 +21,7 @@ export namespace BillingImport {
               provider_request_id: Identifier.optional(),
               occurred_at: z.string().datetime({ offset: true }),
               model: z.string().trim().min(1).max(256).optional(),
+              requested_model: z.string().trim().min(1).max(256).optional(),
               amount_usd: Amount,
             })
             .strict(),
@@ -38,6 +39,7 @@ export namespace BillingImport {
     providerRequestID: z.string().optional(),
     occurredAt: z.string(),
     model: z.string().optional(),
+    requestedModel: z.string().optional(),
     amountUSD: Amount,
     match: z.enum(["matched", "unmatched", "ambiguous"]),
     callID: z.string().optional(),
@@ -70,6 +72,7 @@ export namespace BillingImport {
           ...(row.provider_request_id ? { providerRequestID: row.provider_request_id } : {}),
           occurredAt: new Date(row.occurred_at).toISOString(),
           ...(row.model ? { model: row.model } : {}),
+          ...(row.requested_model ? { requestedModel: row.requested_model } : {}),
           amountUSD: canonical(row.amount_usd),
         }
       })
@@ -151,7 +154,8 @@ export namespace BillingImport {
       return rows.map((row) => {
         const record = Record.omit({ match: true, callID: true, sessionID: true }).parse(JSON.parse(row.data))
         if (row.accounts > 1 || row.calls > 1) return { ...record, match: "ambiguous" as const }
-        if (!row.callID || !row.sessionID || (record.model && row.model !== record.model))
+        const requested = record.requestedModel ?? record.model
+        if (!row.callID || !row.sessionID || (requested && row.model !== requested))
           return { ...record, match: "unmatched" as const }
         return { ...record, match: "matched" as const, callID: row.callID, sessionID: row.sessionID }
       })

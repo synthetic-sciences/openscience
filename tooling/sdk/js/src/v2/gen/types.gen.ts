@@ -9988,6 +9988,7 @@ export type SettingsUsageImportBillingData = {
       provider_request_id?: string
       occurred_at: string
       model?: string
+      requested_model?: string
       amount_usd: string
     }>
   }
@@ -10054,6 +10055,7 @@ export type SettingsUsageBillingResponses = {
     providerRequestID?: string
     occurredAt: string
     model?: string
+    requestedModel?: string
     amountUSD: string
     match: "matched" | "unmatched" | "ambiguous"
     callID?: string

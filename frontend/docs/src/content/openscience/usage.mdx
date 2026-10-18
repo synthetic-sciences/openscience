@@ -135,3 +135,20 @@ seen only in internal/failed calls or imports, even without transcript messages.
 OpenAI and Azure Responses cache-write counters are retained when the provider
 exposes them. Explicit zero stays zero; omitted or null counters remain unknown.
 A reported counter takes precedence over a catalog-based cache-write estimate.
+
+
+### Billed model names and request aliases
+
+A provider can bill a dated model version even when you requested an alias.
+Keep the provider's name in `model` and optionally add `requested_model` with
+the alias recorded on the local call. Matching still requires an exact provider
+request ID and one unique local call; the supplied requested name must also
+match. Without `requested_model`, `model` remains the model-name check.
+
+Both names are retained in billing reconciliation exports. Uniquely matched
+annotated records group under the requested model in Usage; unmatched and
+ambiguous records keep their billed model name. Alias annotations
+are user supplied, not verified model mappings. They do not resolve duplicate
+request IDs or account ambiguity. If you need to annotate an already imported
+billing ID, remove its original import before reimporting the corrected document;
+conflicting evidence is never silently replaced.

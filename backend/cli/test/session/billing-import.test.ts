@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { BillingImport } from "../../src/session/billing-import"
+import { localUsage } from "../../src/session/usage"
 import { Storage } from "../../src/storage/storage"
 import { SessionTraceStore } from "../../src/session/trace-store"
 import { UsageSettingsRoutes } from "../../src/server/routes/settings/usage"
@@ -234,4 +235,50 @@ test("custom provider identifiers remain exact instead of being forced into buil
   expect(await BillingImport.records(start, start + 86400000)).toMatchObject([
     { provider: "team/custom:gateway", match: "matched", sessionID },
   ])
+})
+
+test("explicit requested aliases preserve billed model names without guessing a mapping", async () => {
+  const sessionID = await call()
+  const base = document()
+  const records = base.records.map((record) => ({ ...record, model: "billing-fixture-model-20261018" }))
+  const original = await BillingImport.add({ ...base, records })
+  expect(await BillingImport.records(start, start + 86400000)).toMatchObject([
+    { model: "billing-fixture-model-20261018", match: "unmatched" },
+  ])
+  await BillingImport.remove(original.id)
+  const annotated = await BillingImport.add({
+    ...base,
+    records: records.map((record) => ({ ...record, requested_model: "billing-fixture-model" })),
+  })
+  expect(await BillingImport.records(start, start + 86400000)).toMatchObject([
+    { model: "billing-fixture-model-20261018", requestedModel: "billing-fixture-model", match: "matched", sessionID },
+  ])
+  const rows = (await localUsage(start, start + 86400000)).filter((row) => row.provider === base.provider)
+  expect(rows.map((row) => row.model)).toEqual(["billing-fixture-model"])
+  expect(rows[0]?.costs).toEqual(
+    expect.arrayContaining([{ source: "imported_billing", amountUSD: "0.000000000000000001", known: 1, unknown: 0 }]),
+  )
+  await BillingImport.remove(annotated.id)
+  await BillingImport.add({
+    ...base,
+    records: records.map((record) => ({ ...record, requested_model: "different-request-model" })),
+  })
+  const unmatched = await BillingImport.records(start, start + 86400000)
+  expect(unmatched).toMatchObject([{ match: "unmatched" }])
+  expect(unmatched[0]?.callID).toBeUndefined()
+})
+
+test("alias annotations cannot disambiguate reused request IDs", async () => {
+  await call()
+  await call()
+  const base = document()
+  await BillingImport.add({
+    ...base,
+    records: base.records.map((record) => ({
+      ...record,
+      model: "canonical-billed-model",
+      requested_model: "billing-fixture-model",
+    })),
+  })
+  expect(await BillingImport.records(start, start + 86400000)).toMatchObject([{ match: "ambiguous" }])
 })
