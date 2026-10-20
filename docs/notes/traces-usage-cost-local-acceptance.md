@@ -376,3 +376,33 @@ subscription covered as not allocated, and the blocked paid-summary attempt as
 unknown. Data-root, relocation and storage-route checks passed: 72 tests, one
 skipped, no failures. The pending hosted release question does not authorize
 a push or deployment by silence.
+
+## Real local Ace inference and Wallet receipt (2026-10-20)
+
+The configured shared OpenRouter key passed a read-only account check. A new
+local Dashboard API used an isolated SQLite clone, a temporary Personal API
+key, $1 of promotional credit and auto reload disabled. No original Wallet,
+database or production account was changed. A direct managed request settled
+and produced a scoped receipt for 8 microUSD.
+
+OpenScience then sent a real managed streaming request to
+`z-ai/glm-5.3-flash`. It retained one completed HTTP call, its provider
+generation ID and Ace hold, and uploaded the reported 32 input, 32 output,
+36 reasoning, zero cache-read and zero cache-write tokens to the local server.
+The patched Dashboard proxy settled that same hold immediately; the
+`llm_usage` row retained all five token dimensions, provider cost 9 microUSD
+after rounding and exact Wallet charge 10 microUSD. The authenticated scoped
+receipt returned `settled` and the same 10-microUSD charge. The short response
+exhausted its output limit during reasoning, so it proves accounting and
+settlement, not answer quality.
+
+This test exposed that OpenRouter can report reasoning tokens greater than
+`completion_tokens` for this model. The Dashboard proxy previously rejected
+those details before settlement. Its token parsing now preserves the reported
+values and charges from the provider's explicit cost; a regression test covers
+the provider shape. Earlier isolated attempts remain in the test database,
+including one hold waiting for the generation reconciler after an immediate
+generation lookup returned 404. Local health therefore remains incomplete for
+the aggregate test history, while the final call's scoped receipt is settled.
+Hosted receipts and health still return 404 until the Dashboard branch is
+reviewed, deployed and verified there. Live Ace child-task mixing remains open.
