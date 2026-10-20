@@ -12,17 +12,17 @@ retain the exact versions and fixture scope of each historical check. Live
 subscription, BYOK and Ace evidence supplements those fixtures; local Wallet
 receipts do not establish the hosted release.
 
-| Item                             | Current evidence                                                                                                                                   | Open acceptance                                                                  |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1. Real route audit              | Raw subscription/BYOK comparisons and real local Ace parent/worker calls→holds→charges; real Task, parent-selected/background/mixed-provider calls | Hosted Ace verification, mixed Ace/BYOK routing and broader provider billing     |
-| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending          | Release acceptance on deployed versions                                          |
-| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                       | Release acceptance on deployed versions                                          |
-| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts         | Hosted receipt endpoint currently returns 404                                    |
-| 5. BYOK cost provenance          | Exact separate provider/estimate/import totals, real zero-price provider billing lookup/import, API and rebuilt-browser rendering                  | Release acceptance; native file picker not automatable with current browser tool |
-| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                          | Release acceptance                                                               |
-| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches | Hosted health endpoint currently returns 404; release acceptance                 |
+| Item                             | Current evidence                                                                                                                                   | Open acceptance                                                  |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks    | Hosted Ace verification and wider route/provider coverage        |
+| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending          | Release acceptance on deployed versions                          |
+| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                       | Release acceptance on deployed versions                          |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts         | Hosted receipt endpoint currently returns 404                    |
+| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation    | Hosted release and native file-picker acceptance                 |
+| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                          | Release acceptance                                               |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches | Hosted health endpoint currently returns 404; release acceptance |
 
-Nonzero BYOK provider invoices and mixed Ace routing would add coverage. No item is marked
+Provider invoice exports would add independent billing evidence. No item is marked
 released solely on local tests. Current post-schema-7 checks include 90 broader
 storage/trace/receipt/billing tests and 72 data-root/storage-route tests (one
 skipped). No production promotion has been performed.
@@ -425,4 +425,33 @@ and 136 microUSD (1,955 microUSD total). Server health for this installation
 reported five completed attempts, five managed responses, five settled holds,
 zero pending holds and zero token or charge mismatches. The worker Task finished.
 This verifies real local Ace parent/worker accounting, including cached input;
-hosted release and mixed Ace/BYOK delegation still need acceptance.
+hosted release still needs acceptance.
+
+## Mixed Ace parent and direct API-key worker (2026-10-20)
+
+A fresh isolated installation used the managed OpenRouter provider for its
+parent and a separate direct OpenRouter provider alias for its BYOK worker.
+Read-only route preflight identified `managed` for the parent and `byok` for
+the worker. The parent selected one Task, the worker completed, and the root
+audit retained two sessions and five completed HTTP calls. Three managed calls
+have settled Wallet holds and scoped receipts of 700, 251 and 107 microUSD.
+The two BYOK worker calls have no Wallet holds or managed-call links. The local
+server projected all five responses; health reported three settled managed
+responses, zero pending and zero token or charge mismatches. This tests both
+routes in one delegated task without treating BYOK cost as Wallet spend.
+
+OpenRouter's read-only generation records for both BYOK calls matched their
+provider-reported costs and all available native token counters. The records
+reported model `z-ai/glm-5.3-flash-20260826` while the requests used
+`z-ai/glm-5.3-flash`; the normalized import kept both names. Both billing
+records matched unique local call IDs. The two costs total `$0.000289264`.
+Settings Usage retained that amount separately as provider-response evidence
+and imported billing evidence, with two known calls and no unknown amount.
+The fresh local workspace browser showed `Provider reported: $0.000289264` and
+`Imported billing: $0.000289264` as separate totals and model-row categories.
+Its import panel reported two matched, zero unmatched and zero ambiguous
+records. The normalized JSON was imported through the same `BillingImport`
+service used by the settings API; the browser's native file picker was not
+driven. These generation records are provider account metadata, not an
+independently downloaded invoice. Hosted release and native file-picker
+acceptance remain open.
