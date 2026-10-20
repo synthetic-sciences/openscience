@@ -12,15 +12,15 @@ retain the exact versions and fixture scope of each historical check. Live
 subscription, BYOK and Ace evidence supplements those fixtures; local Wallet
 receipts do not establish the hosted release.
 
-| Item                             | Current evidence                                                                                                                                   | Open acceptance                                                  |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks    | Hosted Ace verification and wider route/provider coverage        |
-| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending          | Release acceptance on deployed versions                          |
-| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                       | Release acceptance on deployed versions                          |
-| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts         | Hosted receipt endpoint currently returns 404                    |
-| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation    | Hosted release and native file-picker acceptance                 |
-| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                          | Release acceptance                                               |
-| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches | Hosted health endpoint currently returns 404; release acceptance |
+| Item                             | Current evidence                                                                                                                                                                                            | Open acceptance                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks                                                             | Hosted Ace verification and wider route/provider coverage        |
+| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending                                                                   | Release acceptance on deployed versions                          |
+| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                                                                                | Release acceptance on deployed versions                          |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts                                                                  | Hosted receipt endpoint currently returns 404                    |
+| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation; isolated Chrome file-input import, reload and removal pass | Hosted release and independent provider invoice evidence         |
+| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                                                                                   | Release acceptance                                               |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches                                                          | Hosted health endpoint currently returns 404; release acceptance |
 
 Provider invoice exports would add independent billing evidence. No item is marked
 released solely on local tests. Current post-schema-7 checks include 90 broader
@@ -476,5 +476,13 @@ rerun after the test correction.
 
 The hosted Dashboard liveness path `/api/health` returned HTTP 200, while
 `/api/v1/telemetry/health` returned HTTP 404. Hosted receipt, telemetry and
-billing acceptance therefore remain open. The native billing-file picker also
-remains untested in the local browser.
+billing acceptance therefore remain open.
+
+## Billing file-input acceptance (2026-10-20)
+
+An isolated Chrome test selected a normalized JSON billing file in Settings →
+Usage → API keys. The real local server saved its charge as unmatched evidence.
+The record remained visible after page reload and disappeared after removal.
+This verifies the browser file input, request, persistence and removal path
+without a live provider key or Wallet charge. It does not verify an operating
+system file dialog, an independent provider invoice or the hosted release.
