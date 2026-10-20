@@ -22,6 +22,7 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
 }
 
 export function accessRoute(source: CredentialSource, model: Provider.Model): AccessRoute {
+  if (source === "managed") return "managed"
   if (
     model.providerID === "ollama" ||
     model.providerID === "lmstudio" ||
@@ -31,7 +32,6 @@ export function accessRoute(source: CredentialSource, model: Provider.Model): Ac
   }
   if (source === "oauth" && model.providerID === "openai-codex") return "chatgpt"
   if (source === "oauth") return "subscription"
-  if (source === "managed") return "managed"
   return "byok"
 }
 

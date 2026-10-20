@@ -13,6 +13,7 @@ import { tmpdir, trustProject } from "../fixture/fixture"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionHarness } from "../../src/session/harness"
 import { Token } from "../../src/util/token"
+import { accessRoute } from "../../src/session/access-route"
 
 function testModel(toolcall: boolean): Provider.Model {
   return {
@@ -71,6 +72,12 @@ const agent = {
 const user = {
   tools: {},
 } as unknown as MessageV2.User
+
+test("managed access keeps its Wallet route through a loopback dashboard", () => {
+  const model = { ...testModel(false), options: { baseURL: "http://127.0.0.1:8014" } }
+  expect(accessRoute("managed", model)).toBe("managed")
+  expect(accessRoute("byok", model)).toBe("local")
+})
 
 function questionTool() {
   return tool({
