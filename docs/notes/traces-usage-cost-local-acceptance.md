@@ -455,3 +455,26 @@ service used by the settings API; the browser's native file picker was not
 driven. These generation records are provider account metadata, not an
 independently downloaded invoice. Hosted release and native file-picker
 acceptance remain open.
+
+## Release-candidate checks (2026-10-20)
+
+The Dashboard backend suite passed with 2,880 tests passed and 142 skipped.
+The frontend suite passed 433 tests across 71 files. The production frontend
+build passed, and the SQLite/PostgreSQL migration comparison matched 103
+tables. Review of the OpenScience and Dashboard changes found one actionable
+failure path: an OAuth structured-output error could record the same failed
+model call twice. The OpenScience source now handles that error once; the new
+regression test and all 44 agent tests pass, as does repository typecheck. The
+full OpenScience backend run finished with 5,209 passed, 66 skipped and four
+failed. Three failures passed when run alone: a Modal output-recovery timeout,
+a folder-authority test and an authority watcher. The remaining failure was
+a stale assertion that expected session JSON files after the shared-database
+migration. The test now checks the authoritative database and its six-server
+run passes. The UI (386), workspace (1,237), SDK (31) and docs (8) test suites
+pass. The single-file native build passes. The full backend suite has not been
+rerun after the test correction.
+
+The hosted Dashboard liveness path `/api/health` returned HTTP 200, while
+`/api/v1/telemetry/health` returned HTTP 404. Hosted receipt, telemetry and
+billing acceptance therefore remain open. The native billing-file picker also
+remains untested in the local browser.

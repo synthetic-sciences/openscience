@@ -633,10 +633,10 @@ export namespace Agent {
           }),
         )
         for await (const part of Provider.withRequestContextIterable(requestContext, result.fullStream)) {
-          if (part.type === "error") await failed(part.error)
+          if (part.type === "error") throw part.error
         }
-        const object = await result.object.catch(failed)
-        return complete(object, await result.usage, await result.providerMetadata, await result.response).catch(failed)
+        const object = await result.object
+        return complete(object, await result.usage, await result.providerMetadata, await result.response)
       })().catch(failed)
 
     const result = await Provider.withRequestContext(requestContext, () => generateObject(params)).catch(failed)

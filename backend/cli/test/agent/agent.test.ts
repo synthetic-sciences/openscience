@@ -8,6 +8,7 @@ import { ProjectTrust } from "../../src/project/trust"
 import { Config } from "../../src/config/config"
 import { Provider } from "../../src/provider/provider"
 import { Auth } from "../../src/auth"
+import { UsageLogging } from "../../src/session/usage-logging"
 
 const restores: Array<{ mockRestore(): void }> = []
 
@@ -865,6 +866,7 @@ test("agent configuration generation disables AI SDK telemetry", async () => {
         object: { identifier: "reviewer", whenToUse: "Review a result", systemPrompt: "Check every claim." },
         usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
         finishReason: "stop",
+        response: { id: "gen-test" },
       } as never)
       restores.push(getModel, getLanguage, auth, generate)
 
@@ -907,6 +909,7 @@ test("OAuth configuration generation streams without provider telemetry", async 
         object: Promise.resolve(output),
         usage: Promise.resolve({ inputTokens: 20, outputTokens: 10, totalTokens: 30 }),
         finishReason: Promise.resolve("stop"),
+        response: Promise.resolve({ id: "gen-test" }),
         fullStream: (async function* () {
           yield { type: "finish" }
         })(),
@@ -925,6 +928,47 @@ test("OAuth configuration generation streams without provider telemetry", async 
       expect(stream.mock.calls[0]?.[0]).toMatchObject({
         experimental_telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
       })
+    },
+  })
+})
+
+test("OAuth structured-output failure records usage once", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = { ...generatedModel(), id: "gpt-test", providerID: "openai" }
+      const getModel = spyOn(Provider, "getModel").mockResolvedValue(model)
+      const getLanguage = spyOn(Provider, "getLanguage").mockResolvedValue({} as never)
+      const auth = spyOn(Auth, "get").mockResolvedValue({
+        type: "oauth",
+        refresh: "refresh",
+        access: "access",
+        expires: Date.now() + 60_000,
+      })
+      const context = spyOn(UsageLogging, "context").mockResolvedValue({} as never)
+      const record = spyOn(UsageLogging, "record").mockResolvedValue(undefined as never)
+      const error = new AI.NoObjectGeneratedError({
+        message: "Invalid structured response",
+        text: "invalid",
+        response: { id: "gen-invalid" } as never,
+        usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 } as never,
+        finishReason: "stop",
+      })
+      const stream = spyOn(AI, "streamObject").mockReturnValue({
+        get object() {
+          return Promise.reject(error)
+        },
+        fullStream: (async function* () {
+          yield { type: "finish" }
+        })(),
+      } as never)
+      restores.push(getModel, getLanguage, auth, context, record, stream)
+
+      await expect(
+        Agent.generate({ description: "Create an agent", model: { providerID: "openai", modelID: "gpt-test" } }),
+      ).rejects.toBe(error)
+      expect(record).toHaveBeenCalledTimes(1)
     },
   })
 })

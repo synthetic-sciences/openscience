@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ComputeJobs } from "../../src/compute/jobs"
+import { ResearchDatabase } from "../../src/storage/database"
 
 function isolatedEnv(root: string) {
   return {
@@ -101,7 +102,11 @@ await Instance.provide({
     const projects = (await fs.readdir(path.join(storage, "project"))).filter((item) => item.endsWith(".json"))
     expect(projects).toEqual([`${projectID}.json`])
     for (const output of outputs) {
-      expect(await Bun.file(path.join(storage, "session", projectID, `${output.sessionID}.json`)).exists()).toBe(true)
+      expect(
+        await ResearchDatabase.create(path.join(root, "data")).read(["session", projectID, output.sessionID]),
+      ).toMatchObject({
+        id: output.sessionID,
+      })
       expect(
         await Bun.file(path.join(storage, "session_workspace", projectID, `${output.sessionID}.json`)).exists(),
       ).toBe(true)
