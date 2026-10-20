@@ -1,28 +1,28 @@
 # Traces, usage and cost: local acceptance
 
-Verified on 2026-10-18 against OpenScience `9fac1706` and Dashboard `83ae327f`.
-These checks use explicitly synthetic local fixtures. They do not establish
-real provider invoice reconciliation or hosted deployment acceptance.
+The packaged/browser fixtures were verified on 2026-10-18 against OpenScience
+`9fac1706` and Dashboard `83ae327f`. The live local Ace audit below adds real
+provider billing and an exact Wallet receipt. Neither check establishes hosted
+deployment acceptance.
 
 ## Current completion audit
 
 The following maps the seven requested items to evidence below. Earlier sections
 retain the exact versions and fixture scope of each historical check. Live
-subscription/BYOK evidence supplements those fixtures; it does not turn synthetic
-Wallet charges into real hosted receipts.
+subscription, BYOK and Ace evidence supplements those fixtures; local Wallet
+receipts do not establish the hosted release.
 
 | Item                             | Current evidence                                                                                                                              | Open acceptance                                                                  |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| 1. Real route audit              | Raw subscription and BYOK comparisons; real Task, parent-selected/background/mixed-provider execution; local/server identity and usage checks | Real Ace per-call charge reconciliation after hosted receipt rollout             |
+| 1. Real route audit              | Raw subscription/BYOK comparisons and one real local Ace call→hold→charge receipt; real Task, parent-selected/background/mixed-provider calls | Hosted Ace verification, live Ace worker mixing and broader provider billing     |
 | 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending     | Release acceptance on deployed versions                                          |
 | 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                  | Release acceptance on deployed versions                                          |
-| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance                                                | Hosted receipt endpoint currently returns 404; actual Ace receipt audit          |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; real local Ace receipt                        | Hosted receipt endpoint currently returns 404; live Ace worker receipt           |
 | 5. BYOK cost provenance          | Exact separate provider/estimate/import totals, real zero-price provider billing lookup/import, API and rebuilt-browser rendering             | Release acceptance; native file picker not automatable with current browser tool |
 | 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                     | Release acceptance                                                               |
-| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out, live pending-work visibility                                     | Hosted health endpoint currently returns 404; release acceptance                 |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace health: three completed/settled, zero mismatches   | Hosted health endpoint currently returns 404; release acceptance                 |
 
-Nonzero real-provider invoices and mixed Ace routing would add coverage, but are
-not substituted for the explicit outstanding real Ace audit. No item is marked
+Nonzero BYOK provider invoices and mixed Ace routing would add coverage. No item is marked
 released solely on local tests. Current post-schema-7 checks include 90 broader
 storage/trace/receipt/billing tests and 72 data-root/storage-route tests (one
 skipped). No production promotion has been performed.
@@ -401,8 +401,9 @@ This test exposed that OpenRouter can report reasoning tokens greater than
 those details before settlement. Its token parsing now preserves the reported
 values and charges from the provider's explicit cost; a regression test covers
 the provider shape. Earlier isolated attempts remain in the test database,
-including one hold waiting for the generation reconciler after an immediate
-generation lookup returned 404. Local health therefore remains incomplete for
-the aggregate test history, while the final call's scoped receipt is settled.
+including one hold that waited for the generation reconciler after an immediate
+generation lookup returned 404. The reconciler later settled that hold. A fresh
+health check reports three completed managed calls and three settled holds, with
+zero pending, token mismatches or charge mismatches; status is `healthy`.
 Hosted receipts and health still return 404 until the Dashboard branch is
 reviewed, deployed and verified there. Live Ace child-task mixing remains open.
