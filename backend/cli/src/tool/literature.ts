@@ -22,7 +22,8 @@ function authorLine(authors: string[] | undefined) {
 function clip(text: string | undefined, max: number) {
   if (!text) return undefined
   const clean = text.replace(/\s+/g, " ").trim()
-  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean
+  const budget = Math.max(1, Math.trunc(max))
+  return clean.length > budget ? `${clean.slice(0, budget - 1).trimEnd()}…` : clean
 }
 
 /** One candidate as a compact, citable block. */
