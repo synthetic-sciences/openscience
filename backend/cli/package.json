@@ -75,7 +75,7 @@
     "@zip.js/zip.js": "2.23.0",
     "ai": "catalog:",
     "bun-pty": "0.4.10",
-    "decimal.js": "10.5.0",
+    "decimal.js": "10.6.0",
     "diff": "catalog:",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
