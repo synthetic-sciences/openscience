@@ -21,7 +21,7 @@ export function FormatError(input: unknown) {
   }
   if (Config.JsonError.isInstance(input)) {
     return (
-      `Config file at ${input.data.path} is not valid JSON(C)` + (input.data.message ? `: ${input.data.message}` : "")
+      `Config file at ${input.data.path} is not valid JSON` + (input.data.message ? `: ${input.data.message}` : "")
     )
   }
   if (Config.ConfigDirectoryTypoError.isInstance(input)) {
