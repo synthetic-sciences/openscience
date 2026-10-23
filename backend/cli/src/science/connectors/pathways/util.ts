@@ -42,5 +42,6 @@ export function snippet(text: string | undefined, max = 300): string | undefined
   if (!text) return undefined
   const clean = text.trim()
   if (!clean) return undefined
-  return clean.length > max ? `${clean.slice(0, max - 1)}…` : clean
+  const budget = Math.max(1, Math.trunc(max))
+  return clean.length > budget ? `${clean.slice(0, budget - 1)}…` : clean
 }
