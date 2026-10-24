@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Recognize Windows Python kernel result frames across CRLF chunk boundaries and use UTF-8 for worker input and output to prevent timeouts and garbled Unicode.
+
 - Record failed OAuth structured-output usage once per model call, even when object validation fails after the stream ends.
 
 - Classify Ace calls as managed when a local Dashboard proxy handles them, so worker traces and logging health retain their Wallet route during local testing.
