@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Recognize Windows Python kernel result frames across CRLF chunk boundaries and use UTF-8 for worker input and output to prevent timeouts and garbled Unicode.
 - Dispatch Windows job helpers before application initialization so shell and kernel launches do not load the server or initialize application storage.
 - Refresh workspace credentials directly for manual sync and retries, and recognize Dashboard's version response during background refresh.
 
