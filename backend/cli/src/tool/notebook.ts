@@ -386,6 +386,8 @@ class PythonKernel implements Kernel {
           XDG_CACHE_HOME: path.join(cachePath, "xdg"),
           PYTHONPYCACHEPREFIX: path.join(cachePath, "pycache"),
           PYTHONUNBUFFERED: "1",
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
         }),
         stdio: ["pipe", "pipe", "pipe"],
         // Own process group so killing the kernel reaps its children too — a scanpy
@@ -434,6 +436,7 @@ class PythonKernel implements Kernel {
       let buf = ""
       const onData = (d: Buffer) => {
         buf += d.toString()
+        if (process.platform === "win32") buf = buf.replaceAll("\r\n", "\n")
         if (buf.length > 64 * 1024) {
           clearTimeout(timer)
           proc.stdout?.off("data", onData)
@@ -520,6 +523,8 @@ class PythonKernel implements Kernel {
       let buffer = ""
       const onData = (d: Buffer) => {
         buffer += d.toString()
+        // Normalize after accumulation so CRLF split across stdout chunks is recognized.
+        if (process.platform === "win32") buffer = buffer.replaceAll("\r\n", "\n")
         if (!kernel.executionArmed && buffer.includes(EXECUTION_READY)) {
           kernel.executionArmed = true
           buffer = buffer.replace(EXECUTION_READY, "")
