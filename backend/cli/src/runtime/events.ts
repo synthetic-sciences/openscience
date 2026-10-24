@@ -309,6 +309,9 @@ export namespace RuntimeEvents {
     if (!stream) return
     if (stream.timer) clearTimeout(stream.timer)
     stream.timer = undefined
+    // Leave progress mergeable until the preceding durable write finishes.
+    // A slow stream must not create a separate queued snapshot every 50 ms.
+    await stream.tail
     const entries = stream.pending.splice(0)
     if (!entries.length) return stream.tail
     return queue(stream, () => appendProgress({ sessionID, runID: stream.runID, entries }))

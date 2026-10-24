@@ -180,6 +180,76 @@ describe("public runtime event journal", () => {
     })
   })
 
+  test("coalesces progress while the durable stream is slower than its batching window", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        let release!: () => void
+        const gate = new Promise<void>((resolve) => (release = resolve))
+        let blocked = false
+        const deltas: string[] = []
+        const unsubscribeBus = Bus.subscribe(MessageV2.Event.PartUpdated, (event) => {
+          if (event.properties.delta) deltas.push(event.properties.delta)
+        })
+        const unsubscribe = RuntimeEvents.subscribe(session.id, async (event) => {
+          if (event.type !== "message.part.updated" || blocked) return
+          blocked = true
+          await gate
+        })
+        try {
+          await RuntimeEvents.begin({
+            sessionID: session.id,
+            runID: "run_progress_backpressure",
+            acceptedAt: 100,
+            effort: "normal",
+          })
+          let text = ""
+          const publish = async (delta: string) => {
+            text += delta
+            await Bus.publish(MessageV2.Event.PartUpdated, {
+              part: {
+                id: "prt_backpressure",
+                sessionID: session.id,
+                messageID: "msg_backpressure",
+                type: "text",
+                text,
+              },
+              delta,
+            })
+          }
+          await publish("a")
+          await waitUntil(() => blocked)
+          for (const delta of ["b", "c", "d", "e"]) {
+            await publish(delta)
+            await Bun.sleep(RuntimeEvents.PROGRESS_INTERVAL_MS + 20)
+          }
+          const replay = RuntimeEvents.replay(session.id)
+          release()
+          expect((await replay).events).toMatchObject([
+            { sequence: 1, type: "runtime.accepted" },
+            { sequence: 2, properties: { part: { text: "a" }, delta: "a" } },
+            { sequence: 3, properties: { part: { text: "abcde" }, delta: "bcde" } },
+          ])
+          expect(deltas).toEqual(["a", "b", "c", "d", "e"])
+          await RuntimeEvents.finish({
+            sessionID: session.id,
+            runID: "run_progress_backpressure",
+            messageID: "msg_backpressure",
+          })
+          expect((await RuntimeEvents.replay(session.id, 3)).events).toMatchObject([
+            { sequence: 4, type: "runtime.completed" },
+          ])
+        } finally {
+          release()
+          unsubscribe()
+          unsubscribeBus()
+        }
+      },
+    })
+  })
+
   test("isolates cyclic subscriber rejections from durable capture and healthy subscribers", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
