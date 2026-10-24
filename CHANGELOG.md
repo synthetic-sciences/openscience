@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Stop optional Pyright installation after 30 seconds when the package registry is unavailable, leaving Python diagnostics disabled for that session.
+
 - Record failed OAuth structured-output usage once per model call, even when object validation fails after the stream ends.
 
 - Classify Ace calls as managed when a local Dashboard proxy handles them, so worker traces and logging health retain their Wallet route during local testing.
