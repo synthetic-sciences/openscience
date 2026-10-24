@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Dispatch Windows job helpers before application initialization so shell and kernel launches do not load the server or initialize application storage.
+
 - Record failed OAuth structured-output usage once per model call, even when object validation fails after the stream ends.
 
 - Classify Ace calls as managed when a local Dashboard proxy handles them, so worker traces and logging health retain their Wallet route during local testing.
