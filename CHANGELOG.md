@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Keep runtime progress updates mergeable while the durable event stream is busy, preventing redundant snapshots from delaying replay and run status reads.
 - Stop optional Pyright installation after 30 seconds when the package registry is unavailable, leaving Python diagnostics disabled for that session.
 - Recognize Windows Python kernel result frames across CRLF chunk boundaries and use UTF-8 for worker input and output to prevent timeouts and garbled Unicode.
 - Dispatch Windows job helpers before application initialization so shell and kernel launches do not load the server or initialize application storage.
