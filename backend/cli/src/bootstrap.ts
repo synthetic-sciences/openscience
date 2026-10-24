@@ -16,6 +16,16 @@ if (process.argv[2] === updateSwap) {
 // Worker environments intentionally omit application configuration. Dispatch
 // the ownership supervisor before the command graph can initialize a different
 // data root or migrate the user's default storage in that reduced environment.
+if (process.argv[2] === "__openscience_windows_job_launcher__") {
+  try {
+    const { WindowsJobLauncher } = await import("./process/windows-job-launcher")
+    process.exit(await WindowsJobLauncher.run(process.argv.slice(3)))
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  }
+}
+
 if (process.argv[2] === "__openscience_darwin_responsibility_launcher__") {
   try {
     const { DarwinResponsibilityLauncher } = await import("./process/darwin-responsibility-launcher")
