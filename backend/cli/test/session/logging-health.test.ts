@@ -98,6 +98,21 @@ test("signed-out checks do not contact the server", async () => {
   expect(await LoggingHealth.check()).toEqual({ state: "unavailable", reason: "signed_out" })
 })
 
+test("server health respects the account deadline and never invents a healthy result", async () => {
+  const previous = process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+  process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "40"
+  using remote = receiver(async () => {
+    await Bun.sleep(150)
+    return Response.json(report)
+  })
+  try {
+    expect(await LoggingHealth.check()).toEqual({ state: "unavailable", reason: "server_unavailable" })
+  } finally {
+    if (previous === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+    else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previous
+  }
+})
+
 for (const [status, reason] of [
   [404, "unsupported"],
   [401, "unauthorized"],

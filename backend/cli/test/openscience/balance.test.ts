@@ -96,3 +96,16 @@ test("blocks on the fetch when nothing is cached", async () => {
   expect(await pending).toBe(5)
   expect(fixture.requests).toHaveLength(1)
 })
+
+test("a balance read respects the account deadline and leaves its amount unknown", async () => {
+  const previous = process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+  process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "40"
+  fixture.balance = 12
+  fixture.gate = sleep(150).then(() => undefined)
+  try {
+    expect(await OpenScience.getBalance(funding("deadline"))).toBeNull()
+  } finally {
+    if (previous === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+    else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previous
+  }
+})

@@ -436,10 +436,12 @@ import type {
   SettingsUsageBillingResponses,
   SettingsUsageImportBillingResponses,
   SettingsUsageImportsResponses,
+  SettingsUsageLocalErrors,
   SettingsUsageLocalResponses,
   SettingsUsageLoggingGetResponses,
   SettingsUsageLoggingHealthResponses,
   SettingsUsageLoggingUpdateResponses,
+  SettingsUsageManagedErrors,
   SettingsUsageManagedResponses,
   SettingsUsageRemoveImportResponses,
   SettingsWalletGetResponses,
@@ -2168,7 +2170,7 @@ export class Usage extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<SettingsUsageLocalResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<SettingsUsageLocalResponses, SettingsUsageLocalErrors, ThrowOnError>({
       url: "/settings/usage/local",
       ...options,
       ...params,
@@ -2196,7 +2198,11 @@ export class Usage extends HeyApiClient {
         },
       ],
     )
-    return (options?.client ?? this.client).get<SettingsUsageManagedResponses, unknown, ThrowOnError>({
+    return (options?.client ?? this.client).get<
+      SettingsUsageManagedResponses,
+      SettingsUsageManagedErrors,
+      ThrowOnError
+    >({
       url: "/settings/usage/managed",
       ...options,
       ...params,

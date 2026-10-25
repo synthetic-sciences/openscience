@@ -10075,6 +10075,15 @@ export type SettingsUsageLocalData = {
   url: "/settings/usage/local"
 }
 
+export type SettingsUsageLocalErrors = {
+  /**
+   * Account read deadline expired
+   */
+  503: string
+}
+
+export type SettingsUsageLocalError = SettingsUsageLocalErrors[keyof SettingsUsageLocalErrors]
+
 export type SettingsUsageLocalResponses = {
   /**
    * Usage
@@ -10125,6 +10134,15 @@ export type SettingsUsageManagedData = {
   }
   url: "/settings/usage/managed"
 }
+
+export type SettingsUsageManagedErrors = {
+  /**
+   * Account read deadline expired
+   */
+  503: string
+}
+
+export type SettingsUsageManagedError = SettingsUsageManagedErrors[keyof SettingsUsageManagedErrors]
 
 export type SettingsUsageManagedResponses = {
   /**

@@ -707,11 +707,11 @@ export namespace OpenScience {
    * unscoped session still needs the status read to learn its workspace before
    * dispatch. Authorization is proved per request instead: the balance check
    * and every spend-capable response must echo this exact funding context. */
-  export async function getRequestSnapshot(): Promise<FundingSnapshot | null> {
+  export async function getRequestSnapshot(options: { signal?: AbortSignal } = {}): Promise<FundingSnapshot | null> {
     const snapshot = await getFundingSnapshot()
     if (!snapshot) return null
     if (!isLegacyUnscoped(snapshot)) return snapshot
-    return (await getReconciledFundingState())?.snapshot ?? null
+    return (await getReconciledFundingState(options))?.snapshot ?? null
   }
 
   export async function managedRequestSnapshot(
@@ -1712,10 +1712,6 @@ export namespace OpenScience {
   // the background, up to this age. A missing, non-positive or older value
   // blocks on the fetch so an empty wallet is noticed promptly.
   const BALANCE_STALE_MAX_MS = 5 * 60_000
-  // The account service has answered in 1–2 s on slow afternoons; a 3 s cap
-  // turned those into a paused turn and a retry countdown before every step.
-  // Match the credential sync's patience instead.
-  const BALANCE_FETCH_TIMEOUT_MS = 8_000
 
   /** Expire the cached balance after a spend or credential change. A positive
    * value is kept past its TTL so the next check serves it while a refresh runs
@@ -1760,7 +1756,7 @@ export namespace OpenScience {
     const started = Date.now()
     const request = (async () => {
       try {
-        const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/balance`, {}, BALANCE_FETCH_TIMEOUT_MS)
+        const response = await fundedAtlasFetch(session, `${apiBase()}/api/cli/balance`, {}, accountDeadlineMs())
         if (!response.ok) {
           log.warn("balance check failed", { status: response.status, elapsed_ms: Date.now() - started })
           return null
@@ -1907,7 +1903,8 @@ export namespace OpenScience {
   }
 
   export async function getUsage(start: string, end: string, signal?: AbortSignal): Promise<unknown | null> {
-    const session = (await getReconciledFundingState({ signal }))?.snapshot
+    const session = await getRequestSnapshot({ signal })
+    signal?.throwIfAborted()
     if (!session) return null
     const query = new URLSearchParams({ since: start, until: end })
     const response = await fundedAtlasFetch(session, `${apiBase()}/api/credits/usage?${query}`, { signal })

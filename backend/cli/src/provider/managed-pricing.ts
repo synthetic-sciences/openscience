@@ -211,11 +211,10 @@ export namespace ManagedPricing {
   let cached: { key: string; at: number; value: Catalog } | undefined
   let pending: { key: string; promise: Promise<void> } | undefined
   const TTL = 60_000
-  const TIMEOUT = 3_000
 
   async function refresh(snapshot: FundingSnapshot, key: string) {
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), TIMEOUT)
+    const timer = setTimeout(() => controller.abort(), OpenScience.accountDeadlineMs())
     try {
       // A legacy unscoped session resolves its workspace through the account
       // service first; that read shares the one deadline with the catalog
@@ -282,7 +281,7 @@ export namespace ManagedPricing {
 
   /** Local session/cache reads only. Network refresh never blocks startup.
    * An explicit `force` (the user pressed Refresh) skips the TTL and the
-   * post-failure cooldown and waits, within TIMEOUT, for the answer so the
+   * post-failure cooldown and waits within the account deadline so the
    * caller's read reflects it. */
   export async function catalog(options: { force?: boolean } = {}): Promise<Catalog> {
     const snapshot = await OpenScience.getFundingSnapshot().catch(() => null)

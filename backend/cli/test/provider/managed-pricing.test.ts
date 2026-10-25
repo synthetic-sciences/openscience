@@ -44,6 +44,45 @@ async function gateway(request: Request) {
 const { ManagedPricing } = await import("../../src/provider/managed-pricing")
 const { OpenScience } = await import("../../src/openscience")
 
+test("catalog refresh shares the account deadline and discards a late price", async () => {
+  const previous = { base: process.env.OPENSCIENCE_API_BASE, deadline: process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS }
+  const organization = "org_deadline_" + crypto.randomUUID()
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch() {
+      await Bun.sleep(150)
+      return Response.json(
+        { models: [entry] },
+        {
+          headers: {
+            "OpenScience-Funding-Protocol": "1",
+            "OpenScience-Funding-Context": "organization:" + organization,
+          },
+        },
+      )
+    },
+  })
+  process.env.OPENSCIENCE_API_BASE = server.url.origin
+  process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = "40"
+  try {
+    await OpenScience.saveSession({
+      api_key: "osk_fixture_" + crypto.randomUUID(),
+      user_id: "deadline-user",
+      organization_id: organization,
+      workspace_locked: true,
+    })
+    expect(await ManagedPricing.current({ force: true })).toEqual({})
+  } finally {
+    server.stop(true)
+    await OpenScience.clearSession()
+    if (previous.base === undefined) delete process.env.OPENSCIENCE_API_BASE
+    else process.env.OPENSCIENCE_API_BASE = previous.base
+    if (previous.deadline === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
+    else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previous.deadline
+  }
+})
+
 test("pricing ingestion copies only reviewed non-executable metadata", () => {
   const parsed = ManagedPricing.parse({
     models: [

@@ -23103,6 +23103,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Account read deadline expired",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -23265,6 +23275,16 @@
                     "connected",
                     "rows"
                   ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Account read deadline expired",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }

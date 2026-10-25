@@ -939,3 +939,225 @@ remained clean after the builds. Full command outputs and the independent
 review record remain in the ignored execution workspace. PR checks and Deep
 CI must establish the exact final documentation commit before Phase 3 is
 closed. No merge, deployment or release is included in this phase.
+
+## Local services with a Supabase test branch — 2026-10-25
+
+The user chose local Dashboard and isolated OpenScience services connected to
+an empty Supabase branch of Dashboard. Fly deployment is deferred. The branch
+is persistent, `with_data=false`, and `ACTIVE_HEALTHY`. Its inherited schema
+had 51 public tables; current Dashboard migrations passed and the expected
+schema hash marker and required usage/receipt tables are present. The resulting
+108 public tables include inherited tables; this count is not a new migration
+parity result. Only the authorized profile's basic identity fields were copied.
+Production records, balances, payment state, consent and credentials were not
+copied or changed. The branch has no copied Supabase Auth users.
+
+Dashboard source is `93b56986a58d2e4121530ebb01a6cf4a8aa905f1` (the same tree as
+`origin/main` `0cc9b3ce7dfc633f120f04ad816cb06b318d67d7`). OpenScience source is
+`f5a858a665e19e83349174a535b1bfe38162a097`; the existing native build uses
+`5fd06202ee3b329e211ae83d1d9a22266c383533`, whose later candidate changes are
+documentation only. No product source was changed, rebuilt, pushed or released
+for this test. All test data and credentials remain in isolated private storage.
+
+The backend uses the branch session pooler on port 5432, because its prepared
+statements and session advisory locks require session semantics. Stripe, auto
+reload, graph proxy and indexing are disabled. A one-day workspace key and
+USD 1 of synthetic promotional credit were created only in the test branch.
+The test middleware allows Qwen only, at most eight requests, 512 output tokens
+per request and a conservative USD 0.02 allowance. Its counters persist across
+the local API restart. Five provider requests used an allowance of 7,138.8
+microUSD. No further provider requests were made for the follow-up checks.
+
+**The normal application is not accepted on this local/cloud connection.** The
+initial unmodified managed task failed before any upstream dispatch. A direct
+database round trip took about 1.1–1.3 seconds; a balance HTTP request took
+10.049 seconds. Network and server execution time were not measured separately.
+After restoring the backend's normal primary/OAuth pool limits of 12/3, a fresh
+unmodified-client probe still recorded these results:
+
+| Read                 | Result                              | Observed elapsed time |
+| -------------------- | ----------------------------------- | --------------------- |
+| Auth status          | HTTP 200                            | 7,218 ms              |
+| Balance              | Timeout, no balance returned        | 8,000 ms              |
+| Model catalog        | Aborted, no managed price available | 3,002 ms              |
+| Scoped task receipts | HTTP 200, available                 | 4,313 ms              |
+| Logging health       | Timeout, unavailable                | 5,001 ms              |
+
+A separate **diagnostic harness** allowed longer deadlines for local account,
+catalog and telemetry requests. It did not change product source, financial
+rules, authorization, paid chat cancellation or provider limits. Under those
+diagnostic conditions, a real parent delegated once to a real worker:
+
+- Two sessions and five completed managed calls had five exact settled receipts.
+- Raw provider usage matched all saved token fields, including explicit zeros;
+  provider amounts matched local amounts and server projections.
+- Every call had one scoped projection and exact call/hold/operation/usage/
+  receipt links. Each settled amount matched its actual ledger debit.
+- Provider-reported cost totals USD 0.000666922. Test Wallet debits total
+  **706 microUSD (USD 0.000706)**. These remain separate sources.
+- Receipt lookup with sharing disabled returned the same receipts; delivered
+  counts stopped increasing and the queue was empty.
+- Missing projection, rejected delivery, pending hold, receipt-only delivery,
+  token mismatch and charge mismatch each produced the expected attention or
+  incomplete status on the real Supabase branch. Each fault was rolled back,
+  and health returned to healthy. Account, workspace and installation scope
+  checks passed; unauthenticated HTTP lookup returned 401 and a mismatched
+  workspace header returned 403.
+- Hash checks confirmed that the original copied source data was unchanged.
+
+The actual local browser opened the recorded session and displayed five
+settled receipts, one worker, subtotal USD 0.000706, and zero pending, missing
+or inconsistent calls. Dashboard home opened with the copied test profile
+after restoring the normal connection-pool limits. Earlier reduced-pool
+workspace loading failed. Dashboard Usage was still loading at the last
+observation; the OpenScience Usage page showed HTTP 500. The exact server-side
+cause of that page error has not been established. These browser cases do not
+count as passing acceptance.
+
+Private commands, failures, redacted reconciliation and a local test guide are
+retained under the existing execution workspace (`supabase-local-*` and
+`supabase-staging/`). The first seed probe used a SQLite integer for a PostgreSQL
+boolean; the verification probe initially compared a JSON string to a native
+UUID and then used positional columns from the SQLite fixture. These test
+harness errors were corrected, the synthetic grant made idempotent, and the
+final complete PostgreSQL verification exited successfully. They were not
+product defects. No failed run is counted as a pass.
+
+The database diagnostic is complete, but normal-client latency and the browser
+page failures remain open. No Fly or production deployment was tested. All
+seven roadmap items remain Partial.
+
+## Local Supabase timeout fixes and browser follow-up — 2026-10-25
+
+This follow-up supersedes the open Usage/deadline failures above; the failed
+runs remain part of the record. Product fixes are local working-tree changes
+based on OpenScience `f5a858a6` and Dashboard `93b56986`. The Dashboard fixes
+are isolated on `codex/usage-read-timeouts`. The earlier green PR/CI runs cover
+their recorded commits, not these new fixes.
+
+Query profiling showed repeated access and funding reads across a slow database
+connection. Dashboard balance now reuses its resolved request-local billing
+context and existing aggregate spend query. Balance and model catalog share
+one connection with authentication. Workspace receipt/health scope uses one
+fresh membership/organization join. Authentication, active membership,
+workspace pins and server financial decisions remain authoritative. The
+existing telemetry authentication/connection ordering policy is preserved.
+
+OpenScience balance, managed pricing and logging health use the existing
+configurable account deadline (15 seconds by default). Pinned managed Usage
+reads go directly to the authoritative usage endpoint; legacy unscoped reads
+still resolve their workspace within the same deadline. Expiry returns HTTP
+503 with no-store, rather than HTTP 500. Dashboard organization Usage has one
+30-second attempt; other workspace reads retain their eight-second limits.
+A separately reproduced binary floating-point display artifact in the cents
+to dollars conversion is corrected with the existing decimal library. This
+changes displayed cost evidence, not Wallet settlement or recorded amounts.
+
+The final normal-client probe used no deadline override or diagnostic fetch
+extension. All selected reads passed:
+
+| Read                 | Result                           | Observed elapsed time |
+| -------------------- | -------------------------------- | --------------------- |
+| Auth status          | HTTP 200                         | 14,329 ms             |
+| Balance              | HTTP 200, available              | 11,260 ms             |
+| Model catalog        | HTTP 200, selected price present | 3,018 ms              |
+| Scoped task receipts | HTTP 200, available              | 4,725 ms              |
+| Logging health       | HTTP 200, available              | 7,143 ms              |
+
+The rebuilt native managed Usage endpoint returned HTTP 200 in 7,121 ms,
+with five calls and 7,039 tokens. The actual Dashboard Usage page loaded five
+requests and its model/member breakdown; its rounded Wallet total was
+USD 0.0007. The actual OpenScience Usage page also loaded five requests.
+The exact ledger/receipt total remains 706 microUSD, separate from provider
+cost USD 0.000666922. No additional inference was dispatched for these reads.
+
+Workspace bootstrap remains sensitive to slow responses: one account-context
+request took 11,314 ms and exceeded its unchanged eight-second limit. The
+normal Try again action succeeded in 3,950 ms, after which Usage loaded.
+One authentication SQL read itself took 7,788 ms. Network, pool and server
+execution contributions are not separated; these samples do not establish
+reliable latency under load or eliminate transient retry requirements.
+The original managed task used diagnostic waits. It has not been repeated
+with the new native client; the new evidence covers reads of the saved task.
+
+Verification of the timeout fixes: Dashboard backend 2,885 passed / 142 skipped;
+Dashboard frontend 435 passed, production build passed; affected OpenScience
+backend 647 passed / 2 skipped; SDK 31 passed; docs validation and 8 tests passed;
+all seven typechecks, SDK regeneration and native build passed. The decimal
+regression then failed with the observed long fraction and passed after the
+conversion fix (9 Usage tests). The final rebuilt native endpoint returned
+HTTP 200 in 7,172 ms with exact cost evidence `0.000706`. The five real-call
+links, scope checks and all six rollback-only Supabase faults also passed
+again against the final Dashboard code. Full logs, source-file hashes and the native
+binary hash remain in the private execution workspace. A fresh independent
+review found no actionable issues. These are local checks; CI for the new
+product fixes is still pending. No new full monolithic backend pass is claimed.
+
+Fly and production acceptance remain untested. All seven roadmap items stay
+Partial. No push, merge, production data change or release is included.
+
+## Per-call profiling follow-up — 2026-10-25
+
+A new opt-in Dashboard diagnostic profiles the actual account/Usage routes,
+authentication, database statements and pool lifecycle. It skips startup jobs
+and migrations and verifies read-only test connections after checkout/reset.
+It retains no SQL parameters, credential headers or response bodies. Its six
+regressions and the full Dashboard backend suite passed: 2,891 passed,
+142 skipped. The independent review's unfinished-cleanup finding was reproduced
+and fixed before completion.
+
+The final run recorded 55 HTTP-200 requests: first use, two warm passes,
+concurrency three and a separate local HTTP pass across eleven endpoints.
+Warm version probe and full sync took 8.65 and 9.61 seconds, with 13 and 15
+SQL statements respectively. Both endpoints share one 15-second client
+workflow deadline. A real native forced-sync probe with no override timed out
+after 15.03 seconds while the version request was still pending. A separate
+local HTTP full-sync request took 16.46 seconds. Concurrent workspace loading
+took 11.44 seconds and exceeded its eight-second bound.
+
+Warm small database round trips took about 0.5 seconds through the session
+pool, and 0.56–0.64 seconds through a separate direct connection. Five later
+EXPLAIN samples executed in 0.028–0.242 ms on the server. Driver, network and
+pooler contributions remain combined; these are not paired measurements.
+Setup/reset added roughly 1–2 seconds per warm request; several routes acquired
+two connections. Queue wait was at most 0.01 ms. New connections in the
+concurrent pass cost about 3.1 seconds each. These small test-branch samples
+do not establish production tail latency or an index/CPU bottleneck.
+
+Dashboard's `docs/ACCOUNT_READ_PROFILING.md` explains the reusable test, and
+`docs/ACCOUNT_READ_LATENCY_2026-10-25.md` records the full table, limitations
+and proposed work. Raw spans, plans, source hashes and native-client results
+remain in private local storage. Failed exploratory harness runs were retained;
+a read-only startup GUC alone was not accepted by the pooler, so the corrected
+setup explicitly sets and verifies it. No new paid model requests were made.
+The provider dispatch count remains five.
+
+This profiling task adds no product latency fix. Local acceptance remains
+partial due to the observed native sync and workspace limits. All seven
+roadmap items remain Partial; no release or production change occurred.
+
+## Resume candidate review and CI — 2026-10-25
+
+The user deferred further performance optimization to a separate feature
+branch and resumed the approved usage/tracking roadmap. No optimization was
+implemented after that instruction. The profiler, its six tests and detailed
+findings are retained on Dashboard branch `codex/account-read-performance`,
+commit `f8885d01c5ebaf0c1367313b0a34a3e292fb2300`; they are excluded from the
+usage candidate. The private raw report remains available without switching
+branches. The observed sync/workspace latency failures remain open.
+
+The Dashboard usage candidate is
+`dca54dfbc238b020316cfef81df3f285f6de3333` on
+`codex/usage-read-timeouts`, based directly on `origin/main`. Its six changed
+files contain the earlier account/Usage fixes and regression tests. A fresh
+independent review of both product candidates found no actionable issue.
+Fresh OpenScience checks passed: 647 affected backend tests / 2 skipped,
+all seven typechecks, formatting, 31 SDK tests, and docs validation plus 8 tests.
+The existing exact-source native build remains recorded above; the new commit
+metadata must not be confused with the version string of the running process.
+Product-only Dashboard checks and exact-candidate CI are being refreshed;
+the earlier 2,891-test total includes the six deferred profiler tests.
+
+This is a candidate update, not completion of the normal-client or production
+gates. All seven roadmap items remain Partial. No merge, release, production
+data mutation or additional paid inference is included.

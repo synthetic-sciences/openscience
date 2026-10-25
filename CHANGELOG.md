@@ -8,6 +8,9 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Use the account-read deadline for Ace balance, model prices and logging health. Show a temporary service error when managed Usage times out.
+- Preserve exact decimal Wallet amounts when converting managed Usage totals from cents to dollars.
+
 - Record failed OAuth structured-output usage once per model call, even when object validation fails after the stream ends.
 
 - Classify Ace calls as managed when a local Dashboard proxy handles them, so worker traces and logging health retain their Wallet route during local testing.

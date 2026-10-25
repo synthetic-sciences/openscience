@@ -91,7 +91,7 @@ export namespace LoggingHealth {
         Authorization: `Bearer ${session.api_key}`,
         ...(session.organization_id ? { "X-Organization-ID": session.organization_id } : {}),
       },
-      signal: AbortSignal.timeout(5_000),
+      signal: OpenScience.accountDeadline(),
       redirect: "error",
     }).catch(() => undefined)
     if (!response) return { state: "unavailable", reason: "server_unavailable" }

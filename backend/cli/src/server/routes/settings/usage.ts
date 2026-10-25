@@ -4,6 +4,7 @@ import { BillingImport } from "@/session/billing-import"
 import { Hono } from "hono"
 import { describeRoute, resolver, validator } from "hono-openapi"
 import z from "zod"
+import { Decimal } from "decimal.js"
 import { OpenScience } from "@/openscience"
 import { localUsage } from "@/session/usage"
 import { usageCost, usageCostLabels, usageDate, usageRange, usageModels } from "@synsci/util/usage"
@@ -144,7 +145,13 @@ export const UsageSettingsRoutes = lazy(() => {
       describeRoute({
         summary: `Get ${source} usage by day and model`,
         operationId: `settings.usage.${source}`,
-        responses: { 200: { description: "Usage", content: { "application/json": { schema: resolver(Result) } } } },
+        responses: {
+          200: { description: "Usage", content: { "application/json": { schema: resolver(Result) } } },
+          503: {
+            description: "Account read deadline expired",
+            content: { "text/plain": { schema: resolver(z.string()) } },
+          },
+        },
       }),
       validator("query", Query),
       async (c) => {
@@ -153,11 +160,15 @@ export const UsageSettingsRoutes = lazy(() => {
         const end = Date.parse(range.end) + 86_400_000
         c.header("Cache-Control", "no-store")
         if (source === "local") return c.json({ connected: true, rows: await localUsage(start, end) })
+        const deadline = OpenScience.accountDeadline(c.req.raw.signal)
         const result = await OpenScience.getUsage(
           new Date(start).toISOString(),
           new Date(end).toISOString(),
-          OpenScience.accountDeadline(c.req.raw.signal),
-        )
+          deadline,
+        ).catch((error) => {
+          if (!deadline.aborted || deadline.reason?.name !== "TimeoutError") throw error
+          throw new HTTPException(503, { message: deadline.reason.message })
+        })
         if (result === null) return c.json({ connected: false, rows: [] })
         const rows = Remote.parse(result)
           .daily_breakdown.filter((row) => row.route === "managed" && row.date >= range.start && row.date <= range.end)
@@ -174,7 +185,7 @@ export const UsageSettingsRoutes = lazy(() => {
             cacheWrite: row.cache_creation_tokens ?? 0,
             tokens: row.input_tokens + row.output_tokens,
             cost: row.cost_cents / 100,
-            costs: [usageCost("wallet_receipt", row.cost_cents / 100)],
+            costs: [usageCost("wallet_receipt", new Decimal(row.cost_cents).div(100).toFixed())],
           }))
         return c.json({
           connected: true,
