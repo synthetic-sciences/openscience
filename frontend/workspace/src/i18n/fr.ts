@@ -360,9 +360,9 @@ export const dict = {
   "error.chain.providerAuthFailed": "Échec de l'authentification du fournisseur ({{provider}}) : {{message}}",
   "error.chain.providerInitFailed":
     'Échec de l\'initialisation du fournisseur "{{provider}}". Vérifiez les identifiants et la configuration.',
-  "error.chain.configJsonInvalid": "Le fichier de configuration à {{path}} n'est pas un JSON(C) valide",
+  "error.chain.configJsonInvalid": "Le fichier de configuration à {{path}} n'est pas un JSON valide",
   "error.chain.configJsonInvalidWithMessage":
-    "Le fichier de configuration à {{path}} n'est pas un JSON(C) valide : {{message}}",
+    "Le fichier de configuration à {{path}} n'est pas un JSON valide : {{message}}",
   "error.chain.configDirectoryTypo":
     'Le répertoire "{{dir}}" dans {{path}} n\'est pas valide. Renommez le répertoire en "{{suggestion}}" ou supprimez-le. C\'est une faute de frappe courante.',
   "error.chain.configFrontmatterError": "Échec de l'analyse du frontmatter dans {{path}} :\n{{message}}",

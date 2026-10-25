@@ -361,9 +361,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Anbieter-Authentifizierung fehlgeschlagen ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Anbieter "{{provider}}" konnte nicht initialisiert werden. Überprüfen Sie Anmeldeinformationen und Konfiguration.',
-  "error.chain.configJsonInvalid": "Konfigurationsdatei unter {{path}} ist kein gültiges JSON(C)",
-  "error.chain.configJsonInvalidWithMessage":
-    "Konfigurationsdatei unter {{path}} ist kein gültiges JSON(C): {{message}}",
+  "error.chain.configJsonInvalid": "Konfigurationsdatei unter {{path}} ist kein gültiges JSON",
+  "error.chain.configJsonInvalidWithMessage": "Konfigurationsdatei unter {{path}} ist kein gültiges JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Verzeichnis "{{dir}}" in {{path}} ist ungültig. Benennen Sie das Verzeichnis in "{{suggestion}}" um oder entfernen Sie es. Dies ist ein häufiger Tippfehler.',
   "error.chain.configFrontmatterError": "Frontmatter in {{path}} konnte nicht geparst werden:\n{{message}}",

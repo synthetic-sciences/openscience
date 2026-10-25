@@ -356,9 +356,9 @@ export const dict = {
   "error.chain.providerAuthFailed": "Ошибка аутентификации провайдера ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Не удалось инициализировать провайдера "{{provider}}". Проверьте учётные данные и конфигурацию.',
-  "error.chain.configJsonInvalid": "Конфигурационный файл по адресу {{path}} не является валидным JSON(C)",
+  "error.chain.configJsonInvalid": "Конфигурационный файл по адресу {{path}} не является валидным JSON",
   "error.chain.configJsonInvalidWithMessage":
-    "Конфигурационный файл по адресу {{path}} не является валидным JSON(C): {{message}}",
+    "Конфигурационный файл по адресу {{path}} не является валидным JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Папка "{{dir}}" в {{path}} невалидна. Переименуйте папку в "{{suggestion}}" или удалите её. Это распространённая опечатка.',
   "error.chain.configFrontmatterError": "Не удалось разобрать frontmatter в {{path}}:\n{{message}}",

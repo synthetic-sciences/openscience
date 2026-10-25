@@ -354,8 +354,8 @@ export const dict = {
     'เซิร์ฟเวอร์ MCP "{{name}}" ล้มเหลว โปรดทราบว่า OpenScience ยังไม่รองรับการตรวจสอบสิทธิ์ MCP',
   "error.chain.providerAuthFailed": "การตรวจสอบสิทธิ์ผู้ให้บริการล้มเหลว ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": 'ไม่สามารถเริ่มต้นผู้ให้บริการ "{{provider}}" ตรวจสอบข้อมูลรับรองและการกำหนดค่า',
-  "error.chain.configJsonInvalid": "ไฟล์กำหนดค่าที่ {{path}} ไม่ใช่ JSON(C) ที่ถูกต้อง",
-  "error.chain.configJsonInvalidWithMessage": "ไฟล์กำหนดค่าที่ {{path}} ไม่ใช่ JSON(C) ที่ถูกต้อง: {{message}}",
+  "error.chain.configJsonInvalid": "ไฟล์กำหนดค่าที่ {{path}} ไม่ใช่ JSON ที่ถูกต้อง",
+  "error.chain.configJsonInvalidWithMessage": "ไฟล์กำหนดค่าที่ {{path}} ไม่ใช่ JSON ที่ถูกต้อง: {{message}}",
   "error.chain.configDirectoryTypo":
     'ไดเรกทอรี "{{dir}}" ใน {{path}} ไม่ถูกต้อง เปลี่ยนชื่อไดเรกทอรีเป็น "{{suggestion}}" หรือเอาออก นี่เป็นการสะกดผิดทั่วไป',
   "error.chain.configFrontmatterError": "ไม่สามารถแยกวิเคราะห์ frontmatter ใน {{path}}:\n{{message}}",

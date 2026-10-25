@@ -471,8 +471,8 @@ export const dict = {
   "error.chain.mcpFailed": 'MCP 服务器 "{{name}}" 启动失败。注意: OpenScience 暂不支持 MCP 认证。',
   "error.chain.providerAuthFailed": "提供商认证失败（{{provider}}）：{{message}}",
   "error.chain.providerInitFailed": '无法初始化提供商 "{{provider}}"。请检查凭据和配置。',
-  "error.chain.configJsonInvalid": "配置文件 {{path}} 不是有效的 JSON(C)",
-  "error.chain.configJsonInvalidWithMessage": "配置文件 {{path}} 不是有效的 JSON(C)：{{message}}",
+  "error.chain.configJsonInvalid": "配置文件 {{path}} 不是有效的 JSON",
+  "error.chain.configJsonInvalidWithMessage": "配置文件 {{path}} 不是有效的 JSON：{{message}}",
   "error.chain.configDirectoryTypo":
     '{{path}} 中的目录 "{{dir}}" 无效。请将目录重命名为 "{{suggestion}}" 或移除它。这是一个常见拼写错误。',
   "error.chain.configFrontmatterError": "无法解析 {{path}} 中的 frontmatter：\n{{message}}",

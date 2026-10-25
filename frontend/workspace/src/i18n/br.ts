@@ -352,9 +352,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Autenticação do provedor falhou ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Falha ao inicializar provedor "{{provider}}". Verifique credenciais e configuração.',
-  "error.chain.configJsonInvalid": "Arquivo de configuração em {{path}} não é um JSON(C) válido",
-  "error.chain.configJsonInvalidWithMessage":
-    "Arquivo de configuração em {{path}} não é um JSON(C) válido: {{message}}",
+  "error.chain.configJsonInvalid": "Arquivo de configuração em {{path}} não é um JSON válido",
+  "error.chain.configJsonInvalidWithMessage": "Arquivo de configuração em {{path}} não é um JSON válido: {{message}}",
   "error.chain.configDirectoryTypo":
     'Diretório "{{dir}}" em {{path}} não é válido. Renomeie o diretório para "{{suggestion}}" ou remova-o. Este é um erro de digitação comum.',
   "error.chain.configFrontmatterError": "Falha ao analisar frontmatter em {{path}}:\n{{message}}",

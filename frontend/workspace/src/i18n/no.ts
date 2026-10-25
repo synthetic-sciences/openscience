@@ -357,8 +357,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Leverandørautentisering mislyktes ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Kunne ikke initialisere leverandør "{{provider}}". Sjekk legitimasjon og konfigurasjon.',
-  "error.chain.configJsonInvalid": "Konfigurasjonsfilen på {{path}} er ikke gyldig JSON(C)",
-  "error.chain.configJsonInvalidWithMessage": "Konfigurasjonsfilen på {{path}} er ikke gyldig JSON(C): {{message}}",
+  "error.chain.configJsonInvalid": "Konfigurasjonsfilen på {{path}} er ikke gyldig JSON",
+  "error.chain.configJsonInvalidWithMessage": "Konfigurasjonsfilen på {{path}} er ikke gyldig JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Mappen "{{dir}}" i {{path}} er ikke gyldig. Gi mappen nytt navn til "{{suggestion}}" eller fjern den. Dette er en vanlig skrivefeil.',
   "error.chain.configFrontmatterError": "Kunne ikke analysere frontmatter i {{path}}:\n{{message}}",
