@@ -748,3 +748,36 @@ the management key and new account reports close that dependency. This does
 not close the seven roadmap checkboxes: fresh cross-service Ace/health work
 in Phase 2, release-candidate work in Phase 3, and hosted acceptance in Phase 4
 remain separate. No release, merge or production deployment is authorized.
+
+## Read-only amount-difference check (2026-10-25)
+
+A further check queried both existing generations, the same test API key's
+usage total, and Analytics for those exact generation IDs both separately and
+combined. No new inference was requested.
+
+| Source for the two test calls                                    | Reported total USD |
+| ---------------------------------------------------------------- | ------------------ |
+| Raw completion responses saved by OpenScience                    | 0.00000904         |
+| OpenRouter individual generation records, summed                 | 0.00000904         |
+| OpenRouter test API-key usage                                    | 0.00000904         |
+| OpenRouter Analytics `credits_usage`, per-generation rows summed | 0.000008           |
+| OpenRouter Analytics `credits_usage`, one combined query         | 0.000008           |
+
+Both generation lookups also agree with the saved native input/output counts
+(27/1 per call). The exact test-key usage total now agrees with both full
+provider amounts, unlike the earlier stale aggregate read. The lower values
+are already in the original Analytics JSON; OpenScience's importer and export
+preserve them without changing decimals.
+
+This isolates the difference to OpenRouter's Analytics reporting path. The
+observed values are consistent with loss of sub-microdollar precision there,
+but the exact conversion rule has not been confirmed. It does not establish
+a final invoice adjustment or a refund. For these two calls there is no amount
+loss in OpenScience: its stored values match the responses, generation records
+and key-usage total. No product-code change is indicated by this check.
+
+The original independent-report imports remain USD 0.000008 in total, since
+that is what their source returned. They are not rewritten to USD 0.00000904.
+Private read-only observations are retained in `amount-investigation.json`
+and the `private-amount-*.json` files in the execution workspace. Account-wide
+credit totals were not used to attribute these two calls and are not published.
