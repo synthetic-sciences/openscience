@@ -486,3 +486,87 @@ The record remained visible after page reload and disappeared after removal.
 This verifies the browser file input, request, persistence and removal path
 without a live provider key or Wallet charge. It does not verify an operating
 system file dialog, an independent provider invoice or the hosted release.
+
+## Phase 1 completion audit (2026-10-25)
+
+OpenScience source is pinned to `d720862157d146d52b6faae1e5aff9d3973ed918`
+(merged PR #1007). The earlier worktree tip `ec287fed` has the same tracked
+content. The Phase 1 branch is `codex/usage-tracking-phase1`. Dashboard's local
+HEAD is `93b56986a58d2e4121530ebb01a6cf4a8aa905f1`; its tracked tree is identical
+to `origin/main` at `0cc9b3ce7dfc633f120f04ad816cb06b318d67d7`. Both repositories
+were clean at the baseline. No production promotion, new paid inference, or
+production data mutation was performed for this audit.
+
+The real-run artifacts described above are still present. A fresh read-only
+comparison joined their local model-call records to stored server usage,
+provider request IDs, holds, usage rows and debit transactions. It covered
+**34 unique HTTP attempts: 28 completed, three failed, two cancelled and one
+pending**. All 28 completed calls have exact saved server projections for every
+reported token field and provider request ID. All eight managed calls have
+settled holds, exact native token vectors, and matching Wallet debit amounts.
+Identical records in a database backup are compared once, by stable usage ID;
+they are not treated as extra calls or fresh server deliveries.
+
+These are carried real-provider observations checked again against saved data,
+not new live-provider requests. The saved raw-field and generation comparisons
+remain separate evidence; this audit did not fetch a new provider invoice or
+repeat a raw-stream capture for every call.
+
+| Case                                                   | State               | Evidence and remaining limit                                                                                                                                                    |
+| ------------------------------------------------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ChatGPT sign-in/subscription                           | Verified locally    | Raw final usage and saved projection agree; costs remain unallocated subscription amounts.                                                                                      |
+| Direct BYOK                                            | Verified locally    | Native fields, explicit provider zero, two retained HTTP 400 failures and nonzero mixed-worker calls are retained. Independent billing evidence is missing.                     |
+| Managed Ace parent/worker                              | Verified locally    | Five calls, five exact settled holds/debits, provider comparisons and healthy saved scoped report.                                                                              |
+| Mixed Ace/BYOK delegation                              | Verified locally    | Three Ace receipts and two direct BYOK calls; no Wallet holds on the BYOK calls.                                                                                                |
+| Internal summaries and foreground/background Task work | Verified locally    | Stable root/child identity, completed summaries, parent notification and saved projections.                                                                                     |
+| Cancellation/process interruption                      | Verified locally    | Cancelled attempts have no fabricated usage; one older interrupted summary remains pending and health remains incomplete.                                                       |
+| Retries, compaction and local/custom routes            | Controlled coverage | Current tests cover retries and compaction; all six route labels have fixture coverage. This does not establish live-provider coverage for every label or provider combination. |
+| Independent provider billing                           | Missing             | No local export was found. OpenRouter's read-only activity API returned HTTP 403 with the configured key. Generation metadata is not substituted for a bill.                    |
+| Hosted receipt and logging health                      | Missing             | Last hosted checks returned HTTP 404. This phase does not authorize deployment or repeat hosted mutation checks.                                                                |
+
+### Redacted call inventory
+
+The short identifiers below are the first ten SHA-256 hexadecimal characters
+of the original identities; they allow correlation without publishing raw
+request, hold or ledger IDs. `I/O/R/CR/CW` means input/output/reasoning/cache-read/
+cache-write. `?` means unknown. `exact` means the persisted server projection
+matches the saved provider fields, not that every stream was observed again.
+Wallet amounts are ledger debits in micro-USD. A provider-reported BYOK zero or
+subscription coverage is not a zero Wallet receipt.
+
+| Audit               | Call hash  | Provider ID hash | Route   | Outcome   | I/O/R/CR/CW        | Server       | Hold hash  | Wallet outcome            | Ledger hash |
+| ------------------- | ---------- | ---------------- | ------- | --------- | ------------------ | ------------ | ---------- | ------------------------- | ----------- |
+| subscription-fields | 561809537c | 0238608fd1       | chatgpt | completed | 33/5/0/0/0         | exact        | —          | subscription; unallocated | —           |
+| subscription-worker | ca67489dbb | 9a82b63edd       | chatgpt | completed | 561/10/0/0/0       | exact        | —          | subscription; unallocated | —           |
+| subscription-worker | 589da7c0dc | ae0acceb85       | chatgpt | completed | 547/9/0/0/0        | exact        | —          | subscription; unallocated | —           |
+| subscription-worker | ea1ccb6a78 | 00373f728e       | chatgpt | completed | 4477/21/14/0/0     | exact        | —          | subscription; unallocated | —           |
+| subscription-worker | e0e2435fff | 94d09f6a0d       | chatgpt | completed | 1795/37/0/0/0      | exact        | —          | subscription; unallocated | —           |
+| subscription-worker | 08d99dd72e | d7fac6dd17       | chatgpt | completed | 1916/5/0/1664/0    | exact        | —          | subscription; unallocated | —           |
+| cancellation-first  | 54b59734dd | —                | chatgpt | cancelled | ?/?/?/?/?          | attempt only | —          | subscription; unallocated | —           |
+| cancellation-first  | 5273562a1c | —                | chatgpt | pending   | ?/?/?/?/?          | attempt only | —          | subscription; unallocated | —           |
+| cancellation        | 0aca52c272 | —                | chatgpt | cancelled | ?/?/?/?/?          | attempt only | —          | subscription; unallocated | —           |
+| cancellation        | cda2e9d84f | e56bed1415       | chatgpt | completed | 542/10/0/0/0       | exact        | —          | subscription; unallocated | —           |
+| background-worker   | 76584fb53b | ca25eb90c5       | chatgpt | completed | 567/8/0/0/0        | exact        | —          | subscription; unallocated | —           |
+| background-worker   | c7ec2e1816 | 829c421fb0       | chatgpt | completed | 1826/36/0/0/0      | exact        | —          | subscription; unallocated | —           |
+| background-worker   | dc347872f0 | 49faab1fdc       | chatgpt | completed | 542/9/0/0/0        | exact        | —          | subscription; unallocated | —           |
+| background-worker   | 4f6c7573fc | 781f4518fd       | chatgpt | completed | 2027/5/0/1664/0    | exact        | —          | subscription; unallocated | —           |
+| background-worker   | c0ce12dae7 | 1f9aea3f5b       | chatgpt | completed | 4475/24/17/0/0     | exact        | —          | subscription; unallocated | —           |
+| background-worker   | 906173a0d6 | 8547c8541f       | chatgpt | completed | 2114/5/0/1920/0    | exact        | —          | subscription; unallocated | —           |
+| subscription-BYOK   | bbc381bc56 | 247cc45f9f       | chatgpt | completed | 561/13/0/0/0       | exact        | —          | subscription; unallocated | —           |
+| subscription-BYOK   | e9315453b4 | —                | byok    | failed    | ?/?/?/?/?          | attempt only | —          | no Wallet hold            | —           |
+| subscription-BYOK   | eccdd560ea | d879308e4c       | byok    | completed | 1489/256/151/0/0   | exact        | —          | no Wallet hold            | —           |
+| subscription-BYOK   | 2d06395450 | b7409eb3f3       | chatgpt | completed | 1802/33/0/0/0      | exact        | —          | subscription; unallocated | —           |
+| subscription-BYOK   | baf43dab79 | c37be053f2       | chatgpt | completed | 2021/5/0/1664/0    | exact        | —          | subscription; unallocated | —           |
+| BYOK-fields         | 5968de2cda | 21a915e16d       | byok    | failed    | ?/?/?/?/?          | attempt only | —          | no Wallet hold            | —           |
+| BYOK-fields         | 2ae27b8f51 | 17e2a0308c       | byok    | failed    | ?/?/?/?/?          | attempt only | —          | no Wallet hold            | —           |
+| BYOK-fields         | d801f83aef | a1853b4a4b       | byok    | completed | 34/32/32/0/0       | exact        | —          | no Wallet hold            | —           |
+| Ace-worker          | 1876de5dc0 | ddc036bfc5       | managed | completed | 608/11/0/0/0       | exact        | b41dcd53cf | 700 µUSD                  | 93bbe41263  |
+| Ace-worker          | 852c827592 | 81f322cade       | managed | completed | 589/4/0/0/0        | exact        | fbbb2d9c76 | 643 µUSD                  | bae598728a  |
+| Ace-worker          | cb75d6d409 | 2f510080d2       | managed | completed | 1376/552/312/0/0   | exact        | 073b0a7fd1 | 224 µUSD                  | cde06f142e  |
+| Ace-worker          | 7e4c33d758 | 0414190ac3       | managed | completed | 2128/119/57/1024/0 | exact        | 370242f385 | 252 µUSD                  | 92f040b1bc  |
+| Ace-worker          | 19d14902e5 | c79d8a7aab       | managed | completed | 2593/28/24/2048/0  | exact        | a4ca74f999 | 136 µUSD                  | 8c02ec0fd7  |
+| Ace-BYOK            | 2ebc681c77 | 1b8ee66914       | managed | completed | 608/11/0/0/0       | exact        | 62296fa360 | 700 µUSD                  | 6637322d35  |
+| Ace-BYOK            | 5b92380a60 | 1525b920a8       | byok    | completed | 540/20/15/0/0      | exact        | —          | no Wallet hold            | —           |
+| Ace-BYOK            | 9105299a4d | a4c8081484       | byok    | completed | 1392/128/128/0/0   | exact        | —          | no Wallet hold            | —           |
+| Ace-BYOK            | eb3193fa3b | b7471df389       | managed | completed | 2140/113/51/1024/0 | exact        | 48d8627597 | 251 µUSD                  | 3db20f5fe3  |
+| Ace-BYOK            | 44545adc07 | ded26162da       | managed | completed | 2363/45/42/2048/0  | exact        | 0ed2035c88 | 107 µUSD                  | 167672a0cc  |
