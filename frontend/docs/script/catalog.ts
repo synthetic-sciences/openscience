@@ -4,6 +4,7 @@ import { capabilityManifests } from "../../../backend/cli/src/science/capability
 import { coreManifests } from "../../../backend/cli/src/science/capability/manifests/core"
 import { bioNemoManifests } from "../../../backend/cli/src/science/capability/manifests/bionemo"
 import { MANAGED_OPENROUTER_MODELS, MANAGED_MODEL_DETAILS } from "../../../backend/cli/src/provider/managed-catalog"
+import { skillPath } from "./skill-paths"
 
 const root = path.resolve(import.meta.dir, "../../..")
 const content = path.join(root, "frontend/docs/src/content/openscience")
@@ -29,7 +30,9 @@ const labels: Record<string, string> = {
   general: "General",
 }
 
-for (const file of Array.from(new Bun.Glob("**/SKILL.md").scanSync({ cwd: skills })).sort()) {
+for (const file of Array.from(new Bun.Glob("**/SKILL.md").scanSync({ cwd: skills }))
+  .map(skillPath)
+  .sort()) {
   const source = await Bun.file(path.join(skills, file)).text()
   const frontmatter = source.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? ""
   const metadata = Bun.YAML.parse(frontmatter) as Record<string, unknown>
