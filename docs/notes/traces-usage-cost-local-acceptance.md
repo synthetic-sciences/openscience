@@ -570,3 +570,57 @@ subscription coverage is not a zero Wallet receipt.
 | Ace-BYOK            | 9105299a4d | a4c8081484       | byok    | completed | 1392/128/128/0/0   | exact        | —          | no Wallet hold            | —           |
 | Ace-BYOK            | eb3193fa3b | b7471df389       | managed | completed | 2140/113/51/1024/0 | exact        | 48d8627597 | 251 µUSD                  | 3db20f5fe3  |
 | Ace-BYOK            | 44545adc07 | ded26162da       | managed | completed | 2363/45/42/2048/0  | exact        | 0ed2035c88 | 107 µUSD                  | 167672a0cc  |
+
+### Fresh Phase 1 verification
+
+All commands used pinned Bun 1.3.14, an environment with provider credentials
+removed, and test-controlled data roots. The following are new runs against
+`d7208621`, rather than reused test totals:
+
+| Check                                                | Command / result                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Focused trace/billing/database/Task tests            | From `backend/cli`: `bun test --timeout 15000 ./test/session/billing-import.test.ts ./test/session/model-call-trace.test.ts ./test/session/trace-queue.test.ts ./test/session/usage-logging.test.ts ./test/session/usage-accounting.test.ts ./test/session/logging-health.test.ts ./test/session/trace-database.test.ts ./test/storage/database.test.ts ./test/storage/migration-damaged-record.test.ts ./test/tool/task-attempt-process.test.ts` — 127 passed, zero failed. |
+| Adjacent provider/receipt/data-root/stats/API checks | Eight discovered files across provider cache writes, OpenRouter cache usage, call audit, receipts, managed data root, CLI data-root scope/stats, and settings usage — 116 passed, one Windows-only skip, zero failed.                                                                                                                                                                                                                                                        |
+| Relevant backend directories                         | From `backend/cli`: `bun test --timeout 15000 ./test/session ./test/storage ./test/provider ./test/cli ./test/global` — 1,653 passed, three skipped, zero failed.                                                                                                                                                                                                                                                                                                            |
+| Workspace unit tests                                 | `bun run test:workspace` — 1,237 passed, zero failed.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Typecheck                                            | `bun run typecheck` — seven packages passed through Turbo cache.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Native build                                         | `bun run build --single` — exited 0; output `backend/cli/dist/@synsci/openscience-linux-x64/bin/openscience`. Existing CSS build warnings remain.                                                                                                                                                                                                                                                                                                                            |
+| Billing browser file input                           | `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/google-chrome-stable bun run --cwd frontend/workspace test:e2e -- billing-imports.spec.ts` — one passed against its isolated local server.                                                                                                                                                                                                                                                                                     |
+| Copied real Task replay                              | Copied schema-7 database plus project metadata; two identical Task replays retained two HTTP calls and two sessions, returned the saved result, and made no new calls. No credentials were copied and network dispatch was forbidden.                                                                                                                                                                                                                                        |
+| Queue acknowledgement after restart                  | Three separate Bun processes dispatched, replayed, then acknowledged the earlier delivery. The event ID stayed stable: one stored event, one delivered count, zero queued events.                                                                                                                                                                                                                                                                                            |
+| Copied nonzero billing records                       | Reimporting the two saved generation-derived records twice retained two unique matches and exact decimal amounts `0.000216704` and `0.00007256` USD. This proves local idempotent matching, not independent billing.                                                                                                                                                                                                                                                         |
+
+The broader backend skips were the fully reparented token-helper daemon test,
+the opt-in live models.dev catalog test, and the native Windows junction test.
+They are not claimed as verified on this Linux host. The original subscription
+audit database's SHA-256 stayed unchanged during copied-data verification.
+No product defect was found in these checks and no product code changed.
+
+Existing behavior assertions used for the spec include dispatch-before-network,
+separate retry identities, failed/cancelled attempts without fabricated usage,
+nullable provider counts, lost-ack receiver deduplication, all six route labels,
+in-flight opt-out, raw partial reasoning, atomic legacy import, rollback,
+concurrent writes, deletion history, explicit ambiguous recovery, and schema-6
+Task migration. `Usage.component.test.ts` checks separate cost sources and CSV;
+`UsageLogging.component.test.ts` checks incomplete coverage and old-server
+unavailability. The fresh cross-process queue probe adds direct restart evidence
+to the existing deduplication and concurrent-producer assertions.
+
+### Phase 1 result and remaining dependency
+
+Task 1 (baseline and route inventory) and Task 3 (current regression checks)
+are complete. Task 2 has functional import coverage, but remains **pending**:
+there is no independent nonzero billing source with a unique request identity.
+The configured key returned HTTP 403 from the read-only activity query for
+2026-10-20; the [OpenRouter activity API](https://openrouter.ai/docs/api/api-reference/analytics/get-user-activity)
+requires a management key. No management key was created and no permission was
+changed. The user has been asked for an existing export path or read-only source.
+Aggregate billing without request identity must remain unmatched.
+
+Phase 1 as a whole is therefore **partial**, not complete. None of the seven
+roadmap items is marked shipped from these local results. Phase 2 has not started;
+hosted release and deployment remain unauthorized. Command logs, the read-only
+comparison script, copied-data probes and original-input hash are retained under
+`.superpowers/sdd/2026-10-25-usage-tracking-completion/` in this worktree. The
+private `/tmp/roadmap-*` artifacts remain local and may be lost on cleanup; only
+the redacted result and inventory above are durable repository evidence.
