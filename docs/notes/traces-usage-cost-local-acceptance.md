@@ -12,18 +12,20 @@ retain the exact versions and fixture scope of each historical check. Live
 subscription, BYOK and Ace evidence supplements those fixtures; local Wallet
 receipts do not establish the hosted release.
 
-| Item                             | Current evidence                                                                                                                                                                                            | Open acceptance                                                  |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks                                                             | Hosted Ace verification and wider route/provider coverage        |
-| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending                                                                   | Release acceptance on deployed versions                          |
-| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                                                                                | Release acceptance on deployed versions                          |
-| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts                                                                  | Hosted receipt endpoint currently returns 404                    |
-| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation; isolated Chrome file-input import, reload and removal pass | Hosted release and independent provider invoice evidence         |
-| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                                                                                   | Release acceptance                                               |
-| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches                                                          | Hosted health endpoint currently returns 404; release acceptance |
+| Item                             | Current evidence                                                                                                                                                                                                                                                                | Open acceptance                                                  |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks                                                                                                                                 | Hosted Ace verification and wider route/provider coverage        |
+| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending                                                                                                                                       | Release acceptance on deployed versions                          |
+| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                                                                                                                                                    | Release acceptance on deployed versions                          |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts                                                                                                                                      | Hosted receipt endpoint currently returns 404                    |
+| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation; isolated Chrome file-input import, reload and removal pass; independent account Analytics now matches two unique nonzero calls | Hosted release acceptance                                        |
+| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                                                                                                                                                       | Release acceptance                                               |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches                                                                                                                              | Hosted health endpoint currently returns 404; release acceptance |
 
-Provider invoice exports would add independent billing evidence. No item is marked
-released solely on local tests. Current post-schema-7 checks include 90 broader
+Independent billing evidence now includes two authenticated account Analytics records,
+queried by exact generation ID and imported without changing their reported amounts.
+This is an account report, not an invoice or a settled Wallet receipt. No item is
+marked released solely on local tests. Current post-schema-7 checks include 90 broader
 storage/trace/receipt/billing tests and 72 data-root/storage-route tests (one
 skipped). No production promotion has been performed.
 
@@ -84,8 +86,8 @@ credentials are kept separately and are not included in this note.
 
 - Real hosted-provider/route/worker runs with returned usage compared against
   local evidence, consented server evidence and actual charge receipts.
-- Actual BYOK billing exports or a read-only billing account, including native
-  export conversion and reconciliation acceptance.
+- Independent BYOK account-report import and reconciliation now pass locally;
+  the hosted release still needs acceptance.
 - Hosted rollout and verification at the deployed versions. Local checks do
   not prove that these commits are running on a hosted service.
 
@@ -616,7 +618,7 @@ Task migration. `Usage.component.test.ts` checks separate cost sources and CSV;
 unavailability. The fresh cross-process queue probe adds direct restart evidence
 to the existing deduplication and concurrent-producer assertions.
 
-### Phase 1 result and remaining dependency
+### Phase 1 result before management-key access
 
 Task 1 (baseline and route inventory) and Task 3 (current regression checks)
 are complete. Task 2 has functional import coverage, but remains **pending**:
@@ -662,3 +664,87 @@ or a mismatch. A website export or account analytics record containing this
 request identity and its charge is still needed. The private raw observation,
 request guard and saved call are under the data root named by
 `.superpowers/sdd/2026-10-25-usage-tracking-completion/fresh-account-root`.
+
+## Independent account billing and second test round (2026-10-25)
+
+The supplied management key passed `GET /api/v1/analytics/meta` with HTTP 200.
+Read-only `POST /api/v1/analytics/query` calls then retrieved account-side
+`credits_usage` for each real test generation. Each query used an exact
+`generation_id` filter, `generation_id` and `model` dimensions, a bounded UTC
+time range, and minute granularity. Each returned one row with `request_count`
+1 and `truncated: false`. The returned `created_at__minute` bucket was retained
+as the source date, normalized to ISO 8601 UTC; it is not represented as an
+exact request timestamp. Raw responses remain private and unchanged.
+
+| Call hash    | Generation hash | Provider-response USD | Account-reported credits usage USD | Account minus provider USD |
+| ------------ | --------------- | --------------------- | ---------------------------------- | -------------------------- |
+| `8f13038d39` | `6338bac521`    | `0.00000452`          | `0.000004`                         | `-0.00000052`              |
+| `b7bc62d3f0` | `b977d1ba82`    | `0.00000452`          | `0.000004`                         | `-0.00000052`              |
+
+Source response SHA-256 values are
+`24077e74371c09c4784377edf1f3c7d53849e3c329e37ad65b6e63a2ba00d6a3` and
+`5065c398a3f4dad4531a40c14a9c9e01fe1e997f0ec32c36b8b15d680aa44d77`. The source contains a positive account-reported credits
+amount for each unique request. It is independent of the completion response
+and the generation metadata lookup. The reason for the sub-microdollar
+source difference was not established. No rounding rule, refund, charge
+correction, or final invoice amount is inferred from it.
+
+The first document passed the real Settings Usage import/export API in a
+copied database. It matched one real call, retained exact source decimals,
+deduplicated reimport, exported match status, and removed imported evidence
+without changing the provider record. No model request was made while testing
+the importer. This supplies the independent nonzero read-only account evidence
+allowed by spec §5; it does not claim an invoice export.
+
+At the user's request, a second bounded real Qwen call then returned `OK`.
+It again retained 27 input, one output, zero reasoning, zero cache-read and
+zero cache-write tokens, and USD 0.00000452 in both the raw response and local
+call. It has a different HTTP and provider generation identity. Original
+first-round artifacts were preserved, and a new disposable data root was used.
+No hosted Dashboard deployment or production Wallet mutation was involved.
+
+The two real records were normalized into one billing document and exercised
+through fresh copied data in a second test round:
+
+- Two separate Bun processes verified save/reopen persistence, exact unique
+  matching, duplicate and overlapping imports, atomic HTTP 409 conflicts,
+  deliberately ambiguous account labels, removal of that collision, and
+  removal without losing shared imported records or provider evidence.
+- The resulting Qwen row retained **provider reported USD 0.00000904** and
+  **imported billing USD 0.000008** separately, with two model calls. The
+  two equal-cost account records matched two distinct call IDs; matching did
+  not use their amounts as identities.
+- An isolated Chrome test selected the actual two-record normalized document
+  through Settings Usage's file input. The browser showed **2 matched / 0
+  unmatched / 0 ambiguous**, kept both source totals separate, deduplicated
+  repeat file selection, exported two unique reconciled calls, retained the
+  records after page reload, and removed the import without changing provider
+  totals. The source data copy was supplied to the existing isolated E2E
+  harness; all provider credentials were omitted from the browser/server test.
+- Fresh focused backend checks passed **101 tests across seven files**, zero
+  failures. They cover billing imports, usage accounting, model-call tracing,
+  trace queue, usage logging, receipts and Settings Usage. The actual-document
+  browser test passed **one test**. Earlier in this continuation, the billing/
+  accounting/Settings tests passed 48 tests and the existing synthetic-file
+  browser test also passed. These overlapping runs are not added together as
+  a count of unique tests.
+
+Private evidence and probes are retained in the execution workspace:
+`account-billing-query.py`, `private-account-billing.json`,
+`second-account-billing.json`, `two-account-records.json`,
+`account-billing-import.log`, `second-import.log`,
+`second-round-regressions.log`, `second-real-browser.log`,
+`second-browser-export.json` and `second-browser.png`. The temporary browser
+spec was archived as `second-browser.spec.ts` and removed from the source test
+directory after execution. The raw reports and local credential file are not
+committed. No product code changed.
+
+### Current Phase 1 result
+
+**Phase 1 is complete for the approved plan's Tasks 1–3.** Baseline inventory,
+independent billing evidence and the regression checks now have local evidence.
+The earlier missing-source and HTTP 403 notes remain historical observations;
+the management key and new account reports close that dependency. This does
+not close the seven roadmap checkboxes: fresh cross-service Ace/health work
+in Phase 2, release-candidate work in Phase 3, and hosted acceptance in Phase 4
+remain separate. No release, merge or production deployment is authorized.
