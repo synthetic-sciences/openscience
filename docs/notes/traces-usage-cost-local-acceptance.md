@@ -745,9 +745,9 @@ committed. No product code changed.
 independent billing evidence and the regression checks now have local evidence.
 The earlier missing-source and HTTP 403 notes remain historical observations;
 the management key and new account reports close that dependency. This does
-not close the seven roadmap checkboxes: fresh cross-service Ace/health work
-in Phase 2, release-candidate work in Phase 3, and hosted acceptance in Phase 4
-remain separate. No release, merge or production deployment is authorized.
+not close the seven roadmap checkboxes. The subsequent Phase 2 result is
+recorded below; release-candidate and hosted checks remain separate. No release,
+merge or production deployment is authorized.
 
 ## Read-only amount-difference check (2026-10-25)
 
@@ -781,3 +781,111 @@ that is what their source returned. They are not rewritten to USD 0.00000904.
 Private read-only observations are retained in `amount-investigation.json`
 and the `private-amount-*.json` files in the execution workspace. Account-wide
 credit totals were not used to attribute these two calls and are not published.
+
+## Account CSV and displayed cost (2026-10-25)
+
+The user's original `openrouter_activity_2026-10-25.csv` contains exactly the
+two test generation IDs, each with 27 input, one output, zero reasoning and
+zero cached tokens. Its `cost_total` is USD 0.000004 per call, matching the
+Analytics account records. The OpenRouter activity screenshot shows USD
+0.00000452 per call, matching the raw responses, generation records and local
+records. The CSV SHA-256 is
+`8fd95a7a1c5a74125c29378147280443b00abb736f0a629a404567483c6955f5`.
+The file was read without modification and remains outside Git.
+
+The user accepted the USD 0.00000104 total difference for this verification.
+This does not authorize discarding provider precision or using a tolerance to
+change charges or refunds. Both source amounts remain separate. Truncation to
+six decimal places would explain the exported values, but the upstream method
+is unconfirmed.
+
+## Phase 2 cross-service local acceptance (2026-10-25)
+
+OpenScience source remains at merged baseline `d720862157d146d52b6faae1e5aff9d3973ed918`
+(evidence branch parent `aaf3e414`); Dashboard runs source `93b56986a58d2e4121530ebb01a6cf4a8aa905f1`.
+The Dashboard tree is identical to its recorded merged `origin/main` baseline.
+No product code changed for this phase.
+
+A separate loopback Dashboard API used a new disposable SQLite database,
+account, workspace-pinned API key, USD 1 of synthetic local promotional credit,
+and disabled auto reload. OpenScience used a consistent backup of the earlier
+disposable research database. Source-file hashes remained unchanged. Neither
+the user's original data nor production Wallet was used. The real upstream
+key was passed only to the isolated Dashboard process. Provider requests were
+limited to Qwen 3.8 Flash, 512 output tokens, eight requests and a conservative
+USD 0.02 aggregate input/output bound; Dashboard's reviewed upstream price
+filter remained active. Five requests ran, below the bound.
+
+The live parent selected the Task tool once. Its managed worker completed;
+the parent finished. The two sessions retained five completed managed HTTP
+calls, including internal work. Each raw response matched the local provider
+generation identity, six-field usage vector and provider cost. Read-only
+OpenRouter generation lookups independently matched all five costs and native
+input/output/reasoning counters. The local call, unique server usage projection,
+managed call link, hold, exact usage receipt and Wallet debit were joined for
+every call. The five settled receipts total **858 microUSD (USD 0.000858)**.
+Their separate provider costs total **USD 0.000812082**.
+
+| Call ID SHA-256 prefix | Session         | Provider request SHA-256 prefix | Input | Output | Reasoning | Cache read | Cache write | Provider USD | Settled microUSD |
+| ---------------------- | --------------- | ------------------------------- | ----- | ------ | --------- | ---------- | ----------- | ------------ | ---------------- |
+| c74ab8f948             | Parent/internal | c92bc409e3                      | 581   | 8      | 0         | 512        | 0           | 0.000022302  | 24               |
+| cefb14e77e             | Worker          | 545c015786                      | 564   | 4      | 0         | 512        | 0           | 0.000017872  | 19               |
+| 6e5b6f87ca             | Worker/internal | 4b6b069190                      | 1454  | 237    | 0         | 0          | 0           | 0.00032949   | 348              |
+| 2f65f4cc1a             | Parent/internal | c657296dc1                      | 2096  | 59     | 0         | 0          | 0           | 0.00034213   | 361              |
+| 53929f5fbb             | Parent/internal | b9ce47210f                      | 2495  | 1      | 0         | 2048       | 0           | 0.000100288  | 106              |
+
+The health response reported five dispatched/completed calls, five responses,
+five projections and five settled holds. Pending calls/holds, missing links,
+token mismatches and charge mismatches were all zero. The device queue was
+empty. Turning sharing off retained identical scoped receipts and their exact
+total; delivered event counts did not increase during that receipt lookup.
+
+Faults were injected one at a time into another database copy, then rolled
+back. The healthy baseline returned after each rollback:
+
+| Fault                         | Observed status | Exact diagnostic                     |
+| ----------------------------- | --------------- | ------------------------------------ |
+| One missing usage projection  | attention       | `usage.missing_projection = 1`       |
+| One rejected delivery receipt | attention       | `receipts.anomalous = 1`             |
+| One pending, unsettled hold   | incomplete      | `managed.pending = 1`                |
+| One accepted receipt only     | attention       | `receipts.receipt_only = 1`          |
+| One different input count     | attention       | `managed.token_mismatch = 1`         |
+| One different charge amount   | attention       | `managed.charge_amount_mismatch = 1` |
+
+Pending and inconsistent calls returned four settled receipts plus an explicit
+non-settled state for the fifth, without a fabricated zero charge. A released
+hold returned `not_charged` and no receipt. A pending hold with a contradictory
+settled usage row correctly returned `inconsistent`. Account, workspace and
+device scope changes returned no unrelated evidence. Route tests additionally
+checked authentication, suspended membership and pinned credentials.
+
+Verification commands, with full private logs in the execution workspace:
+
+- OpenScience `bun test --timeout 15000 ./test/session/task-receipts.test.ts
+./test/session/logging-health.test.ts ./test/session/usage-logging.test.ts`:
+  **48 passed**, zero failed.
+- Dashboard `.venv/bin/python -m pytest tests/test_call_receipts_route.py
+tests/test_call_receipts_service.py tests/test_logging_health_route.py
+tests/test_logging_health_service.py tests/test_logging_health_audit.py -q`:
+  **38 passed**, zero failed; 24 existing UTC datetime deprecation warnings.
+- Dashboard PostgreSQL health, managed recovery, settlement, token-correction
+  and Wallet concurrency files: **28 passed**, zero failed/skipped, against a
+  separate disposable pgvector/PostgreSQL 16 container, removed after testing.
+- Workspace receipt and logging-health components plus receipt page tests:
+  **17 passed**, zero failed. These counts cover distinct suites; they do not
+  include earlier overlapping Phase 1 checks.
+- `phase2-verify.py`: raw/local/server field comparisons, exact receipt/debit
+  sums, opt-out, source preservation, six isolated faults and scope checks pass.
+
+Two initial harness runs stopped before upstream dispatch: one used unsupported
+client routing options, and one had a test monthly limit below the reservation.
+Both retained their failed attempts, had zero upstream usage rows, and remain
+private. The successful run used a fresh account/database after correcting
+those test settings. No product behavior was changed to make the audit pass.
+
+This verifies the SQLite cross-service path and real PostgreSQL adapter
+contracts. It does not test hosted Supabase authentication, deployment settings
+or deployed routes. Server health still cannot observe rejection before a
+receipt is stored; historical unscoped receipts cannot be assigned to a guessed
+workspace. Phase 2 is complete locally. Roadmap items #4 and #7 remain Partial
+until separately authorized hosted acceptance.
