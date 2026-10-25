@@ -889,3 +889,53 @@ or deployed routes. Server health still cannot observe rejection before a
 receipt is stored; historical unscoped receipts cannot be assigned to a guessed
 workspace. Phase 2 is complete locally. Roadmap items #4 and #7 remain Partial
 until separately authorized hosted acceptance.
+
+## Phase 3 local candidate checks (2026-10-25)
+
+Both remotes were fetched again. OpenScience `origin/main` remains `d7208621`;
+Dashboard `origin/main` remains `0cc9b3ce`, with the local `93b56986` tree
+identical to it. The OpenScience review branch changes this acceptance note
+only. Dashboard has no candidate code diff. SDK regeneration, user-facing
+changelog entries and package version changes are not applicable.
+
+A fresh read-only reviewer checked `d7208621..5fd06202`, independently joined
+all five generation/raw/local/server/hold/receipt/debit records, and found no
+actionable issue. Its review confirms the evidence boundary; it does not
+certify hosted behavior or an upstream invoice conversion rule.
+
+The local commands ran on `5fd06202` with unchanged product source:
+
+| Check                                                         | Result                                                                                                      |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `bun run check` formatting and typecheck stages               | Passed; seven successful cached typecheck tasks                                                             |
+| `bun run check` backend stage                                 | **5,211 passed, 66 skipped, two failed**; the command exited 1 and did not run its later stages             |
+| Separate `./test/project` process with Bash                   | **91 passed, one platform skip, zero failed**                                                               |
+| `bun run test:ui`                                             | **386 passed**, zero failed                                                                                 |
+| `bun run test:workspace`                                      | **1,237 passed**, zero failed                                                                               |
+| `bun run test:sdk`                                            | **31 passed**, zero failed                                                                                  |
+| `bun run test:docs`                                           | **8 passed**; 70 pages, 981 links, 17 JSON examples and nine TypeScript examples validated                  |
+| `bun run build --single`                                      | Passed; workspace bundle and Linux x64 executable built; `--version` returned the local development version |
+| Dashboard `.venv/bin/python -m pytest tests/ -q --timeout=30` | **2,880 passed, 142 skipped**, zero failed; existing datetime deprecation warnings remain                   |
+| Dashboard SQLite/PostgreSQL migration parity                  | All **103 tables** matched                                                                                  |
+| Dashboard `npm test -- --run`                                 | **433 passed**, zero failed                                                                                 |
+| Dashboard `npm run build`                                     | Passed TypeScript, production build, UI-copy and distribution checks                                        |
+
+The two monolithic backend failures are retained, not reported as a green
+`bun run check`. `AuthoritySignal.watch`'s own-settled-burst test passes alone;
+the monolithic run supplied older shared authority state and a resync that
+its assertion did not expect. `tooling/repo/test-shards.ts` already declares
+the entire project group isolated from other multiprocess groups in Deep CI.
+The terminal test also failed in isolation under the inherited Zsh setup,
+which points `ZDOTDIR` at the user's interactive configuration. Running the
+whole project group in its own process with Bash and without that override
+passed both cases. No test assertion or product path was weakened or changed.
+The remaining check stages were run separately because the aggregate command
+stops at its failed backend stage. The isolated results overlap the aggregate
+run and must not be added as unique-test totals.
+
+The native build embeds artifact source `5fd06202ee3b329e211ae83d1d9a22266c383533`;
+it is a local development artifact, not a publication. Both tracked trees
+remained clean after the builds. Full command outputs and the independent
+review record remain in the ignored execution workspace. PR checks and Deep
+CI must establish the exact final documentation commit before Phase 3 is
+closed. No merge, deployment or release is included in this phase.
