@@ -590,6 +590,16 @@ removed, and test-controlled data roots. The following are new runs against
 | Queue acknowledgement after restart                  | Three separate Bun processes dispatched, replayed, then acknowledged the earlier delivery. The event ID stayed stable: one stored event, one delivered count, zero queued events.                                                                                                                                                                                                                                                                                            |
 | Copied nonzero billing records                       | Reimporting the two saved generation-derived records twice retained two unique matches and exact decimal amounts `0.000216704` and `0.00007256` USD. This proves local idempotent matching, not independent billing.                                                                                                                                                                                                                                                         |
 
+The final independent review requested a fresh combined privacy/receipt check.
+A disposable local probe captured a context before opt-out, disabled sharing,
+and attempted to record through that stale context on all six route labels.
+It observed zero telemetry requests and zero queued payloads. While sharing
+remained off, the same account made one authenticated, workspace-pinned receipt
+request and received the exact `123` micro-USD synthetic fixture receipt.
+This closes the combined assertion without claiming a new real charge or hosted
+acceptance. The probe is retained as `privacy-receipt.ts` and its output as
+`privacy-receipt.log` in the execution workspace.
+
 The broader backend skips were the fully reparented token-helper daemon test,
 the opt-in live models.dev catalog test, and the native Windows junction test.
 They are not claimed as verified on this Linux host. The original subscription
