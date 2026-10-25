@@ -634,3 +634,31 @@ comparison script, copied-data probes and original-input hash are retained under
 `.superpowers/sdd/2026-10-25-usage-tracking-completion/` in this worktree. The
 private `/tmp/roadmap-*` artifacts remain local and may be lost on cleanup; only
 the redacted result and inventory above are durable repository evidence.
+
+## Fresh-account test key acceptance (2026-10-25)
+
+The newly supplied direct OpenRouter test key passed a read-only authentication
+check. A separate local data root then completed one bounded
+`qwen/qwen3.8-flash` request through OpenScience's real LLM and durable attempt
+path. The answer was `OK`. Raw provider usage and the saved call agree on
+27 input, one output, 28 total, zero reasoning, zero cache-read and zero
+cache-write tokens. The provider request identity matches, and the exact
+provider-reported amount is **USD 0.00000452** (call hash `8f13038d39`).
+The request had a 32-token output cap, no tools or retries, disabled provider
+fallbacks, and explicit prompt/completion price caps. No production account
+trace or managed Wallet charge is claimed from this signed-out local audit.
+
+Two earlier `openai/gpt-4.1-nano` HTTP 404 attempts remain stored as failed with
+unknown usage and cost. A deprecated-model selection was rejected locally
+before dispatch and is not counted as an HTTP attempt. The new audit database
+therefore contains three HTTP attempts, with one completed. No failed record
+was cleared to obtain that result. The existing 34-call inventory above keeps
+its original scope and does not include this new isolated account.
+
+Independent request-level billing remains pending. The management key is still
+absent, and the first post-call aggregate key-usage read had not yet reflected
+the small provider amount. This is not treated as proof of either a zero bill
+or a mismatch. A website export or account analytics record containing this
+request identity and its charge is still needed. The private raw observation,
+request guard and saved call are under the data root named by
+`.superpowers/sdd/2026-10-25-usage-tracking-completion/fresh-account-root`.
