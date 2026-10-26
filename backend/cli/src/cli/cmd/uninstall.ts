@@ -9,6 +9,7 @@ import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import { cmd } from "./cmd"
+import { Reason } from "../../util/reason"
 
 interface UninstallArgs {
   keepConfig?: boolean
@@ -215,7 +216,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     const err = await fs.rm(dir.path, { recursive: true, force: true }).catch((e) => e)
     if (err) {
       spinner.stop(`Failed to remove ${dir.label}`, 1)
-      errors.push(`${dir.label}: ${err.message}`)
+      errors.push(`${dir.label}: ${Reason.of(err)}`)
       continue
     }
     spinner.stop(`Removed ${dir.label}`)
@@ -226,7 +227,7 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     const err = await cleanShellConfig(targets.shellConfig).catch((e) => e)
     if (err) {
       spinner.stop("Failed to clean shell config", 1)
-      errors.push(`Shell config: ${err.message}`)
+      errors.push(`Shell config: ${Reason.of(err)}`)
     } else {
       spinner.stop("Cleaned shell config")
     }
