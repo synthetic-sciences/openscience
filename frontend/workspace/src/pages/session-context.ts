@@ -47,8 +47,15 @@ export function usageSample(messages: Message[]): ContextSample | undefined {
 
 export function latestContext(messages: Message[], live?: ContextEstimate): ContextSample | undefined {
   const last = settled(messages)
-  const composition = live?.composition && (!last || last.id <= live.after) ? { composition: live.composition } : {}
-  if (live && (!last || last.id < live.after)) return { total: live.total, source: "estimate", ...composition }
+  const saved = findLast(messages, (message) => message.role === "assistant" && Boolean(message.contextComposition))
+  const snapshot =
+    saved?.role === "assistant" && saved.contextComposition && (!last || saved.id >= last.id)
+      ? { total: saved.contextComposition.total, after: saved.id, composition: saved.contextComposition }
+      : undefined
+  const current = live && (!snapshot || live.after > snapshot.after) ? live : snapshot
+  const composition =
+    current?.composition && (!last || last.id <= current.after) ? { composition: current.composition } : {}
+  if (current && (!last || last.id < current.after)) return { total: current.total, source: "estimate", ...composition }
   const reported = sample(last)
   return reported ? { ...reported, ...composition } : undefined
 }

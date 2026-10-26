@@ -1,110 +1,78 @@
-import { For, Show, createMemo } from "solid-js"
-import type { StepFinishPart } from "@synsci/sdk/v2/client"
-import { sessionCostFormatter } from "./session-usage"
+import { For, Show } from "solid-js"
+import type { SessionReceiptsResponses, StepFinishPart } from "@synsci/sdk/v2/client"
+import { walletAmount } from "./session-usage"
 
-const labels = {
-  subscription: "Subscription covered",
-  provider_response: "Provider reported",
-  wallet_calculated: "Ace calculated · not a settled receipt",
-  catalog_estimate: "Catalog estimate",
-  unknown: "Unknown",
-  recorded_unclassified: "Historical accounting · basis unknown",
-}
-
-export function SessionCallUsage(props: { steps: StepFinishPart[]; locale: string }) {
-  const usd = createMemo(() => sessionCostFormatter(props.locale))
+export function SessionCallUsage(props: {
+  steps: StepFinishPart[]
+  locale: string
+  report?: SessionReceiptsResponses[200]
+}) {
   const number = (value: number | null | undefined) => (value == null ? "Unknown" : value.toLocaleString(props.locale))
-  const totals = createMemo(() => {
-    return (["provider_response", "wallet_calculated", "catalog_estimate"] as const).flatMap((source) => {
-      const values = props.steps.filter((step) => step.usage?.cost?.source === source)
-      if (!values.length) return []
-      const known = values.filter((step) => step.usage?.cost?.amountUSD != null)
-      return [
-        {
-          source,
-          amount: known.reduce((sum, step) => sum + (step.usage?.cost?.amountUSD ?? 0), 0),
-          complete: known.length === values.length,
-        },
-      ]
-    })
-  })
-
+  const charge = (step: StepFinishPart) => {
+    const report = props.report
+    if (!report) return "Not checked"
+    if (report.state !== "available") return "Unavailable"
+    const call = report.calls.find((call) => call.call_id === step.usage?.call)
+    if (!call) return "Unknown"
+    if (call.state === "pending") return "Pending"
+    if (call.state === "not_charged") return "No charge"
+    if (call.state !== "settled") return "Unknown"
+    const receipt = report.receipts.find(
+      (receipt) =>
+        receipt.receipt_id === call.receipt_id &&
+        receipt.hold_id === call.hold_id &&
+        receipt.hold_id === step.usage?.hold,
+    )
+    return receipt ? walletAmount(receipt.charged_microusd) : "Unknown"
+  }
   return (
     <Show when={props.steps.length > 0}>
       <section class="context-panel__section" aria-label="Model call usage">
         <h3 class="context-panel__title">Model call usage</h3>
-        <p class="context-panel__note">
-          Calls recorded in this session. Workers have their own sessions. Unknown means the provider did not report a
-          field or the older record did not preserve it. Cost categories are separate; none confirms a settled Ace
-          charge.
-        </p>
-        <For each={totals()}>
-          {(total) => (
-            <p>
-              {labels[total.source]}: {usd().format(total.amount)}
-              {total.complete ? "" : " (partial)"}
-            </p>
-          )}
-        </For>
-        <div style={{ "overflow-x": "auto" }}>
-          <table class="context-panel__calls">
-            <caption class="context-panel__note">Provider token counts and cost basis for each completed step</caption>
-            <thead>
-              <tr>
-                <th scope="col">Route / model</th>
-                <th scope="col">Input</th>
-                <th scope="col">Output</th>
-                <th scope="col">Reasoning</th>
-                <th scope="col">Cache read</th>
-                <th scope="col">Cache write</th>
-                <th scope="col">Cost</th>
-                <th scope="col">Call / Ace hold</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For each={props.steps}>
-                {(step) => {
-                  const source = () =>
-                    step.usage?.route === "chatgpt" || step.usage?.route === "subscription"
-                      ? "subscription"
-                      : (step.usage?.cost?.source ?? "recorded_unclassified")
-                  const amount = () =>
-                    source() === "subscription" ? null : step.usage?.cost ? step.usage.cost.amountUSD : step.cost
-                  return (
-                    <tr>
-                      <td>
-                        {step.usage?.route ?? "Unknown"}
-                        <br />
-                        {step.usage?.model ?? "Unknown"}
-                      </td>
-                      <td>{number(step.usage?.reported?.input_tokens)}</td>
-                      <td>{number(step.usage?.reported?.output_tokens)}</td>
-                      <td>{number(step.usage?.reported?.reasoning_tokens)}</td>
-                      <td>{number(step.usage?.reported?.cached_input_tokens)}</td>
-                      <td>{number(step.usage?.reported?.cache_creation_input_tokens)}</td>
-                      <td>
-                        {labels[source()]}
-                        <Show when={amount() != null}>
-                          <br />
-                          {usd().format(amount()!)}
-                        </Show>
-                        <Show when={step.usage?.reportedCostUSD != null && source() !== "provider_response"}>
-                          <br />
-                          Provider reported: {usd().format(step.usage!.reportedCostUSD!)}
-                        </Show>
-                      </td>
-                      <td>
-                        {step.usage?.call ?? "Unknown"}
-                        <br />
-                        {step.usage?.hold ?? "No hold recorded"}
-                      </td>
-                    </tr>
-                  )
-                }}
-              </For>
-            </tbody>
-          </table>
-        </div>
+        <table class="context-panel__calls">
+          <caption class="context-panel__note">This session · Wallet deductions only</caption>
+          <thead>
+            <tr>
+              <th scope="col">Model</th>
+              <th scope="col">Tokens</th>
+              <th scope="col">Wallet cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <For each={props.steps}>
+              {(step) => (
+                <tr>
+                  <td>
+                    {step.usage?.model ?? "Unknown"}
+                    <details class="context-panel__call-details">
+                      <summary>Details</summary>
+                      <dl>
+                        <dt>Route</dt>
+                        <dd>{step.usage?.route ?? "Unknown"}</dd>
+                        <dt>Reasoning</dt>
+                        <dd>{number(step.usage?.reported?.reasoning_tokens)}</dd>
+                        <dt>Cache read</dt>
+                        <dd>{number(step.usage?.reported?.cached_input_tokens)}</dd>
+                        <dt>Cache write</dt>
+                        <dd>{number(step.usage?.reported?.cache_creation_input_tokens)}</dd>
+                        <dt>Call</dt>
+                        <dd>{step.usage?.call ?? "Unknown"}</dd>
+                        <dt>Hold</dt>
+                        <dd>{step.usage?.hold ?? "Unknown"}</dd>
+                      </dl>
+                    </details>
+                  </td>
+                  <td>
+                    {number(step.usage?.reported?.input_tokens)} in
+                    <br />
+                    {number(step.usage?.reported?.output_tokens)} out
+                  </td>
+                  <td>{charge(step)}</td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
       </section>
     </Show>
   )

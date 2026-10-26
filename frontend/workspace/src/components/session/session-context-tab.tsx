@@ -1,4 +1,5 @@
 import { createMemo, createEffect, on, onCleanup, For, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
 import { useSDK } from "@/context/sdk"
@@ -13,11 +14,11 @@ import { Accordion } from "@synsci/ui/accordion"
 import { StickyAccordionHeader } from "@synsci/ui/sticky-accordion-header"
 import { Code } from "@synsci/ui/code"
 import { Markdown } from "@synsci/ui/markdown"
-import type { AssistantMessage, Message, Part, UserMessage } from "@synsci/sdk/v2/client"
+import type { AssistantMessage, Message, Part, UserMessage, SessionReceiptsResponses } from "@synsci/sdk/v2/client"
 import { useLanguage } from "@/context/language"
 import { contextWindow } from "@/pages/session-context"
 import { SessionCallUsage } from "./session-call-usage"
-import { sessionCost, sessionCostFormatter, sessionProviderLabel } from "./session-usage"
+import { sessionCost, sessionProviderLabel } from "./session-usage"
 import {
   CONTEXT_BUCKET_COLORS,
   contextComposition,
@@ -44,13 +45,12 @@ export function SessionContextTab(props: SessionContextTabProps) {
   const sync = useSync()
   const sdk = useSDK()
   const language = useLanguage()
-
-  const usd = createMemo(() => sessionCostFormatter(language.locale()))
+  const [settlement, setSettlement] = createStore<{ report?: SessionReceiptsResponses[200] }>({})
 
   const ctx = createMemo(() => {
     const last = findLast(props.messages(), (x) => {
       if (x.role !== "assistant") return false
-      return TokenUsage.total(x.tokens) > 0
+      return TokenUsage.total(x.tokens) > 0 || (props.estimate === true && !x.summary)
     }) as AssistantMessage
     if (!last) return
 
@@ -61,7 +61,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
     const window = contextWindow(props.messages(), model)
     const reported = TokenUsage.total(last.tokens)
     const total = props.total ?? reported
-    const usage = window.window ? Math.round((total / window.window) * 100) : null
+    const usage = window.window ? (total / window.window) * 100 : null
 
     return {
       message: last,
@@ -81,8 +81,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
     }
   })
 
+  const tokens = createMemo(() =>
+    props
+      .messages()
+      .reduce((total, message) => total + (message.role === "assistant" ? TokenUsage.total(message.tokens) : 0), 0),
+  )
+
   const cost = createMemo(() => {
-    return usd().format(sessionCost(props.messages(), sync.data.part).total)
+    return sessionCost(props.messages(), sync.data.part).total
   })
 
   const counts = createMemo(() => {
@@ -151,13 +157,15 @@ export function SessionContextTab(props: SessionContextTabProps) {
       assistant: language.t("context.breakdown.assistant"),
       tool: language.t("context.breakdown.tool"),
     }
-    return contextSegments(
-      contextComposition(props.messages(), sync.data.part, call).map((entry) => ({
+    return contextSegments([
+      { key: "system", label: "System instructions", tokens: undefined },
+      { key: "definitions", label: "Tool definitions", tokens: undefined },
+      ...contextComposition(props.messages(), sync.data.part, call).map((entry) => ({
         key: entry.key,
         label: labels[entry.key],
         tokens: entry.tokens,
       })),
-    )
+    ])
   })
 
   const level = createMemo(() => {
@@ -166,6 +174,11 @@ export function SessionContextTab(props: SessionContextTabProps) {
     if (usage >= 85) return "high"
     return undefined
   })
+
+  const percentage = () =>
+    new Intl.NumberFormat(language.locale(), { style: "percent", maximumFractionDigits: 2 }).format(
+      (ctx()?.usage ?? 0) / 100,
+    )
 
   function RawMessageContent(msgProps: { message: Message }) {
     const file = createMemo(() => {
@@ -265,7 +278,8 @@ export function SessionContextTab(props: SessionContextTabProps) {
       }}
       onScroll={handleScroll}
     >
-      <header class="context-panel__headline">
+      <section class="context-panel__headline" aria-label="Context window">
+        <h3 class="context-panel__title">Context window</h3>
         <div class="context-panel__tokens">
           <strong>{compact(ctx()?.total)}</strong>
           <span>
@@ -275,14 +289,14 @@ export function SessionContextTab(props: SessionContextTabProps) {
           </span>
           <Show when={ctx()?.usage !== null && ctx()?.usage !== undefined}>
             <span class="context-panel__percent" data-level={level()}>
-              {ctx()?.usage}%
+              {percentage()}
             </span>
           </Show>
         </div>
         <div
           class="context-panel__bar"
           role="img"
-          aria-label={`${number(ctx()?.total)} ${language.t("context.headline.tokens")}, ${ctx()?.usage ?? 0}%`}
+          aria-label={`${number(ctx()?.total)} ${language.t("context.headline.tokens")}, ${percentage()}`}
         >
           <For each={segments().filter((segment) => segment.share > 0)}>
             {(segment) => (
@@ -295,15 +309,7 @@ export function SessionContextTab(props: SessionContextTabProps) {
             )}
           </For>
         </div>
-        <div class="context-panel__subline">
-          <span>{modelLabel()}</span>
-          <span>{providerLabel()}</span>
-          <Show when={ctx()?.capped && ctx()?.full}>
-            <span>{language.t("context.headline.cap", { full: compact(ctx()?.full) })}</span>
-          </Show>
-          <span>{props.estimate ? language.t("context.usage.estimate") : language.t("context.headline.reported")}</span>
-        </div>
-      </header>
+      </section>
 
       <Show when={segments().length > 0}>
         <section class="context-panel__section" aria-label={language.t("context.section.composition")}>
@@ -324,25 +330,24 @@ export function SessionContextTab(props: SessionContextTabProps) {
               )}
             </For>
           </ul>
-          <p class="context-panel__note">
-            {props.composition
-              ? language.t("context.composition.recordedNote")
-              : language.t("context.composition.note")}
-          </p>
+          <p class="context-panel__note">Estimated text breakdown</p>
         </section>
       </Show>
 
-      <SessionCallUsage
-        steps={props
-          .messages()
-          .flatMap((message) => (sync.data.part[message.id] ?? []).filter((part) => part.type === "step-finish"))}
-        locale={language.locale()}
-      />
+      <section class="context-panel__headline" aria-label="Tokens used">
+        <h3 class="context-panel__title">Tokens used</h3>
+        <div class="context-panel__tokens">
+          <strong>{number(tokens())}</strong>
+        </div>
+        <p class="context-panel__note">This session</p>
+      </section>
 
       <Show when={params.id}>
         {(sessionID) => (
           <TaskReceipts
             sessionID={sessionID()}
+            onReport={(report) => setSettlement("report", report)}
+            version={`${tokens()}:${cost()}:${counts().all}`}
             load={async () => {
               const result = await sdk.client.session.receipts({ sessionID: sessionID() })
               if (!result.data) throw new Error("Receipt lookup failed")
@@ -352,74 +357,104 @@ export function SessionContextTab(props: SessionContextTabProps) {
         )}
       </Show>
 
-      <div class="context-panel__cards">
-        <section class="context-panel__card" aria-label={language.t("context.section.lastRequest")}>
-          <h3 class="context-panel__title">{language.t("context.section.lastRequest")}</h3>
-          <dl>
-            <dt>{language.t("context.stats.inputTokens")}</dt>
-            <dd>{ctx()?.input == null ? "Unknown" : number(ctx()?.input)}</dd>
-            <dt>{language.t("context.stats.cacheRead")}</dt>
-            <dd>{ctx()?.cacheRead == null ? "Unknown" : number(ctx()?.cacheRead)}</dd>
-            <dt>{language.t("context.stats.cacheWrite")}</dt>
-            <dd>{ctx()?.cacheWrite == null ? "Unknown" : number(ctx()?.cacheWrite)}</dd>
-            <dt>{language.t("context.stats.outputTokens")}</dt>
-            <dd>{ctx()?.output == null ? "Unknown" : number(ctx()?.output)}</dd>
-            <dt>{language.t("context.stats.reasoningTokens")}</dt>
-            <dd>{ctx()?.reasoning == null ? "Unknown" : number(ctx()?.reasoning)}</dd>
-            <dt>{language.t("context.stats.limit")}</dt>
-            <dd>
-              {number(ctx()?.window)}
+      <details class="context-panel__details">
+        <summary>Technical details</summary>
+        <div>
+          <header class="context-panel__headline">
+            <div class="context-panel__subline">
+              <span>{modelLabel()}</span>
+              <span>{providerLabel()}</span>
               <Show when={ctx()?.capped && ctx()?.full}>
-                <small>/ {number(ctx()?.full)}</small>
+                <span>{language.t("context.headline.cap", { full: compact(ctx()?.full) })}</span>
               </Show>
-            </dd>
-          </dl>
-        </section>
-        <section class="context-panel__card" aria-label={language.t("context.section.session")}>
-          <h3 class="context-panel__title">{language.t("context.section.session")}</h3>
-          <dl>
-            <dt>{language.t("context.stats.messages")}</dt>
-            <dd>
-              {number(counts().all)}
-              <small>
-                {language.t("context.stats.messagesDetail", {
-                  user: number(counts().user),
-                  assistant: number(counts().assistant),
-                })}
-              </small>
-            </dd>
-            <dt>Recorded accounting total</dt>
-            <dd>{cost()}</dd>
-            <dt>{language.t("context.stats.sessionCreated")}</dt>
-            <dd>{time(props.info()?.time.created)}</dd>
-            <dt>{language.t("context.stats.lastActivity")}</dt>
-            <dd>{time(ctx()?.message.time.created)}</dd>
-          </dl>
-        </section>
-      </div>
+              <span>
+                {props.estimate ? language.t("context.usage.estimate") : language.t("context.headline.reported")}
+              </span>
+            </div>
+          </header>
 
-      <Show when={systemPrompt()}>
-        {(prompt) => (
+          <p class="context-panel__note">
+            {props.composition
+              ? language.t("context.composition.recordedNote")
+              : language.t("context.composition.note")}
+          </p>
+
+          <SessionCallUsage
+            steps={props
+              .messages()
+              .flatMap((message) => (sync.data.part[message.id] ?? []).filter((part) => part.type === "step-finish"))}
+            report={settlement.report}
+            locale={language.locale()}
+          />
+
+          <div class="context-panel__cards">
+            <section class="context-panel__card" aria-label={language.t("context.section.lastRequest")}>
+              <h3 class="context-panel__title">{language.t("context.section.lastRequest")}</h3>
+              <dl>
+                <dt>{language.t("context.stats.inputTokens")}</dt>
+                <dd>{ctx()?.input == null ? "Unknown" : number(ctx()?.input)}</dd>
+                <dt>{language.t("context.stats.cacheRead")}</dt>
+                <dd>{ctx()?.cacheRead == null ? "Unknown" : number(ctx()?.cacheRead)}</dd>
+                <dt>{language.t("context.stats.cacheWrite")}</dt>
+                <dd>{ctx()?.cacheWrite == null ? "Unknown" : number(ctx()?.cacheWrite)}</dd>
+                <dt>{language.t("context.stats.outputTokens")}</dt>
+                <dd>{ctx()?.output == null ? "Unknown" : number(ctx()?.output)}</dd>
+                <dt>{language.t("context.stats.reasoningTokens")}</dt>
+                <dd>{ctx()?.reasoning == null ? "Unknown" : number(ctx()?.reasoning)}</dd>
+                <dt>{language.t("context.stats.limit")}</dt>
+                <dd>
+                  {number(ctx()?.window)}
+                  <Show when={ctx()?.capped && ctx()?.full}>
+                    <small>/ {number(ctx()?.full)}</small>
+                  </Show>
+                </dd>
+              </dl>
+            </section>
+            <section class="context-panel__card" aria-label={language.t("context.section.session")}>
+              <h3 class="context-panel__title">{language.t("context.section.session")}</h3>
+              <dl>
+                <dt>{language.t("context.stats.messages")}</dt>
+                <dd>
+                  {number(counts().all)}
+                  <small>
+                    {language.t("context.stats.messagesDetail", {
+                      user: number(counts().user),
+                      assistant: number(counts().assistant),
+                    })}
+                  </small>
+                </dd>
+                <dt>{language.t("context.stats.sessionCreated")}</dt>
+                <dd>{time(props.info()?.time.created)}</dd>
+                <dt>{language.t("context.stats.lastActivity")}</dt>
+                <dd>{time(ctx()?.message.time.created)}</dd>
+              </dl>
+            </section>
+          </div>
+
+          <Show when={systemPrompt()}>
+            {(prompt) => (
+              <details class="context-panel__details">
+                <summary>{language.t("context.composition.instructions")}</summary>
+                <div>
+                  <div class="context-panel__instructions">
+                    <Markdown text={prompt()} class="text-12-regular" />
+                  </div>
+                </div>
+              </details>
+            )}
+          </Show>
+
           <details class="context-panel__details">
-            <summary>{language.t("context.composition.instructions")}</summary>
+            <summary>
+              {language.t("context.rawMessages.title")}
+              <small>{number(counts().all)}</small>
+            </summary>
             <div>
-              <div class="context-panel__instructions">
-                <Markdown text={prompt()} class="text-12-regular" />
-              </div>
+              <Accordion multiple>
+                <For each={props.messages()}>{(message) => <RawMessage message={message} />}</For>
+              </Accordion>
             </div>
           </details>
-        )}
-      </Show>
-
-      <details class="context-panel__details">
-        <summary>
-          {language.t("context.rawMessages.title")}
-          <small>{number(counts().all)}</small>
-        </summary>
-        <div>
-          <Accordion multiple>
-            <For each={props.messages()}>{(message) => <RawMessage message={message} />}</For>
-          </Accordion>
         </div>
       </details>
     </div>

@@ -19,6 +19,7 @@ describe("session.telemetry.recordContext", () => {
           sessionID: "ses_ctx",
           composition: {
             system: 1,
+            definitions: 8,
             text: 2,
             reasoning: 3,
             tool: 4,
@@ -26,20 +27,20 @@ describe("session.telemetry.recordContext", () => {
             image: 6,
             images: 1,
             document: 7,
-            total: 28,
+            total: 36,
           },
-          budget: { total: 30, newest: 20, history: 10, usable: 100, soft: 70, hard: 90 },
+          budget: { total: 38, newest: 20, history: 10, usable: 100, soft: 70, hard: 90 },
         })
         expect(seen).toEqual([
           {
             sessionID: "ses_ctx",
-            tokens: { system: 1, text: 2, reasoning: 3, tool: 4, skills: 5, image: 6, document: 7 },
+            tokens: { system: 1, definitions: 8, text: 2, reasoning: 3, tool: 4, skills: 5, image: 6, document: 7 },
             images: 1,
-            total: 28,
-            budget: { total: 30, newest: 20, history: 10, usable: 100, soft: 70, hard: 90 },
+            total: 36,
+            budget: { total: 38, newest: 20, history: 10, usable: 100, soft: 70, hard: 90 },
           },
         ])
-        expect(SessionTelemetry.context("ses_ctx")).toMatchObject({ total: 30, hard: 90, composition: { total: 28 } })
+        expect(SessionTelemetry.context("ses_ctx")).toMatchObject({ total: 38, hard: 90, composition: { total: 36 } })
         expect(Object.values(seen[0].tokens).reduce((sum: number, value) => sum + Number(value), 0)).toBe(seen[0].total)
       },
     })

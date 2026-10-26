@@ -1,7 +1,7 @@
 import { afterAll, afterEach, expect, test } from "bun:test"
 import { fileURLToPath } from "node:url"
 import solid from "vite-plugin-solid"
-import type { StepFinishPart } from "@synsci/sdk/v2/client"
+import type { SessionReceiptsResponses, StepFinishPart } from "@synsci/sdk/v2/client"
 import { createTestServer } from "../../../test/vite"
 
 const vite = await createTestServer({
@@ -44,10 +44,10 @@ const usage = (cost?: NonNullable<StepFinishPart["usage"]>["cost"]): NonNullable
   },
   cost,
 })
-function mount(steps: StepFinishPart[]) {
+function mount(steps: StepFinishPart[], report?: SessionReceiptsResponses[200]) {
   const host = document.createElement("div")
   document.body.append(host)
-  cleanups.push(web.render(() => subject.SessionCallUsage({ steps, locale: "en-US" }), host))
+  cleanups.push(web.render(() => subject.SessionCallUsage({ steps, locale: "en-US", report }), host))
   return host
 }
 afterAll(() => vite.close())
@@ -56,43 +56,71 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-test("per-call counts preserve known zero and show omitted dimensions as unknown", () => {
-  const host = mount([step("known", usage())])
-  const cells = [...host.querySelectorAll("tbody td")].map((cell) => cell.textContent)
-  expect(cells.slice(1, 6)).toEqual(["12", "2", "Unknown", "0", "Unknown"])
-  expect(cells[0]).toContain("byok")
-  expect(cells[0]).toContain("fixture-model")
+test("the compact call list retains counts and identities in collapsed details", () => {
+  const host = mount([step("known", { ...usage(), call: "call-known", hold: "hold-known" })])
+  const cells = [...host.querySelectorAll("tbody td")]
+  expect(cells).toHaveLength(3)
+  expect(cells[0].textContent).toContain("fixture-model")
+  expect(cells[1].textContent).toContain("12 in")
+  expect(cells[1].textContent).toContain("2 out")
+  const details = cells[0].querySelector("details")!
+  expect(details).not.toBeNull()
+  expect(details.open).toBe(false)
+  expect([...details.querySelectorAll("dd")].map((cell) => cell.textContent)).toEqual([
+    "byok",
+    "Unknown",
+    "0",
+    "Unknown",
+    "call-known",
+    "hold-known",
+  ])
+  details.querySelector("summary")!.click()
+  expect(details.open).toBe(true)
 })
 
-test("provider charges, estimates and calculated Ace costs have separate subtotals and call identities", () => {
-  const host = mount([
-    step("provider", usage({ source: "provider_response", amountUSD: 0.01 })),
-    step("estimate", usage({ source: "catalog_estimate", amountUSD: 0.02 })),
-    step("ace", {
-      ...usage({ source: "wallet_calculated", amountUSD: 0.03 }),
-      route: "managed",
-      call: "call-ace",
-      hold: "hold-ace",
-    }),
-  ])
-  expect(host.textContent).toContain("Provider reported: $0.01")
-  expect(host.textContent).toContain("Catalog estimate: $0.02")
-  expect(host.textContent).toContain("Ace calculated · not a settled receipt: $0.03")
-  expect(host.textContent).not.toContain("$0.06")
-  expect(host.querySelector("tbody tr:last-child")?.textContent).toContain("call-ace")
-  expect(host.querySelector("tbody tr:last-child")?.textContent).toContain("hold-ace")
+const receiptReport = (): SessionReceiptsResponses[200] => ({
+  rootSessionID: "session",
+  sessions: 1,
+  managedCalls: 1,
+  missingCallIDs: 0,
+  state: "available",
+  chargedMicrousd: "362",
+  calls: [{ call_id: "call-ace", state: "settled", receipt_id: "receipt-ace", hold_id: "hold-ace" }],
+  receipts: [
+    {
+      receipt_id: "receipt-ace",
+      hold_id: "hold-ace",
+      charged_microusd: "362",
+      settled_at: "2026-10-25T00:00:00Z",
+      provider: "openrouter",
+      model: "fixture-model",
+    },
+  ],
+})
+const managed = () =>
+  step("ace", {
+    ...usage({ source: "wallet_calculated", amountUSD: 0.99 }),
+    route: "managed",
+    call: "call-ace",
+    hold: "hold-ace",
+    reportedCostUSD: 0.88,
+  })
+
+test("the call cost comes only from a matching settled Wallet receipt", () => {
+  const host = mount([managed()], receiptReport())
+  expect(host.querySelector("tbody td:last-child")!.textContent).toBe("USD 0.000362")
+  expect(host.textContent).not.toContain("$0.99")
+  expect(host.textContent).not.toContain("$0.88")
+  expect(host.textContent).not.toContain("Ace calculated")
+  expect(host.textContent).not.toContain("Provider reported")
 })
 
-test("historical subscription zeros and unknown costs are not presented as free calls", () => {
-  const host = mount([
-    step("subscription", { ...usage(), route: "chatgpt" }),
-    step("unknown", usage({ source: "unknown", amountUSD: null })),
-    step("legacy"),
-  ])
-  const rows = [...host.querySelectorAll("tbody tr")]
-  expect(rows[0].textContent).toContain("Subscription covered")
-  expect(rows[0].textContent).not.toContain("$0.00")
-  expect(rows[1].textContent).not.toContain("$0.00")
-  expect(rows[2].textContent).toContain("Historical accounting · basis unknown")
-  expect(rows[2].querySelectorAll("td")[1].textContent).toBe("Unknown")
+test("unchecked, pending and mismatched receipt costs are never shown as charges", () => {
+  const unchecked = mount([managed()])
+  expect(unchecked.querySelector("tbody td:last-child")!.textContent).toBe("Not checked")
+  const report = receiptReport()
+  const pending = mount([managed()], { ...report, calls: [{ ...report.calls[0]!, state: "pending" }] })
+  expect(pending.querySelector("tbody td:last-child")!.textContent).toBe("Pending")
+  const mismatched = mount([managed()], { ...report, receipts: [{ ...report.receipts[0]!, hold_id: "other-hold" }] })
+  expect(mismatched.querySelector("tbody td:last-child")!.textContent).toBe("Unknown")
 })

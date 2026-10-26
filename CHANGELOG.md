@@ -8,6 +8,10 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Save estimated system-instruction and tool-definition counts with each model call so the context breakdown survives a page reload.
+
+- Simplify the task context panel with a visible context bar and text breakdown, session tokens and exact Wallet deductions; collapse charge identities and technical details.
+
 - Use the account-read deadline for Ace balance, model prices and logging health. Show a temporary service error when managed Usage times out.
 - Preserve exact decimal Wallet amounts when converting managed Usage totals from cents to dollars.
 

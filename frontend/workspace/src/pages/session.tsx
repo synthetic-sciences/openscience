@@ -599,7 +599,7 @@ export default function Page(): JSX.Element {
     // is shown as its own "Tool definitions" bucket so the breakdown reconciles.
     const composed = event.properties.total
     const assembled = event.properties.budget?.total ?? composed
-    const definitions = Math.max(0, assembled - composed)
+    const definitions = event.properties.tokens.definitions ?? Math.max(0, assembled - composed)
     setEstimates((current) => ({
       ...current,
       [id]: estimate(stored, assembled, {

@@ -15,6 +15,7 @@ const vite = await createTestServer({
   ssr: { noExternal: true, resolve: { conditions: ["browser", "production"] } },
 })
 const web = (await vite.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
+const solidjs = (await vite.ssrLoadModule("solid-js")) as typeof import("solid-js")
 const subject = (await vite.ssrLoadModule(
   "/src/components/session/task-receipts.tsx",
 )) as typeof import("./task-receipts")
@@ -42,10 +43,22 @@ const report = (): SessionReceiptsResponses[200] => ({
     },
   ],
 })
-function mount(load: () => Promise<SessionReceiptsResponses[200]>) {
+function mount(load: () => Promise<SessionReceiptsResponses[200]>, version?: () => string) {
   const host = document.createElement("div")
   document.body.append(host)
-  cleanups.push(web.render(() => subject.TaskReceipts({ sessionID: "session", load }), host))
+  cleanups.push(
+    web.render(
+      () =>
+        subject.TaskReceipts({
+          sessionID: "session",
+          load,
+          get version() {
+            return version?.()
+          },
+        }),
+      host,
+    ),
+  )
   return host
 }
 async function click(host: HTMLElement) {
@@ -121,4 +134,47 @@ test("an explicit settled zero is shown as evidence rather than a missing amount
   expect(host.textContent).toContain("Settled receipts subtotal: USD 0.000000")
   expect(host.textContent).not.toContain("No settled receipts available")
   expect(host.textContent).not.toContain("This subtotal is incomplete")
+})
+
+test("the cost summary shows only checked Wallet charges", async () => {
+  const host = mount(async () => report())
+  const summary = () => host.querySelector('[aria-label="Cost so far"]')!
+  expect(summary().textContent).toContain("Not checked")
+  expect(summary().textContent).not.toContain("Estimated")
+  await click(host)
+  expect(summary().textContent).toContain("USD 0.000001")
+  expect(summary().textContent).not.toContain("$0.000432")
+  expect(summary().textContent).toContain("Some charges are not final")
+})
+
+test("receipt identities are available in collapsed details while incomplete costs stay visible", async () => {
+  const host = mount(async () => report())
+  await click(host)
+  const receipt = [...host.querySelectorAll("li")].find((item) => item.textContent?.includes("Receipt receipt"))!
+  const details = receipt.closest("details")!
+  expect(details).not.toBeNull()
+  expect(details.open).toBe(false)
+  const warning = [...host.querySelectorAll('[role="status"]')].find((item) =>
+    item.textContent?.includes("Some charges are not final"),
+  )!
+  expect(warning).toBeDefined()
+  expect(warning.closest("details")).toBeNull()
+  details.querySelector("summary")!.click()
+  expect(details.open).toBe(true)
+})
+
+test("new session activity clears a checked cost and rejects an earlier in-flight total", async () => {
+  const [version, setVersion] = solidjs.createSignal("1")
+  const pending = Promise.withResolvers<SessionReceiptsResponses[200]>()
+  let checks = 0
+  const host = mount(() => (++checks === 1 ? Promise.resolve(report()) : pending.promise), version)
+  await click(host)
+  expect(host.querySelector("strong")!.textContent).toBe("USD 0.000001")
+  setVersion("2")
+  expect(host.querySelector("strong")!.textContent).toBe("Not checked")
+  host.querySelector("button")!.click()
+  setVersion("3")
+  pending.resolve(report())
+  await Bun.sleep(30)
+  expect(host.querySelector("strong")!.textContent).toBe("Not checked")
 })

@@ -1161,3 +1161,38 @@ the earlier 2,891-test total includes the six deferred profiler tests.
 This is a candidate update, not completion of the normal-client or production
 gates. All seven roadmap items remain Partial. No merge, release, production
 data mutation or additional paid inference is included.
+
+## Context UI and saved breakdown follow-up — 2026-10-26
+
+The Context panel now keeps the context-window bar, estimated input breakdown,
+current-session token total and exact Wallet deductions visible. Receipt IDs,
+per-call usage and raw messages are under collapsed details. Wallet amounts
+come only from matching settled receipts; unchecked, unavailable and incomplete
+states remain explicit. New activity or an account change invalidates a checked
+report, including a response that arrives after that change.
+
+Each prepared assistant call saves numeric estimates for system instructions,
+tool definitions and the other input categories. No prompt or tool-schema text
+is added to this metadata. Saved counts survive reloads; historical missing
+counts stay unknown. Provider-reported totals remain separate from category
+estimates. Preflight limits and compaction decisions are unchanged.
+
+Local verification passed 944 session tests, 1,244 workspace tests, 31 SDK tests,
+eight documentation tests, all seven typecheck tasks, SDK regeneration and the
+single-target native build. Independent review found no actionable issues.
+The earlier green candidate CI does not cover this follow-up; a new commit
+requires its own Fast and Deep CI results.
+
+A separate native instance, using copied local data and the Supabase test
+branch, saved 5,141 estimated system tokens, 8,214 tool-definition tokens and
+198 conversation tokens. A browser reload retained all 13,553 estimated tokens.
+One internal message-title request used the test's one-request allowance; the
+main reply was then blocked by the guard. This is evidence of persistent
+pre-call estimates, not a completed main inference or measured billed usage.
+The fresh receipt lookup was unavailable, so no fresh Wallet total is claimed.
+Existing servers and their request guards were not restarted or reset.
+
+Normal-client parent/worker acceptance, the observed sync/workspace timeouts,
+and acceptance on deployed versions remain open. Further performance work is
+deferred to its separate branch. This follow-up does not close those gates or
+authorize a merge, deployment or release.

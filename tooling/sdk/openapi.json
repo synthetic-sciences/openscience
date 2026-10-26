@@ -58259,6 +58259,69 @@
           "data"
         ]
       },
+      "ContextComposition": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "const": "estimate"
+          },
+          "total": {
+            "type": "number",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "object",
+            "properties": {
+              "system": {
+                "type": "number",
+                "minimum": 0
+              },
+              "definitions": {
+                "type": "number",
+                "minimum": 0
+              },
+              "text": {
+                "type": "number",
+                "minimum": 0
+              },
+              "reasoning": {
+                "type": "number",
+                "minimum": 0
+              },
+              "tool": {
+                "type": "number",
+                "minimum": 0
+              },
+              "skills": {
+                "type": "number",
+                "minimum": 0
+              },
+              "image": {
+                "type": "number",
+                "minimum": 0
+              },
+              "document": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "system",
+              "text",
+              "reasoning",
+              "tool",
+              "skills",
+              "image"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "total",
+          "tokens"
+        ]
+      },
       "AssistantMessage": {
         "type": "object",
         "properties": {
@@ -58362,6 +58425,9 @@
           },
           "cost": {
             "type": "number"
+          },
+          "contextComposition": {
+            "$ref": "#/components/schemas/ContextComposition"
           },
           "tokens": {
             "type": "object",
@@ -60084,6 +60150,9 @@
                 "type": "object",
                 "properties": {
                   "system": {
+                    "type": "number"
+                  },
+                  "definitions": {
                     "type": "number"
                   },
                   "text": {

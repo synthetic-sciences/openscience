@@ -30,3 +30,8 @@ export function sessionProviderLabel(
   if (source === "chatgpt") return "ChatGPT"
   return provider?.name ?? message.providerID
 }
+
+export function walletAmount(value: string) {
+  const micro = BigInt(value)
+  return `USD ${micro / 1_000_000n}.${(micro % 1_000_000n).toString().padStart(6, "0")}`
+}

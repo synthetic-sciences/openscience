@@ -104,6 +104,7 @@ export namespace SessionTelemetry {
         sessionID: z.string(),
         tokens: z.object({
           system: z.number(),
+          definitions: z.number().optional(),
           text: z.number(),
           reasoning: z.number(),
           tool: z.number(),
@@ -163,6 +164,7 @@ export namespace SessionTelemetry {
       sessionID: input.sessionID,
       total: c.total,
       system: c.system,
+      definitions: c.definitions,
       text: c.text,
       tool: c.tool,
       image: c.image,
@@ -177,6 +179,7 @@ export namespace SessionTelemetry {
       sessionID: input.sessionID,
       tokens: {
         system: c.system,
+        ...(c.definitions !== undefined && { definitions: c.definitions }),
         text: c.text,
         reasoning: c.reasoning,
         tool: c.tool,

@@ -513,6 +513,24 @@ export namespace MessageV2 {
     })
   export type Part = z.infer<typeof Part>
 
+  export const ContextComposition = z
+    .object({
+      source: z.literal("estimate"),
+      total: z.number().nonnegative(),
+      tokens: z.object({
+        system: z.number().nonnegative(),
+        definitions: z.number().nonnegative().optional(),
+        text: z.number().nonnegative(),
+        reasoning: z.number().nonnegative(),
+        tool: z.number().nonnegative(),
+        skills: z.number().nonnegative(),
+        image: z.number().nonnegative(),
+        document: z.number().nonnegative().optional(),
+      }),
+    })
+    .meta({ ref: "ContextComposition" })
+  export type ContextComposition = z.infer<typeof ContextComposition>
+
   export const Assistant = Base.extend({
     role: z.literal("assistant"),
     time: z.object({
@@ -549,6 +567,8 @@ export namespace MessageV2 {
     }),
     summary: z.boolean().optional(),
     cost: z.number(),
+    /** Numeric pre-call estimates survive reloads without retaining prompt content. */
+    contextComposition: ContextComposition.optional(),
     // `output` is inclusive; `reasoning` is its provider-reported subset for display.
     tokens: z.object({
       input: z.number(),
@@ -1425,6 +1445,7 @@ export namespace MessageV2 {
   }
 
   export type Composition = {
+    definitions?: number
     system: number
     text: number
     reasoning: number

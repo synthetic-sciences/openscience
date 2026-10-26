@@ -175,12 +175,13 @@ export namespace SessionPrompt {
     const limit = Math.max(hard, Math.floor(window * CONTEXT_PREFLIGHT_MARGIN))
     const tools = await toolTokens(input.tools)
     const extra = input.extra ? Token.estimate(input.extra) : 0
-    const composition = MessageV2.composition(input.messages, { system: input.system })
+    const base = MessageV2.composition(input.messages, { system: input.system })
     const current = SessionCompaction.protectedContext(input.messages, input.current.id)
     const fixed = tools + extra
+    const composition = { ...base, definitions: tools, text: base.text + extra, total: base.total + fixed }
     // Attachments are part of the composition, with documents estimated the
     // way providers bill them (MessageV2.documentTokens) rather than by bytes.
-    const total = composition.total + fixed
+    const total = composition.total
     const newest = MessageV2.composition(current, { system: input.system }).total + fixed
     return {
       total,
@@ -1929,6 +1930,20 @@ export namespace SessionPrompt {
       }
 
       step = nextStep
+      processor.message.contextComposition = {
+        source: "estimate",
+        total: preflight.composition.total,
+        tokens: {
+          system: preflight.composition.system,
+          definitions: preflight.composition.definitions,
+          text: preflight.composition.text,
+          reasoning: preflight.composition.reasoning,
+          tool: preflight.composition.tool,
+          skills: preflight.composition.skills,
+          image: preflight.composition.image,
+          document: preflight.composition.document,
+        },
+      }
       await Session.updateMessage(processor.message)
       if (step === 1) {
         // Both are fire-and-forget; ensureTitle is single-flight per session,

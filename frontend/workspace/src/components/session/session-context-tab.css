@@ -1,8 +1,4 @@
-/* Context panel
-   -------------
-   One headline says how full the window is and what fills it; two cards
-   carry the exact counts; the long material (instructions, raw messages)
-   folds away beneath them. */
+/* Keep usage totals visible; fold the per-call audit into details. */
 
 .context-panel {
   height: 100%;
@@ -226,7 +222,7 @@
   border-top: 1px solid var(--color-border-weak, var(--color-border));
 }
 
-.context-panel__details summary {
+.context-panel__details > summary {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -238,11 +234,11 @@
   list-style: none;
 }
 
-.context-panel__details summary::-webkit-details-marker {
+.context-panel__details > summary::-webkit-details-marker {
   display: none;
 }
 
-.context-panel__details summary::before {
+.context-panel__details > summary::before {
   content: "";
   width: 6px;
   height: 6px;
@@ -253,11 +249,11 @@
   transition: transform 140ms var(--ease-standard);
 }
 
-.context-panel__details[open] summary::before {
+.context-panel__details[open] > summary::before {
   transform: rotate(45deg);
 }
 
-.context-panel__details summary small {
+.context-panel__details > summary small {
   color: var(--color-text-faint);
   font-size: var(--font-size-small);
 }
@@ -289,7 +285,32 @@
 }
 
 .context-panel__calls td:last-child {
-  min-width: 140px;
-  max-width: 220px;
+  white-space: nowrap;
+}
+
+.context-panel__calls td:first-child {
+  overflow-wrap: anywhere;
+}
+
+.context-panel__call-details {
+  margin-top: 6px;
+}
+
+.context-panel__call-details summary {
+  color: var(--color-text-faint);
+  cursor: pointer;
+}
+
+.context-panel__call-details dl {
+  margin: 8px 0 0;
+}
+
+.context-panel__call-details dt {
+  margin-top: 6px;
+  color: var(--color-text-faint);
+}
+
+.context-panel__call-details dd {
+  margin: 0;
   overflow-wrap: anywhere;
 }

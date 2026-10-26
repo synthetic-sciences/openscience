@@ -138,3 +138,40 @@ test("document composition remains a separate estimate when reported usage repla
   expect(latestContext([call], live)).toEqual({ total: 700, source: "usage", composition })
   expect(latestContext([{ ...call, id: "msg_3" }], live)).toEqual({ total: 700, source: "usage" })
 })
+
+const savedComposition = {
+  source: "estimate" as const,
+  total: 400,
+  tokens: { system: 100, definitions: 200, text: 100, reasoning: 0, tool: 0, skills: 0, image: 0, document: 0 },
+}
+
+test("a reopened task uses saved system and tool estimates alongside the provider total", () => {
+  const call = Object.assign(assistant("msg_02", { input: 450, output: 50 }), { contextComposition: savedComposition })
+  expect(latestContext([user("msg_01"), call])).toEqual({ total: 500, source: "usage", composition: savedComposition })
+})
+
+test("a prepared first request shows saved composition before any reported usage", () => {
+  const call = Object.assign(assistant("msg_02", pending), { contextComposition: savedComposition })
+  expect(latestContext([user("msg_01"), call])).toEqual({
+    total: 400,
+    source: "estimate",
+    composition: savedComposition,
+  })
+})
+
+test("saved composition does not carry across compaction or a newer unrecorded response", () => {
+  const call = Object.assign(assistant("msg_02", { input: 450, output: 50 }), { contextComposition: savedComposition })
+  const summary = assistant("msg_04", { input: 450, output: 50 }, true)
+  expect(latestContext([call, summary])).toBeUndefined()
+  expect(latestContext([call, assistant("msg_05", { input: 100, output: 10 })])).toEqual({
+    total: 110,
+    source: "usage",
+  })
+})
+
+test("a newer live estimate wins over an older saved composition", () => {
+  const call = Object.assign(assistant("msg_02", { input: 450, output: 50 }), { contextComposition: savedComposition })
+  const messages = [call, user("msg_03"), assistant("msg_04", pending)]
+  const live = estimate(messages, 600, { ...savedComposition, total: 600 })
+  expect(latestContext(messages, live)).toEqual({ total: 600, source: "estimate", composition: live.composition })
+})

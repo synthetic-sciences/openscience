@@ -304,6 +304,21 @@ export type ApiError = {
   }
 }
 
+export type ContextComposition = {
+  source: "estimate"
+  total: number
+  tokens: {
+    system: number
+    definitions?: number
+    text: number
+    reasoning: number
+    tool: number
+    skills: number
+    image: number
+    document?: number
+  }
+}
+
 export type AssistantMessage = {
   id: string
   sessionID: string
@@ -335,6 +350,7 @@ export type AssistantMessage = {
   }
   summary?: boolean
   cost: number
+  contextComposition?: ContextComposition
   tokens: {
     input: number
     output: number
@@ -783,6 +799,7 @@ export type EventSessionContext = {
     sessionID: string
     tokens: {
       system: number
+      definitions?: number
       text: number
       reasoning: number
       tool: number
