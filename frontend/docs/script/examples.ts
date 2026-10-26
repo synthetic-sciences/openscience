@@ -1,5 +1,6 @@
 import path from "node:path"
 import ts from "typescript"
+import { skillPath } from "./skill-paths"
 
 const root = path.resolve(import.meta.dir, "../../..")
 const directory = path.join(root, "frontend/docs/src/content/openscience")
@@ -8,7 +9,10 @@ for (const file of new Bun.Glob("*.mdx").scanSync({ cwd: directory })) {
   const source = await Bun.file(path.join(directory, file)).text()
   for (const match of source.matchAll(/```typescript\n([\s\S]*?)\n```/g)) {
     const location = match[1].includes('"@synsci/plugin"') ? "tooling/plugin/src" : "tooling/sdk/js/src"
-    const filename = path.join(root, location, "__docs_example_" + examples.size + ".ts")
+    // TypeScript normalizes root-file names to forward slashes, so the example
+    // map keys must match or `getSourceFile` misses and the compiler reports
+    // TS6053 for every scratch root on Windows.
+    const filename = skillPath(path.join(root, location, "__docs_example_" + examples.size + ".ts"))
     examples.set(filename, { source: match[1], page: file })
   }
 }
