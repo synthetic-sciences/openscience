@@ -1196,3 +1196,47 @@ Normal-client parent/worker acceptance, the observed sync/workspace timeouts,
 and acceptance on deployed versions remain open. Further performance work is
 deferred to its separate branch. This follow-up does not close those gates or
 authorize a merge, deployment or release.
+
+## Account sync performance follow-up — 2026-10-26
+
+Separate performance branches retain the normal 15-second sync deadline.
+OpenScience now skips the version probe for forced refresh, accepts Dashboard's
+actual `v` response, and drops an older digest after an unversioned full read.
+Dashboard avoids a write transaction when no legacy credential needs copying
+and reuses one fresh account-key snapshot for GitHub, Codex and model selection.
+Pending migration still re-reads sources inside its original transaction.
+Authentication, workspace checks, cached-grant expiry and Wallet decisions are
+unchanged. Independent review found no actionable issues.
+
+Regression evidence: client cases failed before the fix, then all eight focused
+tests passed; 127 account/credential tests passed with three platform skips.
+Empty-migration and account-read tests reproduced the redundant SQL before their
+fixes. All 2,898 Dashboard backend tests passed with 142 skips. Seven typechecks,
+eight documentation tests, formatting and the native single-target build passed.
+
+Normal sync against a separate local API and the Supabase test branch completed
+in 14.95 seconds on one pass and 7.81 seconds on a warm pass. A later preflight
+timed out again before inference. These observations do not establish reliable
+tail latency. No request deadline was extended.
+
+One normal retry started a real managed parent/worker run. The worker completed,
+but the parent failed after database connection errors and exhausted the
+eight-request test guard. Nine saved attempts comprise four completed provider
+calls and five failed attempts. The test's conservative request allowance was
+13,382.6 microUSD against a 20,000-microUSD cap; no further model calls were made.
+
+The error was Supabase's 15-client session-pool limit. An unused disposable API
+created during this task contributed connections and was stopped; the current
+candidate API and original user services were retained. A read-only ledger
+check confirms four settled charges totaling 627 microUSD. Scoped task lookup
+returns three receipts totaling 604 microUSD; one settled 23-microUSD charge has
+no `managed_call_links` row. The existing best-effort background link write can
+fail independently of settlement. This gap is retained for a separate durable
+link fix, without rewriting the test ledger or changing billing behavior here.
+
+Trace consent/delivery requests also failed during pool exhaustion. Thirty local
+queued events had no verified delivery before the test's privacy opt-out; health
+returned `no_data`, not `healthy`. Receipt lookup still worked after opt-out and
+kept its incomplete subtotal. The failed evidence remains saved. Normal-client
+end-to-end acceptance and all seven deployed gates remain open. No merge,
+production deployment or release is included.

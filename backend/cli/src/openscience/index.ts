@@ -824,7 +824,8 @@ export namespace OpenScience {
       typeof body === "number"
         ? body
         : body && typeof body === "object"
-          ? ((body as Record<string, unknown>).version ??
+          ? ((body as Record<string, unknown>).v ??
+            (body as Record<string, unknown>).version ??
             (body as Record<string, unknown>).digest ??
             (body as Record<string, unknown>).sync_version)
           : undefined
@@ -868,7 +869,9 @@ export namespace OpenScience {
         }, options.timeoutMs ?? 15_000)
       })
       try {
-        const version = await Promise.race([probeSyncVersion(session, headers, controller.signal), deadline])
+        const version = options.force
+          ? undefined
+          : await Promise.race([probeSyncVersion(session, headers, controller.signal), deadline])
         const known = digests.get(identity)
         if (
           !options.force &&
@@ -950,6 +953,8 @@ export namespace OpenScience {
         // The digest read before this payload names it closely enough: a
         // change in between shows up as a moved digest on the next tick.
         if (version !== undefined) digests.set(target, { version, at: Date.now() })
+        // A forced or unversioned read cannot validate the previous digest.
+        else digests.delete(target)
         return (synced = { state: "ready", organization_id: data.snapshot.organization_id, synced_at: Date.now() })
       } catch (error) {
         // A silent failure here is how a grant lapses unnoticed: name the
