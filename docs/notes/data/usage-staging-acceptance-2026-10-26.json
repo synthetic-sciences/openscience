@@ -1,0 +1,288 @@
+{
+  "schema_version": 1,
+  "environment": "isolated Fly test app and Supabase branch; no production release",
+  "source": {
+    "dashboard_commit": "489af6b1ff1657ba63e3da830b453af0359ac135",
+    "openscience_commit": "187e99311cb530dcd6a3c3d8d691f6600d150a69",
+    "staging_wrapper_sha256": "cbd94d6a7646c1c2bc3a132e5b9aa518c1e0ebeedbe8ac2ffbb64625911ee1d3",
+    "branch": "dtmiedrqzwhzujivedhr",
+    "app": "synsci-usage-test-20261026",
+    "region": "sin",
+    "acceptance_run": "run2"
+  },
+  "image_digest": "sha256:362f0f2a4e223481c0c251f3a8ffbe3ffea955e49be88fc86a153e3ba915f652",
+  "fixture": {
+    "api_workers": 1,
+    "primary_pool": [1, 3],
+    "oauth_pool": [1, 1],
+    "branch_session_limit": 15,
+    "other_local_api_connections_retained": true,
+    "fresh_primary_steps": 2
+  },
+  "normal_forced_sync_ms": 2744.5338899999997,
+  "passed_run": {
+    "sessions": 2,
+    "calls": [
+      {
+        "call_sha256_prefix": "dd388c3eee",
+        "generation_sha256_prefix": "5a66abef73",
+        "role": "parent/internal",
+        "tokens": {
+          "input_tokens": 581,
+          "output_tokens": 6,
+          "total_tokens": 587,
+          "reasoning_tokens": 0,
+          "cached_input_tokens": 512,
+          "cache_creation_input_tokens": 0
+        },
+        "provider_cost_usd": "2.1362e-05",
+        "charged_microusd": 23,
+        "links_and_projection_exact": true,
+        "ledger_and_receipt_exact": true
+      },
+      {
+        "call_sha256_prefix": "28e0281cf7",
+        "generation_sha256_prefix": "8875073859",
+        "role": "worker",
+        "tokens": {
+          "input_tokens": 564,
+          "output_tokens": 4,
+          "total_tokens": 568,
+          "reasoning_tokens": 0,
+          "cached_input_tokens": 512,
+          "cache_creation_input_tokens": 0
+        },
+        "provider_cost_usd": "1.7872e-05",
+        "charged_microusd": 19,
+        "links_and_projection_exact": true,
+        "ledger_and_receipt_exact": true
+      },
+      {
+        "call_sha256_prefix": "9d7e1c5d6e",
+        "generation_sha256_prefix": "ac9700e475",
+        "role": "worker",
+        "tokens": {
+          "input_tokens": 1461,
+          "output_tokens": 1,
+          "total_tokens": 1462,
+          "reasoning_tokens": 0,
+          "cached_input_tokens": 0,
+          "cache_creation_input_tokens": 0
+        },
+        "provider_cost_usd": "0.00021962",
+        "charged_microusd": 233,
+        "links_and_projection_exact": true,
+        "ledger_and_receipt_exact": true
+      },
+      {
+        "call_sha256_prefix": "dae2fdcaca",
+        "generation_sha256_prefix": "e40749a043",
+        "role": "parent/internal",
+        "tokens": {
+          "input_tokens": 2102,
+          "output_tokens": 59,
+          "total_tokens": 2161,
+          "reasoning_tokens": 0,
+          "cached_input_tokens": 1024,
+          "cache_creation_input_tokens": 0
+        },
+        "provider_cost_usd": "0.000205814",
+        "charged_microusd": 218,
+        "links_and_projection_exact": true,
+        "ledger_and_receipt_exact": true
+      },
+      {
+        "call_sha256_prefix": "5a6f98658e",
+        "generation_sha256_prefix": "68992fd409",
+        "role": "parent/internal",
+        "tokens": {
+          "input_tokens": 2444,
+          "output_tokens": 186,
+          "total_tokens": 2630,
+          "reasoning_tokens": 0,
+          "cached_input_tokens": 2048,
+          "cache_creation_input_tokens": 0
+        },
+        "provider_cost_usd": "0.000179588",
+        "charged_microusd": 190,
+        "links_and_projection_exact": true,
+        "ledger_and_receipt_exact": true
+      }
+    ],
+    "charged_microusd": 683,
+    "provider_cost_usd": "0.000644256",
+    "privacy_off_receipts_equal": true,
+    "queued": 0,
+    "health": {
+      "schema_version": 1,
+      "scope": "account_installation_workspace",
+      "since": "2026-10-25T18:18:58.691599Z",
+      "until": "2026-10-26T18:18:58.691599Z",
+      "checked_at": "2026-10-26T18:18:59.248700Z",
+      "status": "healthy",
+      "receipts": {
+        "deliveries": 7,
+        "receipt_only": 0,
+        "replayed_only": 0,
+        "anomalous": 0,
+        "orphaned_events": 0
+      },
+      "usage": {
+        "responses": 5,
+        "projected": 5,
+        "missing_projection": 0,
+        "unknown_input": 0,
+        "unknown_output": 0,
+        "unknown_reasoning": 0,
+        "unknown_cache_read": 0,
+        "unknown_cache_write": 0
+      },
+      "attempts": {
+        "calls": 5,
+        "dispatched": 5,
+        "completed": 5,
+        "failed": 0,
+        "cancelled": 0,
+        "timed_out": 0,
+        "pending": 0,
+        "unclassified_requests": 0
+      },
+      "managed": {
+        "attempts_without_response": 0,
+        "unknown_attempt_charge": 0,
+        "responses": 5,
+        "pending": 0,
+        "settled": 5,
+        "not_charged": 0,
+        "missing_call_id": 0,
+        "missing_link": 0,
+        "ambiguous_link": 0,
+        "missing_hold": 0,
+        "hold_mismatch": 0,
+        "settled_missing_charge": 0,
+        "duplicate_charge": 0,
+        "token_mismatch": 0,
+        "charge_amount_mismatch": 0,
+        "unknown_charge_amount": 0
+      }
+    },
+    "database_read_only": true
+  },
+  "failed_run": {
+    "provider_responses": 7,
+    "saved_attempts": 8,
+    "durable_links": 7,
+    "projections": 7,
+    "acknowledged_events": 32,
+    "initial_settled": 5,
+    "initial_pending": 2,
+    "guard_rejections": 1,
+    "later_settled": 7,
+    "later_pending": 0,
+    "later_health": "incomplete",
+    "later_unknown_charge_attempts": 1,
+    "manual_financial_repair": false,
+    "failure": "Repeated delegation reached conservative guard; two post-response serialization conflicts left holds pending initially."
+  },
+  "guards": {
+    "run1_preserved": {
+      "requests": 7,
+      "upper_microusd": 18671.52,
+      "max_requests": 8,
+      "cap_microusd": 20000,
+      "max_output_tokens": 512,
+      "test_id": "usage-acceptance-20261026"
+    },
+    "run2": {
+      "requests": 5,
+      "upper_microusd": 13681.92,
+      "max_requests": 8,
+      "cap_microusd": 20000,
+      "max_output_tokens": 512,
+      "test_id": "usage-acceptance-20261026-run2"
+    }
+  },
+  "managed_call_latency": [
+    {
+      "responseStartMs": 4508,
+      "firstBodyChunkMs": 4509,
+      "activeBodyMs": 32,
+      "totalMs": 4542,
+      "gateway_cumulative_ms": {
+        "os_authenticated": 953.9,
+        "os_authorized": 1458.9,
+        "os_admitted": 2346.3,
+        "os_upstream_dispatch": 2877.9,
+        "os_upstream_headers": 3358.4
+      }
+    },
+    {
+      "responseStartMs": 9035,
+      "firstBodyChunkMs": 9035,
+      "activeBodyMs": 464,
+      "totalMs": 9500,
+      "gateway_cumulative_ms": {
+        "os_authenticated": 181.4,
+        "os_authorized": 486.7,
+        "os_admitted": 1336.5,
+        "os_upstream_dispatch": 1996.7,
+        "os_upstream_headers": 7741.7
+      }
+    },
+    {
+      "responseStartMs": 3025,
+      "firstBodyChunkMs": 3027,
+      "activeBodyMs": 96,
+      "totalMs": 3123,
+      "gateway_cumulative_ms": {
+        "os_authenticated": 182.9,
+        "os_authorized": 426.1,
+        "os_admitted": 972.9,
+        "os_upstream_dispatch": 1397.1,
+        "os_upstream_headers": 1994.8
+      }
+    },
+    {
+      "responseStartMs": 10223,
+      "firstBodyChunkMs": 10225,
+      "activeBodyMs": 58,
+      "totalMs": 10287,
+      "gateway_cumulative_ms": {
+        "os_authenticated": 249.7,
+        "os_authorized": 576.6,
+        "os_admitted": 1737.3,
+        "os_upstream_dispatch": 2270.3,
+        "os_upstream_headers": 9215.6
+      }
+    },
+    {
+      "responseStartMs": 3046,
+      "firstBodyChunkMs": 3046,
+      "activeBodyMs": 2643,
+      "totalMs": 5694,
+      "gateway_cumulative_ms": {
+        "os_authenticated": 180.1,
+        "os_authorized": 418.7,
+        "os_admitted": 952.9,
+        "os_upstream_dispatch": 1365.8,
+        "os_upstream_headers": 1734.9
+      }
+    }
+  ],
+  "packaged_copy": {
+    "integrity": "ok",
+    "sessions": 2,
+    "calls": 5,
+    "audit_exact": true,
+    "original_user_data_touched": false
+  },
+  "browser_wallet_usd": "0.000683",
+  "billing_import": "Prior independent nonzero account billing/file-input/reload/removal evidence reused for unchanged code; not a fresh released browser check.",
+  "full_ci": "https://github.com/synthetic-sciences/dashboard/actions/runs/40376123885",
+  "production_gate": "Still requires explicit release authorization and final checks of deployed production versions.",
+  "scope_http": {
+    "missing_credentials": 401,
+    "wrong_workspace": 403,
+    "receipt_data_disclosed": false
+  }
+}

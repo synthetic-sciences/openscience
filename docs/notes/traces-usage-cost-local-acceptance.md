@@ -12,15 +12,15 @@ retain the exact versions and fixture scope of each historical check. Live
 subscription, BYOK and Ace evidence supplements those fixtures; local Wallet
 receipts do not establish the hosted release.
 
-| Item                             | Current evidence                                                                                                                                                                                                                                                                | Open acceptance                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks                                                                                                                                 | Hosted Ace verification and wider route/provider coverage        |
-| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending                                                                                                                                       | Release acceptance on deployed versions                          |
-| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                                                                                                                                                    | Release acceptance on deployed versions                          |
-| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts                                                                                                                                      | Hosted receipt endpoint currently returns 404                    |
-| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation; isolated Chrome file-input import, reload and removal pass; independent account Analytics now matches two unique nonzero calls | Hosted release acceptance                                        |
-| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                                                                                                                                                       | Release acceptance                                               |
-| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches                                                                                                                              | Hosted health endpoint currently returns 404; release acceptance |
+| Item                             | Current evidence                                                                                                                                                                                                                                                                | Open acceptance                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1. Real route audit              | Raw subscription/BYOK comparisons; real local Ace parent/worker calls→holds→charges; real mixed Ace/BYOK delegation; provider generation checks                                                                                                                                 | Hosted Ace verification and wider route/provider coverage   |
+| 2. Shared trace path             | Durable dispatch/outcome, retry/failure/cancellation tests, live worker/internal/background calls; interrupted work stays visibly pending                                                                                                                                       | Release acceptance on deployed versions                     |
+| 3. Reported token fields         | Nullable provider fields, raw cache-write correction, zero/omitted replay matrix, context and usage displays                                                                                                                                                                    | Release acceptance on deployed versions                     |
+| 4. Task Wallet receipts          | Exact scoped worker receipts, independent of sharing; SQLite/PostgreSQL and browser acceptance; five real local Ace parent/worker receipts                                                                                                                                      | Production release acceptance; isolated Fly receipts passed |
+| 5. BYOK cost provenance          | Separate cost sources; real nonzero provider records imported with unique matches; local browser shows separate totals and 2/0/0 reconciliation; isolated Chrome file-input import, reload and removal pass; independent account Analytics now matches two unique nonzero calls | Hosted release acceptance                                   |
+| 6. Shared message/event database | Schema 7 includes Task replay records; migration/recovery/deletion/relocation checks and real Task replay                                                                                                                                                                       | Release acceptance                                          |
+| 7. Logging health                | Queue/rejection/receipt/projection/attempt/charge checks, all-route opt-out; real local Ace worker health: five completed/settled, zero mismatches                                                                                                                              | Production release acceptance; isolated Fly health passed   |
 
 Independent billing evidence now includes two authenticated account Analytics records,
 queried by exact generation ID and imported without changing their reported amounts.
@@ -1240,3 +1240,113 @@ returned `no_data`, not `healthy`. Receipt lookup still worked after opt-out and
 kept its incomplete subtotal. The failed evidence remains saved. Normal-client
 end-to-end acceptance and all seven deployed gates remain open. No merge,
 production deployment or release is included.
+
+## Isolated Fly acceptance — 26 October 2026
+
+The test app is [synsci-usage-test-20261026](https://synsci-usage-test-20261026.fly.dev).
+It uses only Supabase branch `usage-tracking-test`. The API is in Singapore;
+the branch session pooler is in AWS Mumbai. One API worker has a primary pool
+of 1–3 and an OAuth pool of 1. Existing local test APIs retained connections
+under the branch's 15-session limit. This is staging evidence, not production
+load or release acceptance.
+
+### Source and fixes
+
+OpenScience source is `187e99311cb530dcd6a3c3d8d691f6600d150a69`.
+Dashboard first ran `a32f5b901cc692cbe5ac6b32486ceb92d1228c15`, then
+`489af6b1ff1657ba63e3da830b453af0359ac135`. The final test image digest is
+`sha256:362f0f2a4e223481c0c251f3a8ffbe3ffea955e49be88fc86a153e3ba915f652`.
+The exact source, wrapper hash and numeric evidence are saved in the
+[redacted staging record](data/usage-staging-acceptance-2026-10-26.json).
+
+The previous best-effort background call-link write could fail while a hold
+settled. The proxy now inserts valid call metadata within the existing hold
+transaction, before provider dispatch. A storage failure rolls back and
+returns 503 without a model request. Missing or invalid optional metadata
+retains old-client behavior. Valid consent reads now use one fresh SELECT;
+missing or damaged epochs still use the existing privacy transaction.
+
+The first Fly run exposed post-response PostgreSQL serialization conflicts.
+The proxy now retries the same generation attachment and settlement work on
+SQLSTATE 40001 or `TooContended`. It does not send another provider generation.
+Prices, precision, account scope, Wallet allocation and settlement arithmetic
+are unchanged.
+
+### Failed run retained
+
+The first run completed seven provider requests. Each had a durable call link
+and one usage projection. Thirty-two trace events were acknowledged and the
+queue was empty. The parent repeated delegation and reached the conservative
+guard before its final reply. The saved audit contains seven completed calls
+and one failed pre-provider attempt. Initially, five holds were settled and
+two were pending after serialization conflicts. Health correctly reported
+incomplete coverage.
+
+A later normal, read-only lookup found seven settled receipts and zero pending
+holds. Health remains incomplete because the guard rejected the final attempt
+without a provider response or confirmed charge outcome. No manual financial
+repair, link backfill, event deletion or counter reset was used. This remains
+a failed run; later settlement does not convert it into a successful task.
+
+### Separate bounded retest
+
+The second run used fresh client data and a separate persistent guard. Both
+guards retain their original limits: eight requests, 512 output tokens per
+request and USD 0.02 conservative allowance, including title/summary work.
+The primary agent used its normal two-step budget instead of three. The final
+step supplies a stop instruction; it does not disable tools. The worker
+returned OK, and the parent returned its final-step summary. No guard rejection
+occurred. Model reasoning was disabled in this fixture.
+
+| Check            | Observed result                                                                                                                                       |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Calls            | Five completed provider calls across the parent and one real worker, including internal work                                                          |
+| Raw usage        | All five provider generation IDs and input/output/total/reasoning/cache fields match saved attempts and server projections; explicit zero is retained |
+| Financial links  | Five exact call→hold→settled usage→Wallet receipt links; each debit sum matches its hold and receipt                                                  |
+| Wallet deduction | **683 microUSD (USD 0.000683)**, including the worker                                                                                                 |
+| Provider cost    | **USD 0.000644256**, stored separately from the Wallet deduction                                                                                      |
+| Delivery         | Eighteen acknowledged events across seven deliveries; zero queued or quarantined events                                                               |
+| Health           | Healthy for the test installation, account and workspace: five calls, five projections, five settled holds; no missing link or token/charge mismatch  |
+| Sharing off      | The same five scoped receipts remain available after opt-out; no queued uploads remain                                                                |
+| Scope            | Missing credentials return 401; a different workspace returns 403, without receipt data; prior cross-account service tests remain applicable          |
+| Client deadline  | Fresh forced sync completes in 2.745 seconds through the normal 15-second path                                                                        |
+| Browser          | Separate copied-data app, connected to Fly, shows USD 0.000683 deducted from Wallet, including workers                                                |
+| Packaged CLI     | SQLite backup reopens under a relocated data root; both sessions and all five audit records match exactly; integrity check returns `ok`               |
+
+Individual Wallet deductions are **23, 19, 233, 218 and 190 microUSD**.
+The second guard saved five requests and 13,681.92 microUSD of conservative
+upper allowance. The first guard retains seven requests and 18,671.52 microUSD.
+These bounds are not actual bills. No additional paid calls were sent after
+this retest. Original user data and original server processes were not changed.
+
+The first read-only verifier compared a PostgreSQL UUID object with an API
+string; it was corrected to compare the UUID's string representation. The
+first packaged audit selected a new empty project directory; it was rerun
+with the existing test project and relocated data root. Both initial fixture
+failures are retained in the private log. Neither required a product change.
+
+### Verification and remaining gate
+
+- Dashboard backend: **2,900 passed, 148 skipped**. Real PostgreSQL contracts:
+  **93 passed**. Atomic-link and post-response conflict regressions failed
+  before the fixes and passed afterward.
+- [Full Dashboard CI passed at 489af6b1](https://github.com/synthetic-sciences/dashboard/actions/runs/40376123885),
+  including backend, PostgreSQL and frontend build/tests. OpenScience's selected
+  unchanged billing/receipt/logging/storage tests passed **72 checks**.
+- The independent final review found no product blocker. Two test-guard
+  bypasses were fixed before dispatch. A minor suggestion remains to assert
+  receipt count and exact debit directly in the new retry test; existing
+  concurrent-settlement tests cover those invariants.
+- All **66** read-only Fly profile requests returned 200. See the
+  [API latency guide](openscience-api-latency.md) for per-endpoint readings,
+  comparison targets and measurement limits.
+- Earlier independent nonzero BYOK account-billing import, file-input,
+  reload/removal and migration/deletion/rollback evidence is reused only for
+  unchanged client contracts. These cases were not silently reclassified as
+  new released-browser or production checks.
+
+Isolated staging receipt, privacy, health and normal-client acceptance now
+pass for the tested route/model. Wider provider combinations remain limited
+to the saved route matrix. Production deployment and release remain
+prohibited. All seven roadmap items stay Partial until separately authorized
+shipped-version checks pass. A staging success does not remove that gate.
