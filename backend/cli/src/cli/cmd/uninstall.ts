@@ -236,9 +236,9 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
   if (targets.link) {
     spinner.start("Removing the command-line link...")
     const err = await CliShim.remove().catch((e) => e)
-    if (err instanceof Error) {
+    if (err) {
       spinner.stop("Failed to remove the command-line link", 1)
-      errors.push(`Command-line link: ${err.message}`)
+      errors.push(`Command-line link: ${Reason.of(err)}`)
     } else {
       spinner.stop("Removed the command-line link")
     }
