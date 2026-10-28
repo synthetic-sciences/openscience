@@ -1,0 +1,2615 @@
+{
+  "schema_version": 1,
+  "note": "Saved observations only. Small samples; no production or p95 claim. Server-header timing does not measure model TTFT or completion. Exceptions can be absent from server success log.",
+  "source_commits": {
+    "baseline_openscience": "f5a858a665e19e83349174a535b1bfe38162a097",
+    "baseline_dashboard": "93b56986a58d2e4121530ebb01a6cf4a8aa905f1",
+    "baseline_caveat": "Baseline also included then-uncommitted timeout fixes; see linked account latency report.",
+    "followup_openscience": "187e99311cb530dcd6a3c3d8d691f6600d150a69",
+    "followup_dashboard": "fd8f42dc08cade41fe218adb7f41ae3d4a9ca0f3"
+  },
+  "baseline_2026_10_25": {
+    "samples": [
+      {
+        "label": "dashboard_auth",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 4026.3478780398145,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 4021.739,
+        "other_wall_ms": 4.608,
+        "exclusive_work_ms": {
+          "acquire": 0.079,
+          "queue": 0.004,
+          "setup": 485.321,
+          "query": 3027.149,
+          "release": 0.172,
+          "reset": 509.015
+        }
+      },
+      {
+        "label": "native_auth",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 6938.804007018916,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 6935.721,
+        "other_wall_ms": 3.083,
+        "exclusive_work_ms": {
+          "acquire": 0.178,
+          "queue": 0.008,
+          "setup": 977.158,
+          "query": 4955.011,
+          "release": 0.368,
+          "reset": 1002.999
+        }
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 4491.652587079443,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 4489.11,
+        "other_wall_ms": 2.542,
+        "exclusive_work_ms": {
+          "acquire": 0.144,
+          "queue": 0.006,
+          "setup": 990.26,
+          "query": 2529.919,
+          "release": 0.335,
+          "reset": 968.446
+        }
+      },
+      {
+        "label": "balance",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5773.063266999088,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 5770.438,
+        "other_wall_ms": 2.625,
+        "exclusive_work_ms": {
+          "acquire": 0.062,
+          "queue": 0.003,
+          "setup": 650.981,
+          "query": 4607.525,
+          "release": 0.337,
+          "reset": 511.53
+        }
+      },
+      {
+        "label": "model_catalog",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 2506.909081013873,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2503.856,
+        "other_wall_ms": 3.053,
+        "exclusive_work_ms": {
+          "acquire": 0.069,
+          "queue": 0.003,
+          "setup": 485.605,
+          "query": 1531.669,
+          "release": 0.16,
+          "reset": 486.351
+        }
+      },
+      {
+        "label": "native_usage",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 7450.529583031312,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 7445.58,
+        "other_wall_ms": 4.949,
+        "exclusive_work_ms": {
+          "acquire": 0.111,
+          "queue": 0.003,
+          "setup": 484.657,
+          "query": 6477.607,
+          "release": 0.161,
+          "reset": 483.042
+        }
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 8596.189121017233,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 8593.161,
+        "other_wall_ms": 3.029,
+        "exclusive_work_ms": {
+          "acquire": 0.136,
+          "queue": 0.006,
+          "setup": 997.076,
+          "query": 6599.588,
+          "release": 0.349,
+          "reset": 996.005
+        }
+      },
+      {
+        "label": "receipts",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 3565.0609879521653,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 3559.111,
+        "other_wall_ms": 5.95,
+        "exclusive_work_ms": {
+          "acquire": 0.106,
+          "queue": 0.006,
+          "setup": 487.76,
+          "query": 2562.588,
+          "release": 0.169,
+          "reset": 508.481
+        }
+      },
+      {
+        "label": "logging_health",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 7271.163295023143,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 7268.101,
+        "other_wall_ms": 3.063,
+        "exclusive_work_ms": {
+          "acquire": 0.14,
+          "queue": 0.006,
+          "setup": 1000.887,
+          "query": 5243.827,
+          "release": 0.347,
+          "reset": 1022.893
+        }
+      },
+      {
+        "label": "sync_version",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 13926.84599198401,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 13923.891,
+        "other_wall_ms": 2.955,
+        "exclusive_work_ms": {
+          "acquire": 0.155,
+          "queue": 0.007,
+          "setup": 993.863,
+          "query": 11822.924,
+          "release": 0.294,
+          "reset": 1106.648
+        }
+      },
+      {
+        "label": "sync",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 13209.602834074758,
+        "over_budget": false,
+        "query_count": 15,
+        "database_wall_ms": 13204.405,
+        "other_wall_ms": 5.197,
+        "exclusive_work_ms": {
+          "acquire": 0.146,
+          "queue": 0.005,
+          "setup": 1021.375,
+          "query": 11181.893,
+          "release": 0.351,
+          "reset": 1000.636
+        }
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2152.4841729551554,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 2151.268,
+        "other_wall_ms": 1.216,
+        "exclusive_work_ms": {
+          "acquire": 0.064,
+          "queue": 0.003,
+          "setup": 485.808,
+          "query": 1154.112,
+          "release": 0.148,
+          "reset": 511.134
+        }
+      },
+      {
+        "label": "native_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5117.6120940363035,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 5115.634,
+        "other_wall_ms": 1.978,
+        "exclusive_work_ms": {
+          "acquire": 0.132,
+          "queue": 0.005,
+          "setup": 1064.756,
+          "query": 3055.607,
+          "release": 0.273,
+          "reset": 994.861
+        }
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 4582.96091191005,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 4581.115,
+        "other_wall_ms": 1.846,
+        "exclusive_work_ms": {
+          "acquire": 0.142,
+          "queue": 0.006,
+          "setup": 1022.182,
+          "query": 2480.007,
+          "release": 0.272,
+          "reset": 1078.505
+        }
+      },
+      {
+        "label": "balance",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 3609.1946699889377,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 3607.066,
+        "other_wall_ms": 2.129,
+        "exclusive_work_ms": {
+          "acquire": 0.069,
+          "queue": 0.004,
+          "setup": 536.278,
+          "query": 2559.961,
+          "release": 0.16,
+          "reset": 510.593
+        }
+      },
+      {
+        "label": "model_catalog",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 2560.0940639851615,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2557.525,
+        "other_wall_ms": 2.569,
+        "exclusive_work_ms": {
+          "acquire": 0.065,
+          "queue": 0.003,
+          "setup": 510.055,
+          "query": 1539.093,
+          "release": 0.15,
+          "reset": 508.16
+        }
+      },
+      {
+        "label": "native_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5119.984952034429,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 5117.834,
+        "other_wall_ms": 2.151,
+        "exclusive_work_ms": {
+          "acquire": 0.061,
+          "queue": 0.003,
+          "setup": 483.154,
+          "query": 4122.933,
+          "release": 0.15,
+          "reset": 511.532
+        }
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 6348.530026967637,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 6346.126,
+        "other_wall_ms": 2.404,
+        "exclusive_work_ms": {
+          "acquire": 0.14,
+          "queue": 0.005,
+          "setup": 1063.796,
+          "query": 4227.787,
+          "release": 0.268,
+          "reset": 1054.129
+        }
+      },
+      {
+        "label": "receipts",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2507.912080967799,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2505.402,
+        "other_wall_ms": 2.51,
+        "exclusive_work_ms": {
+          "acquire": 0.072,
+          "queue": 0.009,
+          "setup": 510.97,
+          "query": 1508.594,
+          "release": 0.156,
+          "reset": 485.601
+        }
+      },
+      {
+        "label": "logging_health",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5172.42342105601,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 5170.023,
+        "other_wall_ms": 2.401,
+        "exclusive_work_ms": {
+          "acquire": 0.23,
+          "queue": 0.01,
+          "setup": 1102.597,
+          "query": 3074.747,
+          "release": 0.36,
+          "reset": 992.078
+        }
+      },
+      {
+        "label": "sync_version",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 8554.972411016934,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 8552.376,
+        "other_wall_ms": 2.596,
+        "exclusive_work_ms": {
+          "acquire": 0.133,
+          "queue": 0.006,
+          "setup": 1022.801,
+          "query": 6509.168,
+          "release": 0.267,
+          "reset": 1020.001
+        }
+      },
+      {
+        "label": "sync",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 9671.592229045928,
+        "over_budget": false,
+        "query_count": 15,
+        "database_wall_ms": 9668.299,
+        "other_wall_ms": 3.293,
+        "exclusive_work_ms": {
+          "acquire": 0.132,
+          "queue": 0.005,
+          "setup": 1114.417,
+          "query": 7572.177,
+          "release": 0.307,
+          "reset": 981.263
+        }
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2048.8205150468275,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 2046.807,
+        "other_wall_ms": 2.013,
+        "exclusive_work_ms": {
+          "acquire": 0.106,
+          "queue": 0.006,
+          "setup": 510.505,
+          "query": 996.211,
+          "release": 0.196,
+          "reset": 539.783
+        }
+      },
+      {
+        "label": "native_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5119.418946094811,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 5117.353,
+        "other_wall_ms": 2.066,
+        "exclusive_work_ms": {
+          "acquire": 0.145,
+          "queue": 0.006,
+          "setup": 1043.219,
+          "query": 3055.069,
+          "release": 0.275,
+          "reset": 1018.64
+        }
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 4397.396447951905,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 4395.54,
+        "other_wall_ms": 1.856,
+        "exclusive_work_ms": {
+          "acquire": 0.136,
+          "queue": 0.006,
+          "setup": 994.468,
+          "query": 2433.049,
+          "release": 0.279,
+          "reset": 967.602
+        }
+      },
+      {
+        "label": "balance",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 3589.9451290024444,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 3588.061,
+        "other_wall_ms": 1.884,
+        "exclusive_work_ms": {
+          "acquire": 0.063,
+          "queue": 0.003,
+          "setup": 516.783,
+          "query": 2559.757,
+          "release": 0.156,
+          "reset": 511.298
+        }
+      },
+      {
+        "label": "model_catalog",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 2509.2186289839447,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2506.687,
+        "other_wall_ms": 2.532,
+        "exclusive_work_ms": {
+          "acquire": 0.085,
+          "queue": 0.003,
+          "setup": 484.216,
+          "query": 1536.087,
+          "release": 0.15,
+          "reset": 486.146
+        }
+      },
+      {
+        "label": "native_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5070.505267009139,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 5068.113,
+        "other_wall_ms": 2.392,
+        "exclusive_work_ms": {
+          "acquire": 0.089,
+          "queue": 0.003,
+          "setup": 482.309,
+          "query": 4072.469,
+          "release": 0.211,
+          "reset": 513.032
+        }
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 6551.828463096172,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 6549.374,
+        "other_wall_ms": 2.454,
+        "exclusive_work_ms": {
+          "acquire": 0.143,
+          "queue": 0.006,
+          "setup": 994.687,
+          "query": 4397.129,
+          "release": 0.26,
+          "reset": 1157.15
+        }
+      },
+      {
+        "label": "receipts",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2560.2233490208164,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2558.212,
+        "other_wall_ms": 2.012,
+        "exclusive_work_ms": {
+          "acquire": 0.062,
+          "queue": 0.003,
+          "setup": 510.806,
+          "query": 1535.064,
+          "release": 0.147,
+          "reset": 512.13
+        }
+      },
+      {
+        "label": "logging_health",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5121.335641015321,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 5119.121,
+        "other_wall_ms": 2.215,
+        "exclusive_work_ms": {
+          "acquire": 0.14,
+          "queue": 0.006,
+          "setup": 1023.515,
+          "query": 3023.482,
+          "release": 0.365,
+          "reset": 1071.612
+        }
+      },
+      {
+        "label": "sync_version",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 8751.441406086087,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 8748.837,
+        "other_wall_ms": 2.604,
+        "exclusive_work_ms": {
+          "acquire": 0.129,
+          "queue": 0.006,
+          "setup": 1035.946,
+          "query": 6729.646,
+          "release": 0.288,
+          "reset": 982.822
+        }
+      },
+      {
+        "label": "sync",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 9549.024685984477,
+        "over_budget": false,
+        "query_count": 15,
+        "database_wall_ms": 9545.805,
+        "other_wall_ms": 3.219,
+        "exclusive_work_ms": {
+          "acquire": 0.159,
+          "queue": 0.008,
+          "setup": 1047.347,
+          "query": 7529.498,
+          "release": 0.253,
+          "reset": 968.54
+        }
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2076.8235749565065,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 2073.873,
+        "other_wall_ms": 2.951,
+        "exclusive_work_ms": {
+          "acquire": 0.135,
+          "queue": 0.008,
+          "setup": 485.879,
+          "query": 1075.318,
+          "release": 0.156,
+          "reset": 512.378
+        }
+      },
+      {
+        "label": "native_auth",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 11799.24426402431,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 11796.126,
+        "other_wall_ms": 3.119,
+        "exclusive_work_ms": {
+          "acquire": 0.158,
+          "queue": 0.006,
+          "connect": 3113.967,
+          "setup": 1502.232,
+          "query": 6172.637,
+          "release": 0.276,
+          "reset": 1006.85
+        }
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 11439.285960048437,
+        "over_budget": true,
+        "query_count": 5,
+        "database_wall_ms": 11435.229,
+        "other_wall_ms": 4.057,
+        "exclusive_work_ms": {
+          "acquire": 0.185,
+          "queue": 0.007,
+          "connect": 3104.126,
+          "setup": 1504.184,
+          "query": 5824.167,
+          "release": 0.263,
+          "reset": 1002.297
+        }
+      },
+      {
+        "label": "balance",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 3454.3407800374553,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 3451.883,
+        "other_wall_ms": 2.458,
+        "exclusive_work_ms": {
+          "acquire": 0.066,
+          "queue": 0.003,
+          "setup": 486.617,
+          "query": 2479.832,
+          "release": 0.18,
+          "reset": 485.185
+        }
+      },
+      {
+        "label": "model_catalog",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 2539.731394033879,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 2536.383,
+        "other_wall_ms": 3.349,
+        "exclusive_work_ms": {
+          "acquire": 0.072,
+          "queue": 0.003,
+          "setup": 536.574,
+          "query": 1513.138,
+          "release": 0.166,
+          "reset": 486.43
+        }
+      },
+      {
+        "label": "native_usage",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5246.773711987771,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 5244.034,
+        "other_wall_ms": 2.739,
+        "exclusive_work_ms": {
+          "acquire": 0.065,
+          "queue": 0.002,
+          "setup": 556.625,
+          "query": 4205.12,
+          "release": 0.142,
+          "reset": 482.079
+        }
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 9581.047000945546,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 9578.629,
+        "other_wall_ms": 2.418,
+        "exclusive_work_ms": {
+          "acquire": 0.141,
+          "queue": 0.005,
+          "setup": 1000.722,
+          "query": 7556.05,
+          "release": 0.299,
+          "reset": 1021.413
+        }
+      },
+      {
+        "label": "receipts",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 3571.165001951158,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 3568.798,
+        "other_wall_ms": 2.367,
+        "exclusive_work_ms": {
+          "acquire": 0.116,
+          "queue": 0.004,
+          "setup": 501.619,
+          "query": 2565.135,
+          "release": 0.15,
+          "reset": 501.775
+        }
+      },
+      {
+        "label": "logging_health",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 5142.073455965146,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 5139.887,
+        "other_wall_ms": 2.187,
+        "exclusive_work_ms": {
+          "acquire": 0.14,
+          "queue": 0.006,
+          "setup": 1019.511,
+          "query": 3124.104,
+          "release": 0.54,
+          "reset": 995.586
+        }
+      },
+      {
+        "label": "sync_version",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 14853.428825968876,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 14850.158,
+        "other_wall_ms": 3.271,
+        "exclusive_work_ms": {
+          "acquire": 0.168,
+          "queue": 0.007,
+          "setup": 1023.803,
+          "query": 12825.897,
+          "release": 0.273,
+          "reset": 1000.011
+        }
+      },
+      {
+        "label": "sync",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 9735.812484985217,
+        "over_budget": false,
+        "query_count": 15,
+        "database_wall_ms": 9731.761,
+        "other_wall_ms": 4.051,
+        "exclusive_work_ms": {
+          "acquire": 0.17,
+          "queue": 0.006,
+          "setup": 995.389,
+          "query": 7545.737,
+          "release": 0.693,
+          "reset": 1189.765
+        }
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 2020.933901076205,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 2020.934,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "native_auth",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 7490.453098900616,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 7490.453,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 6230.413125013001,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 6230.413,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "balance",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 7576.696848031133,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 7576.697,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "model_catalog",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 11859.701354056597,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 11859.701,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "native_usage",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 12837.36125798896,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 12837.361,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 8382.634553010575,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 8382.635,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "receipts",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 3173.1479690643027,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 3173.148,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "logging_health",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 14967.63801202178,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 14967.638,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "sync_version",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 13802.738405065611,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 13802.738,
+        "exclusive_work_ms": {}
+      },
+      {
+        "label": "sync",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 16462.25959295407,
+        "over_budget": true,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 16462.26,
+        "exclusive_work_ms": {}
+      }
+    ],
+    "database": {
+      "connect_ms": 3500.62824098859,
+      "select_one_ms": [1227.251350064762, 511.5485730348155, 502.8714770451188],
+      "plans": [
+        {
+          "query": "bcce3f0b70b45864",
+          "site": "app/auth/middleware.py:126",
+          "planning_ms": 1.139,
+          "execution_ms": 0.111,
+          "root_node": "Nested Loop",
+          "client_ms": 1032.619782956317
+        },
+        {
+          "query": "5c308bb642a15f6d",
+          "site": "app/services/organization_service.py:231",
+          "planning_ms": 0.766,
+          "execution_ms": 0.242,
+          "root_node": "Sort",
+          "client_ms": 1025.9207910858095
+        },
+        {
+          "query": "2408a1344ff56da6",
+          "site": "app/db/repos/organization_repo.py:18",
+          "planning_ms": 0.289,
+          "execution_ms": 0.028,
+          "root_node": "Index Scan",
+          "client_ms": 1022.0360199455172
+        },
+        {
+          "query": "1f612b9033ba9ff4",
+          "site": "app/db/repos/user_repo.py:48",
+          "planning_ms": 0.088,
+          "execution_ms": 0.042,
+          "root_node": "Index Scan",
+          "client_ms": 1025.7654399611056
+        },
+        {
+          "query": "e33c9669796dd733",
+          "site": "app/services/organization_service.py:711",
+          "planning_ms": 1.975,
+          "execution_ms": 0.24,
+          "root_node": "Result",
+          "client_ms": 1024.229155969806
+        }
+      ]
+    },
+    "pool_configuration": {
+      "primary_min": 1,
+      "primary_max": 12,
+      "oauth_min": 1,
+      "oauth_max": 3
+    }
+  },
+  "followup_2026_10_26": {
+    "measurement": "Dashboard middleware elapsed time to response headers, before stream consumption; not end-to-end client completion.",
+    "server_headers": [
+      {
+        "path": "/api/health",
+        "status": 200,
+        "milliseconds": 0.84
+      },
+      {
+        "path": "/api/cli/sync",
+        "status": 200,
+        "milliseconds": 14880.6
+      },
+      {
+        "path": "/api/cli/sync",
+        "status": 200,
+        "milliseconds": 7779.7
+      },
+      {
+        "path": "/api/cli/sync",
+        "status": 200,
+        "milliseconds": 24456.45
+      },
+      {
+        "path": "/api/cli/sync",
+        "status": 200,
+        "milliseconds": 8386.99
+      },
+      {
+        "path": "/api/cli/model-catalog",
+        "status": 200,
+        "milliseconds": 4216.4
+      },
+      {
+        "path": "/api/cli/balance",
+        "status": 200,
+        "milliseconds": 4654.51
+      },
+      {
+        "path": "/api/cli/model-catalog",
+        "status": 200,
+        "milliseconds": 3167.16
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 5726.24
+      },
+      {
+        "path": "/api/v1/auth/status",
+        "status": 200,
+        "milliseconds": 12416.41
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 9823.33
+      },
+      {
+        "path": "/api/llm/proxy/openrouter/v1/chat/completions",
+        "status": 200,
+        "milliseconds": 18225.49
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 10376.65
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 4598.14
+      },
+      {
+        "path": "/api/v1/auth/status",
+        "status": 200,
+        "milliseconds": 7569.31
+      },
+      {
+        "path": "/api/llm/proxy/openrouter/v1/chat/completions",
+        "status": 200,
+        "milliseconds": 19762.08
+      },
+      {
+        "path": "/api/llm/proxy/openrouter/v1/chat/completions",
+        "status": 200,
+        "milliseconds": 24171.01
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 4440.69
+      },
+      {
+        "path": "/api/cli/balance",
+        "status": 200,
+        "milliseconds": 4220.18
+      },
+      {
+        "path": "/api/llm/proxy/openrouter/v1/chat/completions",
+        "status": 200,
+        "milliseconds": 22211.18
+      },
+      {
+        "path": "/api/v1/auth/status",
+        "status": 200,
+        "milliseconds": 5563.39
+      },
+      {
+        "path": "/api/cli/balance",
+        "status": 200,
+        "milliseconds": 3174.12
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 3298.54
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 2325.03
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 3699.24
+      },
+      {
+        "path": "/api/v1/telemetry/consent",
+        "status": 200,
+        "milliseconds": 4921.87
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 2520.94
+      },
+      {
+        "path": "/api/v1/telemetry/health",
+        "status": 200,
+        "milliseconds": 8168.32
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 2345.64
+      },
+      {
+        "path": "/api/credits/call-receipts",
+        "status": 200,
+        "milliseconds": 3120.87
+      }
+    ],
+    "normal_forced_sync": {
+      "completed_ms": [14949, 7811.98827],
+      "later_preflight_timed_out": true,
+      "client_deadline_ms": 15000
+    },
+    "client_http_status_counts": {
+      "/api/cli/access": {
+        "500": 1
+      },
+      "/api/cli/balance": {
+        "200": 3,
+        "500": 3
+      },
+      "/api/cli/model-catalog": {
+        "200": 2
+      },
+      "/api/cli/sync": {
+        "200": 1
+      },
+      "/api/credits/call-receipts": {
+        "200": 5,
+        "500": 7
+      },
+      "/api/llm/proxy/openrouter/v1/chat/completions": {
+        "200": 4,
+        "400": 1,
+        "500": 4
+      },
+      "/api/v1/auth/status": {
+        "200": 3
+      },
+      "/api/v1/telemetry/consent": {
+        "500": 8
+      },
+      "/api/v1/telemetry/health": {
+        "200": 1
+      },
+      "/api/v1/wallet": {
+        "500": 1
+      }
+    }
+  },
+  "fly_staging_2026_10_26": {
+    "dashboard_commit": "a32f5b901cc692cbe5ac6b32486ceb92d1228c15",
+    "openscience_commit": "187e99311cb530dcd6a3c3d8d691f6600d150a69",
+    "region": "sin",
+    "database_region": "AWS ap-south-1",
+    "concurrency": 1,
+    "pool_configuration": {
+      "primary_min": 1,
+      "primary_max": 3,
+      "oauth_min": 1,
+      "oauth_max": 1
+    },
+    "database_read_only": true,
+    "requests": [
+      {
+        "label": "dashboard_auth",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 484.7147410000616,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 475.889,
+        "other_wall_ms": 8.826,
+        "exclusive_work_ms": {
+          "acquire": 0.188,
+          "queue": 0.005,
+          "setup": 59.354,
+          "query": 356.51,
+          "release": 0.38,
+          "reset": 59.451
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 842.1121819999371,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 835.238,
+        "other_wall_ms": 6.874,
+        "exclusive_work_ms": {
+          "acquire": 0.354,
+          "queue": 0.011,
+          "setup": 118.569,
+          "query": 596.691,
+          "release": 0.575,
+          "reset": 119.038
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 542.2503190000043,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 537.798,
+        "other_wall_ms": 4.452,
+        "exclusive_work_ms": {
+          "acquire": 0.302,
+          "queue": 0.01,
+          "setup": 119.012,
+          "query": 298.646,
+          "release": 0.534,
+          "reset": 119.296
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 660.0922049999554,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 655.339,
+        "other_wall_ms": 4.753,
+        "exclusive_work_ms": {
+          "acquire": 0.138,
+          "queue": 0.005,
+          "setup": 59.281,
+          "query": 536.158,
+          "release": 0.271,
+          "reset": 59.486
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 303.7060050000946,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.154,
+        "other_wall_ms": 5.552,
+        "exclusive_work_ms": {
+          "acquire": 0.133,
+          "queue": 0.005,
+          "setup": 59.3,
+          "query": 179.046,
+          "release": 0.332,
+          "reset": 59.34
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 909.2243139998573,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 896.36,
+        "other_wall_ms": 12.865,
+        "exclusive_work_ms": {
+          "acquire": 0.2,
+          "queue": 0.007,
+          "setup": 59.545,
+          "query": 776.725,
+          "release": 0.349,
+          "reset": 59.532
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 1020.5716259999917,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 1014.877,
+        "other_wall_ms": 5.694,
+        "exclusive_work_ms": {
+          "acquire": 0.43,
+          "queue": 0.012,
+          "setup": 119.056,
+          "query": 775.856,
+          "release": 0.531,
+          "reset": 118.992
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 423.4888220000812,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 418.394,
+        "other_wall_ms": 5.094,
+        "exclusive_work_ms": {
+          "acquire": 0.134,
+          "queue": 0.005,
+          "setup": 59.76,
+          "query": 298.688,
+          "release": 0.32,
+          "reset": 59.487
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 855.2690579999762,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 849.407,
+        "other_wall_ms": 5.862,
+        "exclusive_work_ms": {
+          "acquire": 0.45,
+          "queue": 0.01,
+          "setup": 118.441,
+          "query": 611.302,
+          "release": 0.573,
+          "reset": 118.632
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1613.6593090000133,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 1608.111,
+        "other_wall_ms": 5.548,
+        "exclusive_work_ms": {
+          "acquire": 0.289,
+          "queue": 0.01,
+          "setup": 118.68,
+          "query": 1369.807,
+          "release": 0.514,
+          "reset": 118.811
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "first",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1139.463004000163,
+        "over_budget": false,
+        "query_count": 10,
+        "database_wall_ms": 1131.269,
+        "other_wall_ms": 8.194,
+        "exclusive_work_ms": {
+          "acquire": 0.276,
+          "queue": 0.01,
+          "setup": 118.783,
+          "query": 892.854,
+          "release": 0.54,
+          "reset": 118.806
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 240.75253500018334,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 238.142,
+        "other_wall_ms": 2.61,
+        "exclusive_work_ms": {
+          "acquire": 0.157,
+          "queue": 0.006,
+          "setup": 59.481,
+          "query": 118.987,
+          "release": 0.297,
+          "reset": 59.214
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 602.3380270000871,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 598.502,
+        "other_wall_ms": 3.836,
+        "exclusive_work_ms": {
+          "acquire": 0.328,
+          "queue": 0.012,
+          "setup": 118.561,
+          "query": 360.235,
+          "release": 0.476,
+          "reset": 118.89
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 542.2476380001626,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 538.347,
+        "other_wall_ms": 3.901,
+        "exclusive_work_ms": {
+          "acquire": 0.317,
+          "queue": 0.012,
+          "setup": 118.712,
+          "query": 299.448,
+          "release": 0.541,
+          "reset": 119.316
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 421.7604919999758,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 418.276,
+        "other_wall_ms": 3.485,
+        "exclusive_work_ms": {
+          "acquire": 0.64,
+          "queue": 0.004,
+          "setup": 59.262,
+          "query": 298.684,
+          "release": 0.347,
+          "reset": 59.339
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 302.13518400000794,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 297.479,
+        "other_wall_ms": 4.656,
+        "exclusive_work_ms": {
+          "acquire": 0.144,
+          "queue": 0.005,
+          "setup": 59.377,
+          "query": 178.359,
+          "release": 0.275,
+          "reset": 59.319
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 602.3561680001421,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 597.845,
+        "other_wall_ms": 4.511,
+        "exclusive_work_ms": {
+          "acquire": 0.131,
+          "queue": 0.005,
+          "setup": 59.47,
+          "query": 478.367,
+          "release": 0.32,
+          "reset": 59.551
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 721.3214539999626,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 716.283,
+        "other_wall_ms": 5.039,
+        "exclusive_work_ms": {
+          "acquire": 0.298,
+          "queue": 0.01,
+          "setup": 118.605,
+          "query": 477.473,
+          "release": 0.677,
+          "reset": 119.221
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 302.5824939998074,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.65,
+        "other_wall_ms": 3.933,
+        "exclusive_work_ms": {
+          "acquire": 0.145,
+          "queue": 0.006,
+          "setup": 59.309,
+          "query": 179.401,
+          "release": 0.314,
+          "reset": 59.475
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 603.8543079998817,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 600.137,
+        "other_wall_ms": 3.717,
+        "exclusive_work_ms": {
+          "acquire": 0.293,
+          "queue": 0.009,
+          "setup": 118.727,
+          "query": 361.812,
+          "release": 0.557,
+          "reset": 118.739
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1017.1798549999949,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 1012.273,
+        "other_wall_ms": 4.907,
+        "exclusive_work_ms": {
+          "acquire": 0.317,
+          "queue": 0.011,
+          "setup": 118.86,
+          "query": 773.962,
+          "release": 0.49,
+          "reset": 118.632
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 838.231240000141,
+        "over_budget": false,
+        "query_count": 10,
+        "database_wall_ms": 833.449,
+        "other_wall_ms": 4.783,
+        "exclusive_work_ms": {
+          "acquire": 0.282,
+          "queue": 0.01,
+          "setup": 118.512,
+          "query": 595.284,
+          "release": 0.512,
+          "reset": 118.849
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 239.9116739998135,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 237.785,
+        "other_wall_ms": 2.127,
+        "exclusive_work_ms": {
+          "acquire": 0.124,
+          "queue": 0.004,
+          "setup": 59.271,
+          "query": 118.638,
+          "release": 0.274,
+          "reset": 59.474
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 600.2757759999895,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 596.512,
+        "other_wall_ms": 3.764,
+        "exclusive_work_ms": {
+          "acquire": 0.316,
+          "queue": 0.009,
+          "setup": 118.739,
+          "query": 358.025,
+          "release": 0.531,
+          "reset": 118.89
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 539.8668579998684,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 536.337,
+        "other_wall_ms": 3.529,
+        "exclusive_work_ms": {
+          "acquire": 0.331,
+          "queue": 0.013,
+          "setup": 118.747,
+          "query": 298.087,
+          "release": 0.573,
+          "reset": 118.587
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 421.04285100003835,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 417.273,
+        "other_wall_ms": 3.77,
+        "exclusive_work_ms": {
+          "acquire": 0.149,
+          "queue": 0.006,
+          "setup": 59.329,
+          "query": 298.146,
+          "release": 0.323,
+          "reset": 59.321
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 304.1565850001007,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.437,
+        "other_wall_ms": 5.719,
+        "exclusive_work_ms": {
+          "acquire": 0.169,
+          "queue": 0.007,
+          "setup": 59.259,
+          "query": 178.705,
+          "release": 0.264,
+          "reset": 60.034
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 601.1004370000137,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 596.987,
+        "other_wall_ms": 4.114,
+        "exclusive_work_ms": {
+          "acquire": 0.123,
+          "queue": 0.004,
+          "setup": 59.334,
+          "query": 477.858,
+          "release": 0.346,
+          "reset": 59.322
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 720.3490739998415,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 715.338,
+        "other_wall_ms": 5.011,
+        "exclusive_work_ms": {
+          "acquire": 0.285,
+          "queue": 0.009,
+          "setup": 118.505,
+          "query": 477.311,
+          "release": 0.508,
+          "reset": 118.721
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 302.6518640001541,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.696,
+        "other_wall_ms": 3.956,
+        "exclusive_work_ms": {
+          "acquire": 0.126,
+          "queue": 0.005,
+          "setup": 59.229,
+          "query": 179.5,
+          "release": 0.307,
+          "reset": 59.529
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 604.4571089998954,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 600.558,
+        "other_wall_ms": 3.899,
+        "exclusive_work_ms": {
+          "acquire": 0.273,
+          "queue": 0.01,
+          "setup": 118.47,
+          "query": 362.263,
+          "release": 0.509,
+          "reset": 119.032
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1015.7446539999455,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 1011.297,
+        "other_wall_ms": 4.448,
+        "exclusive_work_ms": {
+          "acquire": 0.297,
+          "queue": 0.01,
+          "setup": 118.612,
+          "query": 773.07,
+          "release": 0.531,
+          "reset": 118.778
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 838.059069999872,
+        "over_budget": false,
+        "query_count": 10,
+        "database_wall_ms": 833.827,
+        "other_wall_ms": 4.232,
+        "exclusive_work_ms": {
+          "acquire": 0.337,
+          "queue": 0.009,
+          "setup": 118.395,
+          "query": 595.82,
+          "release": 0.485,
+          "reset": 118.781
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 239.4033450000279,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 237.247,
+        "other_wall_ms": 2.157,
+        "exclusive_work_ms": {
+          "acquire": 0.117,
+          "queue": 0.005,
+          "setup": 59.246,
+          "query": 118.485,
+          "release": 0.267,
+          "reset": 59.127
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 597.365494999849,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 593.69,
+        "other_wall_ms": 3.675,
+        "exclusive_work_ms": {
+          "acquire": 0.281,
+          "queue": 0.009,
+          "setup": 118.35,
+          "query": 355.92,
+          "release": 0.531,
+          "reset": 118.598
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 540.1095180000084,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 536.393,
+        "other_wall_ms": 3.717,
+        "exclusive_work_ms": {
+          "acquire": 0.383,
+          "queue": 0.011,
+          "setup": 118.478,
+          "query": 298.233,
+          "release": 0.495,
+          "reset": 118.792
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 420.11156000012306,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 416.863,
+        "other_wall_ms": 3.248,
+        "exclusive_work_ms": {
+          "acquire": 0.117,
+          "queue": 0.004,
+          "setup": 59.339,
+          "query": 297.706,
+          "release": 0.304,
+          "reset": 59.394
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 302.00630400008777,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 297.182,
+        "other_wall_ms": 4.825,
+        "exclusive_work_ms": {
+          "acquire": 0.125,
+          "queue": 0.004,
+          "setup": 59.113,
+          "query": 178.217,
+          "release": 0.346,
+          "reset": 59.377
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 599.4693150000785,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 595.072,
+        "other_wall_ms": 4.398,
+        "exclusive_work_ms": {
+          "acquire": 0.124,
+          "queue": 0.004,
+          "setup": 59.137,
+          "query": 476.296,
+          "release": 0.336,
+          "reset": 59.174
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 721.6284339999675,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 716.622,
+        "other_wall_ms": 5.006,
+        "exclusive_work_ms": {
+          "acquire": 0.316,
+          "queue": 0.023,
+          "setup": 119.506,
+          "query": 477.66,
+          "release": 0.504,
+          "reset": 118.614
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 302.6677440000185,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.485,
+        "other_wall_ms": 4.183,
+        "exclusive_work_ms": {
+          "acquire": 0.135,
+          "queue": 0.005,
+          "setup": 59.4,
+          "query": 179.282,
+          "release": 0.28,
+          "reset": 59.383
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 604.6751789999689,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 600.642,
+        "other_wall_ms": 4.033,
+        "exclusive_work_ms": {
+          "acquire": 0.334,
+          "queue": 0.011,
+          "setup": 118.866,
+          "query": 361.858,
+          "release": 0.602,
+          "reset": 118.97
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1016.2427149998621,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 1011.151,
+        "other_wall_ms": 5.091,
+        "exclusive_work_ms": {
+          "acquire": 0.375,
+          "queue": 0.009,
+          "setup": 119.787,
+          "query": 771.89,
+          "release": 0.652,
+          "reset": 118.438
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "warm",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 850.6963760000872,
+        "over_budget": false,
+        "query_count": 10,
+        "database_wall_ms": 846.103,
+        "other_wall_ms": 4.594,
+        "exclusive_work_ms": {
+          "acquire": 0.276,
+          "queue": 0.009,
+          "setup": 118.807,
+          "query": 600.699,
+          "release": 0.575,
+          "reset": 125.736
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 241.90663500007759,
+        "over_budget": false,
+        "query_count": 2,
+        "database_wall_ms": 239.773,
+        "other_wall_ms": 2.134,
+        "exclusive_work_ms": {
+          "acquire": 0.124,
+          "queue": 0.004,
+          "setup": 59.524,
+          "query": 120.497,
+          "release": 0.313,
+          "reset": 59.312
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 599.771495999903,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 595.871,
+        "other_wall_ms": 3.901,
+        "exclusive_work_ms": {
+          "acquire": 0.309,
+          "queue": 0.011,
+          "setup": 118.62,
+          "query": 357.524,
+          "release": 0.627,
+          "reset": 118.781
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 553.015263999896,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 549.481,
+        "other_wall_ms": 3.534,
+        "exclusive_work_ms": {
+          "acquire": 0.279,
+          "queue": 0.008,
+          "setup": 118.527,
+          "query": 299.923,
+          "release": 0.513,
+          "reset": 130.231
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 433.25688699997045,
+        "over_budget": false,
+        "query_count": 5,
+        "database_wall_ms": 429.755,
+        "other_wall_ms": 3.502,
+        "exclusive_work_ms": {
+          "acquire": 0.14,
+          "queue": 0.004,
+          "setup": 59.386,
+          "query": 310.406,
+          "release": 0.328,
+          "reset": 59.491
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 303.7309850001293,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.709,
+        "other_wall_ms": 5.022,
+        "exclusive_work_ms": {
+          "acquire": 0.127,
+          "queue": 0.004,
+          "setup": 59.415,
+          "query": 179.082,
+          "release": 0.304,
+          "reset": 59.777
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 600.5641859999287,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 596.186,
+        "other_wall_ms": 4.378,
+        "exclusive_work_ms": {
+          "acquire": 0.159,
+          "queue": 0.007,
+          "setup": 59.492,
+          "query": 476.868,
+          "release": 0.283,
+          "reset": 59.377
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 720.2643729999636,
+        "over_budget": false,
+        "query_count": 8,
+        "database_wall_ms": 715.396,
+        "other_wall_ms": 4.869,
+        "exclusive_work_ms": {
+          "acquire": 0.294,
+          "queue": 0.009,
+          "setup": 118.486,
+          "query": 477.484,
+          "release": 0.497,
+          "reset": 118.625
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 302.57364499993855,
+        "over_budget": false,
+        "query_count": 3,
+        "database_wall_ms": 298.45,
+        "other_wall_ms": 4.123,
+        "exclusive_work_ms": {
+          "acquire": 0.124,
+          "queue": 0.004,
+          "setup": 59.496,
+          "query": 179.029,
+          "release": 0.354,
+          "reset": 59.443
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 606.3444189999245,
+        "over_budget": false,
+        "query_count": 6,
+        "database_wall_ms": 601.572,
+        "other_wall_ms": 4.773,
+        "exclusive_work_ms": {
+          "acquire": 0.38,
+          "queue": 0.011,
+          "setup": 118.882,
+          "query": 362.953,
+          "release": 0.624,
+          "reset": 118.721
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1016.686664999952,
+        "over_budget": false,
+        "query_count": 13,
+        "database_wall_ms": 1011.888,
+        "other_wall_ms": 4.799,
+        "exclusive_work_ms": {
+          "acquire": 0.304,
+          "queue": 0.01,
+          "setup": 118.532,
+          "query": 773.803,
+          "release": 0.621,
+          "reset": 118.618
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "concurrent",
+        "transport": "in_process_asgi",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 839.3199299998741,
+        "over_budget": false,
+        "query_count": 10,
+        "database_wall_ms": 834.124,
+        "other_wall_ms": 5.196,
+        "exclusive_work_ms": {
+          "acquire": 0.287,
+          "queue": 0.009,
+          "setup": 118.568,
+          "query": 595.465,
+          "release": 0.558,
+          "reset": 119.238
+        },
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_auth",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 424.6821730000647,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 424.682,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "native_auth",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1329.9928440001167,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 1329.993,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "workspace_bootstrap",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 8000,
+        "status": 200,
+        "duration_ms": 720.6757040000866,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 720.676,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "balance",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 593.944423000039,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 593.944,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "model_catalog",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 448.36468299990884,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 448.365,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "native_usage",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 846.2963830002082,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 846.296,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "dashboard_usage",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 30000,
+        "status": 200,
+        "duration_ms": 951.7848939999567,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 951.785,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "receipts",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 5000,
+        "status": 200,
+        "duration_ms": 362.33240299998215,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 362.332,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "logging_health",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 840.6259509999927,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 840.626,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "sync_version",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1553.6141009999938,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 1553.614,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      },
+      {
+        "label": "sync",
+        "phase": "loopback",
+        "transport": "loopback_http",
+        "budget_ms": 15000,
+        "status": 200,
+        "duration_ms": 1127.1533480000926,
+        "over_budget": false,
+        "query_count": 0,
+        "database_wall_ms": 0.0,
+        "other_wall_ms": 1127.153,
+        "exclusive_work_ms": {},
+        "repeated_queries": []
+      }
+    ],
+    "normal_client_sync_ms": [2502.877506, 2046.275816],
+    "note": "66 successful requests: 11 first, 33 warm, 11 scheduled under concurrency=1, 11 loopback HTTP. Diagnostic timeouts unchanged; no production capacity or p95 claim."
+  }
+}
