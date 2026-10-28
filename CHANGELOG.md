@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Refresh workspace credentials directly for manual sync and retries, and recognize Dashboard's version response during background refresh.
+
 - Save estimated system-instruction and tool-definition counts with each model call so the context breakdown survives a page reload.
 
 - Simplify the task context panel with a visible context bar and text breakdown, session tokens and exact Wallet deductions; collapse charge identities and technical details.

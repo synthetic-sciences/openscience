@@ -30,6 +30,7 @@ const fixture = {
   version: 7 as number | string,
   versionStatus: 200,
   versionBody: undefined as unknown,
+  gate: undefined as Promise<void> | undefined,
   probes: 0,
   fulls: 0,
 }
@@ -42,7 +43,8 @@ const server = Bun.serve({
     if (pathname === "/api/cli/sync/version") {
       fixture.probes++
       expect(request.headers.get("authorization")).toBe(`Bearer ${session.api_key}`)
-      return Response.json(fixture.versionBody ?? { version: fixture.version }, {
+      await fixture.gate
+      return Response.json(fixture.versionBody ?? { v: fixture.version }, {
         status: fixture.versionStatus,
         headers: funding,
       })
@@ -66,12 +68,15 @@ const { JsonStore } = await import("../../src/util/jsonstore")
 const previousAuth = await Auth.all()
 
 const expiresAt = async () => (await JsonStore.read(WorkspaceCredentials.filepath)).expires_at as number
+let sequence = 0
 
 beforeEach(async () => {
+  session.api_key = `osk_fixture_sync_version_${++sequence}`
   fixture.payload = snapshot()
   fixture.version = 7
   fixture.versionStatus = 200
   fixture.versionBody = undefined
+  fixture.gate = undefined
   fixture.probes = 0
   fixture.fulls = 0
   await OpenScience.clearSession()
@@ -94,7 +99,7 @@ test("a tick fetches the payload only when the digest moved or the periodic wind
   let clock = Date.now()
   const now = spyOn(Date, "now").mockImplementation(() => clock)
   try {
-    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    expect((await OpenScience.syncCredentials()).state).toBe("ready")
     expect(fixture).toMatchObject({ probes: 1, fulls: 1 })
     expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
     const written = await expiresAt()
@@ -133,7 +138,7 @@ test("an unreadable digest, a forced sync or a missing grant fetches the payload
   let clock = Date.now()
   const now = spyOn(Date, "now").mockImplementation(() => clock)
   try {
-    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    expect((await OpenScience.syncCredentials()).state).toBe("ready")
     expect(fixture).toMatchObject({ probes: 1, fulls: 1 })
 
     // A failing probe never blocks the sync; the full read decides.
@@ -149,25 +154,74 @@ test("an unreadable digest, a forced sync or a missing grant fetches the payload
     expect((await OpenScience.syncCredentials()).state).toBe("ready")
     expect(fixture).toMatchObject({ probes: 3, fulls: 3 })
 
-    // The digest as a string still names the same payload.
+    // An unversioned payload cannot retain the digest of an earlier snapshot.
     fixture.versionBody = undefined
     fixture.version = "7"
     clock += OpenScience.SYNC_INTERVAL
     expect((await OpenScience.syncCredentials()).state).toBe("ready")
-    expect(fixture).toMatchObject({ probes: 4, fulls: 3 })
+    expect(fixture).toMatchObject({ probes: 4, fulls: 4 })
 
     // A forced sync (a login, a retry) always reads the payload.
     clock += OpenScience.SYNC_INTERVAL
     expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
-    expect(fixture).toMatchObject({ probes: 5, fulls: 4 })
+    expect(fixture).toMatchObject({ probes: 4, fulls: 5 })
 
     // An unchanged digest cannot revive a grant that is no longer stored.
     await WorkspaceCredentials.clear()
     clock += OpenScience.SYNC_INTERVAL
     expect((await OpenScience.syncCredentials()).state).toBe("ready")
-    expect(fixture).toMatchObject({ probes: 6, fulls: 5 })
+    expect(fixture).toMatchObject({ probes: 5, fulls: 6 })
     expect(await expiresAt()).toBe(clock + WorkspaceCredentials.TTL)
   } finally {
     now.mockRestore()
   }
 })
+
+test("forced sync reaches the full payload even when the version endpoint stalls", async () => {
+  const gate = Promise.withResolvers<void>()
+  fixture.gate = gate.promise
+  try {
+    expect((await OpenScience.syncCredentials({ force: true, timeoutMs: 100 })).state).toBe("ready")
+    expect(fixture).toMatchObject({ probes: 0, fulls: 1 })
+    expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
+  } finally {
+    gate.resolve()
+  }
+})
+
+test("a forced payload invalidates the digest cached before that read", async () => {
+  let clock = Date.now()
+  const now = spyOn(Date, "now").mockImplementation(() => clock)
+  try {
+    expect((await OpenScience.syncCredentials()).state).toBe("ready")
+    expect(fixture).toMatchObject({ probes: 1, fulls: 1 })
+    fixture.payload.services.openai.env.OPENAI_API_KEY = "fixture-forced-openai"
+    expect((await OpenScience.syncCredentials({ force: true })).state).toBe("ready")
+    expect(fixture).toMatchObject({ probes: 1, fulls: 2 })
+
+    fixture.payload.services.openai.env.OPENAI_API_KEY = "fixture-current-openai"
+    clock += OpenScience.SYNC_INTERVAL
+    expect((await OpenScience.syncCredentials()).state).toBe("ready")
+    expect(fixture).toMatchObject({ probes: 2, fulls: 3 })
+    expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-current-openai" })
+  } finally {
+    now.mockRestore()
+  }
+})
+
+test.each([{ v: 0 }, { version: 7 }, { digest: "7" }, { sync_version: 7 }])(
+  "unchanged version %j renews a grant without fetching credentials again",
+  async (body) => {
+    let clock = Date.now()
+    const now = spyOn(Date, "now").mockImplementation(() => clock)
+    fixture.versionBody = body
+    try {
+      expect((await OpenScience.syncCredentials()).state).toBe("ready")
+      clock += OpenScience.SYNC_INTERVAL
+      expect((await OpenScience.syncCredentials()).state).toBe("ready")
+      expect(fixture).toMatchObject({ probes: 2, fulls: 1 })
+    } finally {
+      now.mockRestore()
+    }
+  },
+)
