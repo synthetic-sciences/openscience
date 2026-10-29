@@ -36,7 +36,7 @@ const contract = {
   reloadThresholdUsd: 5,
   reloadAmountUsd: 20,
   processingFeeDisclosedSeparately: true,
-  reloadControlledByAce: true,
+  reloadControlledByAce: false,
 }
 const funded = {
   signedIn: true,
@@ -47,6 +47,7 @@ const funded = {
   managedSupported: true,
   managedUnlocked: true,
   aceEnabled: true,
+  autoReloadEnabled: true,
   aceContract: contract,
 }
 type Wallet = Omit<typeof funded, "balanceUsd"> & {
@@ -230,18 +231,49 @@ describe("Ace account surface", () => {
     expect(state.links).toEqual([])
   })
 
-  test("before activation the reload row says what turning Ace on does, and Manage opens the consent flow", async () => {
-    const { host, state } = await mount({ ...funded, balanceUsd: 0, aceEnabled: false, managedUnlocked: false })
+  test("before activation the reload row requires separate consent", async () => {
+    const { host, state } = await mount({
+      ...funded,
+      balanceUsd: 0,
+      aceEnabled: false,
+      autoReloadEnabled: false,
+      managedUnlocked: false,
+    })
     await ready(() => button(host, "Turn on Ace") !== undefined)
     expect(button(host, "Ace").disabled).toBe(true)
     expect(host.querySelector("[data-model-reload] .models-routing__status")?.textContent).toBe("Off")
     expect(host.querySelector(".models-routing__reload-terms")?.textContent).toBe(
-      "Turning on Ace adds $20 whenever the Wallet drops below $5.",
+      "Optional: add $20 below $5 with separate consent and a saved card. Turning on Ace does not enable auto-reload.",
     )
     // The contract itself is read and accepted in the browser consent flow.
     expect(host.querySelector("details")).toBeNull()
     button(host, "Turn on Ace").click()
     expect(state.links).toHaveLength(1)
+    expect(state.links[0]).toContain("billing")
+    expect(state.writes).toEqual([])
+  })
+
+  test("cardless Ace is on while automatic reload remains off", async () => {
+    const { host, state } = await mount({ ...funded, autoReloadEnabled: false })
+    await ready(() => button(host, "Manage Ace") !== undefined)
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(host.querySelector("[data-model-reload] .models-routing__status")?.textContent).toBe("Off")
+    expect(button(host, "Ace").disabled).toBe(false)
+    expect(state.writes).toEqual([])
+    expect(host.querySelector(".models-routing__reload-terms")?.textContent).toContain("separate consent")
+  })
+
+  test("enabled Ace with an empty wallet asks for funds without requesting activation again", async () => {
+    const { host, state } = await mount({
+      ...funded,
+      balanceUsd: 0,
+      managedUnlocked: false,
+      autoReloadEnabled: false,
+    })
+    await ready(() => button(host, "Add funds") !== undefined)
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("On")
+    expect(button(host, "Ace").disabled).toBe(true)
+    button(host, "Add funds").click()
     expect(state.links[0]).toContain("billing")
     expect(state.writes).toEqual([])
   })

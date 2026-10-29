@@ -1,12 +1,12 @@
-/** Public reload terms mirrored by the local client. Atlas remains authoritative. */
+/** Public reload terms mirrored by the local client. Dashboard remains authoritative. */
 export const ACE_CONTRACT = Object.freeze({
   activationAuthorizationUsd: 0,
   reloadThresholdUsd: 5,
   reloadAmountUsd: 20,
   processingFeeDisclosedSeparately: true,
-  reloadControlledByAce: true,
+  reloadControlledByAce: false,
 })
 
 export function aceActivationCopy() {
-  return `Ace is a $${ACE_CONTRACT.activationAuthorizationUsd} authorization, not a purchase or subscription. While Ace is on, a purchased Wallet balance below $${ACE_CONTRACT.reloadThresholdUsd} triggers one fixed $${ACE_CONTRACT.reloadAmountUsd} reload; the processing fee is disclosed separately before payment. Ace usage is billed at the Wallet rates shown for the selected model and speed.`
+  return `Turning on Ace costs $${ACE_CONTRACT.activationAuthorizationUsd} and does not authorize automatic card charges. Auto-reload is a separate opt-in with a saved card: it adds $${ACE_CONTRACT.reloadAmountUsd} when purchased funds fall below $${ACE_CONTRACT.reloadThresholdUsd}, plus the separately disclosed processing fee. Ace usage is billed at the Wallet rates shown for the selected model and speed.`
 }

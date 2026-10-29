@@ -16,6 +16,7 @@ const WalletState = z.object({
   managedSupported: z.boolean(),
   managedUnlocked: z.boolean(),
   aceEnabled: z.boolean(),
+  autoReloadEnabled: z.boolean(),
   aceContract: z.object({
     activationAuthorizationUsd: z.number().nonnegative(),
     reloadThresholdUsd: z.number().positive(),
@@ -54,6 +55,7 @@ const SIGNED_OUT: WalletState = {
   managedSupported: false,
   managedUnlocked: false,
   aceEnabled: false,
+  autoReloadEnabled: false,
   aceContract: { ...ACE_CONTRACT },
   lifetimeSpentUsd: null,
   transactions: [],
@@ -99,7 +101,8 @@ export function walletState(input: {
     // Explicit access denials outrank cash or reload consent. Neither implies
     // permission to spend from a workspace with a revoked role or usage limit.
     managedUnlocked: mode?.access_verified === true && mode.managed_supported && mode.managed_unlocked,
-    aceEnabled: mode?.ace_enabled ?? false,
+    aceEnabled: mode?.ace_access_enabled ?? credits?.aceEnabled ?? mode?.managed_unlocked ?? false,
+    autoReloadEnabled: mode?.auto_reload_enabled ?? mode?.ace_enabled ?? false,
     // The reload rule is the workspace's own configuration; the constants
     // are only the public default for an account the gateway has not described.
     aceContract: {

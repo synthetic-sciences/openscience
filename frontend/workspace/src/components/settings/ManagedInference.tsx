@@ -27,6 +27,7 @@ type Wallet = {
   managedSupported: boolean
   managedUnlocked: boolean
   aceEnabled: boolean
+  autoReloadEnabled?: boolean
   aceContract?: {
     activationAuthorizationUsd: number
     reloadThresholdUsd: number
@@ -342,14 +343,14 @@ export function ManagedInference(props: {
     const held = wallet.balanceUsd - available
     return held >= 0.005 ? formatCreditBalance(held) : undefined
   }
-  const reloadActive = () => Boolean(state.wallet?.aceEnabled && state.wallet.aceContract?.reloadControlledByAce)
+  const reloadActive = () => state.wallet?.autoReloadEnabled === true
   const accountAction = () => {
     if (state.wallet && !state.wallet.signedIn) return state.signingIn ? "Waiting for browser…" : "Sign in"
     if (state.account === "error") return "Retry"
     if (!state.wallet) return "Open Wallet"
     if (state.wallet.balanceUsd === null && !state.wallet.managedUnlocked && !state.wallet.aceEnabled) return "Refresh"
     if (!state.wallet.managedSupported) return "Manage Wallet"
-    if (!state.wallet.managedUnlocked) return "Turn on Ace"
+    if (!state.wallet.managedUnlocked) return state.wallet.aceEnabled ? "Add funds" : "Turn on Ace"
     return state.wallet.aceEnabled ? "Manage Ace" : "Manage Wallet"
   }
   const actOnAccount = () => {
@@ -455,7 +456,7 @@ export function ManagedInference(props: {
         </div>
       </dl>
 
-      {/* Auto-reload: the rule and whether it is in force. Ace's Manage above is where it changes. */}
+      {/* Reload consent is independent of managed model access. */}
       <Show when={state.wallet?.signedIn && state.wallet.aceContract}>
         {(contract) => (
           <div class="settings-row settings-preference-row" data-model-reload>
@@ -464,7 +465,7 @@ export function ManagedInference(props: {
               <span class="models-routing__reload-terms">
                 <Show
                   when={reloadActive()}
-                  fallback={`Turning on Ace adds $${contract().reloadAmountUsd} whenever the Wallet drops below $${contract().reloadThresholdUsd}.`}
+                  fallback={`Optional: add $${contract().reloadAmountUsd} below $${contract().reloadThresholdUsd} with separate consent and a saved card. Turning on Ace does not enable auto-reload.`}
                 >
                   Adds ${contract().reloadAmountUsd} when the Wallet drops below ${contract().reloadThresholdUsd}.
                 </Show>

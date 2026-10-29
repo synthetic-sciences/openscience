@@ -3774,6 +3774,8 @@ export type AccountGetResponses = {
       managed_supported: boolean
       managed_unlocked: boolean
       ace_enabled?: boolean
+      ace_access_enabled?: boolean
+      auto_reload_enabled?: boolean
     } | null
     funding_context: {
       type: "personal" | "organization"
@@ -3959,6 +3961,8 @@ export type AccountBillingModeGetResponses = {
     managed_supported: boolean
     managed_unlocked: boolean
     ace_enabled?: boolean
+    ace_access_enabled?: boolean
+    auto_reload_enabled?: boolean
   } | null
 }
 
@@ -3984,6 +3988,8 @@ export type AccountBillingModeSetResponses = {
     managed_supported: boolean
     managed_unlocked: boolean
     ace_enabled?: boolean
+    ace_access_enabled?: boolean
+    auto_reload_enabled?: boolean
   } | null
 }
 
@@ -10898,6 +10904,7 @@ export type SettingsWalletGetResponses = {
     managedSupported: boolean
     managedUnlocked: boolean
     aceEnabled: boolean
+    autoReloadEnabled: boolean
     aceContract: {
       activationAuthorizationUsd: number
       reloadThresholdUsd: number

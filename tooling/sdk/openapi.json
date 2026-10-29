@@ -536,6 +536,12 @@
                             },
                             "ace_enabled": {
                               "type": "boolean"
+                            },
+                            "ace_access_enabled": {
+                              "type": "boolean"
+                            },
+                            "auto_reload_enabled": {
+                              "type": "boolean"
                             }
                           },
                           "required": [
@@ -1099,6 +1105,12 @@
                         },
                         "ace_enabled": {
                           "type": "boolean"
+                        },
+                        "ace_access_enabled": {
+                          "type": "boolean"
+                        },
+                        "auto_reload_enabled": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -1158,6 +1170,12 @@
                           "type": "boolean"
                         },
                         "ace_enabled": {
+                          "type": "boolean"
+                        },
+                        "ace_access_enabled": {
+                          "type": "boolean"
+                        },
+                        "auto_reload_enabled": {
                           "type": "boolean"
                         }
                       },
@@ -25377,6 +25395,9 @@
                     "aceEnabled": {
                       "type": "boolean"
                     },
+                    "autoReloadEnabled": {
+                      "type": "boolean"
+                    },
                     "aceContract": {
                       "type": "object",
                       "properties": {
@@ -25498,6 +25519,7 @@
                     "managedSupported",
                     "managedUnlocked",
                     "aceEnabled",
+                    "autoReloadEnabled",
                     "aceContract",
                     "lifetimeSpentUsd",
                     "transactions",
