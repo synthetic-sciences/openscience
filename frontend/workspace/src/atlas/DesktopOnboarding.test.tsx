@@ -54,6 +54,7 @@ function fixture(
     acePollsUntilOn?: number
     funded?: boolean
     fundedAfterPolls?: number
+    accessVerified?: boolean
     organization?: string
     /** What the runtime already reaches, as `GET /provider` reports it. */
     providers?: Array<{ id: string; source: string }>
@@ -131,15 +132,16 @@ function fixture(
           if (options.acePollsUntilOn !== undefined && state.polls >= options.acePollsUntilOn) state.ace = true
           if (options.fundedAfterPolls !== undefined && state.polls >= options.fundedAfterPolls) state.funded = true
         }
-        const spendable = state.ace || state.funded
+        const spendable = state.funded
         return Response.json({
           signedIn: true,
-          balanceUsd: spendable ? 12.5 : null,
-          availableUsd: spendable ? 12.5 : null,
-          accessVerified: true,
+          balanceUsd: spendable ? 12.5 : 0,
+          availableUsd: spendable ? 12.5 : 0,
+          accessVerified: options.accessVerified ?? true,
           managedSupported: true,
           managedUnlocked: spendable,
           aceEnabled: state.ace,
+          autoReloadEnabled: false,
           aceContract: { reloadThresholdUsd: 5, reloadAmountUsd: 20 },
           ...(options.organization
             ? { workspace: { organizationId: options.organization, name: "Lab", personal: false } }
@@ -333,7 +335,7 @@ test("browser sign-in gives up after its deadline and can be retried", async () 
 })
 
 test("turning on Ace opens billing, polls the wallet, then selects managed models", async () => {
-  const app = fixture({ connected: true, step: "ace", acePollsUntilOn: 2 })
+  const app = fixture({ connected: true, step: "ace", acePollsUntilOn: 2, fundedAfterPolls: 2 })
   const view = app.mount()
   await until(() => heading(view.host) === "Turn on Ace")
   await until(() =>
@@ -350,12 +352,14 @@ test("turning on Ace opens billing, polls the wallet, then selects managed model
   await until(() => app.state.step === "connect")
 })
 
-test("a funded Wallet continues without Ace: managed models are selected and nothing opens", async () => {
+test("verified Wallet access continues without reload: managed models are selected and nothing opens", async () => {
   const app = fixture({ connected: true, step: "ace", funded: true })
   const view = app.mount()
   await until(() => view.host.textContent?.includes("Managed models are ready") === true)
   expect(view.host.textContent).toContain("$12.50 available, no card needed")
-  expect(view.host.textContent).toContain("$20 whenever it falls below $5")
+  expect(view.host.textContent).toContain("Optional auto-reload adds $20 below $5")
+  expect(view.host.textContent).toContain("separate consent and a saved card")
+  expect(view.host.textContent).toContain("Turning on Ace does not enable it")
   expect(view.host.textContent).not.toContain("Ace is on")
   await until(() => app.state.billing === "managed")
   button(view.host, "Continue").click()
@@ -365,16 +369,59 @@ test("a funded Wallet continues without Ace: managed models are selected and not
   expect(app.opened).toEqual([])
 })
 
-test("a funded Wallet can still turn on Ace: the wait ends on the reload rule, not the funds it already had", async () => {
-  const app = fixture({ connected: true, step: "ace", funded: true, acePollsUntilOn: 3, organization: "org 1" })
+test("a funded workspace opens its own Wallet without waiting for reload consent", async () => {
+  const app = fixture({ connected: true, step: "ace", funded: true, organization: "org 1" })
   const view = app.mount()
   await until(() => view.host.textContent?.includes("Managed models are ready") === true)
-  button(view.host, "Turn on Ace").click()
+  button(view.host, "Manage Wallet").click()
   expect(app.opened).toEqual(["https://app.syntheticsciences.ai/workspace/org%201/billing"])
+  expect(app.state.polls).toBe(0)
+  expect(view.host.textContent).not.toContain("Waiting for Ace")
+})
+
+test("enabled but unfunded Ace does not select managed models or hide the missing-model warning", async () => {
+  const app = fixture({ connected: true, step: "ace", ace: true })
+  const view = app.mount()
+  await until(() => heading(view.host) === "Set up Ace")
+  await until(() =>
+    Array.from(view.host.querySelectorAll("button")).some((el) => el.textContent?.trim() === "Add funds for Ace"),
+  )
+  expect(app.state.billing).toBe("byok")
+  expect(view.host.textContent).not.toContain("Ace is on")
+  button(view.host, "Skip for now").click()
+  await until(() => heading(view.host) === "Connect your models")
+  expect(view.host.textContent).toContain("No model connected yet")
+  button(view.host, "Continue").click()
+  await until(() => heading(view.host) === "You're set")
+  expect(view.host.textContent).toContain("On · not ready to use")
+})
+
+test("Ace activation alone does not end the wait before verified funds become available", async () => {
+  const app = fixture({ connected: true, step: "ace", acePollsUntilOn: 1, fundedAfterPolls: 3 })
+  const view = app.mount(true, { acePollMs: 40 })
+  await until(() =>
+    Array.from(view.host.querySelectorAll("button")).some((el) => el.textContent?.trim() === "Turn on Ace"),
+  )
+  button(view.host, "Turn on Ace").click()
   await until(() => view.host.textContent?.includes("Waiting for Ace") === true)
-  await until(() => app.state.polls >= 2)
+  await until(() => app.state.polls >= 1)
+  expect(app.state.ace).toBe(true)
+  expect(app.state.billing).toBe("byok")
   expect(view.host.textContent).not.toContain("Ace is on")
   await until(() => view.host.textContent?.includes("Ace is on") === true)
+  expect(app.state.billing).toBe("managed")
+})
+
+test("unverified access never makes a funded enabled Wallet ready for managed models", async () => {
+  const app = fixture({ connected: true, step: "ace", ace: true, funded: true, accessVerified: false })
+  const view = app.mount()
+  await until(() =>
+    Array.from(view.host.querySelectorAll("button")).some((el) => el.textContent?.trim() === "Add funds for Ace"),
+  )
+  expect(app.state.billing).toBe("byok")
+  button(view.host, "Skip for now").click()
+  await until(() => heading(view.host) === "Connect your models")
+  expect(view.host.textContent).toContain("No model connected yet")
 })
 
 test("waiting for Ace is never a dead end, and funds added meanwhile finish the step", async () => {
@@ -500,7 +547,7 @@ test("connections: ChatGPT connects through the OAuth routes, Modal detection re
 })
 
 test("finishing records the setup revision and reveals the workspace", async () => {
-  const app = fixture({ connected: true, step: "connect", ace: true })
+  const app = fixture({ connected: true, step: "connect", ace: true, funded: true })
   const view = app.mount()
   await until(() => heading(view.host) === "Connect your models")
   // A resumed setup reads the wallet before it claims anything about Ace.
