@@ -15,6 +15,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Stop optional Pyright installation after 30 seconds when the package registry is unavailable, leaving Python diagnostics disabled for that session.
 - Recognize Windows Python kernel result frames across CRLF chunk boundaries and use UTF-8 for worker input and output to prevent timeouts and garbled Unicode.
 - Dispatch Windows job helpers before application initialization so shell and kernel launches do not load the server or initialize application storage.
+- Skip Python installations that cannot start when selecting a host interpreter, so they do not block local tools and compute jobs.
+
 - Refuse symlinked compute staging destinations and preserve original files when concurrent changes prevent a safe refresh.
 - Keep the preserved message prefix when continuing a session after a part-level undo.
 
