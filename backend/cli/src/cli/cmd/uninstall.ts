@@ -196,7 +196,7 @@ export function packageStep(
   return { summary: `✓ Package: ${command.join(" ")}`, command }
 }
 
-async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
+export async function executeUninstall(method: Installation.Method, targets: RemovalTargets) {
   const spinner = prompts.spinner()
   const errors: string[] = []
 
@@ -213,10 +213,10 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
     if (!exists) continue
 
     spinner.start(`Removing ${dir.label}...`)
-    const err = await fs.rm(dir.path, { recursive: true, force: true }).catch((e) => e)
-    if (err) {
+    const result = await Reason.capture(fs.rm(dir.path, { recursive: true, force: true }))
+    if (!result.ok) {
       spinner.stop(`Failed to remove ${dir.label}`, 1)
-      errors.push(`${dir.label}: ${Reason.of(err)}`)
+      errors.push(`${dir.label}: ${Reason.of(result.error)}`)
       continue
     }
     spinner.stop(`Removed ${dir.label}`)
@@ -224,10 +224,10 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
 
   if (targets.shellConfig) {
     spinner.start("Cleaning shell config...")
-    const err = await cleanShellConfig(targets.shellConfig).catch((e) => e)
-    if (err) {
+    const result = await Reason.capture(cleanShellConfig(targets.shellConfig))
+    if (!result.ok) {
       spinner.stop("Failed to clean shell config", 1)
-      errors.push(`Shell config: ${Reason.of(err)}`)
+      errors.push(`Shell config: ${Reason.of(result.error)}`)
     } else {
       spinner.stop("Cleaned shell config")
     }
@@ -235,10 +235,10 @@ async function executeUninstall(method: Installation.Method, targets: RemovalTar
 
   if (targets.link) {
     spinner.start("Removing the command-line link...")
-    const err = await CliShim.remove().catch((e) => e)
-    if (err) {
+    const result = await Reason.capture(CliShim.remove())
+    if (!result.ok) {
       spinner.stop("Failed to remove the command-line link", 1)
-      errors.push(`Command-line link: ${Reason.of(err)}`)
+      errors.push(`Command-line link: ${Reason.of(result.error)}`)
     } else {
       spinner.stop("Removed the command-line link")
     }

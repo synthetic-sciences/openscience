@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
 - Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.
 - Handle empty science-source excerpts and one-character locale truncation safely, and show useful errors for invalid JSON and non-Error command failures.
 - Correct bundled skill reference paths and Windows documentation-path handling, and update compatible dependencies and code-scanning tooling.

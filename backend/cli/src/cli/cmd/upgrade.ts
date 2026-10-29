@@ -77,8 +77,9 @@ export const UpgradeCommand = cmd({
     prompts.log.info(`From ${Installation.VERSION} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
-    const err = await Installation.upgrade(method, target).catch((err) => err)
-    if (err) {
+    const result = await Reason.capture(Installation.upgrade(method, target))
+    if (!result.ok) {
+      const err = result.error
       spinner.stop("Upgrade failed", 1)
       if (err instanceof Installation.UpgradeFailedError) {
         // necessary because choco only allows install/upgrade in elevated terminals
