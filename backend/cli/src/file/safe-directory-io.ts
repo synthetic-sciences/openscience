@@ -654,6 +654,16 @@ export namespace SafeDirectoryIO {
     }
   }
 
+  export async function ensureDirectory(target: string): Promise<void> {
+    if (process.platform === "win32") return WindowsSafeIO.ensureDirectory(target)
+    const opened = await directory(path.join(path.resolve(target), ".openscience-directory"))
+    try {
+      await verify(opened)
+    } finally {
+      await opened.close()
+    }
+  }
+
   export async function inspect(target: string): Promise<Entry> {
     if (process.platform === "win32") return WindowsSafeIO.inspect(target)
     const resolved = direct(target)

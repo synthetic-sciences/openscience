@@ -9,6 +9,7 @@ import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { Filesystem } from "../../src/util/filesystem"
+import { SafeFileIO } from "../../src/file/safe-io"
 import { ComputeJobParameters, computeJobTesting, createComputeJobTool } from "../../src/tool/compute-job"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
@@ -733,6 +734,96 @@ test("a study's runs ask under the study's approval, and a staged copy is refres
     },
   })
 })
+
+test.each(["directory", ...(process.platform === "win32" ? [] : ["file"])])(
+  "compute staging refresh rejects a destination %s symlink",
+  async (kind) => {
+    await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    const source = path.join(tmp.path, "analysis", "data", "result.txt")
+    await Bun.write(source, "project content")
+    const protectedFile = path.join(outside.path, "result.txt")
+    await Bun.write(protectedFile, "user file outside project")
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const workspace = await SessionFilesystem.workspace(session.id)
+        const tool = await createComputeJobTool({ root: path.join(tmp.path, "compute") }).init()
+        const asked: Asked[] = []
+        const ctx = { ...context(session.id, asked), extra: { studyStaging: "refresh" } }
+        const input = {
+          action: "plan" as const,
+          name: "local staging",
+          purpose: "Stage the study code.",
+          command: "true",
+          cwd: "analysis",
+          target: { kind: "local" as const },
+        }
+        await tool.execute(input, ctx)
+        const staged = path.join(workspace, "analysis", "data", ...(kind === "file" ? ["result.txt"] : []))
+        await fs.rm(staged, { recursive: true })
+        await fs.symlink(kind === "file" ? protectedFile : outside.path, staged, kind === "file" ? "file" : "junction")
+
+        await expect(tool.execute(input, ctx)).rejects.toThrow()
+        expect(await Bun.file(protectedFile).text()).toBe("user file outside project")
+        expect((await fs.lstat(staged)).isSymbolicLink()).toBe(true)
+        expect(asked).toEqual([])
+      },
+    })
+  },
+)
+
+test.skipIf(process.platform === "win32")(
+  "compute staging retains the original if a directory is replaced after verification",
+  async () => {
+    await using tmp = await tmpdir({ git: true })
+    await using outside = await tmpdir()
+    const source = path.join(tmp.path, "analysis", "data", "result.txt")
+    await Bun.write(source, "original staged file")
+    const protectedFile = path.join(outside.path, "result.txt")
+    await Bun.write(protectedFile, "user file outside project")
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await trustProject()
+        const session = await Session.create({})
+        const workspace = await SessionFilesystem.workspace(session.id)
+        const tool = await createComputeJobTool({ root: path.join(tmp.path, "compute") }).init()
+        const ctx = { ...context(session.id, []), extra: { studyStaging: "refresh" } }
+        const input = {
+          action: "plan" as const,
+          name: "local staging",
+          purpose: "Stage the study code.",
+          command: "true",
+          cwd: "analysis",
+          target: { kind: "local" as const },
+        }
+        await tool.execute(input, ctx)
+        await Bun.write(source, "updated project content")
+        const parent = path.join(workspace, "analysis", "data")
+        const destination = path.join(parent, "result.txt")
+        const changed = { value: false }
+        using hook = SafeFileIO.testing({
+          afterRenameVerify: async (from, target) => {
+            if (changed.value || target !== destination || !from.includes(`${path.sep}snapshot${path.sep}`)) return
+            changed.value = true
+            await fs.rename(parent, `${parent}-held`)
+            await fs.symlink(outside.path, parent, "junction")
+          },
+        })
+
+        await expect(tool.execute(input, ctx)).rejects.toThrow("its original is preserved")
+        expect(changed.value).toBe(true)
+        expect(await Bun.file(protectedFile).text()).toBe("user file outside project")
+        const retained = (await fs.readdir(workspace)).filter((name) => name.startsWith(".compute-stage-"))
+        expect(retained).toHaveLength(1)
+        expect(await Bun.file(path.join(workspace, retained[0]!, "previous")).text()).toBe("original staged file")
+      },
+    })
+  },
+)
 
 test("a local study run whose code sits only in Project files is staged into scratch and runs there", async () => {
   await using tmp = await tmpdir({ git: true })

@@ -9,6 +9,9 @@ import { Instance } from "@/project/instance"
 import { ComputeAllowance } from "@/permission/allowance"
 import { SessionFilesystem } from "@/session/filesystem"
 import { Filesystem } from "@/util/filesystem"
+import { SafeDirectoryIO } from "@/file/safe-directory-io"
+import { SafeFileIO } from "@/file/safe-io"
+import { SafeTrashIO } from "@/file/safe-trash-io"
 import { Tool } from "./tool"
 import { SessionWake } from "@/session/wake"
 import { SessionPrompt } from "@/session/prompt"
@@ -547,13 +550,14 @@ async function stageProjectDirectory(input: {
     )
   }
 
-  await fs.mkdir(path.dirname(current.target), { recursive: true, mode: 0o700 })
+  await SafeDirectoryIO.ensureDirectory(path.dirname(current.target))
   const materializedParent = await Filesystem.canonical(path.dirname(current.target))
   if (!materializedParent || !Filesystem.contains(workspace, materializedParent)) {
     throw new Error(`Compute working directory escaped Session scratch while staging: ${input.cwd}`)
   }
   const temporary = await fs.mkdtemp(path.join(workspace, ".compute-stage-"))
   const snapshot = path.join(temporary, "snapshot")
+  const recovery = { retained: false }
   try {
     await fs.mkdir(snapshot, { recursive: true, mode: 0o700 })
     for (const file of manifest.files) {
@@ -575,24 +579,60 @@ async function stageProjectDirectory(input: {
         const target = path.resolve(current.target, file)
         if (!Filesystem.contains(current.target, target))
           throw new Error(`${label} destination escaped Session scratch: ${file}`)
-        await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 })
-        await fs.rename(path.resolve(snapshot, file), target)
-      }
-    } else {
-      await fs.rename(snapshot, current.target).catch(async (error: NodeJS.ErrnoException) => {
-        if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error
-        const existing = await directory(workspace, input.cwd)
-        if (
-          !existing.canonical ||
-          !Filesystem.contains(workspace, existing.canonical) ||
-          !existing.info?.isDirectory()
-        ) {
+        // A job can replace its output directories with symlinks after a
+        // path check. Hold verified directory handles for every mutation,
+        // and retain the previous file if a concurrent change blocks rollback.
+        await SafeDirectoryIO.ensureDirectory(path.dirname(target))
+        const previous = await SafeFileIO.inspect(target).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return
+          throw error
+        })
+        if (previous && previous.type !== "file") {
+          throw new Error(`${label} cannot replace a non-file destination: ${file}`)
+        }
+        const backup = path.join(temporary, "previous")
+        if (previous) {
+          await SafeFileIO.rename(target, backup, previous).catch((error) => {
+            recovery.retained = true
+            throw new Error(`${label} could not move ${file} safely; staging data retained at ${temporary}`, {
+              cause: error,
+            })
+          })
+        }
+        try {
+          const source = path.resolve(snapshot, file)
+          await SafeFileIO.rename(source, target, await SafeFileIO.inspect(source))
+        } catch (error) {
+          if (previous) {
+            await SafeFileIO.rename(backup, target, previous).catch((rollback) => {
+              recovery.retained = true
+              throw new AggregateError(
+                [error, rollback],
+                `${label} could not restore ${file}; its original is preserved at ${backup}`,
+              )
+            })
+          }
           throw error
         }
-      })
+        if (previous) await SafeTrashIO.remove(backup)
+      }
+    } else {
+      await SafeFileIO.rename(snapshot, current.target, await SafeFileIO.inspect(snapshot)).catch(
+        async (error: NodeJS.ErrnoException) => {
+          if (error.code !== "EEXIST" && error.code !== "ENOTEMPTY") throw error
+          const existing = await directory(workspace, input.cwd)
+          if (
+            !existing.canonical ||
+            !Filesystem.contains(workspace, existing.canonical) ||
+            !existing.info?.isDirectory()
+          ) {
+            throw error
+          }
+        },
+      )
     }
   } finally {
-    await fs.rm(temporary, { recursive: true, force: true })
+    if (!recovery.retained) await SafeTrashIO.remove(temporary)
   }
 
   const placed = await directory(workspace, input.cwd)
