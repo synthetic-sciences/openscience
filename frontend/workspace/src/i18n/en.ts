@@ -509,8 +509,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
-  "error.chain.configJsonInvalid": "Config file at {{path}} is not valid JSON(C)",
-  "error.chain.configJsonInvalidWithMessage": "Config file at {{path}} is not valid JSON(C): {{message}}",
+  "error.chain.configJsonInvalid": "Config file at {{path}} is not valid JSON",
+  "error.chain.configJsonInvalidWithMessage": "Config file at {{path}} is not valid JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Directory "{{dir}}" in {{path}} is not valid. Rename the directory to "{{suggestion}}" or remove it. This is a common typo.',
   "error.chain.configFrontmatterError": "Failed to parse frontmatter in {{path}}:\n{{message}}",

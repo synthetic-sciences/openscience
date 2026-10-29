@@ -355,8 +355,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Udbydergodkendelse mislykkedes ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Kunne ikke initialisere udbyder "{{provider}}". Tjek legitimationsoplysninger og konfiguration.',
-  "error.chain.configJsonInvalid": "Konfigurationsfil på {{path}} er ikke gyldig JSON(C)",
-  "error.chain.configJsonInvalidWithMessage": "Konfigurationsfil på {{path}} er ikke gyldig JSON(C): {{message}}",
+  "error.chain.configJsonInvalid": "Konfigurationsfil på {{path}} er ikke gyldig JSON",
+  "error.chain.configJsonInvalidWithMessage": "Konfigurationsfil på {{path}} er ikke gyldig JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Mappe "{{dir}}" i {{path}} er ikke gyldig. Omdøb mappen til "{{suggestion}}" eller fjern den. Dette er en almindelig slåfejl.',
   "error.chain.configFrontmatterError": "Kunne ikke parse frontmatter i {{path}}:\n{{message}}",

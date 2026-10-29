@@ -2,6 +2,7 @@ import type { Argv } from "yargs"
 import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
+import { Reason } from "../../util/reason"
 import { cmd } from "./cmd"
 
 const DOWNLOAD = "https://openscience.sh/download"
@@ -76,8 +77,9 @@ export const UpgradeCommand = cmd({
     prompts.log.info(`From ${Installation.VERSION} → ${target}`)
     const spinner = prompts.spinner()
     spinner.start("Upgrading...")
-    const err = await Installation.upgrade(method, target).catch((err) => err)
-    if (err) {
+    const result = await Reason.capture(Installation.upgrade(method, target))
+    if (!result.ok) {
+      const err = result.error
       spinner.stop("Upgrade failed", 1)
       if (err instanceof Installation.UpgradeFailedError) {
         // necessary because choco only allows install/upgrade in elevated terminals
@@ -86,7 +88,9 @@ export const UpgradeCommand = cmd({
         } else {
           prompts.log.error(err.data.stderr)
         }
-      } else if (err instanceof Error) prompts.log.error(err.message)
+      } else {
+        prompts.log.error(Reason.of(err))
+      }
       prompts.outro("Done")
       return
     }

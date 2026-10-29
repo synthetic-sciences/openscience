@@ -33,6 +33,10 @@ const fixture = (await vite.ssrLoadModule(
 
 const cleanups: Array<() => void> = []
 const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms))
+const until = async (check: () => boolean) => {
+  for (let attempt = 0; attempt < 100 && !check(); attempt++) await settle(20)
+  expect(check()).toBe(true)
+}
 
 afterAll(async () => {
   await vite.close()
@@ -60,11 +64,11 @@ describe("dialog stacking", () => {
     let dialog!: DialogHandle
     mount(fixture.createDialogFixture((handle) => (dialog = handle)))
     dialog.show(fixture.accessible("preview", Promise.resolve(true)))
-    await settle(20)
+    await until(() => outside.hasAttribute("aria-hidden"))
     expect(outside.hasAttribute("aria-hidden")).toBe(true)
 
     cleanups.pop()!()
-    await settle()
+    await until(() => !outside.hasAttribute("aria-hidden") && document.querySelector('[role="dialog"]') === null)
     expect(document.querySelector('[role="dialog"]')).toBeNull()
     expect(outside.hasAttribute("aria-hidden")).toBe(false)
 
@@ -78,7 +82,7 @@ describe("dialog stacking", () => {
     let dialog!: DialogHandle
     mount(fixture.createDialogFixture((handle) => (dialog = handle)))
     dialog.show(fixture.accessible("settings", Promise.resolve(true)))
-    await settle(20)
+    await until(() => document.querySelector('[role="dialog"][aria-label="settings"]') !== null)
     const settings = document.querySelector<HTMLElement>('[role="dialog"][aria-label="settings"]')!
     expect(settings.closest('[aria-hidden="true"]')).toBeNull()
 
@@ -86,14 +90,18 @@ describe("dialog stacking", () => {
     dialog.show(fixture.accessible("picker", ready.promise), { stack: true })
     await settle(20)
     ready.resolve(true)
-    await settle(20)
+    await until(
+      () =>
+        document.querySelector('[role="dialog"][aria-label="picker"]') !== null &&
+        settings.closest('[aria-hidden="true"]') !== null,
+    )
     const picker = document.querySelector<HTMLElement>('[role="dialog"][aria-label="picker"]')!
     expect(picker).not.toBeNull()
     expect(picker.closest('[aria-hidden="true"]')).toBeNull()
     expect(settings.closest('[aria-hidden="true"]')).not.toBeNull()
 
     dialog.close()
-    await settle(150)
+    await until(() => settings.isConnected && settings.closest('[aria-hidden="true"]') === null)
     expect(settings.isConnected).toBe(true)
     expect(settings.closest('[aria-hidden="true"]')).toBeNull()
   })

@@ -1802,6 +1802,8 @@ export namespace OpenScience {
 
   export interface Credits {
     balanceUsd: number
+    /** Actual workspace access, independent of automatic card charges. */
+    aceEnabled?: boolean
     balanceRedacted?: boolean
     balanceCents: number
     /** The settled balance minus the gateway's holds for turns in flight; null when the service omits it. */
@@ -1863,7 +1865,7 @@ export namespace OpenScience {
         cycle_credits_remaining_cents?: number
         lifetime_spent_cents?: number
         redacted?: boolean
-        ace?: { threshold_cents?: number; target_cents?: number }
+        ace?: { enabled?: boolean; threshold_cents?: number; target_cents?: number }
       }
       let lifetimeSpent = body.lifetime_spent_cents ?? null
       if (currentWallet && lifetimeSpent === null && options.lifetimeSpent !== false) {
@@ -1880,6 +1882,7 @@ export namespace OpenScience {
       const purchased = body.purchased_cents ?? body.purchased_credits_cents ?? spendable - promotional
       return {
         balanceUsd: purchased / 100,
+        aceEnabled: typeof body.ace?.enabled === "boolean" ? body.ace.enabled : undefined,
         balanceRedacted: body.redacted === true,
         balanceCents: purchased,
         availableCents: typeof body.available_cents === "number" ? body.available_cents : null,
@@ -1956,6 +1959,8 @@ export namespace OpenScience {
       managed_supported?: boolean
       managed_unlocked?: boolean
       ace_enabled?: boolean
+      ace_access_enabled?: boolean
+      auto_reload_enabled?: boolean
       balance_redacted?: boolean
     }
   }
@@ -2004,6 +2009,8 @@ export namespace OpenScience {
     managed_supported: boolean
     managed_unlocked: boolean
     ace_enabled?: boolean
+    ace_access_enabled?: boolean
+    auto_reload_enabled?: boolean
     balance_redacted?: boolean
     balance_verified?: boolean
     access_verified?: boolean
@@ -2032,6 +2039,11 @@ export namespace OpenScience {
       managed_unlocked: verified && supported && access?.managed_unlocked === true,
       access_verified: verified,
       ace_enabled: access?.ace_enabled ?? false,
+      // Older gateways expose access in the Wallet and use ace_enabled only
+      // for reload consent. Never turn an access grant into payment consent.
+      ace_access_enabled:
+        !denied && (access?.ace_access_enabled ?? credits?.aceEnabled ?? access?.managed_unlocked ?? false),
+      auto_reload_enabled: !denied && (access?.auto_reload_enabled ?? access?.ace_enabled ?? false),
       balance_redacted: access?.balance_redacted ?? credits?.balanceRedacted ?? false,
       balance_verified: typeof access?.cli_balance_cents === "number" && access.balance_redacted !== true,
     }
@@ -2193,6 +2205,7 @@ export namespace OpenScience {
   })
   const StoredCredits = z.object({
     balanceUsd: z.number(),
+    aceEnabled: z.boolean().optional(),
     balanceRedacted: z.boolean().optional(),
     balanceCents: z.number(),
     availableCents: z.number().nullable().optional(),
@@ -2210,6 +2223,8 @@ export namespace OpenScience {
     managed_supported: z.boolean(),
     managed_unlocked: z.boolean(),
     ace_enabled: z.boolean().optional(),
+    ace_access_enabled: z.boolean().optional(),
+    auto_reload_enabled: z.boolean().optional(),
     balance_redacted: z.boolean().optional(),
     balance_verified: z.boolean().optional(),
     access_verified: z.boolean().optional(),

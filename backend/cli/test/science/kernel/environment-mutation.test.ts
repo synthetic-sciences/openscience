@@ -1,12 +1,25 @@
 import { expect, test } from "bun:test"
 import { Instance } from "../../../src/project/instance"
-import { KernelEnvironmentMutation, rankPython } from "../../../src/science/kernel/environment-mutation"
+import { KernelEnvironmentMutation, rankPython, selectPython } from "../../../src/science/kernel/environment-mutation"
 import { KernelRuntime, type KernelIdentity } from "../../../src/science/kernel/registry"
 import { PythonTool } from "../../../src/tool/notebook"
 import { RTool } from "../../../src/tool/rkernel"
 import { PermissionNext } from "../../../src/permission/next"
 import { executionSession, tmpdir } from "../../fixture/fixture"
 import fs from "node:fs/promises"
+import path from "node:path"
+
+test("host Python selection skips candidates that the OS cannot start", async () => {
+  await using tmp = await tmpdir()
+  const binary = Bun.which("python3") ?? Bun.which("python")
+  if (!binary) throw new Error("The host runtime fixture needs Python")
+  const broken = path.join(tmp.path, process.platform === "win32" ? "broken-python.exe" : "broken-python")
+  await Bun.write(broken, "#!/missing-openscience-test-interpreter\n")
+  await fs.chmod(broken, 0o755)
+
+  expect(await selectPython([broken, binary])).toBe(binary)
+  expect(await selectPython([broken])).toBeUndefined()
+})
 
 test("subprocess identity preserves the configured executable on every platform and leaves unmeasured values absent", () => {
   for (const binary of ["/project/.venv/bin/python", "C:\\project\\.venv\\Scripts\\python.exe"]) {

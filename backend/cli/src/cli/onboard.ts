@@ -131,19 +131,18 @@ export namespace Onboarding {
   async function ace(): Promise<boolean> {
     prompts.log.step("Ace · managed models and research tools, pay as you go")
     const current = await readWallet(true, OpenScience, new AbortController().signal).catch(() => undefined)
-    if (current?.aceEnabled) {
+    if (current?.aceEnabled && current.managedUnlocked) {
       await OpenScience.setBillingMode("managed").catch(() => undefined)
       prompts.log.success(`Ace is on${balance(current)}.`)
       return true
     }
-    // Purchased or promotional credit runs managed models with no card and no
-    // reload rule; Ace is only the rule that keeps that Wallet topped up.
+    // Purchased or promotional credit can fund enabled Ace without a card.
     const funded = current?.managedUnlocked === true
     if (funded) {
       await OpenScience.setBillingMode("managed").catch(() => undefined)
       prompts.log.success(`Managed models are ready${balance(current)}, no card needed.`)
     }
-    const reload = `Ace keeps the Wallet topped up: $${ACE_CONTRACT.reloadAmountUsd} whenever it falls below $${ACE_CONTRACT.reloadThresholdUsd}.`
+    const reload = `Optional auto-reload adds $${ACE_CONTRACT.reloadAmountUsd} below $${ACE_CONTRACT.reloadThresholdUsd} only with separate consent and a saved card. Turning on Ace does not enable it.`
     prompts.log.message(
       funded
         ? reload
@@ -157,14 +156,18 @@ export namespace Onboarding {
           ].join("\n"),
     )
     const choice = await prompts.select({
-      message: "Turn on Ace?",
+      message: current?.aceEnabled ? "Add funds for Ace?" : "Turn on Ace?",
       options: funded
         ? [
             { value: "skip", label: "Continue with your Wallet", hint: "turn on Ace later in Customize → Models" },
             { value: "on", label: "Turn on Ace", hint: "opens your billing page" },
           ]
         : [
-            { value: "on", label: "Turn on Ace", hint: "recommended · opens your billing page" },
+            {
+              value: "on",
+              label: current?.aceEnabled ? "Add funds for Ace" : "Turn on Ace",
+              hint: "recommended · opens your billing page",
+            },
             { value: "skip", label: "Skip for now", hint: "use your own keys; turn on later in Customize → Models" },
           ],
     })
@@ -183,13 +186,12 @@ export namespace Onboarding {
     while (Date.now() - started < ACE_WAIT_MS) {
       await Bun.sleep(ACE_POLL_MS)
       const wallet = await readWallet(false, OpenScience, new AbortController().signal).catch(() => undefined)
-      // A Wallet funded since the prompt is as good an answer as the rule itself.
-      if (!wallet?.aceEnabled && !(wallet?.managedUnlocked && !funded)) continue
+      if (!wallet?.managedUnlocked) continue
       await OpenScience.setBillingMode("managed").catch(() => undefined)
       spinner.stop(wallet.aceEnabled ? `Ace is on${balance(wallet)}.` : `Managed models are ready${balance(wallet)}.`)
       return true
     }
-    spinner.stop("Ace is not on yet.", 1)
+    spinner.stop("Ace is not ready to use yet. Check access and available credit in Wallet.", 1)
     prompts.log.info("Finish in your browser whenever you like; the Models panel picks it up.")
     return funded
   }

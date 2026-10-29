@@ -668,6 +668,11 @@ export namespace WindowsSafeIO {
     }
   }
 
+  export async function ensureDirectory(target: string): Promise<void> {
+    const opened = await createParent(path.join(path.resolve(target), ".openscience-directory"))
+    opened.directory.close()
+  }
+
   export async function inspect(target: string): Promise<Entry> {
     const source = await existingParent(target)
     try {

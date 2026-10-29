@@ -356,8 +356,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "プロバイダー認証に失敗しました ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'プロバイダー "{{provider}}" の初期化に失敗しました。認証情報と設定を確認してください。',
-  "error.chain.configJsonInvalid": "{{path}} の設定ファイルは有効なJSON(C)ではありません",
-  "error.chain.configJsonInvalidWithMessage": "{{path}} の設定ファイルは有効なJSON(C)ではありません: {{message}}",
+  "error.chain.configJsonInvalid": "{{path}} の設定ファイルは有効なJSONではありません",
+  "error.chain.configJsonInvalidWithMessage": "{{path}} の設定ファイルは有効なJSONではありません: {{message}}",
   "error.chain.configDirectoryTypo":
     '{{path}} 内のディレクトリ "{{dir}}" は無効です。"{{suggestion}}" に名前を変更するか削除してください。これはよくあるタイプミスです。',
   "error.chain.configFrontmatterError": "{{path}} のフロントマターの解析に失敗しました:\n{{message}}",

@@ -26,6 +26,8 @@ const BillingMode = z.object({
   managed_supported: z.boolean(),
   managed_unlocked: z.boolean(),
   ace_enabled: z.boolean().optional(),
+  ace_access_enabled: z.boolean().optional(),
+  auto_reload_enabled: z.boolean().optional(),
 })
 
 const FundingOrganization = z.object({

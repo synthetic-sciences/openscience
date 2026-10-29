@@ -356,8 +356,8 @@ export const dict = {
   "error.chain.providerAuthFailed": "Uwierzytelnianie dostawcy nie powiodło się ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
-  "error.chain.configJsonInvalid": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON(C)",
-  "error.chain.configJsonInvalidWithMessage": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON(C): {{message}}",
+  "error.chain.configJsonInvalid": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON",
+  "error.chain.configJsonInvalidWithMessage": "Plik konfiguracyjny w {{path}} nie jest poprawnym JSON: {{message}}",
   "error.chain.configDirectoryTypo":
     'Katalog "{{dir}}" w {{path}} jest nieprawidłowy. Zmień nazwę katalogu na "{{suggestion}}" lub usuń go. To częsta literówka.',
   "error.chain.configFrontmatterError": "Nie udało się przetworzyć frontmatter w {{path}}:\n{{message}}",

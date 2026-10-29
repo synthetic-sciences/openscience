@@ -77,7 +77,7 @@ export namespace WindowsJobLauncher {
     if (process.platform === "linux" && input.linuxOwner) pendingLinuxLaunches.add(release)
     const executable = path.basename(process.execPath).toLowerCase()
     const sourceRuntime = executable === "bun" || executable === "bun.exe"
-    const entry = fileURLToPath(new URL("../index.ts", import.meta.url))
+    const entry = fileURLToPath(new URL("../bootstrap.ts", import.meta.url))
     return {
       file: process.execPath,
       args: [

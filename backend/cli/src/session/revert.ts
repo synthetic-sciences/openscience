@@ -268,10 +268,10 @@ export namespace SessionRevert {
   async function cleanupTransaction(session: Session.Info) {
     if (!session.revert) return
     const sessionID = session.id
-    let msgs = await Session.messages({ sessionID })
+    const msgs = await Session.messages({ sessionID })
     const messageID = session.revert.messageID
     const [preserve, remove] = splitWhen(msgs, (x) => x.info.id === messageID)
-    msgs = preserve
+    if (session.revert.partID && remove[0]?.info.id === messageID) preserve.push(remove.shift()!)
     for (const msg of remove) {
       await Storage.remove(["message", sessionID, msg.info.id])
       await Bus.publish(MessageV2.Event.Removed, { sessionID: sessionID, messageID: msg.info.id })

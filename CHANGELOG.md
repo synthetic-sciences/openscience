@@ -8,6 +8,19 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
+- Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.
+- Handle empty science-source excerpts and one-character locale truncation safely, and show useful errors for invalid JSON and non-Error command failures.
+- Correct bundled skill reference paths and Windows documentation-path handling, and update compatible dependencies and code-scanning tooling.
+- Keep runtime progress updates mergeable while the durable event stream is busy, preventing redundant snapshots from delaying replay and run status reads.
+- Stop optional Pyright installation after 30 seconds when the package registry is unavailable, leaving Python diagnostics disabled for that session.
+- Recognize Windows Python kernel result frames across CRLF chunk boundaries and use UTF-8 for worker input and output to prevent timeouts and garbled Unicode.
+- Dispatch Windows job helpers before application initialization so shell and kernel launches do not load the server or initialize application storage.
+- Skip Python installations that cannot start when selecting a host interpreter, so they do not block local tools and compute jobs.
+
+- Refuse symlinked compute staging destinations and preserve original files when concurrent changes prevent a safe refresh.
+- Keep the preserved message prefix when continuing a session after a part-level undo.
+
 - Refresh workspace credentials directly for manual sync and retries, and recognize Dashboard's version response during background refresh.
 
 - Save estimated system-instruction and tool-definition counts with each model call so the context breakdown survives a page reload.

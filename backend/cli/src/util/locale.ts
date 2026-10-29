@@ -62,18 +62,22 @@ export namespace Locale {
   }
 
   export function truncate(str: string, len: number): string {
-    if (str.length <= len) return str
-    return str.slice(0, len - 1) + "…"
+    const budget = Math.max(1, Math.trunc(len))
+    if (str.length <= budget) return str
+    return str.slice(0, budget - 1) + "…"
   }
 
   export function truncateMiddle(str: string, maxLength: number = 35): string {
-    if (str.length <= maxLength) return str
+    const budget = Math.max(1, Math.trunc(maxLength))
+    if (str.length <= budget) return str
 
     const ellipsis = "…"
-    const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-    const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+    const keepStart = Math.ceil((budget - ellipsis.length) / 2)
+    const keepEnd = Math.floor((budget - ellipsis.length) / 2)
 
-    return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+    // slice(-0) would capture the whole string when keepEnd is zero.
+    const end = keepEnd > 0 ? str.slice(-keepEnd) : ""
+    return str.slice(0, keepStart) + ellipsis + end
   }
 
   export function pluralize(count: number, singular: string, plural: string): string {

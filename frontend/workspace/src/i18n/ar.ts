@@ -353,8 +353,8 @@ export const dict = {
   "error.chain.mcpFailed": 'فشل خادم MCP "{{name}}". لاحظ أن OpenScience لا يدعم مصادقة MCP بعد.',
   "error.chain.providerAuthFailed": "فشلت مصادقة الموفر ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": 'فشل تهيئة الموفر "{{provider}}". تحقق من بيانات الاعتماد والتكوين.',
-  "error.chain.configJsonInvalid": "ملف التكوين في {{path}} ليس JSON(C) صالحًا",
-  "error.chain.configJsonInvalidWithMessage": "ملف التكوين في {{path}} ليس JSON(C) صالحًا: {{message}}",
+  "error.chain.configJsonInvalid": "ملف التكوين في {{path}} ليس JSON صالحًا",
+  "error.chain.configJsonInvalidWithMessage": "ملف التكوين في {{path}} ليس JSON صالحًا: {{message}}",
   "error.chain.configDirectoryTypo":
     'الدليل "{{dir}}" في {{path}} غير صالح. أعد تسمية الدليل إلى "{{suggestion}}" أو قم بإزالته. هذا خطأ مطبعي شائع.',
   "error.chain.configFrontmatterError": "فشل تحليل frontmatter في {{path}}:\n{{message}}",

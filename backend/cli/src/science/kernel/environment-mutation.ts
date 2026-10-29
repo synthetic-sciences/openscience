@@ -92,13 +92,16 @@ async function pythonProbe(binary: string): Promise<PythonProbe | undefined> {
   return parsed.data
 }
 
+export async function selectPython(candidates: string[]): Promise<string | undefined> {
+  // Executable permission does not prove a binary can start: stale framework
+  // installs and scripts with missing interpreters must not poison the cache
+  // or prevent a healthy candidate from serving every local tool.
+  const probes = await Promise.all(candidates.map((binary) => pythonProbe(binary).catch(() => undefined)))
+  return rankPython(probes.filter((probe): probe is PythonProbe => !!probe))
+}
+
 async function hostPython() {
-  const select = async () => {
-    const candidates = await pythonCandidates()
-    const probes = await Promise.all(candidates.map(pythonProbe))
-    return rankPython(probes.filter((probe): probe is PythonProbe => !!probe)) ?? candidates[0]
-  }
-  const pending = pythonCache.value ?? select()
+  const pending = pythonCache.value ?? pythonCandidates().then(selectPython)
   pythonCache.value = pending
   return pending
 }

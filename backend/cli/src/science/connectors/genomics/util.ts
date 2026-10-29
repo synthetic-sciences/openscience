@@ -41,5 +41,6 @@ export function arr(value: unknown): unknown[] {
 export function summarize(parts: (string | undefined)[], max = 300): string | undefined {
   const joined = parts.filter((p): p is string => typeof p === "string" && p.length > 0).join(" · ")
   if (joined.length === 0) return undefined
-  return joined.length > max ? `${joined.slice(0, max - 1)}…` : joined
+  const budget = Math.max(1, Math.trunc(max))
+  return joined.length > budget ? `${joined.slice(0, budget - 1)}…` : joined
 }

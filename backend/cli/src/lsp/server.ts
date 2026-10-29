@@ -723,6 +723,11 @@ export namespace LSPServer {
         if (!(await Bun.file(js).exists())) {
           if (Flag.OPENSCIENCE_DISABLE_LSP_DOWNLOAD) return
           await bunSpawn([BunProc.which(), "install", "pyright"], {
+            // Optional diagnostics must not leave an installer alive when the registry is unreachable.
+            timeout: 30_000,
+            killSignal: "SIGKILL",
+            stdout: "ignore",
+            stderr: "ignore",
             cwd: Global.Path.bin,
             env: {
               ...OpenScience.kernelEnv(process.env),

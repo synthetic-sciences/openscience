@@ -23,6 +23,11 @@ const fixture = {
   // What /api/cli/access answers: 200, or an explicit refusal (401, 403).
   access: 200,
   wallet: 1200,
+  enabled: undefined as boolean | undefined,
+  reload: undefined as boolean | undefined,
+  legacyReload: false,
+  walletEnabled: undefined as boolean | undefined,
+  unlocked: true,
 }
 // The profile the account service returns carries more than the UI shows;
 // only the shown fields may reach the stored summary.
@@ -49,7 +54,14 @@ async function answer(pathname: string): Promise<Response> {
   }
   if (pathname === "/api/cli/access") {
     return Response.json(
-      { cli_balance_cents: fixture.wallet, managed_supported: true, managed_unlocked: true, ace_enabled: false },
+      {
+        cli_balance_cents: fixture.wallet,
+        managed_supported: true,
+        managed_unlocked: fixture.unlocked,
+        ace_enabled: fixture.legacyReload,
+        ace_access_enabled: fixture.enabled,
+        auto_reload_enabled: fixture.reload,
+      },
       { status: fixture.access, headers },
     )
   }
@@ -60,7 +72,12 @@ async function answer(pathname: string): Promise<Response> {
   }
   if (pathname === "/api/v1/wallet") {
     return Response.json(
-      { balance_cents: fixture.wallet, purchased_cents: fixture.wallet, lifetime_spent_cents: 0 },
+      {
+        balance_cents: fixture.wallet,
+        purchased_cents: fixture.wallet,
+        lifetime_spent_cents: 0,
+        ace: { enabled: fixture.walletEnabled },
+      },
       { headers },
     )
   }
@@ -176,6 +193,11 @@ beforeEach(async () => {
   fixture.status = 200
   fixture.access = 200
   fixture.wallet = 1200
+  fixture.enabled = undefined
+  fixture.reload = undefined
+  fixture.legacyReload = false
+  fixture.walletEnabled = undefined
+  fixture.unlocked = true
   await OpenScience.saveSession(session)
 })
 afterAll(async () => {
@@ -185,6 +207,45 @@ afterAll(async () => {
   else process.env.OPENSCIENCE_API_BASE = previousApiBase
   if (previousDeadline === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
   else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previousDeadline
+})
+
+test("cardless Ace access stays independent of reload consent and survives stored summaries", async () => {
+  fixture.enabled = true
+  fixture.reload = false
+  fixture.wallet = 0
+  fixture.unlocked = false
+  const current = await readWallet(false)
+  expect(current.aceEnabled).toBe(true)
+  expect(current.autoReloadEnabled).toBe(false)
+  expect(current.managedUnlocked).toBe(false)
+  const stored = await OpenScience.readAccountSnapshot((await OpenScience.getFundingSnapshot())!)
+  expect(stored?.billing?.ace_access_enabled).toBe(true)
+  expect(stored?.billing?.auto_reload_enabled).toBe(false)
+})
+
+test("older gateways supply Ace access through the Wallet without granting reload consent", async () => {
+  fixture.walletEnabled = true
+  fixture.unlocked = false
+  const current = await readWallet(false)
+  expect(current.aceEnabled).toBe(true)
+  expect(current.autoReloadEnabled).toBe(false)
+})
+
+test("explicit access and reload fields override legacy flags and Wallet defaults", async () => {
+  fixture.enabled = false
+  fixture.reload = false
+  fixture.legacyReload = true
+  fixture.walletEnabled = true
+  fixture.unlocked = false
+  const current = await readWallet(false)
+  expect(current.aceEnabled).toBe(false)
+  expect(current.autoReloadEnabled).toBe(false)
+})
+
+test("legacy reload authorization remains readable without new gateway fields", async () => {
+  fixture.legacyReload = true
+  const current = await readWallet(false)
+  expect(current.autoReloadEnabled).toBe(true)
 })
 
 test("concurrent account surfaces share one in-flight status read", async () => {

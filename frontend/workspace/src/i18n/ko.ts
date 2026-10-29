@@ -353,8 +353,8 @@ export const dict = {
   "error.chain.mcpFailed": 'MCP 서버 "{{name}}" 실패. 참고: OpenScience는 아직 MCP 인증을 지원하지 않습니다.',
   "error.chain.providerAuthFailed": "공급자 인증 실패 ({{provider}}): {{message}}",
   "error.chain.providerInitFailed": '공급자 "{{provider}}" 초기화 실패. 자격 증명과 구성을 확인하세요.',
-  "error.chain.configJsonInvalid": "{{path}}의 구성 파일이 유효한 JSON(C)가 아닙니다",
-  "error.chain.configJsonInvalidWithMessage": "{{path}}의 구성 파일이 유효한 JSON(C)가 아닙니다: {{message}}",
+  "error.chain.configJsonInvalid": "{{path}}의 구성 파일이 유효한 JSON가 아닙니다",
+  "error.chain.configJsonInvalidWithMessage": "{{path}}의 구성 파일이 유효한 JSON가 아닙니다: {{message}}",
   "error.chain.configDirectoryTypo":
     '{{path}}의 "{{dir}}" 디렉터리가 유효하지 않습니다. 디렉터리 이름을 "{{suggestion}}"으로 변경하거나 제거하세요. 이는 흔한 오타입니다.',
   "error.chain.configFrontmatterError": "{{path}}의 frontmatter 파싱 실패:\n{{message}}",

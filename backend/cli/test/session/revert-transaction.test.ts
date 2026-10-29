@@ -125,6 +125,43 @@ describe("transactional session undo", () => {
     })
   })
 
+  test("continuing a part-level undo keeps the target message prefix and earlier messages", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+        await conversationTurn({ sessionID: session.id, root: tmp.path })
+        const earlier = await Session.messages({ sessionID: session.id })
+        const target = await conversationTurn({ sessionID: session.id, root: tmp.path })
+        const prefix = (await MessageV2.get({ sessionID: session.id, messageID: target.id })).parts
+        const removed = await Session.updatePart({
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: target.id,
+          type: "text",
+          text: "Remove only this suffix and later messages.",
+        })
+        const reverted = await SessionRevert.revert({
+          sessionID: session.id,
+          messageID: target.id,
+          partID: removed.id,
+        })
+        expect(reverted.session.revert?.partID).toBe(removed.id)
+
+        await SessionRevert.cleanup(reverted.session)
+        const remaining = await Session.messages({ sessionID: session.id })
+        expect(remaining.map((message) => message.info.id)).toEqual([
+          ...earlier.map((message) => message.info.id),
+          target.id,
+        ])
+        expect(remaining.slice(0, earlier.length)).toEqual(earlier)
+        expect(remaining.at(-1)?.parts).toEqual(prefix)
+        expect((await Session.get(session.id)).revert).toBeUndefined()
+      },
+    })
+  })
+
   test("returns a structured result, is idempotent, and restores the exact redo snapshot", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
