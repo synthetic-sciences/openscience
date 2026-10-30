@@ -59,7 +59,7 @@
       "typescript": "5.9.3",
       "@typescript/native-preview": "7.0.0-dev.20260707.2",
       "zod": "4.1.8",
-      "remeda": "2.26.0",
+      "remeda": "2.54.1",
       "shiki": "3.20.0",
       "solid-list": "0.3.0",
       "tailwindcss": "4.3.3",
