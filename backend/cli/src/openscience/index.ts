@@ -566,6 +566,7 @@ export namespace OpenScience {
       using _ = await Lock.write(SESSION_PATH)
       await writeWorkspaceScope(session)
       await atomicWrite(SESSION_PATH, JSON.stringify(session, null, 2))
+      invalidateCredentialSync()
       // A summary belongs to one account and funding context; never let a
       // newly connected account inherit the previous one's stored profile.
       await fs.rm(SNAPSHOT_PATH, { force: true }).catch(() => undefined)
@@ -612,8 +613,10 @@ export namespace OpenScience {
     expected: OpenScienceSession,
     organizationID: string | undefined,
     userID: string,
+    generation = syncGeneration,
   ): Promise<OpenScienceSession | null> {
     const matches = (current: OpenScienceSession | null) =>
+      generation === syncGeneration &&
       !!current &&
       current.api_key === expected.api_key &&
       current.user_id === expected.user_id &&
@@ -655,17 +658,25 @@ export namespace OpenScience {
     return result.value
   }
 
-  export async function clearSession(expectedApiKey?: string): Promise<boolean> {
+  export async function clearSession(expectedApiKey?: string, expectedGeneration?: number): Promise<boolean> {
     const action = async () => {
       using _ = await Lock.write(SESSION_PATH)
-      if (expectedApiKey && (await getSession())?.api_key !== expectedApiKey) return false
       await fs.rm(SESSION_PATH, { force: true })
+      invalidateCredentialSync()
       await fs.rm(SCOPE_PATH, { force: true })
       await fs.rm(SNAPSHOT_PATH, { force: true })
       await WorkspaceCredentials.clear()
       return true
     }
-    const result = await CredentialLifecycle.mutate("managed-session.clear", action)
+    const applied = await CredentialLifecycle.mutateIf(
+      "managed-session.clear",
+      async () => {
+        if (expectedGeneration !== undefined && expectedGeneration !== syncGeneration) return false
+        return !expectedApiKey || (await getSession())?.api_key === expectedApiKey
+      },
+      action,
+    )
+    const result = applied.applied && applied.value
     if (result) {
       invalidateBalance()
       const { Provider } = await import("@/provider/provider")
@@ -783,6 +794,7 @@ export namespace OpenScience {
   }
   const syncs = new Map<string, Promise<SyncStatus>>()
   const attempts = new Map<string, number>()
+  let syncGeneration = 0
   let synced: SyncStatus = { state: "disconnected" }
   let syncTimer: ReturnType<typeof setInterval> | undefined
   /** Renewal cadence for the synced overlay. The grant lives
@@ -797,6 +809,16 @@ export namespace OpenScience {
    * digest moved, when it is unknown, or at least this often regardless. */
   export const SYNC_FULL_INTERVAL = 5 * 60_000
   const digests = new Map<string, { version: number; at: number }>()
+
+  function invalidateCredentialSync(): void {
+    // A reconnect may reuse the same key. Its retries, pending requests and
+    // dedupe state still belong to a different sign-in lifetime.
+    syncGeneration++
+    syncs.clear()
+    attempts.clear()
+    digests.clear()
+    synced = { state: "disconnected" }
+  }
 
   export function credentialSyncStatus(): SyncStatus {
     return synced
@@ -835,17 +857,19 @@ export namespace OpenScience {
 
   /** Extend the cached grant after the server confirmed its payload is
    * unchanged. False when no live grant is stored, so a full sync follows. */
-  async function renewGrant(identity: string): Promise<boolean> {
+  async function renewGrant(identity: string, generation: number): Promise<boolean> {
     const result = await CredentialLifecycle.update(async () => {
       const current = await getSession()
-      if (!current || WorkspaceCredentials.identity(current) !== identity) return
+      if (generation !== syncGeneration || !current || WorkspaceCredentials.identity(current) !== identity) return
       return { action: () => WorkspaceCredentials.renew(current) }
     })
     return result.applied && result.value
   }
 
   export async function syncCredentials(options: { force?: boolean; timeoutMs?: number } = {}): Promise<SyncStatus> {
+    const generation = syncGeneration
     const session = await getSession()
+    if (generation !== syncGeneration) return synced
     if (!session) return (synced = { state: "disconnected" })
     const identity = WorkspaceCredentials.identity(session)
     const identities = new Set([identity])
@@ -872,15 +896,19 @@ export namespace OpenScience {
         const version = options.force
           ? undefined
           : await Promise.race([probeSyncVersion(session, headers, controller.signal), deadline])
+        if (generation !== syncGeneration) return synced
         const known = digests.get(identity)
         if (
           !options.force &&
           version !== undefined &&
           known?.version === version &&
           Date.now() - known.at < SYNC_FULL_INTERVAL &&
-          (await renewGrant(identity))
+          (await renewGrant(identity, generation))
         )
-          return (synced = { state: "ready", organization_id: session.organization_id, synced_at: Date.now() })
+          return generation !== syncGeneration
+            ? synced
+            : (synced = { state: "ready", organization_id: session.organization_id, synced_at: Date.now() })
+        if (generation !== syncGeneration) return synced
         const result = await Promise.race([
           (async () => {
             const response = await fetchWithFreshConnection(`${apiBase()}/api/cli/sync`, {
@@ -892,17 +920,20 @@ export namespace OpenScience {
           })(),
           deadline,
         ])
+        if (generation !== syncGeneration) return synced
         seen.status = result.response.status
         if (result.response.status === 401) {
-          await clearSession(session.api_key)
-          throw new Error("This device was disconnected. Sign in again.")
+          if (!(await clearSession(session.api_key, generation))) return synced
+          const failure: SyncStatus = { state: "error", error: "This device was disconnected. Sign in again." }
+          if (syncGeneration === generation + 1) synced = failure
+          return failure
         }
         if (result.response.status === 403) {
           await CredentialLifecycle.mutateIf(
             "workspace-sync.denied",
             async () => {
               const current = await getSession()
-              return !!current && WorkspaceCredentials.identity(current) === identity
+              return generation === syncGeneration && !!current && WorkspaceCredentials.identity(current) === identity
             },
             () => WorkspaceCredentials.clear(),
           )
@@ -918,14 +949,14 @@ export namespace OpenScience {
         ) {
           throw new FundingContextError("Credential sync could not verify the selected workspace. Sign in again.")
         }
-        const scoped = await reconcileSession(session, data.snapshot.organization_id, data.user_id)
-        if (!scoped) return synced
+        const scoped = await reconcileSession(session, data.snapshot.organization_id, data.user_id, generation)
+        if (!scoped || generation !== syncGeneration) return synced
         const target = WorkspaceCredentials.identity(scoped)
         identities.add(target)
         attempts.set(target, attempts.get(identity) ?? Date.now())
         const matches = async () => {
           const current = await getSession()
-          return !!current && WorkspaceCredentials.identity(current) === target
+          return generation === syncGeneration && !!current && WorkspaceCredentials.identity(current) === target
         }
         const applied = await CredentialLifecycle.update(async () => {
           if (!(await matches())) return
@@ -949,7 +980,7 @@ export namespace OpenScience {
           const { Provider } = await import("@/provider/provider")
           Provider.invalidate()
         }
-        if (!(await matches())) return synced
+        if (!(await matches()) || generation !== syncGeneration) return synced
         // The digest read before this payload names it closely enough: a
         // change in between shows up as a moved digest on the next tick.
         if (version !== undefined) digests.set(target, { version, at: Date.now() })
@@ -967,6 +998,7 @@ export namespace OpenScience {
           expires_at: WorkspaceCredentials.expiresAt(),
         })
         const current = await getSession()
+        if (generation !== syncGeneration) return synced
         if (current && !identities.has(WorkspaceCredentials.identity(current))) return synced
         return (synced = {
           state: "error",
@@ -974,7 +1006,7 @@ export namespace OpenScience {
         })
       } finally {
         if (timer) clearTimeout(timer)
-        syncs.delete(identity)
+        if (generation === syncGeneration) syncs.delete(identity)
       }
     })()
     syncs.set(identity, task)
@@ -994,9 +1026,12 @@ export namespace OpenScience {
   export async function scheduleRefresh(
     options: { backoff?: readonly number[]; force?: boolean } = {},
   ): Promise<SyncStatus> {
+    const generation = syncGeneration
     const backoff = options.backoff ?? SYNC_BACKOFF
     const attempt = async (index: number, force: boolean): Promise<SyncStatus> => {
+      if (generation !== syncGeneration) return synced
       const result = await syncCredentials({ force })
+      if (generation !== syncGeneration) return synced
       if (result.state !== "error") return result
       const delay = backoff[index]
       const expires = WorkspaceCredentials.expiresAt()
