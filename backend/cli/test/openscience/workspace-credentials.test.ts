@@ -42,6 +42,8 @@ let status = 200
 let count = 0
 let headers: Headers | undefined
 let wait: Promise<void> | undefined
+let syncRequest: ((attempt: number) => Promise<void>) | undefined
+let versionRequest: (() => Promise<void>) | undefined
 let stallBody = false
 let statuses: number[] = []
 let permissions: unknown = {}
@@ -134,9 +136,14 @@ const server = Bun.serve({
       activeRevokes.push((await OpenScience.getSession())?.api_key ?? "")
       return new Response(null, { status: revokeStatus })
     }
+    if (new URL(input.url).pathname === "/api/cli/sync/version") {
+      await versionRequest?.()
+      return Response.json({})
+    }
     if (new URL(input.url).pathname !== "/api/cli/sync") return Response.json({})
     headers = new Headers(input.headers)
     count++
+    await syncRequest?.(count)
     await wait
     const responseHeaders = {
       "content-type": "application/json",
@@ -176,6 +183,8 @@ beforeEach(async () => {
   count = 0
   headers = undefined
   wait = undefined
+  syncRequest = undefined
+  versionRequest = undefined
   stallBody = false
   statuses = []
   permissions = {}
@@ -803,6 +812,163 @@ describe("workspace credential sync", () => {
     expect(count).toBe(3)
     expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
     expect((await JsonStore.read(WorkspaceCredentials.filepath)).expires_at).toBe(after)
+  })
+
+  test.each(["logout", "replacement", "same-identity reconnect"] as const)(
+    "an in-flight retry cannot reinstall an expired overlay after %s",
+    async (boundary) => {
+      const started = Promise.withResolvers<void>()
+      const response = Promise.withResolvers<void>()
+      syncRequest = async (attempt) => {
+        if (attempt !== 2) return
+        started.resolve()
+        await response.promise
+      }
+      statuses = [503, 200]
+      const refresh = OpenScience.scheduleRefresh({ force: true, backoff: [0] })
+      try {
+        await started.promise
+        await WorkspaceCredentials.write(session, {
+          organization_id: "org_a",
+          auth: { openai: { type: "api", key: "fixture-cloud-openai" } },
+          services: {},
+        })
+        await JsonStore.update(WorkspaceCredentials.filepath, (store) => ({ ...store, expires_at: Date.now() - 1 }))
+        await WorkspaceCredentials.expire()
+        expect(await WorkspaceCredentials.read()).toBeUndefined()
+
+        if (boundary !== "replacement") await OpenScience.clearSession()
+        if (boundary !== "logout")
+          await OpenScience.saveSession({
+            ...session,
+            api_key: boundary === "replacement" ? "osk_fixture_replacement" : session.api_key,
+          })
+        expect(OpenScience.credentialSyncStatus().state).toBe("disconnected")
+        response.resolve()
+        await refresh
+
+        expect(count).toBe(2)
+        expect(await JsonStore.read(path.join(Global.Path.data, "auth.json"))).toEqual({})
+        expect(await JsonStore.read(WorkspaceCredentials.filepath)).toEqual({})
+        expect(await Auth.get("openai")).toBeUndefined()
+      } finally {
+        response.resolve()
+        await refresh
+      }
+    },
+  )
+
+  test.each(["logout", "replacement", "same-identity reconnect"] as const)(
+    "a refresh in backoff never starts another request after %s",
+    async (boundary) => {
+      statuses = [503]
+      const refresh = OpenScience.scheduleRefresh({ force: true, backoff: [1_000] })
+      try {
+        while (OpenScience.credentialSyncStatus().state !== "error") await Bun.sleep(5)
+        if (boundary !== "replacement") await OpenScience.clearSession()
+        if (boundary !== "logout")
+          await OpenScience.saveSession({
+            ...session,
+            api_key: boundary === "replacement" ? "osk_fixture_replacement" : session.api_key,
+          })
+        await refresh
+
+        expect(count).toBe(1)
+        expect(await JsonStore.read(path.join(Global.Path.data, "auth.json"))).toEqual({})
+        expect(await WorkspaceCredentials.read()).toBeUndefined()
+      } finally {
+        await refresh
+      }
+    },
+  )
+
+  test.each([200, 401, 403])("a stale %i response cannot disturb a new same-identity sync", async (status) => {
+    const started = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    const responses = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+    syncRequest = async (attempt) => {
+      started[attempt - 1]?.resolve()
+      await responses[attempt - 1]?.promise
+    }
+    statuses = [status, 200]
+    const old = OpenScience.syncCredentials({ force: true })
+    const pending: Promise<unknown>[] = [old]
+    try {
+      await started[0]!.promise
+      await OpenScience.clearSession()
+      await OpenScience.saveSession(session)
+      const current = OpenScience.syncCredentials({ force: true })
+      pending.push(current)
+      await started[1]!.promise
+
+      responses[0]!.resolve()
+      await old
+      expect(await OpenScience.getSession()).toEqual(session)
+      expect(await WorkspaceCredentials.read()).toBeUndefined()
+      expect(OpenScience.credentialSyncStatus().state).toBe("syncing")
+
+      const joined = OpenScience.syncCredentials({ force: true })
+      pending.push(joined)
+      responses[1]!.resolve()
+      expect((await current).state).toBe("ready")
+      expect((await joined).state).toBe("ready")
+      expect(count).toBe(2)
+      expect(await Auth.get("openai")).toEqual({ type: "api", key: "fixture-cloud-openai" })
+      expect(OpenScience.credentialSyncStatus().state).toBe("ready")
+    } finally {
+      for (const response of responses) response.resolve()
+      await Promise.allSettled(pending)
+    }
+  })
+
+  test("a stale version probe cannot start a full sync after reconnect", async () => {
+    const started = Promise.withResolvers<void>()
+    const response = Promise.withResolvers<void>()
+    versionRequest = async () => {
+      started.resolve()
+      await response.promise
+    }
+    const refresh = OpenScience.syncCredentials()
+    try {
+      await started.promise
+      await OpenScience.clearSession()
+      await OpenScience.saveSession(session)
+      response.resolve()
+      await refresh
+      expect(count).toBe(0)
+      expect(await WorkspaceCredentials.read()).toBeUndefined()
+      expect(OpenScience.credentialSyncStatus().state).toBe("disconnected")
+    } finally {
+      response.resolve()
+      await refresh
+    }
+  })
+
+  test("a queued conditional logout never publishes revocation for a replacement session", async () => {
+    const held = Promise.withResolvers<void>()
+    const replace = Promise.withResolvers<void>()
+    const reasons: string[] = []
+    const off = CredentialLifecycle.onRevoke(({ reason }) => {
+      reasons.push(reason)
+    })
+    const replacement = { ...session, api_key: "osk_fixture_replacement" }
+    const owner = CredentialLifecycle.serialized(async () => {
+      held.resolve()
+      await replace.promise
+      await OpenScience.saveSession(replacement)
+    })
+    try {
+      await held.promise
+      const clear = OpenScience.clearSession(session.api_key)
+      replace.resolve()
+      await owner
+      expect(await clear).toBe(false)
+      expect(await OpenScience.getSession()).toEqual(replacement)
+      expect(reasons).toEqual(["managed-session.set"])
+    } finally {
+      replace.resolve()
+      await owner
+      off()
+    }
   })
 
   /** Spawn a real child through the admitted subprocess boundary and register
