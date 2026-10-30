@@ -36,7 +36,7 @@
       "tooling/sdk/js"
     ],
     "catalog": {
-      "@types/bun": "1.4.3",
+      "@types/bun": "1.4.4",
       "ulid": "3.0.1",
       "@kobalte/core": "0.13.14",
       "@types/luxon": "3.7.1",
@@ -74,7 +74,7 @@
     "@tsconfig/bun": "catalog:",
     "husky": "9.1.7",
     "prettier": "3.9.10",
-    "turbo": "2.11.9"
+    "turbo": "2.11.10"
   },
   "dependencies": {
     "@synsci/script": "workspace:*",
