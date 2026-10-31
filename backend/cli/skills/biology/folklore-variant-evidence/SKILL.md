@@ -1,6 +1,6 @@
 ---
 name: folklore-variant-evidence
-description: "Retrieve ClinGen gene-disease validity assertions for a public gene or disease, and review source-linked public evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent must branch deterministically on resolved, ambiguous, not-found, invalid, unsupported, or unavailable variant outcomes; chain a resolved public variant into related literature or publication details; or preserve evidence provenance without accepting patient, phenotype, family, segregation, or private case data."
+description: "Retrieve public human gene identities, snapshot-bound gene profiles and separate live gene literature, ClinGen gene-disease assertions, and evidence and literature for one supported GRCh38 germline nuclear SNV or simple indel through Folklore Clinical Variant Interpretation MCP. Use when a scientific agent needs source-qualified public gene reference or variant-level evidence, explicit ambiguity/outcome handling and provenance; never use patient, phenotype, family, segregation or private case data."
 category: biology
 license: MIT
 compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
@@ -22,7 +22,7 @@ metadata:
 Use Folklore Clinical Variant Interpretation MCP to retrieve structured public
 variant evidence, automated variant-level ACMG/AMP decision support, provenance,
 and source-linked literature for professional review. Keep the workflow limited
-to public identifiers and preserve every explicit outcome state. Adapter 1.5.0 also provides ClinGen Gene-Disease Validity assertions; source coverage is bounded, not every known association.
+to public identifiers and preserve every explicit outcome state. Adapter 1.6.0 adds public gene resolution, snapshot-bound gene profiles and sections, and separate live gene literature. ClinGen Gene-Disease Validity assertions remain source-bounded, not every known association.
 
 Folklore Clinical Variant Interpretation MCP is published by Helena
 Bioinformatics. Its hosted endpoint is:
@@ -56,7 +56,7 @@ variant notation instead of selecting a candidate automatically.
 ## Select the right skill
 
 Use this skill when the task is one public variant to structured Folklore
-evidence, explicit resolution-state handling, variant-linked literature, or ClinGen gene-to-disease/disease-to-gene assertions.
+evidence, public gene resolution and profiles, separate live gene literature, explicit resolution-state handling, variant-linked literature, or ClinGen gene-to-disease/disease-to-gene assertions.
 
 - Use `database-lookup` for broad direct queries across ClinVar, dbSNP, gnomAD,
   Ensembl VEP, COSMIC, or multiple databases.
@@ -90,7 +90,7 @@ Variant Interpretation MCP.
 ## Verify the live tool catalog
 
 Connect to the hosted endpoint and call `tools/list`. Verify the available tools
-instead of relying on model memory. The documented public catalog contains:
+instead of relying on model memory. The hosted 1.6.0 catalog contains ten scientific tools:
 
 - `search_variant_evidence`
 - `search_variant_literature`
@@ -98,14 +98,78 @@ instead of relying on model memory. The documented public catalog contains:
 - `search_literature_corpus`
 - `get_gene_disease_associations`
 - `search_disease_genes`
+- `resolve_gene`
+- `get_gene_profile`
+- `get_gene_section`
+- `search_gene_literature`
 
-The separate seventh tool `support_helena` is not scientific evidence; use it only when explicitly requested.
+The separate, explicitly opt-in tool `support_helena` is not scientific evidence; use it only when explicitly requested.
 
 If discovery or a tool call fails, preserve the failure as an availability
 problem. Do not reinterpret it as lack of scientific evidence.
 
 Read [the public MCP contract](references/mcp-contract.md) before composing tool
 calls or interpreting response states.
+
+## Resolve a public gene and review its profile
+
+1. Call `resolve_gene` with one printable public gene symbol, previous symbol,
+   alias, HGNC, Ensembl or NCBI Gene identifier (1–128 characters). Gene-plus-HGVS
+   expressions belong in `search_variant_evidence`. Send no patient narrative.
+2. Read transport/JSON-RPC errors and `adapter_error` first. Preserve resolver
+   statuses `exact`, `alias`, `ambiguous`, `not_found` and `withdrawn`. Show every
+   returned candidate for ambiguity and require explicit selection. Never choose
+   the most familiar gene, substitute a withdrawn identity or interpret a bounded
+   miss as biological absence.
+3. Use the selected candidate's `identity.gene_id` and the resolver's
+   `identity_snapshot_id` as `snapshot_id` for `get_gene_profile`. Preserve the
+   returned identity, snapshot, sources and all thirteen sections; do not infer a
+   variant classification from gene-disease validity, constraint, dosage or GWAS.
+4. Continue a section with `get_gene_section`, the same gene/snapshot/section and
+   its opaque returned cursor. `limit` is 1–50, default 20. Preserve assertions,
+   assemblies, releases, source links, coverage, limitations, nulls, `total`,
+   `observed_total` and count units. Do not sum overlapping axes or count mirrored
+   assertions as independent votes. Unavailable or unintegrated evidence differs
+   from a source having no record. Native GRCh37 transcript evidence does not
+   expand the GRCh38 variant-input boundary.
+5. For `snapshot_unavailable`, restart resolution and reload the whole profile.
+   Do not combine snapshots, reuse mismatched cursors, or repair a cursor/hash.
+
+Illustrative `tools/call` parameter templates, not captured scientific results.
+First resolve:
+
+```json
+{"name":"resolve_gene","arguments":{"query":"BRCA1"}}
+```
+
+After selecting the returned identity, read its profile:
+
+```json
+{"name":"get_gene_profile","arguments":{"gene_id":"HGNC:1100","snapshot_id":"<returned identity_snapshot_id>"}}
+```
+
+Read an initial section page (no cursor):
+
+```json
+{"name":"get_gene_section","arguments":{"gene_id":"HGNC:1100","snapshot_id":"<same returned snapshot_id>","section":"structure","limit":20}}
+```
+
+Replace every placeholder with the selected resolver's actual values; do not
+send fabricated snapshots or assume an arbitrary query resolves to HGNC:1100.
+The reference lists sections, envelopes and pagination contracts. Gene profiles
+are public reference evidence for professional review, not patient diagnosis,
+treatment recommendations or variant pathogenicity classifications.
+
+### Separate live gene literature
+
+Call `search_gene_literature` with the selected `gene_id` and `snapshot_id`.
+`limit` is 1–25, default 20; `sort` is `relevance`, `newest` or `oldest`. Continue
+only with the returned opaque cursor for the same gene/snapshot/sort capture.
+Preserve capture time/hash, publications, source links, match labels, degradation
+and pagination. Query-matched discovery is not guaranteed exact gene filtering
+or curated gene-disease evidence. Keep this abstract-free live capture separate
+from the immutable profile's literature section; do not append abstracts to it
+or treat either source as a change to variant classification.
 
 ## Retrieve gene-disease assertions
 
@@ -224,6 +288,6 @@ without automatic candidate selection.
 ## Official references
 
 - Integration setup: <https://folklore.helena.bio/integrations>
-- Technical guide: <https://folklore.helena.bio/docs/folklore-connector>
+- Technical guide: <https://folklore.helena.bio/integrations/mcp>
 - Public adapter and contract: <https://github.com/helena-bioinformatics/folklore-mcp>
 - Official MCP Registry identity: `io.github.helena-bioinformatics/folklore`
