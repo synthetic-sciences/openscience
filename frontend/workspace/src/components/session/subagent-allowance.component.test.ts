@@ -68,6 +68,7 @@ async function mount(
     increments?: boolean
     active?: boolean
     parent?: string
+    cooperative?: boolean
   } = {},
 ) {
   const state = {
@@ -85,6 +86,10 @@ async function mount(
   state.pool.available[state.pool.workers.child.unit] = options.available ?? 0
   state.pool.workers.child.active = options.active ?? false
   state.pool.workers.child.parentSessionID = options.parent ?? "parent"
+  if (options.cooperative) {
+    Reflect.deleteProperty(state.pool.workers.child, "stopReason")
+    state.pool.workers.child.reportReason = "budget_wrapup"
+  }
   const server = createServer(async (request, response) => {
     const json = (value: unknown, status = 200) => {
       response.writeHead(status, {
@@ -394,4 +399,13 @@ test("a failed conflict refresh cannot leave stale totals available for another 
   expect(app.host.querySelector("button[disabled]")).toBeNull()
   expect(app.button("Increase limit by") === undefined).toBe(true)
   expect(app.state.writes).toHaveLength(1)
+})
+
+test("a cooperative partial handoff can continue with the remaining allowance", async () => {
+  const app = await mount({ available: 1000000000, cooperative: true, increments: false })
+  await app.load()
+  expect(app.button("Continue with remaining allowance")).toBeDefined()
+  app.button("Continue with remaining allowance").click()
+  await ready(() => app.state.writes.length === 1)
+  expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
 })

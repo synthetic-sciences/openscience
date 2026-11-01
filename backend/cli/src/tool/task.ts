@@ -18,6 +18,7 @@ import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { Log } from "@/util/log"
+import { FileLease } from "@/util/file-lease"
 import { SessionWake } from "@/session/wake"
 import { SubagentBudget } from "@/session/subagent-budget"
 import { Provider } from "@/provider/provider"
@@ -570,6 +571,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
             })
 
+          if (terminal) {
+            await using recovery = await FileLease.acquire(
+              SessionPrompt.loopLeasePath(Instance.project.id, session.id),
+              10000,
+              signal,
+            )
+            SessionPrompt.assertNotBusy(session.id)
+            await SubagentBudget.release(session.id, identity.callID)
+          }
+
           // A prior process may have died mid-turn; close its interval at its
           // last heartbeat before this process opens its own. Time between
           // reservation and activation is queueing, not child work.
@@ -709,7 +720,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
           const failedToolCalls = summary.filter((part) => part.state.status === "error").length
           const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
-          const budget = await SubagentBudget.read(session.id)
+          const budgetState = await SubagentBudget.read(session.id)
+          const budget = budgetState?.worker.assignmentID === identity.callID ? budgetState : undefined
           const observed = classifyTaskOutcome({
             finish: child?.finish,
             error: execution.error ?? child?.error,

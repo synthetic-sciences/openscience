@@ -208,6 +208,27 @@ export namespace SubagentBudget {
         workers.filter((w) => !ancestor(pool, w.parentSessionID, unit)).reduce((sum, w) => sum + held(pool, w), 0),
     )
   }
+  /** Grants reserve a share; actual spend and unknown calls also bound every ancestor. */
+  export function spendable(pool: Pool, sessionID: string) {
+    const w = pool.workers[sessionID]
+    const capacity = (workers: Worker[], limit: number) =>
+      limit - workers.reduce((sum, child) => sum + child.spent + pending(child), 0)
+    const ancestors = (worker: Worker): number[] => {
+      const parent = ancestor(pool, worker.parentSessionID, worker.unit)
+      return parent ? [capacity(family(pool, parent.sessionID), parent.limit), ...ancestors(parent)] : []
+    }
+    return Math.max(
+      0,
+      Math.min(
+        available(pool, w.unit, sessionID),
+        capacity(
+          Object.values(pool.workers).filter((child) => child.unit === w.unit),
+          pool.limits[w.unit],
+        ),
+        ...ancestors(w),
+      ),
+    )
+  }
   async function root(sessionID: string) {
     const projectID = await Promise.resolve()
       .then(() => Instance.project.id)
@@ -349,6 +370,7 @@ export namespace SubagentBudget {
       if (prior?.parentSessionID !== undefined && prior.parentSessionID !== input.parentSessionID)
         throw new Error("Subagent parent changed")
       if (prior?.assignmentID === input.assignmentID) return { pool, result: prior }
+      if (prior?.active) throw new Error("Subagent is still running; wait for its current assignment to stop")
       if (prior && (prior.unit !== input.unit || prior.route !== input.route))
         throw new LimitError("route_changed", "Continue this child on its original access route or start a new child.")
       const parent = ancestor(pool, input.parentSessionID, input.unit)
@@ -362,7 +384,12 @@ export namespace SubagentBudget {
         )
       const worker = Worker.parse({
         ...input,
-        limit: (prior ? consumed(pool, prior.sessionID) + pending(prior) : 0) + amount,
+        limit:
+          (prior
+            ? consumed(pool, prior.sessionID) +
+              pending(prior) +
+              children(pool, prior.sessionID).reduce((sum, w) => sum + held(pool, w), 0)
+            : 0) + amount,
         spent: prior?.spent ?? 0,
         calls: prior?.calls ?? {},
         active: true,
@@ -387,7 +414,7 @@ export namespace SubagentBudget {
       const reason =
         w.deadline <= Date.now()
           ? "deadline"
-          : !w.active || amount > available(pool, w.unit, sessionID)
+          : !w.active || amount > spendable(pool, sessionID)
             ? w.unit === "usd"
               ? "budget_limit"
               : "token_limit"
@@ -417,12 +444,12 @@ export namespace SubagentBudget {
       return { pool, result: undefined }
     })
   }
-  export async function release(sessionID: string) {
+  export async function release(sessionID: string, assignmentID?: string) {
     const id = await root(sessionID)
     if (!id) return
     await mutate(id, (current) => {
       const pool = current!
-      pool.workers[sessionID].active = false
+      if (!assignmentID || pool.workers[sessionID].assignmentID === assignmentID) pool.workers[sessionID].active = false
       return { pool, result: undefined }
     })
   }

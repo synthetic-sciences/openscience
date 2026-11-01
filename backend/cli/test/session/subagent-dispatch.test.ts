@@ -250,3 +250,32 @@ test("runtime tools reject cancelled assignments even without a wrap-up prompt",
     expect(actions).toHaveLength(0)
   })
 })
+
+test("handoff admission accounts for the next input replay before reaching 75 percent", async () => {
+  await fixture(async (model) => {
+    await SubagentBudget.open({
+      rootSessionID: "larger",
+      parentSessionID: "larger",
+      sessionID: "large-child",
+      assignmentID: "large",
+      objective: "test",
+      expectedOutput: "report",
+      model: { providerID: model.providerID, modelID: model.id },
+      route: "local",
+      unit: "tokens",
+      allocation: 100000,
+      settings: { tokens: 100000 },
+    })
+    await SubagentBudget.reserve("large-child", "earlier", 60000)
+    await SubagentBudget.settle("large-child", "earlier", 60000)
+    const plan = await SubagentDispatch.prepare({
+      sessionID: "large-child",
+      model,
+      route: "local",
+      inputTokens: 30000,
+      maxOutputTokens: 4000,
+    })
+    expect(plan?.wrapup).toBe(true)
+    expect(plan?.notice).toContain("handoff")
+  })
+})

@@ -150,3 +150,46 @@ test("deleted child reports stay redacted and deleted roots cannot be recreated 
     },
   })
 })
+
+test("resuming a parent retains its background descendant allocations", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 150))
+      await SubagentBudget.open({ ...input("nested", 100), parentSessionID: "a" })
+      await SubagentBudget.release("a")
+      await SubagentBudget.open({ ...input("a", 50), assignmentID: "resume" })
+      await expect(SubagentBudget.open(input("other", 150))).rejects.toThrow(/limit/)
+      const pool = (await SubagentBudget.inspect("root"))!
+      expect(SubagentBudget.available(pool, "tokens")).toBe(50)
+    },
+  })
+})
+test("a shared-pool overrun blocks new calls from already allocated siblings", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 100))
+      await SubagentBudget.open(input("b", 100))
+      await SubagentBudget.reserve("a", "overrun", 100)
+      await SubagentBudget.settle("a", "overrun", 300)
+      await expect(SubagentBudget.reserve("b", "later", 100)).rejects.toThrow(/limit/)
+      expect((await SubagentBudget.read("b"))?.worker.calls.later).toBeUndefined()
+    },
+  })
+})
+test("a new assignment cannot replace a child that is still active", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const first = await SubagentBudget.open(input("a", 100))
+      await expect(SubagentBudget.open({ ...input("a", 20), assignmentID: "overlap" })).rejects.toThrow(
+        /running|active/,
+      )
+      expect((await SubagentBudget.read("a"))?.worker.assignmentID).toBe(first.assignmentID)
+    },
+  })
+})

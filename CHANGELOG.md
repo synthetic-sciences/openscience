@@ -8,7 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Give Task subagents shared user-approved USD or token allowances, a deadline and a selected model. Stop further calls at the limit, keep partial results, and let users increase the allowance and continue the same child.
+- Give Task subagents shared user-approved USD or token allowances, a deadline and a selected model. Stop further calls at the limit, keep partial results, and let users increase the allowance and continue the same child. Recognize environment and configuration API keys as paid access.
 
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.

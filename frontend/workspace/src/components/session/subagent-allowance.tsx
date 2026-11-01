@@ -177,7 +177,7 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
   const resumable = (worker: Worker) =>
     worker.parentSessionID === props.sessionID &&
     !worker.active &&
-    ["budget_limit", "token_limit", "budget_wrapup"].includes(worker.stopReason ?? "")
+    ["budget_limit", "token_limit", "budget_wrapup"].includes(worker.stopReason ?? worker.reportReason ?? "")
   const remaining = (worker: Worker) => (state.pool?.available[worker.unit] ?? 0) > 0
   const label = (worker: Worker, increase = false) => {
     const attempt = state.attempts[worker.sessionID]

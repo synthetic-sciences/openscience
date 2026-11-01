@@ -57,7 +57,7 @@ export namespace SubagentDispatch {
   export async function prepare(input: Context & { inputTokens: number; maxOutputTokens?: number }) {
     const state = await checked(input)
     if (!state) return
-    const remaining = SubagentBudget.available(state.pool, state.worker.unit, input.sessionID)
+    const remaining = SubagentBudget.spendable(state.pool, input.sessionID)
     const tokens =
       state.worker.unit === "tokens" ? remaining : new Decimal(remaining).div(rate(input)).floor().toNumber()
     const output = Math.min(input.maxOutputTokens ?? 2048, Math.max(0, Math.floor(tokens - input.inputTokens)))
@@ -69,7 +69,8 @@ export namespace SubagentDispatch {
     const wrapup =
       !!state.worker.wrapup ||
       SubagentBudget.consumed(state.pool, input.sessionID) >= state.worker.limit * 0.75 ||
-      output < Math.min(input.maxOutputTokens ?? 2048, 512)
+      output < Math.min(input.maxOutputTokens ?? 2048, 512) ||
+      tokens - input.inputTokens - output < input.inputTokens + 512
     if (wrapup) await SubagentBudget.wrapup(input.sessionID)
     if (wrapup && input.internal)
       throw new SubagentBudget.LimitError("budget_wrapup", "Internal work deferred to preserve the subagent handoff")

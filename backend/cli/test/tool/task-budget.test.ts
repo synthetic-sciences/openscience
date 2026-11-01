@@ -6,6 +6,8 @@ import { Identifier } from "../../src/id/id"
 import { TaskTool } from "../../src/tool/task"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SubagentBudget } from "../../src/session/subagent-budget"
+import { Storage } from "../../src/storage/storage"
+import { TaskAttempt } from "../../src/tool/task-attempt"
 import { Server } from "../../src/server/server"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { stressProviderConfig, STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL } from "../fixture/stress-provider"
@@ -17,6 +19,7 @@ async function fixture(
     execute: (
       taskID?: string,
       background?: boolean,
+      replay?: boolean,
     ) => Promise<Awaited<ReturnType<Awaited<ReturnType<typeof TaskTool.init>>["execute"]>>>
     requests: unknown[]
   }) => Promise<void>,
@@ -79,8 +82,13 @@ async function fixture(
           effort: "normal",
           time: { created: Date.now() },
         })
-        const execute = async (taskID?: string, background = false) => {
-          const messageID = Identifier.ascending("message")
+        const identity = { messageID: "", callID: "" }
+        const execute = async (taskID?: string, background = false, replay = false) => {
+          const messageID = replay ? identity.messageID : Identifier.ascending("message")
+          if (!replay) {
+            identity.messageID = messageID
+            identity.callID = `call_${crypto.randomUUID()}`
+          }
           await Session.updateMessage({
             id: messageID,
             sessionID: parent.id,
@@ -106,7 +114,7 @@ async function fixture(
             {
               sessionID: parent.id,
               messageID,
-              callID: `call_${crypto.randomUUID()}`,
+              callID: identity.callID,
               agent: "research",
               abort: new AbortController().signal,
               messages: [],
@@ -300,4 +308,47 @@ test("explicit stop also cancels background admission before its allowance watch
     await Bun.sleep(400)
     expect(requests).toHaveLength(0)
   })
+})
+
+test("terminal Task recovery releases its matching stale assignment and keeps unknown call holds", async () => {
+  await fixture(async ({ parent, execute, requests }) => {
+    const first = await execute()
+    const childID = first.metadata.sessionId as string
+    const state = (await SubagentBudget.read(childID))!
+    state.worker.active = true
+    state.worker.calls.uncertain = { amount: 100, state: "pending" }
+    await Storage.write(["subagent_budget", parent.projectID, parent.id], state.pool)
+    const keys = await Storage.list(["task_attempt", parent.projectID])
+    const attempt = TaskAttempt.Info.parse(await Storage.read(keys[0]!))
+    await Storage.write(keys[0]!, { ...attempt, status: "bound", result: undefined })
+    const calls = requests.length
+    const replay = await execute(undefined, false, true)
+    expect(replay.metadata.sessionId).toBe(childID)
+    const after = (await SubagentBudget.read(childID))!
+    expect(after.worker.active).toBe(false)
+    expect(after.worker.calls.uncertain.state).toBe("pending")
+    expect(requests.length).toBe(calls)
+  })
+})
+
+test("a second foreground Task cannot change a live child's assignment or release its allowance", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const first = execute()
+      while (!requests.length) await Bun.sleep(5)
+      const child = (await Session.children(parent.id))[0]!
+      const before = (await SubagentBudget.read(child.id))!
+      const second = await execute(child.id)
+      expect(second.metadata.outcome).not.toBe("completed")
+      const during = (await SubagentBudget.read(child.id))!
+      expect(during.worker.active).toBe(true)
+      expect(during.worker.assignmentID).toBe(before.worker.assignmentID)
+      expect(during.worker.outcome).toBeUndefined()
+      await first
+      expect((await SubagentBudget.read(child.id))?.worker.active).toBe(false)
+    },
+    600000,
+    200000,
+    1500,
+  )
 })
