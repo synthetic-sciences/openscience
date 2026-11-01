@@ -19,6 +19,8 @@ export namespace ResearchDatabase {
     charge: { scope: "account_id", depth: 3 },
     task_receipt: { scope: "account_id", depth: 3 },
     task_attempt: { scope: "project_id", depth: 3 },
+    subagent_budget: { scope: "project_id", depth: 3 },
+    subagent_binding: { scope: "project_id", depth: 3 },
   } as const
   type Kind = keyof typeof tables
 
@@ -85,8 +87,8 @@ export namespace ResearchDatabase {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 7) throw new Error("This research database requires a newer OpenScience version")
-        if (version < 7)
+        if (version > 8) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 8)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
@@ -136,7 +138,7 @@ export namespace ResearchDatabase {
               kind TEXT NOT NULL,parent TEXT NOT NULL,id TEXT NOT NULL,
               state TEXT NOT NULL CHECK(state IN ('known','deleted','pending')),
               data TEXT CHECK(data IS NULL OR json_valid(data)),PRIMARY KEY(kind,parent,id));
-            PRAGMA user_version=7;`)
+            PRAGMA user_version=8;`)
           }).immediate()
         const revision = await fs
           .readFile(path.join(root, revisionFile), "utf8")

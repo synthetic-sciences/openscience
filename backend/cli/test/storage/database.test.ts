@@ -137,7 +137,7 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 7 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 8 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })

@@ -34,6 +34,7 @@ import { State } from "../project/state"
 import { McpSecretStorage } from "../mcp/secret-storage"
 import { McpRemoteUrl } from "../mcp/remote-url"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { SubagentBudget } from "../session/subagent-budget"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -1319,6 +1320,9 @@ export namespace Config {
         .describe(
           "Default agent to use when none is specified. Must be a primary agent. Falls back to 'research' if not set or if the specified agent is invalid.",
         ),
+      subagents: SubagentBudget.Settings.optional().describe(
+        "User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded",
+      ),
       subagent_depth: z
         .number()
         .int()
