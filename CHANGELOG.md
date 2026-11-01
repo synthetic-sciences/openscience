@@ -8,7 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Update the bundled Folklore skill for MCP 1.6.0, including public gene profiles and the current eleven-tool inventory.
+- Update the bundled Folklore skill for MCP 1.7.0 classification, gene profiles, eleven tools and version-2 response contracts.
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
 - Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.
