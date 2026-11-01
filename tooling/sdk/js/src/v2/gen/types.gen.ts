@@ -2713,6 +2713,17 @@ export type Config = {
    */
   default_agent?: string
   /**
+   * User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded
+   */
+  subagents?: {
+    model?: string
+    usd?: number
+    tokens?: number
+    deadlineMs?: number
+    usdIncrease?: number
+    tokenIncrease?: number
+  }
+  /**
    * How many levels of subagents a session may nest (default 1: only the lead dispatches workers)
    */
   subagent_depth?: number
@@ -12095,6 +12106,269 @@ export type ExperimentalResourceListResponses = {
 
 export type ExperimentalResourceListResponse =
   ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
+
+export type SessionSubagentBudgetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/budget"
+}
+
+export type SessionSubagentBudgetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSubagentBudgetError = SessionSubagentBudgetErrors[keyof SessionSubagentBudgetErrors]
+
+export type SessionSubagentBudgetResponses = {
+  /**
+   * Shared subagent pools and assignments; main-agent inference is excluded
+   */
+  200: {
+    version: 1
+    projectID: string
+    rootSessionID: string
+    revision: number
+    limits: {
+      usd: number
+      tokens: number
+    }
+    workers: {
+      [key: string]: {
+        sessionID: string
+        parentSessionID: string
+        rootSessionID: string
+        assignmentID: string
+        objective: string
+        expectedOutput: string
+        model: {
+          providerID: string
+          modelID: string
+        }
+        route: string
+        unit: "usd" | "tokens"
+        limit: number
+        spent: number
+        active: boolean
+        deadline: number
+        stopReason?:
+          | "budget_limit"
+          | "token_limit"
+          | "deadline"
+          | "route_changed"
+          | "pricing_unavailable"
+          | "setup_required"
+          | "budget_wrapup"
+          | "cancelled"
+        wrapup?: boolean
+        handoffCallID?: string
+        handoff?: string
+        outcome?: "completed" | "partial" | "error"
+        reportReason?: string
+        agent?: string
+        deleted?: boolean
+        calls: {
+          [key: string]: {
+            amount: number
+            state: "pending" | "settled"
+            consumed?: number
+          }
+        }
+      }
+    }
+    approvals: {
+      [key: string]: {
+        unit: "usd" | "tokens"
+        amount: number
+        revision: number
+      }
+    }
+    continuations?: {
+      [key: string]: {
+        childID: string
+        userID: string
+        messageID: string
+        partID: string
+        callID: string
+        amount: number
+        completed: boolean
+      }
+    }
+    available: {
+      usd: number
+      tokens: number
+    }
+  } | null
+}
+
+export type SessionSubagentBudgetResponse = SessionSubagentBudgetResponses[keyof SessionSubagentBudgetResponses]
+
+export type SessionContinueSubagentData = {
+  body?: {
+    key: string
+  }
+  path: {
+    sessionID: string
+    childID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/{childID}/continue"
+}
+
+export type SessionContinueSubagentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionContinueSubagentError = SessionContinueSubagentErrors[keyof SessionContinueSubagentErrors]
+
+export type SessionContinueSubagentResponses = {
+  /**
+   * Accepted a new Task call for the same child
+   */
+  202: {
+    sessionID: string
+    callID: string
+  }
+}
+
+export type SessionContinueSubagentResponse = SessionContinueSubagentResponses[keyof SessionContinueSubagentResponses]
+
+export type SessionIncreaseSubagentBudgetData = {
+  body?:
+    | {
+        unit: "usd"
+        amount: number
+        revision: number
+        key: string
+      }
+    | {
+        unit: "tokens"
+        amount: number
+        revision: number
+        key: string
+      }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/budget/increase"
+}
+
+export type SessionIncreaseSubagentBudgetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionIncreaseSubagentBudgetError =
+  SessionIncreaseSubagentBudgetErrors[keyof SessionIncreaseSubagentBudgetErrors]
+
+export type SessionIncreaseSubagentBudgetResponses = {
+  /**
+   * User-approved pool total; existing usage is preserved
+   */
+  200: {
+    version: 1
+    projectID: string
+    rootSessionID: string
+    revision: number
+    limits: {
+      usd: number
+      tokens: number
+    }
+    workers: {
+      [key: string]: {
+        sessionID: string
+        parentSessionID: string
+        rootSessionID: string
+        assignmentID: string
+        objective: string
+        expectedOutput: string
+        model: {
+          providerID: string
+          modelID: string
+        }
+        route: string
+        unit: "usd" | "tokens"
+        limit: number
+        spent: number
+        active: boolean
+        deadline: number
+        stopReason?:
+          | "budget_limit"
+          | "token_limit"
+          | "deadline"
+          | "route_changed"
+          | "pricing_unavailable"
+          | "setup_required"
+          | "budget_wrapup"
+          | "cancelled"
+        wrapup?: boolean
+        handoffCallID?: string
+        handoff?: string
+        outcome?: "completed" | "partial" | "error"
+        reportReason?: string
+        agent?: string
+        deleted?: boolean
+        calls: {
+          [key: string]: {
+            amount: number
+            state: "pending" | "settled"
+            consumed?: number
+          }
+        }
+      }
+    }
+    approvals: {
+      [key: string]: {
+        unit: "usd" | "tokens"
+        amount: number
+        revision: number
+      }
+    }
+    continuations?: {
+      [key: string]: {
+        childID: string
+        userID: string
+        messageID: string
+        partID: string
+        callID: string
+        amount: number
+        completed: boolean
+      }
+    }
+    available: {
+      usd: number
+      tokens: number
+    }
+  }
+}
+
+export type SessionIncreaseSubagentBudgetResponse =
+  SessionIncreaseSubagentBudgetResponses[keyof SessionIncreaseSubagentBudgetResponses]
 
 export type SessionListData = {
   body?: never

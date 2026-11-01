@@ -134,3 +134,19 @@ describe("bounded subagent ledger", () => {
     })
   })
 })
+
+test("deleted child reports stay redacted and deleted roots cannot be recreated by late work", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a"))
+      await SubagentBudget.remove("a")
+      await SubagentBudget.report("a", { handoff: "private stale text", outcome: "completed", reason: "completed" })
+      expect((await SubagentBudget.read("a"))?.worker.handoff).toBeUndefined()
+      await SubagentBudget.remove("root")
+      await expect(SubagentBudget.open(input("late"))).rejects.toThrow(/deleted/)
+      expect(await SubagentBudget.inspect("root")).toBeUndefined()
+    },
+  })
+})

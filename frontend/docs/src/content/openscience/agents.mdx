@@ -58,7 +58,7 @@ The built-in workers are `explore` (a read-only scout for files, data, code and 
 
 You can also hand a job to a worker yourself: type `@` in the composer and pick one (`@explore where is the early-stopping split decided?`). The message becomes that worker's brief, the lead waits for its report, and the worker's session opens from the delegation row. A worker's config can set `hidden: true` to keep it out of the `@` menu while the lead may still dispatch it.
 
-A worker runs on its own configured model when the agent has one, otherwise on the **Worker model** from **Customize → Models**, otherwise on the lead's model. No built-in agent has a model in code; the recommended configuration is documented below. Workers work in the lead's own directory: the files they write there are the deliverables, and the lead reads them directly. The lead writes a self-contained brief with a definition of done, waits for the result (returned once, in a `<task_result>` envelope with a `task_id` that can resume the same worker), and integrates it; checking the lead's own output is never delegated. A worker started in the background returns immediately and wakes the lead with its result when it finishes. Workers cannot dispatch workers unless `subagent_depth` in `openscience.json` allows deeper nesting (default 1).
+In **Settings → General → Subagents**, choose **Same as calling agent** (the default) or one model for delegated tasks. This policy takes precedence over a specialist profile's model. The composer **Worker model** can override the caller when no model is selected in the subagent settings. Workers work in the lead's own directory: the files they write there are the deliverables, and the lead reads them directly. The lead writes a self-contained brief with a definition of done, waits for the result (returned once, in a `<task_result>` envelope with a `task_id` that can resume the same worker), and integrates it; checking the lead's own output is never delegated. A worker started in the background returns immediately and wakes the lead with its result when it finishes. Workers cannot dispatch workers unless `subagent_depth` in `openscience.json` allows deeper nesting (default 1).
 
 A delegated task shows as one line (what it is doing, which agent, its state and elapsed time) and streams nothing while it runs; open it for the result, its saved Results and **Open agent**, which shows the worker's own conversation. Stopping the lead also cancels its active delegated work. A stopped task's saved files and recorded tool results remain available.
 
@@ -67,25 +67,21 @@ result; earlier progress text cannot make an unfinished worker look complete. A
 result without a Verification section (the command, its exit code, what it
 proves) is a claim, and the lead is told so.
 
-#### Recommended models
+#### Subagent allowances
 
-Put the models you want each agent to use in `openscience.json`; nothing is hard-coded:
+Before the first delegated call, configure a paid allowance in USD, a subscription/local allowance in tokens, or both in **Settings → General → Subagents**. These are separate pools shared by all workers of one root conversation. They do not cap the lead's own calls. Project configuration cannot raise these user limits.
 
-```json
-{
-  "model": "openai/gpt-6-astra",
-  "agent": {
-    "explore": { "model": "google/gemini-3.8-flash" },
-    "ml": { "model": "openai/gpt-6-sol", "variant": "high" },
-    "biology": { "model": "openai/gpt-6-sol" },
-    "physics": { "model": "openai/gpt-6-sol" },
-    "chemistry": { "model": "openai/gpt-6-sol" },
-    "data": { "model": "openai/gpt-6-sol" }
-  }
-}
-```
+A task receives an allocation from the approved pool. By default this is at most one quarter of the pool, capped at what remains. The lead can assign another amount within the unspent, unreserved balance. The default deadline is 10 minutes, including queueing and approval waits. Changing defaults affects new pools; it does not raise an existing pool.
 
-A worker on a different model than the lead uses its own `variant` (reasoning effort); on the lead's model it inherits the lead's. Add your own specialist the same way, with `mode: "subagent"`, `skills: ["<category>", ...]` for its domain index and a `permission` rule per domain tool it may use without a skill.
+USD uses the selected BYOK or Ace model's normal cost calculation. Tokens include input, cache and output tokens for subscription or local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
+
+At 75% usage, or earlier when needed for the final report, the runtime asks the worker to wrap up and blocks further exploration. A limit or deadline produces an **Incomplete** report with a reason and saved partial results. **Complete** is the worker's report, not proof that its scientific conclusions are correct.
+
+Open the task context panel to inspect the subagent allowance. **Continue with remaining allowance** resumes the same child. If you configured an increment, **Increase limit by … and continue** raises the pool once and resumes the child through a new Task call. **Stop here** keeps its files and conversation. An increase does not buy Wallet credits or reset a provider quota. A deliberate change of access route requires a new child; historical tokens are never converted into dollars.
+
+An active assignment keeps its model and route. Revoked access stops it. Normal completion of the lead's response leaves background workers running; the explicit Stop action cancels its descendants.
+
+Provider usage can arrive only after a call completes. The app bounds output where the provider supports it and admits calls conservatively. An already accepted request can exceed the local estimate, especially on subscription routes that do not accept output caps. The app records the overrun and blocks later calls. An uncertain request keeps its reserved allowance until there is usage evidence. This is a runtime inference allowance, not an exact provider invoice or a settled Wallet receipt.
 
 Handoffs retain command receipt references and failures. A shell exit of zero
 describes the outer process; it does not establish that nested tests passed or
@@ -144,6 +140,6 @@ Explain each concern and suggest a check before the analysis runs.
 
 Save it as `analysis-reviewer.md` in the agent directory. Select it with `--agent analysis-reviewer`, or in the app: once a second primary agent exists, an agent chip appears beside the model control in the composer, and `Tab` in an empty composer cycles through the primary agents. A `primary` agent can lead a session, a `subagent` is for delegated tasks and the `@` menu, and `all` supports both.
 
-Other frontmatter options: `model` (`provider/model-id`; a worker without one uses the lead's model), `temperature` and `top_p`, `steps` (a cap on agentic iterations, after which the agent is asked to summarize and list what remains), `color` (a hex value or a theme color such as `accent`), `disable`, and `permission.task` globs that decide which workers the agent may dispatch. The deprecated `tools:` map still loads; `openscience agent create` writes `permission:` rules.
+Other frontmatter options: `model` (`provider/model-id`; Task workers follow the user subagent policy), `temperature` and `top_p`, `steps` (a cap on agentic iterations, after which the agent is asked to summarize and list what remains), `color` (a hex value or a theme color such as `accent`), `disable`, and `permission.task` globs that decide which workers the agent may dispatch. The deprecated `tools:` map still loads; `openscience agent create` writes `permission:` rules.
 
 Custom definitions change the agent's instructions and permitted actions. Test a new profile on a small task before relying on it.

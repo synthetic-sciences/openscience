@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import { Config } from "../../src/config/config"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -13,6 +14,15 @@ import { ReadTool } from "../../src/tool/read"
 import { SafeFileIO } from "../../src/file/safe-io"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
+
+const savedDefaults: { content?: string } = {}
+beforeEach(async () => {
+  savedDefaults.content = (await Config.getGlobalRaw()).content
+  await Config.updateGlobal({ subagents: { tokens: 1000000, deadlineMs: 600000 } }, { preserveInstances: true })
+})
+afterEach(async () => {
+  if (savedDefaults.content !== undefined) await Config.replaceGlobal(savedDefaults.content)
+})
 
 const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL }
 const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8S8AAAAASUVORK5CYII="

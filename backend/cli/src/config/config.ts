@@ -1959,7 +1959,10 @@ export namespace Config {
     const existing = path.length
       ? findNodeAtLocation(parseTree(input) ?? { type: "null", offset: 0, length: 0 }, path)
       : undefined
-    const descend = isRecord(patch) && (path.length === 0 || existing?.type === "object")
+    const descend =
+      isRecord(patch) &&
+      !(path.length === 1 && path[0] === "subagents") &&
+      (path.length === 0 || existing?.type === "object")
     if (!descend) {
       const edits = modify(input, path, patch, {
         formattingOptions: {
@@ -2048,7 +2051,7 @@ export namespace Config {
    * configuration still require the normal full instance rebuild.
    */
   function canPreserveInstances(config: Info) {
-    const refreshOnly = new Set<keyof Info>(["billing", "model", "small_model"])
+    const refreshOnly = new Set<keyof Info>(["billing", "model", "small_model", "subagents"])
     return Object.keys(config).every(
       (key) =>
         refreshOnly.has(key as keyof Info) ||
@@ -2232,6 +2235,7 @@ export namespace Config {
 
       const existing = await McpSecretStorage.reveal(rawConfig(before, filepath))
       const merged = mergeDeep(existing, config)
+      if (Object.hasOwn(config, "subagents")) merged.subagents = config.subagents
       assertValid(merged, filepath)
       const next = await (async () => {
         if (!filepath.endsWith(".jsonc")) {

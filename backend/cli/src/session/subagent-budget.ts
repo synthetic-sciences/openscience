@@ -2,6 +2,8 @@ import z from "zod"
 import { Decimal } from "decimal.js"
 import { Storage } from "@/storage/storage"
 import { Instance } from "@/project/instance"
+import { Identifier } from "@/id/id"
+import { Context } from "@/util/context"
 
 /** One transaction owns all grants and physical-call reservations for a root. */
 export namespace SubagentBudget {
@@ -25,6 +27,7 @@ export namespace SubagentBudget {
     "pricing_unavailable",
     "setup_required",
     "budget_wrapup",
+    "cancelled",
   ])
   export type Reason = z.infer<typeof Reason>
   export class LimitError extends DOMException {
@@ -51,6 +54,13 @@ export namespace SubagentBudget {
     active: z.boolean(),
     deadline: z.number(),
     stopReason: Reason.optional(),
+    wrapup: z.boolean().optional(),
+    handoffCallID: z.string().optional(),
+    handoff: z.string().optional(),
+    outcome: z.enum(["completed", "partial", "error"]).optional(),
+    reportReason: z.string().optional(),
+    agent: z.string().optional(),
+    deleted: z.boolean().optional(),
     calls: z.record(z.string(), Call),
   })
   export type Worker = z.infer<typeof Worker>
@@ -62,8 +72,93 @@ export namespace SubagentBudget {
     limits: z.object({ usd: Amount, tokens: Amount }),
     workers: z.record(z.string(), Worker),
     approvals: z.record(z.string(), z.object({ unit: Unit, amount: Amount, revision: Amount })),
+    continuations: z
+      .record(
+        z.string(),
+        z.object({
+          childID: z.string(),
+          userID: z.string(),
+          messageID: z.string(),
+          partID: z.string(),
+          callID: z.string(),
+          amount: Amount,
+          completed: z.boolean(),
+        }),
+      )
+      .default({}),
   })
   export type Pool = z.infer<typeof Pool>
+  export const Snapshot = Pool.extend({ available: z.object({ usd: Amount, tokens: Amount }) })
+  const running = new Map<string, { parentID: string; controller: AbortController }>()
+
+  export async function watch(worker: Worker, signal: AbortSignal) {
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal.reason)
+    if (signal.aborted) abort()
+    else signal.addEventListener("abort", abort, { once: true })
+    running.set(worker.sessionID, { parentID: worker.parentSessionID, controller })
+    const timer = setTimeout(
+      () => {
+        void stop(worker.sessionID, "deadline")
+          .finally(() => controller.abort(new LimitError("deadline")))
+          .catch(() => undefined)
+      },
+      Math.max(0, worker.deadline - Date.now()),
+    )
+    const poll = setInterval(() => {
+      void read(worker.sessionID)
+        .then((state) => {
+          if (state?.worker.stopReason === "cancelled") controller.abort(new LimitError("cancelled"))
+        })
+        .catch(() => controller.abort(new Error("Subagent allowance could not be read")))
+    }, 2500)
+    return {
+      signal: controller.signal,
+      async [Symbol.asyncDispose]() {
+        clearTimeout(timer)
+        clearInterval(poll)
+        signal.removeEventListener("abort", abort)
+        if (running.get(worker.sessionID)?.controller === controller) running.delete(worker.sessionID)
+        await release(worker.sessionID)
+      },
+    }
+  }
+
+  export function cancelChildren(sessionID: string) {
+    const stopping = new Set<string>()
+    for (const [childID, entry] of running) {
+      if (entry.parentID !== sessionID) continue
+      stopping.add(childID)
+      entry.controller.abort(new LimitError("cancelled"))
+      cancelChildren(childID)
+    }
+    void (async () => {
+      const bound = await root(sessionID)
+      const id = bound ?? sessionID
+      if (!(await inspect(id))) return
+      await mutate(id, (current) => {
+        const pool = current!
+        const descendant = (w: Worker): boolean =>
+          w.parentSessionID === sessionID ||
+          (!!pool.workers[w.parentSessionID] && descendant(pool.workers[w.parentSessionID]))
+        for (const w of Object.values(pool.workers))
+          if ((w.active || stopping.has(w.sessionID)) && descendant(w)) w.stopReason = "cancelled"
+        return { pool, result: undefined }
+      })
+    })().catch(() => undefined)
+  }
+
+  export function summary(pool: Pool, worker: Worker) {
+    return {
+      unit: worker.unit,
+      limit: worker.limit,
+      spent: worker.spent,
+      pending: pending(worker),
+      remaining: available(pool, worker.unit, worker.sessionID),
+      deadline: worker.deadline,
+      stopReason: worker.stopReason,
+    }
+  }
 
   export function dollars(value: number | string) {
     const amount = new Decimal(value).mul(1_000_000_000).ceil().toNumber()
@@ -83,7 +178,7 @@ export namespace SubagentBudget {
   function family(pool: Pool, id: string): Worker[] {
     return [pool.workers[id], ...children(pool, id).flatMap((w) => family(pool, w.sessionID))]
   }
-  function consumed(pool: Pool, id: string) {
+  export function consumed(pool: Pool, id: string) {
     return family(pool, id).reduce((sum, w) => sum + w.spent, 0)
   }
   function held(pool: Pool, worker: Worker): number {
@@ -114,14 +209,19 @@ export namespace SubagentBudget {
     )
   }
   async function root(sessionID: string) {
-    const binding = await Storage.read<{ rootSessionID: string }>([
-      "subagent_binding",
-      Instance.project.id,
-      sessionID,
-    ]).catch((error) => {
-      if (Storage.NotFoundError.isInstance(error)) return undefined
-      throw error
-    })
+    const projectID = await Promise.resolve()
+      .then(() => Instance.project.id)
+      .catch((error) => {
+        if (error instanceof Context.NotFound) return undefined
+        throw error
+      })
+    if (!projectID) return
+    const binding = await Storage.read<{ rootSessionID: string }>(["subagent_binding", projectID, sessionID]).catch(
+      (error) => {
+        if (Storage.NotFoundError.isInstance(error)) return undefined
+        throw error
+      },
+    )
     return binding?.rootSessionID
   }
   export async function inspect(rootSessionID: string): Promise<Pool | undefined> {
@@ -136,6 +236,7 @@ export namespace SubagentBudget {
   export async function read(sessionID: string) {
     const id = await root(sessionID)
     const pool = id ? await inspect(id) : undefined
+    if (id && !pool) throw new LimitError("cancelled", "The subagent session budget was deleted")
     const worker = pool?.workers[sessionID]
     return pool && worker ? { pool, worker } : undefined
   }
@@ -146,6 +247,11 @@ export namespace SubagentBudget {
       const current = db
         .query<{ data: string }, [string, string]>("SELECT data FROM subagent_budget WHERE project_id=? AND id=?")
         .get(projectID, rootSessionID)
+      if (
+        !current &&
+        db.query("SELECT 1 FROM subagent_binding WHERE project_id=? AND id=?").get(projectID, rootSessionID)
+      )
+        throw new LimitError("cancelled", "The subagent session budget was deleted")
       const before = current ? JSON.stringify(Pool.parse(JSON.parse(current.data))) : undefined
       const value = fn(current ? Pool.parse(JSON.parse(current.data)) : undefined)
       if (value.binding) {
@@ -167,6 +273,42 @@ export namespace SubagentBudget {
       return value.result
     })
   }
+  export async function snapshot(sessionID: string) {
+    const state = await read(sessionID)
+    const pool = state?.pool ?? (await inspect(sessionID))
+    return pool ? { ...pool, available: { usd: available(pool, "usd"), tokens: available(pool, "tokens") } } : null
+  }
+  export async function remove(sessionID: string) {
+    running.get(sessionID)?.controller.abort(new LimitError("cancelled"))
+    cancelChildren(sessionID)
+    const id = await root(sessionID)
+    if (!id) {
+      if (await inspect(sessionID)) {
+        const database = await Storage.research()
+        database.transaction((db) => {
+          db.query(
+            "INSERT INTO subagent_binding(project_id,id,data,updated_at) VALUES(?,?,?,?) ON CONFLICT(project_id,id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at",
+          ).run(Instance.project.id, sessionID, JSON.stringify({ rootSessionID: sessionID }), Date.now())
+          db.query("DELETE FROM subagent_budget WHERE project_id=? AND id=?").run(Instance.project.id, sessionID)
+        })
+      }
+      return
+    }
+    if (!(await inspect(id))) return
+    await mutate(id, (current) => {
+      const pool = current!
+      const w = pool.workers[sessionID]
+      if (w) {
+        w.active = false
+        w.deleted = true
+        w.objective = ""
+        w.expectedOutput = ""
+        w.handoff = undefined
+        w.stopReason = "cancelled"
+      }
+      return { pool, result: undefined }
+    })
+  }
   export async function open(input: {
     rootSessionID: string
     parentSessionID: string
@@ -180,9 +322,12 @@ export namespace SubagentBudget {
     allocation?: number
     settings: Settings
     deadline?: number
+    agent?: string
   }): Promise<Worker> {
     const settings = Settings.parse(input.settings)
-    const limit = input.unit === "usd" ? dollars(settings.usd ?? 0) : (settings.tokens ?? 0)
+    const existing = await inspect(input.rootSessionID)
+    const limit =
+      existing?.limits[input.unit] ?? (input.unit === "usd" ? dollars(settings.usd ?? 0) : (settings.tokens ?? 0))
     if (!limit)
       throw new LimitError(
         "setup_required",
@@ -197,8 +342,10 @@ export namespace SubagentBudget {
         limits: { usd: dollars(settings.usd ?? 0), tokens: settings.tokens ?? 0 },
         workers: {},
         approvals: {},
+        continuations: {},
       }
       const prior = pool.workers[input.sessionID]
+      if (prior?.deleted) throw new LimitError("cancelled", "The subagent session was deleted")
       if (prior?.parentSessionID !== undefined && prior.parentSessionID !== input.parentSessionID)
         throw new Error("Subagent parent changed")
       if (prior?.assignmentID === input.assignmentID) return { pool, result: prior }
@@ -213,25 +360,30 @@ export namespace SubagentBudget {
           input.unit === "usd" ? "budget_limit" : "token_limit",
           "Subagent allowance limit reached; allocate remaining funds or ask the user to increase the limit.",
         )
-      const worker: Worker = {
+      const worker = Worker.parse({
         ...input,
         limit: (prior ? consumed(pool, prior.sessionID) + pending(prior) : 0) + amount,
         spent: prior?.spent ?? 0,
         calls: prior?.calls ?? {},
         active: true,
         deadline: input.deadline ?? Date.now() + settings.deadlineMs,
-      }
+      })
       pool.workers[input.sessionID] = worker
       return { pool, result: worker, binding: input.sessionID }
     })
   }
-  export async function reserve(sessionID: string, callID: string, amount: number) {
+  export async function reserve(sessionID: string, callID: string, amount: number, handoff = false) {
     const id = await root(sessionID)
     if (!id) return
     const failure = await mutate<Reason | undefined>(id, (current) => {
       const pool = current!
       const w = pool.workers[sessionID]
       if (w.calls[callID]) return { pool, result: undefined }
+      if (w.stopReason === "cancelled") return { pool, result: "cancelled" }
+      if (handoff && w.handoffCallID && w.handoffCallID !== callID) {
+        w.stopReason = "budget_wrapup"
+        return { pool, result: "budget_wrapup" }
+      }
       const reason =
         w.deadline <= Date.now()
           ? "deadline"
@@ -245,6 +397,7 @@ export namespace SubagentBudget {
         return { pool, result: reason }
       }
       w.calls[callID] = { amount: Amount.parse(amount), state: "pending" }
+      if (handoff) w.handoffCallID = callID
       return { pool, result: undefined }
     })
     if (failure) throw new LimitError(failure)
@@ -279,6 +432,65 @@ export namespace SubagentBudget {
     await mutate(id, (current) => {
       const pool = current!
       pool.workers[sessionID].stopReason = reason
+      return { pool, result: undefined }
+    })
+  }
+  export async function wrapup(sessionID: string) {
+    const id = await root(sessionID)
+    if (!id) return
+    await mutate(id, (current) => {
+      const pool = current!
+      pool.workers[sessionID].wrapup = true
+      return { pool, result: undefined }
+    })
+  }
+  export async function report(
+    sessionID: string,
+    input: { handoff: string; outcome: "completed" | "partial" | "error"; reason: string },
+  ) {
+    const id = await root(sessionID)
+    if (!id) return
+    await mutate(id, (current) => {
+      const pool = current!
+      const w = pool.workers[sessionID]
+      if (w.deleted) return { pool, result: undefined }
+      w.handoff = input.handoff.slice(0, 4000)
+      w.outcome = input.outcome
+      w.reportReason = input.reason
+      return { pool, result: undefined }
+    })
+  }
+  export async function continuation(rootSessionID: string, childID: string, key: string) {
+    return mutate(rootSessionID, (current) => {
+      if (!current) throw new Error("Subagent allowance not found")
+      const pool = current
+      const prior = pool.continuations[key]
+      if (prior) {
+        if (prior.childID !== childID) throw new Error("Continuation key conflict")
+        return { pool, result: prior }
+      }
+      const worker = pool.workers[childID]
+      if (!worker || worker.deleted) throw new Error("Subagent not found")
+      if (worker.active) throw new Error("Subagent is still running")
+      const amount = available(pool, worker.unit, ancestor(pool, worker.parentSessionID, worker.unit)?.sessionID)
+      if (!amount) throw new Error("Increase the subagent allowance before continuing")
+      const operation = {
+        childID,
+        userID: Identifier.ascending("message"),
+        messageID: Identifier.ascending("message"),
+        partID: Identifier.ascending("part"),
+        callID: crypto.randomUUID(),
+        amount,
+        completed: false,
+      }
+      pool.continuations[key] = operation
+      return { pool, result: operation }
+    })
+  }
+  export async function finishContinuation(rootSessionID: string, key: string) {
+    return mutate(rootSessionID, (current) => {
+      const pool = current!
+      pool.continuations[key].completed = true
       return { pool, result: undefined }
     })
   }

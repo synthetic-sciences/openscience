@@ -3,6 +3,7 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Decimal } from "decimal.js"
+import { SubagentBudget } from "./subagent-budget"
 import z from "zod"
 import { type LanguageModelUsage, type ProviderMetadata } from "ai"
 import { Identifier } from "../id/id"
@@ -547,6 +548,7 @@ export namespace Session {
     return await lease.during(async () => {
       let pending = await deleting(project.id, sessionID)
       const session = pending?.info ?? (await get(sessionID))
+      await SubagentBudget.remove(sessionID)
       if (!current(session)) bind(session)
       try {
         if (!pending) {

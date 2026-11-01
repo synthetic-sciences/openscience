@@ -1342,6 +1342,39 @@ ToolRegistry.register({
   },
 })
 
+type TaskBudget = {
+  unit: "usd" | "tokens"
+  limit: number
+  spent: number
+  pending: number
+  remaining: number
+  deadline: number
+  stopReason?: string
+}
+
+function isTaskBudget(value: unknown): value is TaskBudget {
+  if (!value || typeof value !== "object") return false
+  const budget = value as Record<string, unknown>
+  return (
+    (budget.unit === "usd" || budget.unit === "tokens") &&
+    ["limit", "spent", "pending", "remaining", "deadline"].every(
+      (key) => typeof budget[key] === "number" && Number.isSafeInteger(budget[key]) && budget[key] >= 0,
+    ) &&
+    (budget.stopReason === undefined || typeof budget.stopReason === "string")
+  )
+}
+
+const taskReasons: Record<string, string> = {
+  budget_limit: "USD limit reached",
+  token_limit: "Token limit reached",
+  budget_wrapup: "Budget wrap-up",
+  deadline: "Deadline reached",
+  cancelled: "Cancelled",
+  route_changed: "Access route changed",
+  pricing_unavailable: "Pricing unavailable",
+  setup_required: "Allowance setup required",
+}
+
 ToolRegistry.register({
   name: "task",
   render(props) {
@@ -1349,6 +1382,40 @@ ToolRegistry.register({
     const i18n = useI18n()
     const childSessionId = () => props.metadata.sessionId as string | undefined
     const handoff = createMemo(() => parseTaskHandoff(props.output ?? props.error))
+    const budget = createMemo(() => {
+      const value: unknown = props.metadata.budget
+      return isTaskBudget(value) ? value : undefined
+    })
+    const amount = (value: number) =>
+      budget()?.unit === "usd"
+        ? `USD ${new Intl.NumberFormat(i18n.locale(), { maximumFractionDigits: 9 }).format(value / 1e9)}`
+        : `${value.toLocaleString(i18n.locale())} tokens`
+    const model = () => {
+      const value: unknown = props.metadata.model
+      if (!value || typeof value !== "object") return
+      const record = value as Record<string, unknown>
+      if (typeof record.providerID === "string" && typeof record.modelID === "string") {
+        return `${record.providerID}/${record.modelID}`
+      }
+    }
+    const report = () => (typeof props.metadata.handoff === "string" ? props.metadata.handoff.trim() : "")
+    const findings = () =>
+      report()
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !/^[#*\s]*(?:Outcome:|Runtime:)/i.test(line))
+        .join(" ")
+        .slice(0, 220)
+    const runtimeReason = () =>
+      budget()?.stopReason ?? (typeof props.metadata.stopReason === "string" ? props.metadata.stopReason : undefined)
+    const interrupted = () => {
+      const value = runtimeReason()
+      return !!value && Object.hasOwn(taskReasons, value)
+    }
+    const reason = () => {
+      const value = runtimeReason()
+      return value ? (taskReasons[value] ?? value.replaceAll("_", " ")) : undefined
+    }
     const child = () => {
       const id = childSessionId()
       return id ? data.store.session.find((session) => session.id === id) : undefined
@@ -1382,10 +1449,16 @@ ToolRegistry.register({
     // recorded, never from the pending placeholder alone: a delegation that
     // fails before a child exists must not look like a worker in trouble.
     const phase = createMemo(() =>
-      taskPhase({ status: props.status, error: props.error, metadata: props.metadata, childBusy: childBusy() }),
+      taskPhase({
+        status: props.status,
+        error: props.error,
+        metadata: interrupted() ? { ...props.metadata, outcome: "partial" } : props.metadata,
+        childBusy: childBusy(),
+      }),
     )
     const outcome = () => taskOutcome(phase())
     const outcomeLabel = () => {
+      if (interrupted() && props.status === "completed") return "Incomplete"
       switch (phase()) {
         case "preparing":
           return i18n.t("ui.tool.task.preparing")
@@ -1516,9 +1589,6 @@ ToolRegistry.register({
           data-phase={phase()}
           data-attention={attention()}
         >
-          {/* One row, and the row is the link: the worker's own session holds
-              its transcript and handoff, so nothing here folds open. What the
-              worker is doing leads; who is doing it and its state sit right. */}
           <button
             type="button"
             data-slot="delegation-summary"
@@ -1535,6 +1605,7 @@ ToolRegistry.register({
               <span data-slot="delegation-title">{String(props.input.description || agentLabel())}</span>
               <span data-slot="delegation-subline">
                 <span data-slot="delegation-status">{statusLabel()}</span>
+                <Show when={model()}>{(value) => <span>{value()}</span>}</Show>
                 <Show when={duration()}>{(value) => <span>{value()}</span>}</Show>
                 <Show when={activity()}>{(value) => <span data-slot="delegation-activity">{value()}</span>}</Show>
               </span>
@@ -1548,6 +1619,43 @@ ToolRegistry.register({
               </Show>
             </span>
           </button>
+
+          <Show when={budget() || report() || interrupted()}>
+            <div data-slot="delegation-report">
+              <Show when={budget()}>
+                {(value) => (
+                  <p data-slot="delegation-budget">
+                    {amount(value().spent)} used of {amount(value().limit)} · {amount(value().remaining)} remaining
+                  </p>
+                )}
+              </Show>
+              <Show when={reason()}>{(value) => <p data-slot="delegation-stop-reason">{value()}</p>}</Show>
+              <Show when={findings()}>{(value) => <p data-slot="delegation-findings">{value()}</p>}</Show>
+              <details data-slot="delegation-report-details">
+                <summary>Assignment details</summary>
+                <Show when={budget()}>
+                  {(value) => (
+                    <>
+                      <p>
+                        {amount(value().pending)} pending · Deadline{" "}
+                        {new Date(value().deadline).toLocaleString(i18n.locale())}
+                      </p>
+                      <p>
+                        {value().unit === "usd"
+                          ? "Allowance use, not a settled Wallet charge."
+                          : "Model tokens, not account quota or cash charges."}
+                      </p>
+                      <p>Calls are checked at dispatch boundaries; in-flight usage may exceed a reservation.</p>
+                    </>
+                  )}
+                </Show>
+                <Show when={report()}>
+                  <p>Worker report (completion claims are separate from the runtime outcome)</p>
+                  <p data-slot="delegation-report-text">{report()}</p>
+                </Show>
+              </details>
+            </div>
+          </Show>
 
           <Show when={attention()}>
             <div data-slot="delegation-body">
