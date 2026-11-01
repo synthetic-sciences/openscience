@@ -69,9 +69,13 @@ proves) is a claim, and the lead is told so.
 
 #### Subagent allowances
 
-Before the first delegated call, configure a paid allowance in USD, a subscription/local allowance in tokens, or both in **Settings → General → Subagents**. These are separate pools shared by all workers of one root conversation. They do not cap the lead's own calls. Project configuration cannot raise these user limits.
+Bounded runs are **off by default**. Open **Settings → General → Subagents** and switch on **Enable bounded runs** to use budget and deadline controls for new conversations. When off, delegated tasks use their ordinary runtime without these extra limits. Model selection remains available in either mode.
 
-A task receives an allocation from the approved pool. By default this is at most one quarter of the pool, capped at what remains. The lead can assign another amount within the unspent, unreserved balance. The default deadline is 10 minutes, including queueing and approval waits. Changing defaults affects new pools; it does not raise an existing pool.
+The suggested defaults are **USD 5**, **1,000,000 tokens**, and **10 minutes**. The suggested increase amounts are **USD 1** and **250,000 tokens**. Edit these values before saving, or leave a numeric field blank to reset it to its suggested value. Changing the switch does not save until you choose **Save subagent defaults**.
+
+A conversation keeps the mode chosen when its first subagent starts. Existing conversations with saved budgets remain bounded, even if you later switch the global default off. A conversation that started with bounded runs off stays off. Start a new conversation to use a changed mode. Within a bounded conversation, USD and token pools are shared by all workers of that root conversation. These limits do not cap the lead's own calls. Project configuration cannot enable or raise the user's global allowance.
+
+With bounded runs on, a task receives an allocation from the approved pool. By default this is at most one quarter of the pool, capped at what remains. The lead can assign another amount within the unspent, unreserved balance. The default deadline is 10 minutes, including queueing and approval waits. Changing defaults affects new pools; it does not raise an existing pool.
 
 USD uses the selected BYOK or Ace model's normal cost calculation. Tokens include input, cache and output tokens for subscription or local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
 

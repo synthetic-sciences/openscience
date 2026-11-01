@@ -18,7 +18,10 @@ import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from 
 const savedDefaults: { content?: string } = {}
 beforeEach(async () => {
   savedDefaults.content = (await Config.getGlobalRaw()).content
-  await Config.updateGlobal({ subagents: { tokens: 1000000, deadlineMs: 600000 } }, { preserveInstances: true })
+  await Config.updateGlobal(
+    { subagents: { enabled: true, tokens: 1000000, deadlineMs: 600000 } },
+    { preserveInstances: true },
+  )
 })
 afterEach(async () => {
   if (savedDefaults.content !== undefined) await Config.replaceGlobal(savedDefaults.content)

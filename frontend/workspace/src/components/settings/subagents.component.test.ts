@@ -86,6 +86,7 @@ async function mount(settings: Record<string, unknown> = {}, catalog?: Promise<v
   })
   const field = (name: string) => host.querySelector<HTMLInputElement>(`input[aria-label="${name}"]`)!
   const select = () => host.querySelector<HTMLSelectElement>("select")!
+  const toggle = () => host.querySelector<HTMLInputElement>('input[role="switch"]')!
   const button = (label: string) =>
     [...host.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent === label)!
   const fill = (name: string, value: string) => {
@@ -94,7 +95,7 @@ async function mount(settings: Record<string, unknown> = {}, catalog?: Promise<v
   }
   const save = () => button("Save subagent defaults").click()
   await ready(() => button("Save subagent defaults")?.disabled === false)
-  return { state, host, field, select, fill, save, button }
+  return { state, host, field, select, toggle, fill, save, button }
 }
 
 afterAll(() => vite.close())
@@ -103,20 +104,30 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-test("setup inherits the calling model and never invents a paid allowance", async () => {
+test("fresh defaults leave bounded runs off with recommended values and an independent calling model", async () => {
   const app = await mount()
+  expect(app.toggle()?.checked).toBe(false)
   expect(app.select().selectedOptions[0]?.textContent).toBe("Same as calling agent")
-  expect(app.field("Paid allowance (USD)").value).toBe("")
-  expect(app.field("Subscription allowance (tokens)").value).toBe("")
+  expect(app.select().disabled).toBe(false)
+  expect(app.field("Paid allowance (USD)").value).toBe("5")
+  expect(app.field("Subscription allowance (tokens)").value).toBe("1000000")
   expect(app.field("Assignment deadline (minutes)").value).toBe("10")
+  expect(app.field("USD increase amount").value).toBe("1")
+  expect(app.field("Token increase amount").value).toBe("250000")
+  expect(app.field("Paid allowance (USD)").disabled).toBe(true)
+  expect(app.state.writes).toEqual([])
+  app.toggle().click()
+  expect(app.toggle().checked).toBe(true)
+  expect(app.field("Paid allowance (USD)").disabled).toBe(false)
   expect(app.state.writes).toEqual([])
   expect(app.host.textContent).toContain("model inference only")
   expect(app.host.textContent).toContain("main agent")
-  expect(app.host.textContent).toContain("existing pools")
+  expect(app.host.textContent).toContain("existing conversations keep their saved mode and limits")
 })
 
 test("saving converts minutes and writes only user-global subagent defaults", async () => {
   const app = await mount()
+  app.toggle().click()
   app.select().value = "fixture/model"
   app.select().dispatchEvent(new Event("change", { bubbles: true }))
   app.fill("Paid allowance (USD)", "2.5")
@@ -129,6 +140,7 @@ test("saving converts minutes and writes only user-global subagent defaults", as
   expect(app.state.writes).toEqual([
     {
       subagents: {
+        enabled: true,
         model: "fixture/model",
         usd: 2.5,
         tokens: 12000,
@@ -144,7 +156,7 @@ test("saving converts minutes and writes only user-global subagent defaults", as
 })
 
 test("a failed save keeps all edits available for an explicit retry", async () => {
-  const app = await mount({ usd: 1, deadlineMs: 600000 })
+  const app = await mount({ enabled: true, usd: 1, deadlineMs: 600000 })
   app.fill("Paid allowance (USD)", "3.75")
   app.fill("Subscription allowance (tokens)", "24000")
   app.state.reject = true
@@ -154,10 +166,22 @@ test("a failed save keeps all edits available for an explicit retry", async () =
   expect(app.field("Subscription allowance (tokens)").value).toBe("24000")
   expect(app.button("Save subagent defaults").disabled).toBe(false)
   expect(app.host.querySelector('[role="alert"]')?.textContent).toContain("could not be saved")
+  app.toggle().click()
+  expect(app.field("Paid allowance (USD)").disabled).toBe(true)
+  app.toggle().click()
+  expect(app.field("Paid allowance (USD)").value).toBe("3.75")
+  expect(app.field("Subscription allowance (tokens)").value).toBe("24000")
   app.state.reject = false
   app.save()
   await ready(() => app.host.querySelector('[role="status"]')?.textContent?.includes("Saved") === true)
-  expect(app.state.settings).toEqual({ usd: 3.75, tokens: 24000, deadlineMs: 600000 })
+  expect(app.state.settings).toEqual({
+    enabled: true,
+    usd: 3.75,
+    tokens: 24000,
+    deadlineMs: 600000,
+    usdIncrease: 1,
+    tokenIncrease: 250000,
+  })
 })
 
 test.each([
@@ -165,12 +189,11 @@ test.each([
   ["Paid allowance (USD)", "-1"],
   ["Subscription allowance (tokens)", "1.5"],
   ["Subscription allowance (tokens)", "9007199254740992"],
-  ["Assignment deadline (minutes)", ""],
   ["Assignment deadline (minutes)", "0"],
   ["USD increase amount", "-2"],
   ["Token increase amount", "0.5"],
 ])("invalid %s (%s) prevents persistence and retains the edit", async (name, value) => {
-  const app = await mount()
+  const app = await mount({ enabled: true })
   app.fill(name, value)
   app.save()
   await ready(() => app.host.querySelector('[role="alert"]') !== null)
@@ -178,14 +201,45 @@ test.each([
   expect(app.field(name).value).toBe(value)
 })
 
-test("clearing a saved model and allowance sends the full replacement defaults", async () => {
+test("blank numeric fields reset to recommended values while disabling preserves the model", async () => {
+  const app = await mount({ enabled: true, model: "fixture/model", usd: 2, tokens: 1000, deadlineMs: 120000 })
+  app.fill("Paid allowance (USD)", "")
+  app.fill("Subscription allowance (tokens)", " ")
+  app.fill("Assignment deadline (minutes)", "")
+  app.fill("USD increase amount", "")
+  app.fill("Token increase amount", "")
+  app.toggle().click()
+  expect(app.select().value).toBe("fixture/model")
+  expect(app.state.writes).toEqual([])
+  app.save()
+  await ready(() => app.host.querySelector('[role="status"]')?.textContent?.includes("Saved") === true)
+  expect(app.state.writes).toEqual([
+    {
+      subagents: {
+        enabled: false,
+        model: "fixture/model",
+        usd: 5,
+        tokens: 1000000,
+        deadlineMs: 600000,
+        usdIncrease: 1,
+        tokenIncrease: 250000,
+      },
+    },
+  ])
+  expect(app.toggle().checked).toBe(false)
+  app.toggle().click()
+  expect(app.field("Paid allowance (USD)").value).toBe("5")
+})
+
+test("clearing the saved model restores calling-model inheritance while bounded runs stay off", async () => {
   const app = await mount({ model: "fixture/model", usd: 2, tokens: 1000, deadlineMs: 120000 })
   app.select().value = ""
   app.select().dispatchEvent(new Event("change", { bubbles: true }))
-  app.fill("Paid allowance (USD)", "")
   app.save()
   await ready(() => app.state.writes.length === 1)
-  expect(app.state.writes).toEqual([{ subagents: { tokens: 1000, deadlineMs: 120000 } }])
+  expect(app.state.writes).toEqual([
+    { subagents: { enabled: false, usd: 2, tokens: 1000, deadlineMs: 120000, usdIncrease: 1, tokenIncrease: 250000 } },
+  ])
 })
 
 test("an unavailable saved model stays selected until the user changes it", async () => {
@@ -193,7 +247,19 @@ test("an unavailable saved model stays selected until the user changes it", asyn
   expect(app.select().value).toBe("removed/old-model")
   app.save()
   await ready(() => app.state.writes.length === 1)
-  expect(app.state.writes).toEqual([{ subagents: { model: "removed/old-model", tokens: 1000, deadlineMs: 600000 } }])
+  expect(app.state.writes).toEqual([
+    {
+      subagents: {
+        enabled: false,
+        model: "removed/old-model",
+        usd: 5,
+        tokens: 1000,
+        deadlineMs: 600000,
+        usdIncrease: 1,
+        tokenIncrease: 250000,
+      },
+    },
+  ])
 })
 
 test("a late model catalog cannot reset the saved model selection", async () => {
@@ -205,5 +271,17 @@ test("a late model catalog cannot reset the saved model selection", async () => 
   expect(app.select().value).toBe("fixture/model")
   app.save()
   await ready(() => app.state.writes.length === 1)
-  expect(app.state.writes).toEqual([{ subagents: { model: "fixture/model", tokens: 1000, deadlineMs: 600000 } }])
+  expect(app.state.writes).toEqual([
+    {
+      subagents: {
+        enabled: false,
+        model: "fixture/model",
+        usd: 5,
+        tokens: 1000,
+        deadlineMs: 600000,
+        usdIncrease: 1,
+        tokenIncrease: 250000,
+      },
+    },
+  ])
 })

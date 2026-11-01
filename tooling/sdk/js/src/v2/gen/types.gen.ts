@@ -2716,6 +2716,7 @@ export type Config = {
    * User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded
    */
   subagents?: {
+    enabled?: boolean
     model?: string
     usd?: number
     tokens?: number
@@ -12132,6 +12133,7 @@ export type SessionSubagentBudgetResponses = {
    * Shared subagent pools and assignments; main-agent inference is excluded
    */
   200: {
+    enabled?: boolean
     version: 1
     projectID: string
     rootSessionID: string
@@ -12291,6 +12293,7 @@ export type SessionIncreaseSubagentBudgetResponses = {
    * User-approved pool total; existing usage is preserved
    */
   200: {
+    enabled?: boolean
     version: 1
     projectID: string
     rootSessionID: string

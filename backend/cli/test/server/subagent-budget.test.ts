@@ -85,3 +85,33 @@ test("deleting a root removes budget content and blocks orphaned child dispatch"
     },
   })
 })
+
+test("disabled conversations expose no approved funds and reject increases", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({})
+      await SubagentBudget.initialize(parent.id, { enabled: false })
+      const internal = Server.internalFetch()
+      const headers = {
+        "x-openscience-project": Instance.project.id,
+        "x-openscience-directory": tmp.path,
+        "content-type": "application/json",
+      }
+      const endpoint = `http://openscience.internal/session/${parent.id}/subagents/budget`
+      const current = await internal(endpoint, { headers })
+      const snapshot = await current.json()
+      expect(snapshot.enabled).toBe(false)
+      expect(snapshot.limits).toEqual({ usd: 0, tokens: 0 })
+      const before = (await SubagentBudget.inspect(parent.id))!
+      const response = await internal(endpoint + "/increase", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ unit: "tokens", amount: 1000, revision: before.revision, key: crypto.randomUUID() }),
+      })
+      expect(response.status).toBe(409)
+      expect(await SubagentBudget.inspect(parent.id)).toEqual(before)
+    },
+  })
+})

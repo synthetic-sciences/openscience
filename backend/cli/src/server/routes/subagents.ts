@@ -101,7 +101,7 @@ export const SubagentRoutes = lazy(() =>
           ...input,
           amount: input.unit === "usd" ? SubagentBudget.dollars(input.amount) : input.amount,
         }).catch((error) => {
-          if (error instanceof Error && /revision|Approval key conflict/.test(error.message))
+          if (error instanceof Error && /revision|Approval key conflict|Bounded runs are off/.test(error.message))
             throw new HTTPException(409, { message: error.message })
           throw error
         })

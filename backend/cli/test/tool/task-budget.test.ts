@@ -50,7 +50,7 @@ async function fixture(
     },
   })
   const previous = await Config.getGlobalRaw()
-  await Config.updateGlobal({ subagents: { tokens, deadlineMs } }, { preserveInstances: true })
+  await Config.updateGlobal({ subagents: { enabled: true, tokens, deadlineMs } }, { preserveInstances: true })
   try {
     await using tmp = await tmpdir({
       git: true,
@@ -239,19 +239,41 @@ test("user increase and continue resumes the same real Task child once", async (
   )
 })
 
-test("missing user setup refuses actual Task dispatch with a usable reason", async () => {
-  await fixture(async ({ execute, requests }) => {
-    await Config.updateGlobal({ subagents: { deadlineMs: 600000 } }, { preserveInstances: true })
+test("enabling bounded runs with omitted amounts uses the suggested allowances", async () => {
+  await fixture(async ({ parent, execute }) => {
+    await Config.updateGlobal({ subagents: { enabled: true, deadlineMs: 600000 } }, { preserveInstances: true })
     const result = await execute()
-    expect(requests).toHaveLength(0)
-    expect(result.metadata.outcome).not.toBe("completed")
-    expect(result.output).toContain("Configure")
+    expect(result.metadata.outcome).toBe("completed")
+    expect((await SubagentBudget.inspect(parent.id))?.limits).toEqual({
+      usd: SubagentBudget.dollars(5),
+      tokens: 1000000,
+    })
+  })
+})
+test("default-off Task dispatch stays unbounded even with tiny suggested limits", async () => {
+  await fixture(async ({ parent, execute, requests }) => {
+    await Config.updateGlobal({ subagents: { enabled: false, tokens: 1, deadlineMs: 1 } }, { preserveInstances: true })
+    const result = await execute()
+    expect(result.metadata.outcome).toBe("completed")
+    expect(requests.length).toBeGreaterThan(0)
+    expect(await SubagentBudget.read(result.metadata.sessionId as string)).toBeUndefined()
+    const pool = (await SubagentBudget.inspect(parent.id))!
+    expect(pool.enabled).toBe(false)
+    expect(pool.limits.tokens).toBe(0)
+    expect(result.metadata.budget).toBeUndefined()
   })
 })
 test("explicit user model overrides both caller and specialist profile", async () => {
   await fixture(async ({ execute }) => {
     await Config.updateGlobal(
-      { subagents: { deadlineMs: 600000, tokens: 200000, model: `${STRESS_PROVIDER_ID}/fixture-model-compact` } },
+      {
+        subagents: {
+          enabled: true,
+          deadlineMs: 600000,
+          tokens: 200000,
+          model: `${STRESS_PROVIDER_ID}/fixture-model-compact`,
+        },
+      },
       { preserveInstances: true },
     )
     const result = await execute()
@@ -350,5 +372,44 @@ test("a second foreground Task cannot change a live child's assignment or releas
     600000,
     200000,
     1500,
+  )
+})
+
+test("global changes do not remove existing bounded conversation limits", async () => {
+  await fixture(async ({ parent, execute }) => {
+    await execute()
+    const before = (await SubagentBudget.inspect(parent.id))!
+    await Config.updateGlobal(
+      { subagents: { enabled: false, tokens: 1000000, deadlineMs: 600000 } },
+      { preserveInstances: true },
+    )
+    const next = await execute()
+    expect(next.metadata.budget).toBeDefined()
+    expect((await SubagentBudget.inspect(parent.id))?.limits).toEqual(before.limits)
+  })
+})
+test("enabling defaults later does not retroactively bind an unbounded conversation", async () => {
+  await fixture(async ({ parent, execute }) => {
+    await Config.updateGlobal({ subagents: { enabled: false, deadlineMs: 600000 } }, { preserveInstances: true })
+    await execute()
+    await Config.updateGlobal({ subagents: { enabled: true, deadlineMs: 1 } }, { preserveInstances: true })
+    const next = await execute()
+    expect(next.metadata.outcome).toBe("completed")
+    expect(next.metadata.budget).toBeUndefined()
+    expect((await SubagentBudget.inspect(parent.id))?.enabled).toBe(false)
+  })
+})
+
+test("off-mode active time includes a slow child's full execution", async () => {
+  await fixture(
+    async ({ execute }) => {
+      await Config.updateGlobal({ subagents: { enabled: false, deadlineMs: 600000 } }, { preserveInstances: true })
+      const result = await execute()
+      expect(result.metadata.outcome).toBe("completed")
+      expect(result.metadata.activeMs).toBeGreaterThanOrEqual(250)
+    },
+    600000,
+    200000,
+    350,
   )
 })

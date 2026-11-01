@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { Storage } from "../../src/storage/storage"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 import { SubagentBudget } from "../../src/session/subagent-budget"
@@ -190,6 +191,34 @@ test("a new assignment cannot replace a child that is still active", async () =>
         /running|active/,
       )
       expect((await SubagentBudget.read("a"))?.worker.assignmentID).toBe(first.assignmentID)
+    },
+  })
+})
+
+test("bounded mode is opt-in and suggested amounts are shared defaults", () => {
+  expect(SubagentBudget.Settings.parse({}).enabled).toBe(false)
+  expect(SubagentBudget.settings({})).toMatchObject({
+    enabled: false,
+    usd: 5,
+    tokens: 1000000,
+    deadlineMs: 600000,
+    usdIncrease: 1,
+    tokenIncrease: 250000,
+  })
+})
+test("conversation mode freezes on first admission and old pools stay bounded", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      expect(await SubagentBudget.initialize("off-root", { enabled: false })).toBe(false)
+      expect(await SubagentBudget.initialize("off-root", { enabled: true, usd: 25 })).toBe(false)
+      expect((await SubagentBudget.inspect("off-root"))?.limits).toEqual({ usd: 0, tokens: 0 })
+      expect(await SubagentBudget.initialize("on-root", { enabled: true, tokens: 500 })).toBe(true)
+      expect(await SubagentBudget.initialize("on-root", { enabled: false, tokens: 1000 })).toBe(true)
+      expect((await SubagentBudget.inspect("on-root"))?.limits.tokens).toBe(500)
+      await SubagentBudget.open(input("old", 100))
+      expect(await SubagentBudget.initialize("root", { enabled: false })).toBe(true)
     },
   })
 })

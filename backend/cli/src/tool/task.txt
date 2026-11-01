@@ -7,4 +7,4 @@ Brief: objective, full input paths, constraints, project output files, checks, e
 
 background=true returns immediately and notifies you on completion; do not poll or sleep. task_id in a NEW call continues the same stopped child. Replaying an old call returns its cached result.
 
-Allocation uses the user-approved shared pool: USD for priced BYOK/Ace, tokens for subscription/local inference, including helper calls. Default: up to one quarter of the pool. You cannot raise the total; ask the user if exhausted. Keep the model and route on budget continuation. At the wrap-up notice, stop exploration and report Outcome: Complete or Incomplete, findings, files, checks and remaining work. Runtime limits apply independently.
+With bounded runs on, allocation uses approved pools: USD for priced BYOK/Ace, tokens for subscription/local inference, including helper calls. Default: up to one quarter of the pool. You cannot raise the total; ask the user if exhausted. Keep the model and route on budget continuation. At the wrap-up notice, stop exploration and report Outcome: Complete or Incomplete, findings, files, checks and remaining work. Runtime limits apply independently.

@@ -4,19 +4,31 @@ import { Storage } from "@/storage/storage"
 import { Instance } from "@/project/instance"
 import { Identifier } from "@/id/id"
 import { Context } from "@/util/context"
+import { SubagentDefaults } from "@synsci/util/subagents"
 
 /** One transaction owns all grants and physical-call reservations for a root. */
 export namespace SubagentBudget {
   const Amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
   export const Settings = z.object({
+    enabled: z.boolean().default(SubagentDefaults.enabled),
     model: z.string().min(1).optional(),
     usd: z.number().positive().max(1_000_000).optional(),
     tokens: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
-    deadlineMs: z.number().int().positive().max(86_400_000).default(600_000),
+    deadlineMs: z.number().int().positive().max(86_400_000).default(SubagentDefaults.deadlineMs),
     usdIncrease: z.number().positive().max(1_000_000).optional(),
     tokenIncrease: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
   })
   export type Settings = z.input<typeof Settings>
+  export function settings(input: Settings = {}) {
+    const value = Settings.parse(input)
+    return {
+      ...value,
+      usd: value.usd ?? SubagentDefaults.usd,
+      tokens: value.tokens ?? SubagentDefaults.tokens,
+      usdIncrease: value.usdIncrease ?? SubagentDefaults.usdIncrease,
+      tokenIncrease: value.tokenIncrease ?? SubagentDefaults.tokenIncrease,
+    }
+  }
   export const Unit = z.enum(["usd", "tokens"])
   export type Unit = z.infer<typeof Unit>
   export const Reason = z.enum([
@@ -65,6 +77,7 @@ export namespace SubagentBudget {
   })
   export type Worker = z.infer<typeof Worker>
   export const Pool = z.object({
+    enabled: z.boolean().default(true),
     version: z.literal(1),
     projectID: z.string(),
     rootSessionID: z.string(),
@@ -330,6 +343,27 @@ export namespace SubagentBudget {
       return { pool, result: undefined }
     })
   }
+  function create(rootSessionID: string, settings: Settings, enabled: boolean): Pool {
+    return {
+      enabled,
+      version: 1,
+      projectID: Instance.project.id,
+      rootSessionID,
+      revision: 0,
+      limits: { usd: enabled ? dollars(settings.usd ?? 0) : 0, tokens: enabled ? (settings.tokens ?? 0) : 0 },
+      workers: {},
+      approvals: {},
+      continuations: {},
+    }
+  }
+  /** Saving defaults must not change an admitted conversation's spending policy. */
+  export async function initialize(rootSessionID: string, input: Settings) {
+    const value = settings(input)
+    return mutate(rootSessionID, (current) => {
+      const pool = current ?? create(rootSessionID, value, value.enabled)
+      return { pool, result: pool.enabled }
+    })
+  }
   export async function open(input: {
     rootSessionID: string
     parentSessionID: string
@@ -355,16 +389,8 @@ export namespace SubagentBudget {
         `Configure the ${input.unit === "usd" ? "paid USD" : "subscription token"} subagent allowance in Settings before starting this worker.`,
       )
     return mutate(input.rootSessionID, (current) => {
-      const pool: Pool = current ?? {
-        version: 1,
-        projectID: Instance.project.id,
-        rootSessionID: input.rootSessionID,
-        revision: 0,
-        limits: { usd: dollars(settings.usd ?? 0), tokens: settings.tokens ?? 0 },
-        workers: {},
-        approvals: {},
-        continuations: {},
-      }
+      const pool = current ?? create(input.rootSessionID, settings, true)
+      if (!pool.enabled) throw new LimitError("setup_required", "Bounded runs are off for this conversation")
       const prior = pool.workers[input.sessionID]
       if (prior?.deleted) throw new LimitError("cancelled", "The subagent session was deleted")
       if (prior?.parentSessionID !== undefined && prior.parentSessionID !== input.parentSessionID)
@@ -528,6 +554,7 @@ export namespace SubagentBudget {
     return mutate(rootSessionID, (current) => {
       if (!current) throw new Error("Subagent allowance not found")
       const pool = current
+      if (!pool.enabled) throw new Error("Bounded runs are off for this conversation")
       const previous = pool.approvals[input.key]
       if (previous) {
         if (previous.unit !== input.unit || previous.amount !== input.amount || previous.revision !== input.revision)

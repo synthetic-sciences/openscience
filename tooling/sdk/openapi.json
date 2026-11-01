@@ -28594,6 +28594,10 @@
                     {
                       "type": "object",
                       "properties": {
+                        "enabled": {
+                          "default": true,
+                          "type": "boolean"
+                        },
                         "version": {
                           "type": "number",
                           "const": 1
@@ -29052,6 +29056,10 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "enabled": {
+                      "default": true,
+                      "type": "boolean"
+                    },
                     "version": {
                       "type": "number",
                       "const": 1
@@ -66328,6 +66336,10 @@
             "description": "User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded",
             "type": "object",
             "properties": {
+              "enabled": {
+                "default": false,
+                "type": "boolean"
+              },
               "model": {
                 "type": "string",
                 "minLength": 1

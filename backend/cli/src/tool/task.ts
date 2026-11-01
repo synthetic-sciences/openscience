@@ -464,7 +464,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const settings = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
       const leadModel = { modelID: assistant.modelID, providerID: assistant.providerID }
-      const userLimits: SubagentBudget.Settings = (await Config.getGlobal()).subagents ?? {}
+      const userLimits = SubagentBudget.settings((await Config.getGlobal()).subagents)
       const reserved = await TaskAttempt.reserve({
         ...identity,
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
@@ -647,6 +647,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     const info = await Session.get(id)
                     return info.parentID ? top(info.parentID) : id
                   })(ctx.sessionID)
+                  const bounded = await SubagentBudget.initialize(root, userLimits)
+                  if (!bounded)
+                    return await SessionPrompt.withCancellation(session.id, () => dispatch(signal), signal).then(
+                      (result) => ({ result, error: undefined }),
+                      (error: unknown) => ({ result: undefined, error }),
+                    )
                   const route = await resolveAccessRoute(model.providerID, model.modelID)
                   const unit = route === "managed" || route === "byok" ? "usd" : "tokens"
                   const stored = await SubagentBudget.read(session.id)

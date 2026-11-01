@@ -1,3 +1,4 @@
+import { SubagentDefaults } from "@synsci/util/subagents"
 import type { Config } from "@synsci/sdk/v2/client"
 import { createEffect, For, on, onCleanup, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
@@ -27,6 +28,7 @@ type Worker = {
   calls: Record<string, { amount: number; state: "pending" | "settled" }>
 }
 type Pool = {
+  enabled?: boolean
   rootSessionID: string
   revision: number
   limits: Record<Unit, number>
@@ -152,7 +154,14 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
       services
         .defaults()
         .then((defaults) => {
-          if (epoch === state.epoch) setState({ defaults, defaultsError: false })
+          if (epoch === state.epoch)
+            setState({
+              defaults: {
+                usdIncrease: defaults.usdIncrease ?? SubagentDefaults.usdIncrease,
+                tokenIncrease: defaults.tokenIncrease ?? SubagentDefaults.tokenIncrease,
+              },
+              defaultsError: false,
+            })
         })
         .catch(() => {
           if (epoch === state.epoch) setState({ defaults: {}, defaultsError: true })
@@ -188,7 +197,7 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
   }
 
   const resume = async (worker: Worker, increase = false) => {
-    if (!state.pool || state.busy || state.loading || !resumable(worker)) return
+    if (!state.pool || state.pool.enabled === false || state.busy || state.loading || !resumable(worker)) return
     const epoch = state.epoch
     const sessionID = props.sessionID
     const id = worker.sessionID
@@ -278,7 +287,13 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
       <Show when={state.pool === null}>
         <p>No subagent pool exists yet. Global defaults in Settings initialize it on first use.</p>
       </Show>
-      <Show when={state.pool}>
+      <Show when={state.pool?.enabled === false}>
+        <p>
+          Bounded runs are off for this conversation. Enable bounded runs in General settings, then start a new
+          conversation to use allowances and deadlines. Existing conversations keep their saved mode and limits.
+        </p>
+      </Show>
+      <Show when={state.pool?.enabled !== false && state.pool}>
         {(pool) => (
           <>
             <For each={["usd", "tokens"] as const}>

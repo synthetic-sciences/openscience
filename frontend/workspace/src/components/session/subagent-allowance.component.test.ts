@@ -66,9 +66,11 @@ async function mount(
     unit?: "usd" | "tokens"
     available?: number
     increments?: boolean
+    defaultsError?: boolean
     active?: boolean
     parent?: string
     cooperative?: boolean
+    enabled?: boolean
   } = {},
 ) {
   const state = {
@@ -107,7 +109,13 @@ async function mount(
       if (state.readError) return json({ message: "Allowance unavailable" }, 503)
       const pool = structuredClone(state.pool)
       await state.readPause
-      return json(pool)
+      return json(
+        options.enabled === false
+          ? { ...pool, enabled: false, limits: { usd: 0, tokens: 0 }, available: { usd: 0, tokens: 0 }, workers: {} }
+          : options.enabled === true
+            ? { ...pool, enabled: true }
+            : pool,
+      )
     }
     const chunks: Buffer[] = []
     for await (const chunk of request) chunks.push(chunk)
@@ -163,7 +171,10 @@ async function mount(
           get scope() {
             return `${scope.projectID}:${scope.directory}`
           },
-          defaults: async () => (options.increments === false ? {} : { usdIncrease: 1.25, tokenIncrease: 2000 }),
+          defaults: async () => {
+            if (options.defaultsError) throw new Error("Defaults unavailable")
+            return options.increments === false ? {} : { usdIncrease: 1.25, tokenIncrease: 2000 }
+          },
         },
       }),
     host,
@@ -177,7 +188,12 @@ async function mount(
     [...host.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes(text))!
   const load = async () => {
     button("Load subagent allowance").click()
-    await ready(() => host.textContent?.includes("Review the controls") === true)
+    await ready(
+      () =>
+        host.textContent?.includes(
+          options.enabled === false ? "Bounded runs are off for this conversation" : "Review the controls",
+        ) === true,
+    )
   }
   return { state, host, button, load, setScope }
 }
@@ -188,7 +204,7 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-test("explicit loading shows shared allowance and a stopped worker without claiming Wallet charges", async () => {
+test("legacy snapshots without an enabled field retain bounded allowance controls", async () => {
   const app = await mount()
   expect(app.state.reads).toEqual([])
   await app.load()
@@ -201,10 +217,26 @@ test("explicit loading shows shared allowance and a stopped worker without claim
   expect(app.host.querySelector("details")?.open).toBe(false)
   expect(app.host.textContent).not.toContain("Deducted from Wallet")
   expect(app.state.writes).toEqual([])
+  expect(app.button("Increase limit by")).toBeDefined()
+})
+
+test("a conversation with bounded runs off has no approval or continuation controls", async () => {
+  const app = await mount({ enabled: false })
+  await app.load()
+  expect(app.host.textContent).toContain("Bounded runs are off for this conversation")
+  expect(app.host.textContent).toContain("start a new conversation")
+  expect(app.host.textContent).not.toContain("approved")
+  expect(app.host.querySelector("details")).toBeNull()
+  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Continue")).toBeUndefined()
+  expect(app.button("Stop here")).toBeUndefined()
+  app.button("Refresh subagent allowance").click()
+  await ready(() => app.state.reads.length === 2)
+  expect(app.state.writes).toEqual([])
 })
 
 test("an explicit increase shows old and new totals and continues the same child with scoped requests", async () => {
-  const app = await mount()
+  const app = await mount({ enabled: true })
   await app.load()
   expect(app.host.textContent).toContain("USD 2 → USD 3.25")
   app.button("Increase limit by USD 1.25 and continue").click()
@@ -275,7 +307,7 @@ test("a revision conflict refreshes totals and requires another explicit approva
 test("remaining approved allowance continues the child without any increase", async () => {
   const app = await mount({ available: 1_000_000_000, increments: false })
   await app.load()
-  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Continue with remaining allowance")).toBeDefined()
   app.button("Continue with remaining allowance").click()
   await ready(() => app.state.writes.length === 1)
   expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
@@ -324,8 +356,8 @@ test("Stop here retains the report and performs no write or continuation", async
   expect(app.button("Increase limit by")).toBeUndefined()
 })
 
-test("missing increase defaults and active children never expose an increase action", async () => {
-  const app = await mount({ increments: false })
+test("failed defaults loads and active children never expose an increase action", async () => {
+  const app = await mount({ defaultsError: true })
   await app.load()
   expect(app.button("Increase limit by")).toBeUndefined()
   expect(app.host.textContent).toContain("Configure an increase amount")
@@ -408,4 +440,13 @@ test("a cooperative partial handoff can continue with the remaining allowance", 
   app.button("Continue with remaining allowance").click()
   await ready(() => app.state.writes.length === 1)
   expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
+})
+
+test.each(["usd", "tokens"] as const)("missing %s increase config uses the suggested amount", async (unit) => {
+  const app = await mount({ unit, increments: false })
+  await app.load()
+  expect(app.button("Increase limit by")).toBeDefined()
+  app.button("Increase limit by").click()
+  await ready(() => app.state.writes.length === 2)
+  expect(app.state.writes[0]!.body.amount).toBe(unit === "usd" ? 1 : 250000)
 })

@@ -6,8 +6,10 @@ import { tmpdir } from "../fixture/fixture"
 test("global subagent settings replace omitted fields so caller-model reset persists", async () => {
   const previous = await Config.getGlobalRaw()
   try {
-    await Config.updateGlobal({ subagents: { model: "openai/example", usd: 1, tokens: 100, deadlineMs: 600000 } })
-    await Config.updateGlobal({ subagents: { deadlineMs: 600000 } })
+    await Config.updateGlobal({
+      subagents: { enabled: false, model: "openai/example", usd: 1, tokens: 100, deadlineMs: 600000 },
+    })
+    await Config.updateGlobal({ subagents: { enabled: false, deadlineMs: 600000 } })
     const settings = (await Config.getGlobal()).subagents
     expect(settings?.model).toBeUndefined()
     expect(settings?.usd).toBeUndefined()
@@ -26,7 +28,7 @@ test("saving subagent defaults does not dispose active project state", async () 
       fn: async () => {
         const state = Instance.state(() => ({ id: crypto.randomUUID() }))
         const initial = state()
-        await Config.updateGlobal({ subagents: { tokens: 10000, deadlineMs: 600000 } })
+        await Config.updateGlobal({ subagents: { enabled: false, tokens: 10000, deadlineMs: 600000 } })
         expect(state()).toBe(initial)
       },
     })
