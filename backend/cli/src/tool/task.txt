@@ -1,20 +1,10 @@
-Launch a subagent to handle one independent, self-contained piece of work.
+Delegate one independent job. Do simple reads/searches and self-checks yourself.
 
-Available subagents (pass the name as subagent_type):
+Agents (subagent_type):
 {agents}
 
-Not for: reading a known file (read, glob), finding a string (grep), a few files (read), or checking your own output; that is your job. If no agent fits, use the tools directly.
+Brief: objective, full input paths, constraints, project output files, checks, expected report, edit permissions. Relative paths use your working directory. Run independent jobs together; never duplicate them. Check the Verification command, exit code and evidence; summarize the report for the user.
 
-1. A subagent starts fresh unless task_id resumes its earlier session. A fresh brief is self-contained: objective, inputs with full paths (a worker's relative paths resolve in your working folder, not in Project files), constraints, what to produce and where (its own files inside the project, not a report or /tmp), how to verify it, what to return; say whether it may change files.
-2. Launch independent subagents together in one message; never duplicate delegated work.
-3. Subagents work in your project directory; their files are the deliverable. The result returns once in <task_result> with a reusable task_id; the user does not see it, so summarize what matters.
-4. Read the report's Verification (command, exit code, what it proves); without one it is a claim.
-5. background=true returns immediately and notifies you when done; do not sleep or poll. Only for work you do not need before continuing.
+background=true returns immediately and notifies you on completion; do not poll or sleep. task_id in a NEW call continues the same stopped child. Replaying an old call returns its cached result.
 
-Subagent limits:
-- The user configures shared subagent allowances in Settings → General → Subagents. These limits cover child inference, including internal helper calls; they do not limit your own calls or pay for search/compute.
-- USD applies to priced BYOK/Ace calls. Tokens apply to subscription and local calls. Never claim that a token allowance measures an account's subscription quota.
-- Supply expected_output when a task needs a particular artifact or check. Use allocation.usd or allocation.tokens to request a share from the existing pool. If omitted, a task receives up to one quarter of the configured pool, capped at the available balance. You cannot increase the pool total.
-- The runtime pins the effective model and route for a running assignment. The default model follows the caller; user subagent settings or the composer Worker model can select another one.
-- At the wrap-up notice, stop exploration and return Outcome: Complete or Outcome: Incomplete, findings, artifact paths, checks and remaining work. The runtime enforces the limit even if you do not obey the notice.
-- A limit, deadline or cancellation returns an incomplete report. Keep its task_id. A new Task call with that task_id continues the same child with a fresh allocation and deadline; replaying an old completed call only returns its saved result. Ensure the child has stopped before continuing it. Ask the user to increase the limit if the shared pool has no available allowance. Never change the access route to bypass a limit; start a new child for a deliberate route change.
+Allocation uses the user-approved shared pool: USD for priced BYOK/Ace, tokens for subscription/local inference, including helper calls. Default: up to one quarter of the pool. You cannot raise the total; ask the user if exhausted. Keep the model and route on budget continuation. At the wrap-up notice, stop exploration and report Outcome: Complete or Incomplete, findings, files, checks and remaining work. Runtime limits apply independently.

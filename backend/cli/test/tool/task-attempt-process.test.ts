@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { Config } from "../../src/config/config"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { Provider } from "../../src/provider/provider"
@@ -12,6 +13,15 @@ import { LockCoordination } from "../../src/util/lock-coordination"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { spawn } from "../fixture/spawn"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
+
+const savedDefaults: { content?: string } = {}
+beforeEach(async () => {
+  savedDefaults.content = (await Config.getGlobalRaw()).content
+  await Config.updateGlobal({ subagents: { tokens: 1000000, deadlineMs: 600000 } }, { preserveInstances: true })
+})
+afterEach(async () => {
+  if (savedDefaults.content !== undefined) await Config.replaceGlobal(savedDefaults.content)
+})
 
 const fixture = path.join(import.meta.dir, "../fixture/task-attempt-process.ts")
 

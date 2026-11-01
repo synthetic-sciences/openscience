@@ -101,11 +101,7 @@ export async function resolveTaskContinuation(input: {
 }
 
 const parameters = z.object({
-  description: z
-    .string()
-    .describe(
-      "A one- to three-word title for the job, e.g. 'Split audit'; it names the worker's session, so a label, not a sentence.",
-    ),
+  description: z.string().describe("A short title for the worker session"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The name of the subagent to use for this task"),
   task_id: z
@@ -113,25 +109,14 @@ const parameters = z.object({
     .trim()
     .nullish()
     .overwrite((value) => value || undefined)
-    .describe(
-      "Set only to resume a previous task: the task_id returned by an earlier call continues the same subagent session with its previous messages instead of starting fresh.",
-    ),
+    .describe("Reuse a returned task_id to continue the same child with its saved messages."),
   command: z.string().describe("The command that triggered this task").optional(),
-  expected_output: z
-    .string()
-    .min(1)
-    .optional()
-    .describe("Expected findings, artifact references and checks; report remaining work honestly"),
+  expected_output: z.string().min(1).optional().describe("Expected artifacts, findings and checks"),
   allocation: z
     .object({ usd: z.number().positive().optional(), tokens: z.number().int().positive().optional() })
     .optional()
-    .describe("Request an allocation from the user-approved shared subagent pool; this cannot increase the pool total"),
-  background: z
-    .boolean()
-    .optional()
-    .describe(
-      "Run the agent in the background and return immediately. You will be notified when it completes; do not sleep, poll, or check on its progress.",
-    ),
+    .describe("Allocation from the approved shared pool; cannot raise its total"),
+  background: z.boolean().optional().describe("Return immediately; completion notifies you. Do not poll or sleep."),
 })
 
 /** Canonicalize model-supplied continuation placeholders before a Task attempt
