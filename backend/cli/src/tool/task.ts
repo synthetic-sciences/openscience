@@ -755,7 +755,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const details = SubagentBudget.summary(budget.pool, w)
                 const format = (value: number) =>
                   w.unit === "usd" ? `USD ${SubagentBudget.usd(value)}` : `${value} tokens`
-                return `Runtime accounting: model=${w.model.providerID}/${w.model.modelID}; route=${w.route}; ${format(w.spent)} used; ${format(details.pending)} pending; ${format(SubagentBudget.available(budget.pool, w.unit))} shared pool available. ${w.unit === "usd" ? "Calculated allowance use, not a settled Wallet charge." : "Provider token use, not account quota."}`
+                return `Runtime accounting: model=${w.model.providerID}/${w.model.modelID}; route=${w.route}; grant=${format(w.limit)}; ${format(w.spent)} used; ${format(details.remaining)} assignment remaining; ${format(details.pending)} pending; ${format(SubagentBudget.available(budget.pool, w.unit))} shared pool available. ${w.unit === "usd" ? "Calculated allowance use, not a settled Wallet charge." : "Provider token use, not account quota."}`
               })()
             : undefined
           const body = [

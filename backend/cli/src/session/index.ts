@@ -732,6 +732,22 @@ export namespace Session {
       .parse(usage)
   }
 
+  export function pricing(model: Provider.Model, promptTokens: number, tier?: string) {
+    const modeCost = tier ? model.modes?.[tier]?.cost : undefined
+    const tierCost = model.cost?.tiers
+      ?.filter((tier) => promptTokens > tier.threshold)
+      .sort((a, b) => b.threshold - a.threshold)[0]
+    const catalogCost = model.cost?.tiers?.length
+      ? (tierCost ?? model.cost)
+      : model.cost?.experimentalOver200K && promptTokens > 200_000
+        ? model.cost.experimentalOver200K
+        : model.cost
+    const modeTier = modeCost?.tiers
+      ?.filter((tier) => promptTokens > tier.threshold)
+      .sort((a, b) => b.threshold - a.threshold)[0]
+    return modeTier ?? modeCost ?? catalogCost
+  }
+
   export const getUsage = fn(
     z.object({
       model: z.custom<Provider.Model>(),
@@ -802,20 +818,7 @@ export namespace Session {
       // cache-CREATION tokens too. Omitting cache.write meant a mostly-cache-write
       // request that really exceeded 200k was billed at the base tier (cost
       // under-report).
-      const modeCost = tier ? input.model.modes?.[tier]?.cost : undefined
-      const promptTokens = tokens.input + tokens.cache.read + tokens.cache.write
-      const tierCost = input.model.cost?.tiers
-        ?.filter((tier) => promptTokens > tier.threshold)
-        .sort((a, b) => b.threshold - a.threshold)[0]
-      const catalogCost = input.model.cost?.tiers?.length
-        ? (tierCost ?? input.model.cost)
-        : input.model.cost?.experimentalOver200K && promptTokens > 200_000
-          ? input.model.cost.experimentalOver200K
-          : input.model.cost
-      const modeTier = modeCost?.tiers
-        ?.filter((tier) => promptTokens > tier.threshold)
-        .sort((a, b) => b.threshold - a.threshold)[0]
-      const costInfo = modeTier ?? modeCost ?? catalogCost
+      const costInfo = pricing(input.model, tokens.input + tokens.cache.read + tokens.cache.write, tier)
       // The calculated Wallet amount is request-specific and need not have
       // posted yet. Older gateways provide raw cost plus the verified route fee;
       // catalog estimates already include that fee and must never add it twice.

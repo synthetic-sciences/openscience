@@ -334,6 +334,7 @@ export namespace LLM {
       model: input.model,
       route: traceRoute,
       inputTokens: Buffer.byteLength(JSON.stringify({ system, messages: providerMessages, tools })) + 1024,
+      tier: input.small ? undefined : input.user.tier,
       maxOutputTokens: requestedOutputTokens,
       internal: input.small,
     })
@@ -354,7 +355,7 @@ export namespace LLM {
       model: routed.api.id,
       pricingModel: input.model,
       outputBound: allowance?.maxOutputTokens ?? requestedOutputTokens,
-      tier: input.user.tier,
+      tier: input.small ? undefined : input.user.tier,
       internal: input.small,
       binding,
     })

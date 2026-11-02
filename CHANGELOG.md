@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Correct premature subagent budget stops by pricing input and output at the selected speed and context tier, reserving room for the final report, and showing each worker's grant in its accounting receipt.
+
 - Apply USD allowances to priced local model proxies, preserve worker accounting in handoffs, and check ancestor allocations before nested workers continue.
 
 - Make bounded subagent runs opt-in, off by default. Suggest USD 5, 1,000,000 tokens and a 10-minute deadline, with user-approved increases of USD 1 or 250,000 tokens. Existing conversations keep their saved mode and limits.

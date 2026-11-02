@@ -29,6 +29,7 @@ async function fixture(
   delay = 0,
   recovery = false,
   priced = false,
+  premium = false,
 ) {
   const requests: unknown[] = []
   const server = Bun.serve({
@@ -66,7 +67,16 @@ async function fixture(
               ...provider.provider[STRESS_PROVIDER_ID].models,
               [STRESS_PROVIDER_MODEL]: {
                 ...provider.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_MODEL],
-                ...(priced ? { cost: { input: 1, output: 2 } } : {}),
+                ...(premium
+                  ? {
+                      cost: { input: 10, output: 50, cache_read: 1, cache_write: 12.5 },
+                      experimental: {
+                        modes: { fast: { cost: { input: 40, output: 150, cache_read: 4, cache_write: 50 } } },
+                      },
+                    }
+                  : priced
+                    ? { cost: { input: 1, output: 2 } }
+                    : {}),
               },
             },
           },
@@ -76,7 +86,7 @@ async function fixture(
           probe: {
             mode: "subagent",
             prompt: "Return a concise report.",
-            permission: { "*": "deny" },
+            permission: premium ? { "*": "deny", read: "allow" } : { "*": "deny" },
             model: `${STRESS_PROVIDER_ID}/fixture-model-compact`,
           },
         },
@@ -121,7 +131,9 @@ async function fixture(
           return (await TaskTool.init()).execute(
             {
               description: "Bounded probe",
-              prompt: "Return your findings.",
+              prompt: premium
+                ? "Review the worker contract, record supported findings and identify unfinished tests. ".repeat(30)
+                : "Return your findings.",
               subagent_type: "probe",
               background,
               ...(taskID ? { task_id: taskID } : {}),
@@ -455,6 +467,8 @@ test("the calling model receives runtime accounting before and after Task compac
     expect(result.output).toContain("model=stress/fixture-model")
     expect(result.output).toContain("route=local")
     expect(result.output).toContain("tokens used")
+    expect(result.output).toContain("grant=50000 tokens")
+    expect(result.output).toContain("assignment remaining")
     expect(result.output).toContain("shared pool available")
     const compacted = MessageV2.toolSummary("task", {
       status: "completed",
@@ -468,4 +482,26 @@ test("the calling model receives runtime accounting before and after Task compac
     expect(compacted).toContain("shared pool available")
     expect(compacted).toContain("model=stress/fixture-model")
   })
+})
+
+test("a Standard priced Task can start within its default USD 1.25 grant while Fast is available", async () => {
+  await fixture(
+    async ({ execute, requests }) => {
+      const result = await execute()
+      expect(result.metadata.outcome).toBe("completed")
+      const state = (await SubagentBudget.read(result.metadata.sessionId as string))!
+      expect(state.worker.limit).toBe(SubagentBudget.dollars(1.25))
+      expect(state.worker.spent).toBeGreaterThan(0)
+      expect(requests.length).toBeGreaterThan(0)
+      const first = JSON.stringify(requests[0])
+      expect(first).toContain('"name":"read"')
+      expect(first).not.toContain("Runtime allowance notice")
+    },
+    600000,
+    200000,
+    0,
+    false,
+    false,
+    true,
+  )
 })

@@ -279,3 +279,119 @@ test("handoff admission accounts for the next input replay before reaching 75 pe
     expect(plan?.notice).toContain("handoff")
   })
 })
+
+test("Standard admission prices input separately and does not reserve unused Fast mode", async () => {
+  await fixture(async (base) => {
+    const model: Provider.Model = {
+      ...base,
+      cost: {
+        input: 10,
+        output: 50,
+        cache: { read: 1, write: 12.5 },
+        tiers: [{ input: 20, output: 75, cache: { read: 2, write: 25 }, threshold: 272000 }],
+      },
+      pricing: { upstream_provider: "openrouter", hosting_provider: "azure", funding_fee_bps: 0 },
+      modes: {
+        fast: {
+          cost: {
+            input: 20,
+            output: 100,
+            cache: { read: 2, write: 25 },
+            tiers: [{ input: 40, output: 150, cache: { read: 4, write: 50 }, threshold: 272000 }],
+          },
+        },
+      },
+    }
+    await SubagentBudget.open({
+      rootSessionID: "standard-root",
+      parentSessionID: "standard-root",
+      sessionID: "standard-child",
+      assignmentID: "standard-task",
+      objective: "Read and review",
+      expectedOutput: "Findings",
+      model: { providerID: model.providerID, modelID: model.id },
+      route: "managed",
+      unit: "usd",
+      allocation: SubagentBudget.dollars(1.25),
+      settings: { usd: 5 },
+    })
+    const prepared = await SubagentDispatch.prepare({
+      sessionID: "standard-child",
+      model,
+      route: "managed",
+      inputTokens: 10000,
+      maxOutputTokens: 32000,
+    })
+    expect(prepared?.maxOutputTokens).toBeGreaterThanOrEqual(512)
+    expect(prepared?.wrapup).toBe(false)
+    await SubagentDispatch.begin({
+      sessionID: "standard-child",
+      model,
+      route: "managed",
+      callID: "standard-request",
+      body: { messages: [{ role: "user", content: "x".repeat(10000) }], max_tokens: prepared!.maxOutputTokens },
+    })
+    expect((await SubagentBudget.read("standard-child"))?.worker.calls["standard-request"].amount).toBeLessThan(
+      SubagentBudget.dollars(1.25),
+    )
+  })
+})
+
+test("Fast admission keeps its own output price and handoff capacity", async () => {
+  await fixture(async (base) => {
+    const model: Provider.Model = {
+      ...base,
+      modes: { fast: { cost: { input: 8, output: 16, cache: { read: 0, write: 0 } } } },
+    }
+    const standard = await SubagentDispatch.prepare({
+      sessionID: "child",
+      model,
+      route: "byok",
+      inputTokens: 1000,
+      maxOutputTokens: 32000,
+    })
+    const fast = await SubagentDispatch.prepare({
+      sessionID: "child",
+      model,
+      route: "byok",
+      tier: "fast",
+      inputTokens: 1000,
+      maxOutputTokens: 32000,
+    })
+    expect(fast?.maxOutputTokens).toBeLessThan(standard!.maxOutputTokens)
+    expect(fast?.wrapup).toBe(false)
+    const body = JSON.stringify({ messages: [{ role: "user", content: "fast" }], max_tokens: 100 })
+    await SubagentDispatch.begin({ sessionID: "child", model, route: "byok", tier: "fast", callID: "fast", body })
+    expect((await SubagentBudget.read("child"))?.worker.calls.fast.amount).toBe(
+      (Buffer.byteLength(body) + 256) * 8000 + 100 * 16000,
+    )
+  }, "usd")
+})
+
+test("trimming an exploration output also reserves replay space for its handoff", async () => {
+  await fixture(async (model) => {
+    const first = await SubagentDispatch.prepare({
+      sessionID: "child",
+      model,
+      route: "local",
+      inputTokens: 1000,
+      maxOutputTokens: 32000,
+    })
+    expect(first?.wrapup).toBe(false)
+    expect(first!.maxOutputTokens).toBeGreaterThanOrEqual(512)
+    const used = 1000 + first!.maxOutputTokens
+    await SubagentBudget.reserve("child", "explore", used)
+    await SubagentBudget.settle("child", "explore", used)
+    const replay = 1000 + first!.maxOutputTokens * 4 + 256
+    const handoff = await SubagentDispatch.prepare({
+      sessionID: "child",
+      model,
+      route: "local",
+      inputTokens: replay,
+      maxOutputTokens: 32000,
+    })
+    expect(handoff?.wrapup).toBe(true)
+    expect(handoff!.maxOutputTokens).toBeGreaterThanOrEqual(512)
+    expect(used + replay + handoff!.maxOutputTokens).toBeLessThanOrEqual(10000)
+  })
+})

@@ -51,6 +51,7 @@ export namespace ModelCallTrace {
                 input.pricingModel ??
                 (await Provider.getModel(bounded.worker.model.providerID, bounded.worker.model.modelID)),
               outputBound: input.outputBound,
+              tier: input.tier,
               internal: input.internal,
             })
           if (!input.binding) return

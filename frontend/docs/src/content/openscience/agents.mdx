@@ -79,6 +79,8 @@ With bounded runs on, a task receives an allocation from the approved pool. By d
 
 USD uses the selected BYOK or Ace model's normal cost calculation. A local or custom proxy with configured prices also uses USD. Tokens include input, cache and output tokens for subscriptions and unpriced local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
 
+Before each call, the runtime estimates input and output separately at the selected speed and context prices. It can reduce the output cap to keep room for the final report. Worker reports show their grant, allowance use, assignment remainder and available shared pool. A rejected call reports the estimated minimum and the worker's available allowance.
+
 At 75% usage, or earlier when needed for the final report, the runtime asks the worker to wrap up and blocks further exploration. A limit or deadline produces an **Incomplete** report with a reason and saved partial results. **Complete** is the worker's report, not proof that its scientific conclusions are correct.
 
 Open the task context panel to inspect the subagent allowance. **Continue with remaining allowance** resumes the same child. If you configured an increment, **Increase limit by … and continue** raises the pool once and resumes the child through a new Task call. **Stop here** keeps its files and conversation. An increase does not buy Wallet credits or reset a provider quota. A deliberate change of access route requires a new child; historical tokens are never converted into dollars.
