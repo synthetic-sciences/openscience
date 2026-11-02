@@ -33,6 +33,7 @@ type Pool = {
   revision: number
   limits: Record<Unit, number>
   available: Record<Unit, number>
+  continuationCapacity?: Record<string, { available: number; ancestorLimited: boolean }>
   workers: Record<string, Worker>
 }
 type Services = { request: ProjectRequest; scope: string; defaults: () => Promise<Defaults> }
@@ -187,7 +188,11 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
     worker.parentSessionID === props.sessionID &&
     !worker.active &&
     ["budget_limit", "token_limit", "budget_wrapup"].includes(worker.stopReason ?? worker.reportReason ?? "")
-  const remaining = (worker: Worker) => (state.pool?.available[worker.unit] ?? 0) > 0
+  const capacity = (worker: Worker) => state.pool?.continuationCapacity?.[worker.sessionID]
+  const ancestorLimited = (worker: Worker) =>
+    capacity(worker)?.ancestorLimited ?? worker.parentSessionID !== state.pool?.rootSessionID
+  const remaining = (worker: Worker) =>
+    (capacity(worker)?.available ?? (ancestorLimited(worker) ? 0 : (state.pool?.available[worker.unit] ?? 0))) > 0
   const label = (worker: Worker, increase = false) => {
     const attempt = state.attempts[worker.sessionID]
     if (attempt?.stage === "continue") return "Retry continuing subagent"
@@ -197,7 +202,15 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
   }
 
   const resume = async (worker: Worker, increase = false) => {
-    if (!state.pool || state.pool.enabled === false || state.busy || state.loading || !resumable(worker)) return
+    if (
+      !state.pool ||
+      state.pool.enabled === false ||
+      state.busy ||
+      state.loading ||
+      !resumable(worker) ||
+      ancestorLimited(worker)
+    )
+      return
     const epoch = state.epoch
     const sessionID = props.sessionID
     const id = worker.sessionID
@@ -348,83 +361,90 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
                     </Show>
                     <Show when={resumable(worker)}>
                       <Show
-                        when={state.attempts[worker.sessionID]?.stage !== "done"}
-                        fallback={<p role="status">Continuation queued for the same subagent.</p>}
+                        when={!ancestorLimited(worker)}
+                        fallback={<p>Continue the parent task first to allocate allowance to this subagent.</p>}
                       >
                         <Show
-                          when={!state.stopped[worker.sessionID]}
-                          fallback={
-                            <>
-                              <p role="status">Stopped here. The conversation and partial results are kept.</p>
-                              <Button
-                                type="button"
-                                size="small"
-                                variant="secondary"
-                                onClick={() => setState("stopped", worker.sessionID, false)}
-                              >
-                                Review continuation
-                              </Button>
-                            </>
-                          }
+                          when={state.attempts[worker.sessionID]?.stage !== "done"}
+                          fallback={<p role="status">Continuation queued for the same subagent.</p>}
                         >
-                          <Show when={increment(worker) !== undefined && !state.attempts[worker.sessionID]}>
-                            <p>
-                              If increased: {amount(worker.unit, pool().limits[worker.unit])} →{" "}
-                              {amount(
-                                worker.unit,
-                                pool().limits[worker.unit] + increment(worker)! * (worker.unit === "usd" ? 1e9 : 1),
-                              )}{" "}
-                              approved total
-                            </p>
-                          </Show>
-                          <div class="flex flex-wrap gap-2">
-                            <Show
-                              when={
-                                remaining(worker) || increment(worker) !== undefined || state.attempts[worker.sessionID]
-                              }
-                              fallback={
-                                <p>Configure an increase amount in General settings to approve a larger pool.</p>
-                              }
-                            >
-                              <Button
-                                type="button"
-                                size="small"
-                                variant={
-                                  remaining(worker) && !state.attempts[worker.sessionID] ? "primary" : "secondary"
-                                }
-                                disabled={!!state.busy || state.loading}
-                                onClick={() => void resume(worker)}
-                              >
-                                {state.busy === worker.sessionID ? "Continuing…" : label(worker)}
-                              </Button>
+                          <Show
+                            when={!state.stopped[worker.sessionID]}
+                            fallback={
+                              <>
+                                <p role="status">Stopped here. The conversation and partial results are kept.</p>
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="secondary"
+                                  onClick={() => setState("stopped", worker.sessionID, false)}
+                                >
+                                  Review continuation
+                                </Button>
+                              </>
+                            }
+                          >
+                            <Show when={increment(worker) !== undefined && !state.attempts[worker.sessionID]}>
+                              <p>
+                                If increased: {amount(worker.unit, pool().limits[worker.unit])} →{" "}
+                                {amount(
+                                  worker.unit,
+                                  pool().limits[worker.unit] + increment(worker)! * (worker.unit === "usd" ? 1e9 : 1),
+                                )}{" "}
+                                approved total
+                              </p>
                             </Show>
-                            <Show
-                              when={
-                                remaining(worker) &&
-                                increment(worker) !== undefined &&
-                                !state.attempts[worker.sessionID]
-                              }
-                            >
+                            <div class="flex flex-wrap gap-2">
+                              <Show
+                                when={
+                                  remaining(worker) ||
+                                  increment(worker) !== undefined ||
+                                  state.attempts[worker.sessionID]
+                                }
+                                fallback={
+                                  <p>Configure an increase amount in General settings to approve a larger pool.</p>
+                                }
+                              >
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant={
+                                    remaining(worker) && !state.attempts[worker.sessionID] ? "primary" : "secondary"
+                                  }
+                                  disabled={!!state.busy || state.loading}
+                                  onClick={() => void resume(worker)}
+                                >
+                                  {state.busy === worker.sessionID ? "Continuing…" : label(worker)}
+                                </Button>
+                              </Show>
+                              <Show
+                                when={
+                                  remaining(worker) &&
+                                  increment(worker) !== undefined &&
+                                  !state.attempts[worker.sessionID]
+                                }
+                              >
+                                <Button
+                                  type="button"
+                                  size="small"
+                                  variant="secondary"
+                                  disabled={!!state.busy || state.loading}
+                                  onClick={() => void resume(worker, true)}
+                                >
+                                  {label(worker, true)}
+                                </Button>
+                              </Show>
                               <Button
                                 type="button"
                                 size="small"
                                 variant="secondary"
-                                disabled={!!state.busy || state.loading}
-                                onClick={() => void resume(worker, true)}
+                                disabled={!!state.busy}
+                                onClick={() => setState("stopped", worker.sessionID, true)}
                               >
-                                {label(worker, true)}
+                                Stop here
                               </Button>
-                            </Show>
-                            <Button
-                              type="button"
-                              size="small"
-                              variant="secondary"
-                              disabled={!!state.busy}
-                              onClick={() => setState("stopped", worker.sessionID, true)}
-                            >
-                              Stop here
-                            </Button>
-                          </div>
+                            </div>
+                          </Show>
                         </Show>
                       </Show>
                     </Show>

@@ -23,10 +23,15 @@ export namespace SubagentDispatch {
         : prices(item),
     )
   }
-  function rate(input: Context) {
+  function rate(input: Pick<Context, "model" | "route">) {
     const highest = Math.max(0, ...prices({ cost: input.model.cost, modes: input.model.modes }))
     const fee = input.route === "managed" ? (ManagedPricing.fundingFeeBps(input.model) ?? 0) : 0
     return new Decimal(highest).mul(1000).mul(new Decimal(10000 + fee).div(10000))
+  }
+  export function unit(model: Provider.Model, route: AccessRoute): SubagentBudget.Unit {
+    if (route === "managed" || route === "byok") return "usd"
+    if ((route === "local" || route === "custom") && rate({ model, route }).greaterThan(0)) return "usd"
+    return "tokens"
   }
   async function checked(input: Context) {
     const state = await SubagentBudget.read(input.sessionID)

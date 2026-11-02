@@ -222,3 +222,58 @@ test("conversation mode freezes on first admission and old pools stay bounded", 
     },
   })
 })
+
+test("a nested continuation reports an exhausted ancestor even after a root increase", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 150))
+      await SubagentBudget.open({ ...input("b", 150), parentSessionID: "a" })
+      await SubagentBudget.reserve("b", "spent", 150)
+      await SubagentBudget.settle("b", "spent", 150)
+      await SubagentBudget.release("b")
+      await SubagentBudget.release("a")
+      const before = (await SubagentBudget.snapshot("root"))!
+      expect(before.available.tokens).toBe(50)
+      expect(before.continuationCapacity.b).toEqual({ available: 0, ancestorLimited: true })
+      await SubagentBudget.increase("root", { unit: "tokens", amount: 100, revision: before.revision, key: "increase" })
+      expect((await SubagentBudget.snapshot("root"))?.continuationCapacity.b).toEqual({
+        available: 0,
+        ancestorLimited: true,
+      })
+      await expect(SubagentBudget.continuation("root", "b", "resume")).rejects.toThrow(/allowance/)
+    },
+  })
+})
+
+test("an inactive ancestor cannot lend returned capacity already allocated to a sibling", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 150))
+      await SubagentBudget.release("a")
+      await SubagentBudget.open(input("sibling", 200))
+      await expect(SubagentBudget.open({ ...input("b", 100), parentSessionID: "a" })).rejects.toThrow(/limit/)
+      expect(SubagentBudget.available((await SubagentBudget.inspect("root"))!, "tokens", "sibling")).toBe(200)
+    },
+  })
+})
+
+test("an active ancestor keeps its reserved capacity across an inactive intermediate worker", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 150))
+      await SubagentBudget.open({ ...input("b", 100), parentSessionID: "a" })
+      await SubagentBudget.release("b")
+      await SubagentBudget.open(input("sibling", 50))
+      const leaf = await SubagentBudget.open({ ...input("leaf", 100), parentSessionID: "b" })
+      expect(leaf.limit).toBe(100)
+      await SubagentBudget.reserve("leaf", "call", 100)
+      expect((await SubagentBudget.read("leaf"))?.worker.calls.call.amount).toBe(100)
+    },
+  })
+})

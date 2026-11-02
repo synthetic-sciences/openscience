@@ -101,7 +101,10 @@ export namespace SubagentBudget {
       .default({}),
   })
   export type Pool = z.infer<typeof Pool>
-  export const Snapshot = Pool.extend({ available: z.object({ usd: Amount, tokens: Amount }) })
+  export const Snapshot = Pool.extend({
+    available: z.object({ usd: Amount, tokens: Amount }),
+    continuationCapacity: z.record(z.string(), z.object({ available: Amount, ancestorLimited: z.boolean() })),
+  })
   const running = new Map<string, { parentID: string; controller: AbortController }>()
 
   export async function watch(worker: Worker, signal: AbortSignal) {
@@ -242,6 +245,17 @@ export namespace SubagentBudget {
       ),
     )
   }
+  function capacity(pool: Pool, unit: Unit, parentSessionID: string): { available: number; ancestorLimited: boolean } {
+    const parent = ancestor(pool, parentSessionID, unit)
+    if (!parent) return { available: available(pool, unit), ancestorLimited: false }
+    const prior = capacity(pool, unit, parent.parentSessionID)
+    const free = available(pool, unit, parent.sessionID)
+    return {
+      // Inactive ancestors have returned their unused grants to the outer pool.
+      available: Math.min(free, parent.active ? spendable(pool, parent.sessionID) : prior.available),
+      ancestorLimited: free === 0 || prior.ancestorLimited,
+    }
+  }
   async function root(sessionID: string) {
     const projectID = await Promise.resolve()
       .then(() => Instance.project.id)
@@ -310,7 +324,18 @@ export namespace SubagentBudget {
   export async function snapshot(sessionID: string) {
     const state = await read(sessionID)
     const pool = state?.pool ?? (await inspect(sessionID))
-    return pool ? { ...pool, available: { usd: available(pool, "usd"), tokens: available(pool, "tokens") } } : null
+    return pool
+      ? {
+          ...pool,
+          available: { usd: available(pool, "usd"), tokens: available(pool, "tokens") },
+          continuationCapacity: Object.fromEntries(
+            Object.values(pool.workers).map((worker) => [
+              worker.sessionID,
+              capacity(pool, worker.unit, worker.parentSessionID),
+            ]),
+          ),
+        }
+      : null
   }
   export async function remove(sessionID: string) {
     running.get(sessionID)?.controller.abort(new LimitError("cancelled"))
@@ -399,8 +424,7 @@ export namespace SubagentBudget {
       if (prior?.active) throw new Error("Subagent is still running; wait for its current assignment to stop")
       if (prior && (prior.unit !== input.unit || prior.route !== input.route))
         throw new LimitError("route_changed", "Continue this child on its original access route or start a new child.")
-      const parent = ancestor(pool, input.parentSessionID, input.unit)
-      const free = available(pool, input.unit, parent?.sessionID)
+      const free = capacity(pool, input.unit, input.parentSessionID).available
       const amount =
         input.allocation === undefined ? Math.min(Math.floor(limit / 4), free) : Amount.parse(input.allocation)
       if (amount <= 0 || amount > free)
@@ -525,7 +549,7 @@ export namespace SubagentBudget {
       const worker = pool.workers[childID]
       if (!worker || worker.deleted) throw new Error("Subagent not found")
       if (worker.active) throw new Error("Subagent is still running")
-      const amount = available(pool, worker.unit, ancestor(pool, worker.parentSessionID, worker.unit)?.sessionID)
+      const amount = capacity(pool, worker.unit, worker.parentSessionID).available
       if (!amount) throw new Error("Increase the subagent allowance before continuing")
       const operation = {
         childID,

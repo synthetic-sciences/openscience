@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Apply USD allowances to priced local model proxies, preserve worker accounting in handoffs, and check ancestor allocations before nested workers continue.
+
 - Make bounded subagent runs opt-in, off by default. Suggest USD 5, 1,000,000 tokens and a 10-minute deadline, with user-approved increases of USD 1 or 250,000 tokens. Existing conversations keep their saved mode and limits.
 
 - Give Task subagents shared user-approved USD or token allowances, a deadline and a selected model. Stop further calls at the limit, keep partial results, and let users increase the allowance and continue the same child. Recognize environment and configuration API keys as paid access.

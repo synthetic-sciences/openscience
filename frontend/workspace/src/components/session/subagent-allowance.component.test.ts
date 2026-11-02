@@ -35,6 +35,7 @@ function fixture(unit: "usd" | "tokens" = "usd") {
     revision: 7,
     limits: { usd: 2_000_000_000, tokens: 4000 },
     available: { usd: 0, tokens: 0 },
+    continuationCapacity: { child: { available: 0, ancestorLimited: false } },
     approvals: {},
     workers: {
       child: {
@@ -71,6 +72,7 @@ async function mount(
     parent?: string
     cooperative?: boolean
     enabled?: boolean
+    ancestorLimited?: boolean
   } = {},
 ) {
   const state = {
@@ -86,6 +88,10 @@ async function mount(
     approved: new Set<string>(),
   }
   state.pool.available[state.pool.workers.child.unit] = options.available ?? 0
+  state.pool.continuationCapacity.child = {
+    available: options.ancestorLimited ? 0 : (options.available ?? 0),
+    ancestorLimited: options.ancestorLimited ?? false,
+  }
   state.pool.workers.child.active = options.active ?? false
   state.pool.workers.child.parentSessionID = options.parent ?? "parent"
   if (options.cooperative) {
@@ -449,4 +455,14 @@ test.each(["usd", "tokens"] as const)("missing %s increase config uses the sugge
   app.button("Increase limit by").click()
   await ready(() => app.state.writes.length === 2)
   expect(app.state.writes[0]!.body.amount).toBe(unit === "usd" ? 1 : 250000)
+})
+
+test("nested workers with exhausted parent grants do not offer ineffective root increases", async () => {
+  const app = await mount({ unit: "tokens", available: 50, parent: "middle", ancestorLimited: true })
+  app.setScope("sessionID", "middle")
+  await app.load()
+  expect(app.host.textContent).toContain("Continue the parent task first to allocate allowance to this subagent.")
+  expect(app.button("Continue with remaining allowance")).toBeUndefined()
+  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.state.writes).toHaveLength(0)
 })

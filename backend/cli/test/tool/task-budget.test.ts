@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
+import { MessageV2 } from "../../src/session/message-v2"
 import { Identifier } from "../../src/id/id"
 import { TaskTool } from "../../src/tool/task"
 import { SessionPrompt } from "../../src/session/prompt"
@@ -27,6 +28,7 @@ async function fixture(
   tokens = 200000,
   delay = 0,
   recovery = false,
+  priced = false,
 ) {
   const requests: unknown[] = []
   const server = Bun.serve({
@@ -49,13 +51,26 @@ async function fixture(
       )
     },
   })
+  const provider = stressProviderConfig(`http://127.0.0.1:${server.port}/v1`)
   const previous = await Config.getGlobalRaw()
   await Config.updateGlobal({ subagents: { enabled: true, tokens, deadlineMs } }, { preserveInstances: true })
   try {
     await using tmp = await tmpdir({
       git: true,
       config: {
-        ...stressProviderConfig(`http://127.0.0.1:${server.port}/v1`),
+        ...provider,
+        provider: {
+          [STRESS_PROVIDER_ID]: {
+            ...provider.provider[STRESS_PROVIDER_ID],
+            models: {
+              ...provider.provider[STRESS_PROVIDER_ID].models,
+              [STRESS_PROVIDER_MODEL]: {
+                ...provider.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_MODEL],
+                ...(priced ? { cost: { input: 1, output: 2 } } : {}),
+              },
+            },
+          },
+        },
         harness: { review: false, budget: false, unattended: false, deliverables: false, acceptance: false },
         agent: {
           probe: {
@@ -412,4 +427,45 @@ test("off-mode active time includes a slow child's full execution", async () => 
     200000,
     350,
   )
+})
+
+test("a priced model behind a local proxy consumes the paid USD pool", async () => {
+  await fixture(
+    async ({ parent, execute }) => {
+      const result = await execute()
+      const state = (await SubagentBudget.read(result.metadata.sessionId as string))!
+      expect(state.worker.route).toBe("local")
+      expect(state.worker.unit).toBe("usd")
+      expect(state.worker.spent).toBeGreaterThan(0)
+      expect(state.worker.limit).toBe(SubagentBudget.dollars(1.25))
+      expect((await SubagentBudget.snapshot(parent.id))?.available.tokens).toBe(200000)
+    },
+    600000,
+    200000,
+    0,
+    false,
+    true,
+  )
+})
+
+test("the calling model receives runtime accounting before and after Task compaction", async () => {
+  await fixture(async ({ execute }) => {
+    const result = await execute()
+    expect(result.output).toContain("Runtime accounting:")
+    expect(result.output).toContain("model=stress/fixture-model")
+    expect(result.output).toContain("route=local")
+    expect(result.output).toContain("tokens used")
+    expect(result.output).toContain("shared pool available")
+    const compacted = MessageV2.toolSummary("task", {
+      status: "completed",
+      title: result.title,
+      input: {},
+      output: result.output,
+      metadata: result.metadata,
+      time: { start: 0, end: 1 },
+    })
+    expect(compacted).toContain("Runtime accounting:")
+    expect(compacted).toContain("shared pool available")
+    expect(compacted).toContain("model=stress/fixture-model")
+  })
 })

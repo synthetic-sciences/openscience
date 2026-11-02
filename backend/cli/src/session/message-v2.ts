@@ -1397,6 +1397,7 @@ export namespace MessageV2 {
   function taskReceipt(metadata: Record<string, unknown>) {
     const outcome = TaskOutcome.safeParse(metadata.outcome).data
     const reason = z.string().max(120).safeParse(metadata.stopReason).data
+    const accounting = z.string().max(1000).safeParse(metadata.accounting).data
     const evidence = z.object({ artifacts: z.array(z.unknown()) }).safeParse(metadata.evidence).data
     const handles = (evidence?.artifacts ?? []).slice(0, 8).flatMap((value) => {
       const handle = TaskArtifactHandle.safeParse(value).data
@@ -1406,6 +1407,7 @@ export namespace MessageV2 {
     })
     return [
       ...(outcome ? [`Task outcome: ${outcome}${reason ? ` (${JSON.stringify(reason)})` : ""}.`] : []),
+      ...(accounting ? [accounting] : []),
       ...(handles.length ? ["Saved outputs: use artifact read_file with these exact IDs.", ...handles] : []),
       ...((evidence?.artifacts.length ?? 0) > 8 ? ["More saved outputs are listed in the full child trace."] : []),
     ].join("\n")

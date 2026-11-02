@@ -28884,6 +28884,29 @@
                             "usd",
                             "tokens"
                           ]
+                        },
+                        "continuationCapacity": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "type": "object",
+                            "properties": {
+                              "available": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "ancestorLimited": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "available",
+                              "ancestorLimited"
+                            ]
+                          }
                         }
                       },
                       "required": [
@@ -28894,7 +28917,8 @@
                         "limits",
                         "workers",
                         "approvals",
-                        "available"
+                        "available",
+                        "continuationCapacity"
                       ]
                     },
                     {
@@ -29346,6 +29370,29 @@
                         "usd",
                         "tokens"
                       ]
+                    },
+                    "continuationCapacity": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "available": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "ancestorLimited": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "available",
+                          "ancestorLimited"
+                        ]
+                      }
                     }
                   },
                   "required": [
@@ -29356,7 +29403,8 @@
                     "limits",
                     "workers",
                     "approvals",
-                    "available"
+                    "available",
+                    "continuationCapacity"
                   ]
                 }
               }

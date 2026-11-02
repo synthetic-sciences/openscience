@@ -77,11 +77,13 @@ A conversation keeps the mode chosen when its first subagent starts. Existing co
 
 With bounded runs on, a task receives an allocation from the approved pool. By default this is at most one quarter of the pool, capped at what remains. The lead can assign another amount within the unspent, unreserved balance. The default deadline is 10 minutes, including queueing and approval waits. Changing defaults affects new pools; it does not raise an existing pool.
 
-USD uses the selected BYOK or Ace model's normal cost calculation. Tokens include input, cache and output tokens for subscription or local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
+USD uses the selected BYOK or Ace model's normal cost calculation. A local or custom proxy with configured prices also uses USD. Tokens include input, cache and output tokens for subscriptions and unpriced local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
 
 At 75% usage, or earlier when needed for the final report, the runtime asks the worker to wrap up and blocks further exploration. A limit or deadline produces an **Incomplete** report with a reason and saved partial results. **Complete** is the worker's report, not proof that its scientific conclusions are correct.
 
 Open the task context panel to inspect the subagent allowance. **Continue with remaining allowance** resumes the same child. If you configured an increment, **Increase limit by … and continue** raises the pool once and resumes the child through a new Task call. **Stop here** keeps its files and conversation. An increase does not buy Wallet credits or reset a provider quota. A deliberate change of access route requires a new child; historical tokens are never converted into dollars.
+
+A nested worker also needs allowance from its parent. If that allocation is exhausted, continue the parent task first so it can receive and allocate more. Increasing the root pool alone does not renew the parent's allocation. Worker reports include a short accounting receipt for the lead, retained when the report is compacted.
 
 An active assignment keeps its model and route. Revoked access stops it. Normal completion of the lead's response leaves background workers running; the explicit Stop action cancels its descendants.
 

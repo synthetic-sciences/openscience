@@ -12207,6 +12207,12 @@ export type SessionSubagentBudgetResponses = {
       usd: number
       tokens: number
     }
+    continuationCapacity: {
+      [key: string]: {
+        available: number
+        ancestorLimited: boolean
+      }
+    }
   } | null
 }
 
@@ -12366,6 +12372,12 @@ export type SessionIncreaseSubagentBudgetResponses = {
     available: {
       usd: number
       tokens: number
+    }
+    continuationCapacity: {
+      [key: string]: {
+        available: number
+        ancestorLimited: boolean
+      }
     }
   }
 }

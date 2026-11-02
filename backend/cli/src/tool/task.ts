@@ -21,6 +21,7 @@ import { Log } from "@/util/log"
 import { FileLease } from "@/util/file-lease"
 import { SessionWake } from "@/session/wake"
 import { SubagentBudget } from "@/session/subagent-budget"
+import { SubagentDispatch } from "@/session/subagent-dispatch"
 import { Provider } from "@/provider/provider"
 import { resolveAccessRoute } from "@/session/access-route"
 
@@ -654,7 +655,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                       (error: unknown) => ({ result: undefined, error }),
                     )
                   const route = await resolveAccessRoute(model.providerID, model.modelID)
-                  const unit = route === "managed" || route === "byok" ? "usd" : "tokens"
+                  const unit = SubagentDispatch.unit(await Provider.getModel(model.providerID, model.modelID), route)
                   const stored = await SubagentBudget.read(session.id)
                   const contract = await SubagentBudget.open({
                     rootSessionID: root,
@@ -748,7 +749,17 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                         : failedToolCalls > 0
                           ? `${failedToolCalls} of ${summary.length} tool calls failed along the way; the report is the worker's own account.`
                           : undefined
+          const accounting = budget
+            ? (() => {
+                const w = budget.worker
+                const details = SubagentBudget.summary(budget.pool, w)
+                const format = (value: number) =>
+                  w.unit === "usd" ? `USD ${SubagentBudget.usd(value)}` : `${value} tokens`
+                return `Runtime accounting: model=${w.model.providerID}/${w.model.modelID}; route=${w.route}; ${format(w.spent)} used; ${format(details.pending)} pending; ${format(SubagentBudget.available(budget.pool, w.unit))} shared pool available. ${w.unit === "usd" ? "Calculated allowance use, not a settled Wallet charge." : "Provider token use, not account quota."}`
+              })()
+            : undefined
           const body = [
+            accounting,
             text || `(no text; ${summary.length} tool calls in this turn)`,
             TaskEvidence.describe(evidence),
             `task_id: ${session.id}`,
@@ -767,6 +778,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               failedToolCalls,
               partialToolCalls,
               usage,
+              ...(accounting ? { accounting } : {}),
               ...(budget ? { budget: SubagentBudget.summary(budget.pool, budget.worker) } : {}),
               outcome: taskOutcome.outcome,
               stopReason: taskOutcome.stopReason,
