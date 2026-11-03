@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Preserve cancellation and deadline reasons when usage arrives late. Report individually cancelled background workers to the lead, and use one subagent model setting so caller inheritance is explicit.
+
 - Explain refused subagent requests without implying unused allowances were spent. Keep bounded command output, including interrupted output, in worker reports and compacted receipts.
 
 - Let subagents use their full approved work allowance until completion or a runtime limit. Return execution evidence for main-agent assessment on every exit, including normal completion, without an automatic early handoff or separate summarizer.

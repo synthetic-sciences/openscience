@@ -52,6 +52,25 @@ describe("bounded subagent ledger", () => {
       },
     })
   })
+  for (const reason of ["cancelled", "deadline"] as const) {
+    test(`late settlement preserves the ${reason} stop reason`, async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await SubagentBudget.open(input("a"))
+          await SubagentBudget.reserve("a", "accepted", 100)
+          await SubagentBudget.stop("a", reason)
+          await SubagentBudget.release("a")
+          await SubagentBudget.settle("a", "accepted", 100)
+          const worker = (await SubagentBudget.read("a"))!.worker
+          expect(worker.stopReason).toBe(reason)
+          expect(worker.spent).toBe(100)
+          expect(worker.calls.accepted).toMatchObject({ state: "settled", consumed: 100 })
+        },
+      })
+    })
+  }
   test("returns unused allocation and reacquires it without resetting consumption", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

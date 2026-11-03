@@ -34083,6 +34083,10 @@
                           "modelID"
                         ]
                       },
+                      "workerModelOverride": {
+                        "description": "Explicit user model override for this run",
+                        "type": "boolean"
+                      },
                       "autonomy": {
                         "default": "balanced",
                         "type": "string",
@@ -34528,6 +34532,10 @@
                           "modelID"
                         ]
                       },
+                      "workerModelOverride": {
+                        "description": "Explicit user model override for this run",
+                        "type": "boolean"
+                      },
                       "autonomy": {
                         "default": "balanced",
                         "type": "string",
@@ -34721,6 +34729,10 @@
                           "providerID",
                           "modelID"
                         ]
+                      },
+                      "workerModelOverride": {
+                        "description": "Explicit user model override for this run",
+                        "type": "boolean"
                       },
                       "autonomy": {
                         "default": "balanced",
@@ -35325,6 +35337,10 @@
                           "providerID",
                           "modelID"
                         ]
+                      },
+                      "workerModelOverride": {
+                        "description": "Explicit user model override for this run",
+                        "type": "boolean"
                       },
                       "autonomy": {
                         "default": "balanced",
@@ -59026,6 +59042,10 @@
                   "providerID",
                   "modelID"
                 ]
+              },
+              "workerModelOverride": {
+                "description": "Explicit user model override for this run",
+                "type": "boolean"
               },
               "autonomy": {
                 "default": "balanced",

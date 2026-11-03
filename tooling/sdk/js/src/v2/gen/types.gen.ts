@@ -240,6 +240,10 @@ export type UserMessage = {
       providerID: string
       modelID: string
     }
+    /**
+     * Explicit user model override for this run
+     */
+    workerModelOverride?: boolean
     autonomy?: "interactive" | "balanced" | "autonomous"
   }
   variant?: string
@@ -13694,6 +13698,10 @@ export type SessionPromptData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     system?: string
@@ -13894,6 +13902,10 @@ export type SessionPromptAsyncData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     system?: string
@@ -13952,6 +13964,10 @@ export type SessionCommandData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     variant?: string
@@ -14184,6 +14200,10 @@ export type RuntimePromptData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     requestID?: string

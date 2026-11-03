@@ -41,6 +41,7 @@ export namespace MessageV2 {
         modelID: z.string(),
       })
       .optional(),
+    workerModelOverride: z.boolean().optional().describe("Explicit user model override for this run"),
     autonomy: DelegationAutonomy.default("balanced"),
   })
   export type DelegationSettings = z.infer<typeof DelegationSettings>

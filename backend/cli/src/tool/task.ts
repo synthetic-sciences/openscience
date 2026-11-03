@@ -341,12 +341,14 @@ type Background = {
   controller: AbortController
   result: Promise<TaskAttempt.Result>
   delivered: boolean
+  parentStopped: boolean
 }
 const background = new Map<string, Background>()
 
 export function cancelBackgroundTasks(parentID: string) {
   for (const [childID, entry] of background) {
     if (entry.parentID !== parentID) continue
+    entry.parentStopped = true
     entry.controller.abort(new SubagentBudget.LimitError("cancelled"))
     cancelBackgroundTasks(childID)
   }
@@ -502,7 +504,11 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           : undefined
       const model =
         contract?.model ??
-        (userLimits.model ? Provider.parseModel(userLimits.model) : (settings.workerModel ?? leadModel))
+        (settings.workerModelOverride && settings.workerModel
+          ? settings.workerModel
+          : userLimits.model
+            ? Provider.parseModel(userLimits.model)
+            : leadModel)
       const variant = contract
         ? (contract.variant ??
           (await Session.messages({ sessionID: reserved.childSessionID }))
@@ -890,14 +896,20 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             }),
           })
         })
-        const entry: Background = { parentID: ctx.sessionID, controller, result: outcome, delivered: false }
+        const entry: Background = {
+          parentID: ctx.sessionID,
+          controller,
+          result: outcome,
+          delivered: false,
+          parentStopped: false,
+        }
         background.set(session.id, entry)
         outcome.then(async (result) => {
           background.delete(session.id)
           await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
           // A call that joined the worker has already taken the report.
           if (entry.delivered) return
-          if (result.metadata.stopReason === "cancelled") return
+          if (entry.parentStopped) return
           await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
             log.error("background task completion could not wake the parent", { error }),
           )

@@ -497,7 +497,8 @@ export namespace SubagentBudget {
       call.consumed = Amount.parse(amount)
       call.state = "settled"
       w.spent += amount
-      if (consumed(pool, sessionID) >= w.limit) w.stopReason = w.unit === "usd" ? "budget_limit" : "token_limit"
+      if (!w.stopReason && consumed(pool, sessionID) >= w.limit)
+        w.stopReason = w.unit === "usd" ? "budget_limit" : "token_limit"
       return { pool, result: undefined }
     })
   }
@@ -543,6 +544,7 @@ export namespace SubagentBudget {
       w.handoff = input.handoff.slice(0, 4000)
       w.outcome = input.outcome
       w.reportReason = input.reason
+      if (input.reason === "cancelled") w.stopReason ??= "cancelled"
       return { pool, result: undefined }
     })
   }

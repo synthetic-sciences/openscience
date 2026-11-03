@@ -24,7 +24,13 @@ async function fixture(
       abort?: AbortSignal,
     ) => Promise<Awaited<ReturnType<Awaited<ReturnType<typeof TaskTool.init>>["execute"]>>>
     requests: unknown[]
-    selection: { variant?: string; permission?: () => Promise<void>; queuedAt?: number }
+    selection: {
+      variant?: string
+      permission?: () => Promise<void>
+      queuedAt?: number
+      workerModel?: typeof model
+      workerModelOverride?: boolean
+    }
   }) => Promise<void>,
   deadlineMs = 600000,
   tokens = 200000,
@@ -33,7 +39,13 @@ async function fixture(
   priced = false,
   premium = false,
 ) {
-  const selection: { variant?: string; permission?: () => Promise<void>; queuedAt?: number } = {}
+  const selection: {
+    variant?: string
+    permission?: () => Promise<void>
+    queuedAt?: number
+    workerModel?: typeof model
+    workerModelOverride?: boolean
+  } = {}
   const requests: unknown[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -173,7 +185,14 @@ async function fixture(
               messages: [],
               ask: selection.permission ?? (async () => {}),
               metadata: async () => {},
-              extra: { bypassAgentCheck: !selection.permission, variant: selection.variant },
+              extra: {
+                bypassAgentCheck: !selection.permission,
+                variant: selection.variant,
+                delegationSettings: {
+                  workerModel: selection.workerModel,
+                  workerModelOverride: selection.workerModelOverride,
+                },
+              },
             },
           )
         }
@@ -550,6 +569,25 @@ test("default-off Task dispatch stays unbounded even with tiny suggested limits"
     expect(result.metadata.budget).toBeUndefined()
   })
 })
+test("Same as calling agent overrides an older worker-model preference", async () => {
+  await fixture(async ({ execute, selection }) => {
+    selection.workerModel = { providerID: STRESS_PROVIDER_ID, modelID: "fixture-model-compact" }
+    const result = await execute()
+    expect((await SubagentBudget.read(result.metadata.sessionId as string))?.worker.model).toEqual(model)
+  })
+})
+
+test("an explicit run worker-model override selects the requested model", async () => {
+  await fixture(async ({ execute, selection }) => {
+    selection.workerModel = { providerID: STRESS_PROVIDER_ID, modelID: "fixture-model-compact" }
+    selection.workerModelOverride = true
+    const result = await execute()
+    expect((await SubagentBudget.read(result.metadata.sessionId as string))?.worker.model).toEqual(
+      selection.workerModel,
+    )
+  })
+})
+
 test("explicit user model overrides both caller and specialist profile", async () => {
   await fixture(async ({ execute }) => {
     await Config.updateGlobal(
@@ -582,10 +620,45 @@ test("normal parent completion keeps a background child; explicit idle-parent st
       while ((await SubagentBudget.read(childID))?.worker.active && Date.now() < until) await Bun.sleep(10)
       expect((await SubagentBudget.read(childID))?.worker.stopReason).toBe("cancelled")
       expect((await SubagentBudget.read(childID))?.worker.active).toBe(false)
+      await Bun.sleep(50)
+      const reports = (await Session.messages({ sessionID: parent.id }))
+        .flatMap((message) => message.parts)
+        .filter((part) => part.type === "text" && part.synthetic && part.text.includes(`task_id: ${childID}`))
+      expect(reports).toHaveLength(0)
     },
     600000,
     200000,
     2000,
+  )
+})
+
+test("stopping only a background child delivers its cancellation report to the parent", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const first = await execute(undefined, true)
+      const childID = first.metadata.sessionId as string
+      const until = Date.now() + 5000
+      while (!requests.length && Date.now() < until) await Bun.sleep(10)
+      expect(requests.length).toBeGreaterThan(0)
+      SessionPrompt.cancel(childID)
+      const reports = async () =>
+        (await Session.messages({ sessionID: parent.id }))
+          .flatMap((message) => message.parts)
+          .filter((part) => part.type === "text" && part.synthetic && part.text.includes(`task_id: ${childID}`))
+      while (!(await reports()).length && Date.now() < until) await Bun.sleep(10)
+      expect(await reports()).toMatchObject([{ text: expect.stringContaining("cancelled") }])
+      expect((await SubagentBudget.read(childID))?.worker.stopReason).toBe("cancelled")
+      while (
+        (await Session.messages({ sessionID: parent.id })).every(
+          (message) => message.info.role !== "assistant" || !message.info.time.completed,
+        ) &&
+        Date.now() < until
+      )
+        await Bun.sleep(10)
+    },
+    600000,
+    200000,
+    400,
   )
 })
 
