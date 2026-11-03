@@ -1,9 +1,32 @@
-import { Database } from "bun:sqlite"
+import { Database, type SQLQueryBindings } from "bun:sqlite"
 import path from "node:path"
 import fs from "node:fs/promises"
 import { randomUUID, createHash } from "node:crypto"
 import { FileLease } from "@/util/file-lease"
 import { DataRootBarrier } from "@/global/data-root-barrier"
+
+// Bun 1.3.14 can keep statements beyond its query cache alive after close; each access must own them.
+class Connection extends Database {
+  private readonly statements = new Set<{ finalize(): void }>()
+
+  override query<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string) {
+    const statement = super.query<T, P>(sql)
+    this.statements.add(statement)
+    return statement
+  }
+
+  override prepare<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string, params?: P) {
+    const statement = super.prepare<T, P>(sql, params)
+    this.statements.add(statement)
+    return statement
+  }
+
+  override close(throwOnError = true) {
+    for (const statement of this.statements) statement.finalize()
+    this.statements.clear()
+    super.close(throwOnError)
+  }
+}
 
 /** Session records share one transaction boundary. Legacy files are retained as
  * backups, but after import the database is authoritative, including deletes. */
@@ -82,7 +105,7 @@ export namespace ResearchDatabase {
     const access = async <T>(fn: (db: Database) => T): Promise<T> => {
       await using operation = await DataRootBarrier.enter(filepath)
       await fs.mkdir(root, { recursive: true })
-      const db = new Database(filepath, { create: true, strict: true })
+      const db = new Connection(filepath, { create: true, strict: true })
       try {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")

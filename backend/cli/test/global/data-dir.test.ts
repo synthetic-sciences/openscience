@@ -19,10 +19,7 @@ const unreadable = test.skipIf(process.platform === "win32")
 const roots: string[] = []
 
 afterEach(async () => {
-  // Windows can briefly retain a closed database's directory; persistent locks must still fail teardown.
-  await Promise.all(
-    roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })),
-  )
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })))
 })
 
 async function root() {

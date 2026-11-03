@@ -71,6 +71,18 @@ describe("bounded subagent ledger", () => {
       })
     })
   }
+  test("a later stop cannot replace an established cancellation", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await SubagentBudget.open(input("a"))
+        await SubagentBudget.stop("a", "cancelled")
+        await SubagentBudget.stop("a", "deadline")
+        expect((await SubagentBudget.read("a"))?.worker.stopReason).toBe("cancelled")
+      },
+    })
+  })
   test("returns unused allocation and reacquires it without resetting consumption", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

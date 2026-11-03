@@ -111,6 +111,11 @@ export namespace SubagentBudget {
   })
   const running = new Map<string, { parentID: string; controller: AbortController }>()
 
+  function halt(worker: Worker, reason: Reason) {
+    if (!worker.stopReason || worker.stopReason === "budget_wrapup" || worker.stopReason === "deadline_wrapup")
+      worker.stopReason = reason
+  }
+
   export async function watch(worker: Worker, signal: AbortSignal) {
     const controller = new AbortController()
     const abort = () => controller.abort(signal.reason)
@@ -138,10 +143,17 @@ export namespace SubagentBudget {
         clearTimeout(timer)
         clearInterval(poll)
         signal.removeEventListener("abort", abort)
+        if (controller.signal.reason instanceof LimitError)
+          await stop(worker.sessionID, controller.signal.reason.reason)
         if (running.get(worker.sessionID)?.controller === controller) running.delete(worker.sessionID)
         await release(worker.sessionID)
       },
     }
+  }
+
+  export function cancel(sessionID: string) {
+    running.get(sessionID)?.controller.abort(new LimitError("cancelled"))
+    cancelChildren(sessionID)
   }
 
   export function cancelChildren(sessionID: string) {
@@ -162,7 +174,7 @@ export namespace SubagentBudget {
           w.parentSessionID === sessionID ||
           (!!pool.workers[w.parentSessionID] && descendant(pool.workers[w.parentSessionID]))
         for (const w of Object.values(pool.workers))
-          if ((w.active || stopping.has(w.sessionID)) && descendant(w)) w.stopReason = "cancelled"
+          if ((w.active || stopping.has(w.sessionID)) && descendant(w)) halt(w, "cancelled")
         return { pool, result: undefined }
       })
     })().catch(() => undefined)
@@ -497,8 +509,7 @@ export namespace SubagentBudget {
       call.consumed = Amount.parse(amount)
       call.state = "settled"
       w.spent += amount
-      if (!w.stopReason && consumed(pool, sessionID) >= w.limit)
-        w.stopReason = w.unit === "usd" ? "budget_limit" : "token_limit"
+      if (consumed(pool, sessionID) >= w.limit) halt(w, w.unit === "usd" ? "budget_limit" : "token_limit")
       return { pool, result: undefined }
     })
   }
@@ -516,7 +527,7 @@ export namespace SubagentBudget {
     if (!id) return
     await mutate(id, (current) => {
       const pool = current!
-      pool.workers[sessionID].stopReason = reason
+      halt(pool.workers[sessionID], reason)
       return { pool, result: undefined }
     })
   }

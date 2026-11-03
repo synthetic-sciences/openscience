@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
+
 - Preserve cancellation and deadline reasons when usage arrives late. Report individually cancelled background workers to the lead, and use one subagent model setting so caller inheritance is explicit.
 
 - Explain refused subagent requests without implying unused allowances were spent. Keep bounded command output, including interrupted output, in worker reports and compacted receipts.

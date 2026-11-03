@@ -32,6 +32,25 @@ test("legacy session records migrate atomically with IDs and original files pres
   expect(await Bun.file(path.join(tmp.path, "storage", ...records[0]!.key) + ".json").json()).toEqual(records[0]!.data)
 })
 
+for (const method of ["query", "prepare"] as const) {
+  test(`research access closes ${method} statements after exceeding the SQLite cache`, async () => {
+    await using tmp = await tmpdir()
+    const store = ResearchDatabase.create(tmp.path)
+    const statements = await store.query((db) => {
+      const retained = [db[method]<{ value: number }, []>("SELECT 42 AS value")]
+      expect(retained[0]!.get()).toEqual({ value: 42 })
+      for (let index = 0; index < Database.MAX_QUERY_CACHE_SIZE + 5; index++) {
+        const statement = db.query<{ value: number }, []>(`SELECT ${index} AS value`)
+        statement.get()
+        retained.push(statement)
+      }
+      return retained
+    })
+    for (const statement of statements) expect(() => statement.get()).toThrow()
+    expect(await store.list([])).toEqual([])
+  })
+}
+
 test("a corrupt legacy record cannot commit a partial import or erase its source", async () => {
   await using tmp = await tmpdir()
   const store = ResearchDatabase.create(tmp.path)

@@ -529,7 +529,7 @@ export namespace SessionPrompt {
     if (owner && controller?.signal !== owner) return
     if (reason !== completed) {
       cancelBackgroundTasks(sessionID)
-      SubagentBudget.cancelChildren(sessionID)
+      SubagentBudget.cancel(sessionID)
     }
     if (!controller) return
     controller.abort(reason)
