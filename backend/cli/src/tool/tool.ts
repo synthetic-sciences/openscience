@@ -103,11 +103,13 @@ export namespace Tool {
         toolInfo.execute = async (args, ctx) => {
           const bounded = await SubagentBudget.read(ctx.sessionID)
           if (bounded?.worker.stopReason) throw new SubagentBudget.LimitError(bounded.worker.stopReason)
+          if (bounded && !bounded.worker.active)
+            throw new SubagentBudget.LimitError("cancelled", "Subagent assignment is no longer active")
           if (bounded?.worker.deadline && bounded.worker.deadline <= Date.now())
             throw new SubagentBudget.LimitError("deadline")
           if (bounded?.worker.wrapup)
             throw new SubagentBudget.LimitError(
-              "budget_wrapup",
+              bounded.worker.wrapupReason ?? "budget_wrapup",
               "Subagent is wrapping up; return the handoff without further tools",
             )
           PlanMode.enforce(id, ctx.agent)

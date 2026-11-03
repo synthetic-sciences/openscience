@@ -60,3 +60,43 @@ test("separate processes cannot double-grant or double-reserve the root allowanc
     },
   })
 })
+
+test("process recovery retains the accepted timestamp and deadline of the same assignment", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const acceptedAt = Date.now() - 8000
+      const deadline = acceptedAt + 10000
+      await SubagentBudget.open({
+        rootSessionID: "root",
+        parentSessionID: "root",
+        sessionID: "child",
+        assignmentID: "assignment",
+        objective: "test",
+        expectedOutput: "report",
+        model: { providerID: "test", modelID: "test" },
+        route: "subscription",
+        unit: "tokens",
+        allocation: 150,
+        settings: { tokens: 200 },
+        acceptedAt,
+        deadline,
+      })
+      const gate = `${tmp.path}/recover-gate`
+      await Bun.write(gate, "start")
+      const child = spawn(
+        [process.execPath, fixture, tmp.path, "recover", "child", "assignment", `${tmp.path}/recover-ready`, gate],
+        { stdout: "pipe", stderr: "pipe" },
+      )
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      if (exit !== 0) throw new Error(`Recovery worker exited ${exit}: ${stderr}`)
+      expect(JSON.parse(stdout)).toEqual({ admitted: true, acceptedAt, deadline })
+      expect((await SubagentBudget.read("child"))!.worker).toMatchObject({ acceptedAt, deadline })
+    },
+  })
+})

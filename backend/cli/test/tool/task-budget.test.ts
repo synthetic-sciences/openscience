@@ -21,16 +21,19 @@ async function fixture(
       taskID?: string,
       background?: boolean,
       replay?: boolean,
+      abort?: AbortSignal,
     ) => Promise<Awaited<ReturnType<Awaited<ReturnType<typeof TaskTool.init>>["execute"]>>>
     requests: unknown[]
+    selection: { variant?: string; permission?: () => Promise<void>; queuedAt?: number }
   }) => Promise<void>,
   deadlineMs = 600000,
   tokens = 200000,
   delay = 0,
-  recovery = false,
+  recovery: boolean | "cooperative" | "deadline" | "deadline-ignored" = false,
   priced = false,
   premium = false,
 ) {
+  const selection: { variant?: string; permission?: () => Promise<void>; queuedAt?: number } = {}
   const requests: unknown[] = []
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -43,10 +46,22 @@ async function fixture(
       if (recovery && !internal) await Bun.sleep(10)
       if (delay) await Bun.sleep(delay)
       const chunk = (content: string, finish: string | null) =>
-        `data: ${JSON.stringify({ id: "task-budget", object: "chat.completion.chunk", created: 1, model: model.modelID, choices: [{ index: 0, delta: finish ? {} : { role: "assistant", content }, finish_reason: finish }], ...(finish ? { usage: { prompt_tokens: recovery && !internal && turn === 1 ? 79990 : 50, completion_tokens: 10, total_tokens: 60 } } : {}) })}\n\n`
+        `data: ${JSON.stringify({ id: "task-budget", object: "chat.completion.chunk", created: 1, model: model.modelID, choices: [{ index: 0, delta: finish ? {} : { role: "assistant", content }, finish_reason: finish }], ...(finish ? { usage: { prompt_tokens: (recovery === true || recovery === "cooperative") && !internal && turn === 1 ? 79990 : recovery === true && !internal && turn === 2 ? 19990 : 50, completion_tokens: 10, total_tokens: 60 } } : {}) })}\n\n`
+      const handoff = (recovery === "cooperative" || recovery === "deadline") && !internal && turn === 2
       return new Response(
-        chunk("Outcome: Complete\nFindings: fixture done.", null) +
-          chunk("", recovery && !internal ? "length" : "stop") +
+        chunk(
+          handoff ? "Outcome: Incomplete\nFindings: fixture partial." : "Outcome: Complete\nFindings: fixture done.",
+          null,
+        ) +
+          chunk(
+            "",
+            !internal &&
+              (recovery === true ||
+                recovery === "deadline-ignored" ||
+                ((recovery === "cooperative" || recovery === "deadline") && turn === 1))
+              ? "length"
+              : "stop",
+          ) +
           "data: [DONE]\n\n",
         { headers: { "content-type": "text/event-stream" } },
       )
@@ -67,6 +82,7 @@ async function fixture(
               ...provider.provider[STRESS_PROVIDER_ID].models,
               [STRESS_PROVIDER_MODEL]: {
                 ...provider.provider[STRESS_PROVIDER_ID].models[STRESS_PROVIDER_MODEL],
+                variants: { low: { reasoningEffort: "low" }, high: { reasoningEffort: "high" } },
                 ...(premium
                   ? {
                       cost: { input: 10, output: 50, cache_read: 1, cache_write: 12.5 },
@@ -108,7 +124,7 @@ async function fixture(
           time: { created: Date.now() },
         })
         const identity = { messageID: "", callID: "" }
-        const execute = async (taskID?: string, background = false, replay = false) => {
+        const execute = async (taskID?: string, background = false, replay = false, abort?: AbortSignal) => {
           const messageID = replay ? identity.messageID : Identifier.ascending("message")
           if (!replay) {
             identity.messageID = messageID
@@ -128,6 +144,16 @@ async function fixture(
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: Date.now() },
           })
+          if (!replay && (selection.permission || selection.queuedAt !== undefined))
+            await Session.updatePart({
+              id: Identifier.ascending("part"),
+              sessionID: parent.id,
+              messageID,
+              type: "tool",
+              tool: "task",
+              callID: identity.callID,
+              state: { status: "running", input: {}, time: { start: selection.queuedAt ?? Date.now() } },
+            })
           return (await TaskTool.init()).execute(
             {
               description: "Bounded probe",
@@ -143,15 +169,15 @@ async function fixture(
               messageID,
               callID: identity.callID,
               agent: "research",
-              abort: new AbortController().signal,
+              abort: abort ?? new AbortController().signal,
               messages: [],
-              ask: async () => {},
+              ask: selection.permission ?? (async () => {}),
               metadata: async () => {},
-              extra: { bypassAgentCheck: true },
+              extra: { bypassAgentCheck: !selection.permission, variant: selection.variant },
             },
           )
         }
-        await fn({ parent, execute, requests })
+        await fn({ parent, execute, requests, selection })
       },
     })
   } finally {
@@ -184,6 +210,18 @@ test("actual Task refuses provider dispatch when the token allowance cannot fit 
       expect(result.metadata.outcome).toBe("partial")
       expect(result.metadata.stopReason).toBe("token_limit")
       expect(requests).toHaveLength(0)
+      expect(result.metadata.budget).toMatchObject({ spent: 0, pending: 0, remaining: 25 })
+      expect(result.output).toContain("not proof that the grant was spent")
+      expect(result.output).toContain("requests refused before dispatch add no model usage")
+      const compacted = MessageV2.toolSummary("task", {
+        status: "completed",
+        title: result.title,
+        input: {},
+        output: result.output,
+        metadata: result.metadata,
+        time: { start: 0, end: 1 },
+      })
+      expect(compacted).toContain("not proof that the grant was spent")
     },
     600000,
     100,
@@ -206,12 +244,234 @@ test("Task continuation uses the same child and keeps its cumulative ledger", as
   })
 })
 
+test("a refused paid request reports unused allowance rather than a spent grant", async () => {
+  await fixture(
+    async ({ execute, requests }) => {
+      await Config.updateGlobal(
+        { subagents: { enabled: true, usd: 0.000004, tokens: 200000, deadlineMs: 600000 } },
+        { preserveInstances: true },
+      )
+      const result = await execute()
+      expect(requests).toHaveLength(0)
+      expect(result.metadata.stopReason).toBe("budget_limit")
+      expect(result.metadata.budget).toMatchObject({ unit: "usd", spent: 0, pending: 0, remaining: 1000 })
+      expect(result.output).toContain("not proof that the grant was spent")
+      expect(result.output).toContain("requests refused before dispatch add no model usage")
+    },
+    600000,
+    200000,
+    0,
+    false,
+    true,
+  )
+})
+
 test("Task deadline stops work with a typed reason and no false completion", async () => {
   await fixture(async ({ execute }) => {
     const result = await execute()
     expect(result.metadata.outcome).toBe("partial")
     expect(result.metadata.stopReason).toBe("deadline")
   }, 1)
+})
+
+test("a saved legacy allowance handoff keeps its model when the global policy changes", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const pending = execute()
+      while (!requests.length) await Bun.sleep(2)
+      const child = (await Session.children(parent.id))[0]!
+      await SubagentBudget.wrapup(child.id)
+      const first = await pending
+      const childID = first.metadata.sessionId as string
+      const before = (await SubagentBudget.read(childID))!
+      expect(first.metadata.stopReason).toBe("budget_wrapup")
+      expect(before.worker.stopReason).toBeUndefined()
+      expect(before.worker.reportReason).toBe("budget_wrapup")
+      const messages = await Session.messages({ sessionID: childID })
+      const calls = Object.keys(before.worker.calls)
+      await Config.updateGlobal(
+        { subagents: { enabled: true, deadlineMs: 600000, model: `${STRESS_PROVIDER_ID}/fixture-model-compact` } },
+        { preserveInstances: true },
+      )
+      const resumed = await execute(childID)
+      const after = (await SubagentBudget.read(childID))!
+      expect(resumed.metadata.outcome).toBe("completed")
+      expect(after.worker.model).toEqual(model)
+      expect(after.worker.spent).toBeGreaterThan(before.worker.spent)
+      expect(Object.keys(after.worker.calls)).toEqual(expect.arrayContaining(calls))
+      expect((await Session.messages({ sessionID: childID })).map((message) => message.info.id)).toEqual(
+        expect.arrayContaining(messages.map((message) => message.info.id)),
+      )
+      const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+      expect(visible.at(-1)).toMatchObject({ model: STRESS_PROVIDER_MODEL })
+      expect(JSON.stringify(visible.at(-1))).toContain("fixture partial")
+    },
+    600000,
+    400000,
+    0,
+    "cooperative",
+  )
+})
+
+for (const legacy of [false, true]) {
+  test(`a limited continuation keeps its reasoning variant${legacy ? " from a legacy contract" : ""}`, async () => {
+    await fixture(
+      async ({ parent, execute, requests, selection }) => {
+        selection.variant = "low"
+        const first = await execute()
+        const childID = first.metadata.sessionId as string
+        expect(first.metadata.stopReason).toBe("token_limit")
+        const before = (await SubagentBudget.read(childID))!
+        expect(before.worker).toMatchObject({ variant: "low" })
+        if (legacy) {
+          Reflect.deleteProperty(before.worker, "variant")
+          await Storage.write(["subagent_budget", parent.projectID, parent.id], before.pool)
+        }
+        await SubagentBudget.increase(parent.id, {
+          unit: "tokens",
+          amount: 200000,
+          revision: before.pool.revision,
+          key: crypto.randomUUID(),
+        })
+        selection.variant = "high"
+        await Config.updateGlobal(
+          { subagents: { enabled: true, deadlineMs: 600000, model: `${STRESS_PROVIDER_ID}/fixture-model-compact` } },
+          { preserveInstances: true },
+        )
+        const resumed = await execute(childID)
+        expect(resumed.metadata.outcome).toBe("completed")
+        const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+        expect(visible.at(-1)).toMatchObject({ model: STRESS_PROVIDER_MODEL, reasoning_effort: "low" })
+        const messages = await Session.messages({ sessionID: childID })
+        const user = messages.findLast((message) => message.info.role === "user")!.info
+        expect(user.role === "user" && user.variant).toBe("low")
+      },
+      600000,
+      100,
+    )
+  })
+}
+
+test("a limited continuation keeps an unset reasoning variant", async () => {
+  await fixture(
+    async ({ parent, execute, requests, selection }) => {
+      const first = await execute()
+      expect(first.metadata.stopReason).toBe("token_limit")
+      const pool = (await SubagentBudget.snapshot(parent.id))!
+      await SubagentBudget.increase(parent.id, {
+        unit: "tokens",
+        amount: 200000,
+        revision: pool.revision,
+        key: crypto.randomUUID(),
+      })
+      selection.variant = "high"
+      const resumed = await execute(first.metadata.sessionId as string)
+      expect(resumed.metadata.outcome).toBe("completed")
+      const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+      expect(visible.at(-1)).not.toHaveProperty("reasoning_effort")
+    },
+    600000,
+    100,
+  )
+})
+
+test("a deadline continuation keeps its model when the global policy changes", async () => {
+  await fixture(async ({ execute, requests }) => {
+    const first = await execute()
+    expect(first.metadata.stopReason).toBe("deadline")
+    await Config.updateGlobal(
+      { subagents: { enabled: true, deadlineMs: 600000, model: `${STRESS_PROVIDER_ID}/fixture-model-compact` } },
+      { preserveInstances: true },
+    )
+    const resumed = await execute(first.metadata.sessionId as string)
+    expect(resumed.metadata.outcome).toBe("completed")
+    const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+    expect(visible.at(-1)).toMatchObject({ model: STRESS_PROVIDER_MODEL })
+  }, 1)
+})
+
+test("a deliberate completed follow-up can select a new model on the same route and unit", async () => {
+  await fixture(async ({ execute, requests }) => {
+    const first = await execute()
+    expect(first.metadata.outcome).toBe("completed")
+    const childID = first.metadata.sessionId as string
+    const before = (await SubagentBudget.read(childID))!
+    await Config.updateGlobal(
+      { subagents: { enabled: true, deadlineMs: 600000, model: `${STRESS_PROVIDER_ID}/fixture-model-compact` } },
+      { preserveInstances: true },
+    )
+    const resumed = await execute(childID)
+    const after = (await SubagentBudget.read(childID))!
+    expect(resumed.metadata.outcome).toBe("completed")
+    expect(after.worker).toMatchObject({
+      model: { providerID: STRESS_PROVIDER_ID, modelID: "fixture-model-compact" },
+      route: "local",
+      unit: "tokens",
+    })
+    expect(after.worker.spent).toBeGreaterThan(before.worker.spent)
+    const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+    expect(visible.at(-1)).toMatchObject({ model: "fixture-model-compact" })
+  })
+})
+
+test("a pinned continuation cannot dispatch a revoked provider", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const first = await execute()
+      expect(first.metadata.stopReason).toBe("token_limit")
+      const pool = (await SubagentBudget.snapshot(parent.id))!
+      await SubagentBudget.increase(parent.id, {
+        unit: "tokens",
+        amount: 200000,
+        revision: pool.revision,
+        key: crypto.randomUUID(),
+      })
+      await Config.updateGlobal({ disabled_providers: [STRESS_PROVIDER_ID] }, { preserveInstances: true })
+      const resumed = await execute(first.metadata.sessionId as string)
+      expect(resumed.metadata.outcome).toBe("error")
+      expect(resumed.metadata.stopReason).toBe("provider_error")
+      expect(requests).toHaveLength(0)
+    },
+    600000,
+    100,
+  )
+})
+
+test("a pinned continuation refuses a changed access route before provider dispatch", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const first = await execute()
+      const childID = first.metadata.sessionId as string
+      expect(first.metadata.stopReason).toBe("token_limit")
+      const before = (await SubagentBudget.read(childID))!
+      await SubagentBudget.increase(parent.id, {
+        unit: "tokens",
+        amount: 200000,
+        revision: before.pool.revision,
+        key: crypto.randomUUID(),
+      })
+      await Config.updateGlobal(
+        {
+          provider: {
+            [STRESS_PROVIDER_ID]: {
+              models: { [STRESS_PROVIDER_MODEL]: { options: { baseURL: "https://route-change.invalid/v1" } } },
+            },
+          },
+        },
+        { preserveInstances: true },
+      )
+      const resumed = await execute(childID)
+      expect(resumed.metadata.outcome).toBe("partial")
+      expect(resumed.metadata.stopReason).toBe("route_changed")
+      const after = (await SubagentBudget.read(childID))!
+      expect(after.worker.route).toBe("local")
+      expect(after.worker.unit).toBe("tokens")
+      expect(after.worker.calls).toEqual(before.worker.calls)
+      expect(requests).toHaveLength(0)
+    },
+    600000,
+    100,
+  )
 })
 
 test("user increase and continue resumes the same real Task child once", async () => {
@@ -329,7 +589,7 @@ test("normal parent completion keeps a background child; explicit idle-parent st
   )
 })
 
-test("a real child that ignores handoff cannot extend output-length recovery past its final call", async () => {
+test("a non-cooperative child stops on runtime exhaustion without a final-report exemption", async () => {
   await fixture(
     async ({ execute, requests }) => {
       const result = await execute()
@@ -339,9 +599,10 @@ test("a real child that ignores handoff cannot extend output-length recovery pas
         stopReason: result.metadata.stopReason,
         budget: result.metadata.budget,
       }).toMatchObject({ calls: 2 })
-      expect(JSON.stringify(visible[1])).toContain("Runtime allowance notice")
+      expect(JSON.stringify(visible)).not.toContain("Runtime allowance notice")
       expect(result.metadata.outcome).toBe("partial")
-      expect(result.metadata.stopReason).toBe("budget_wrapup")
+      expect(result.metadata.stopReason).toBe("token_limit")
+      expect(result.output).toContain("Task completion: unverified.")
     },
     600000,
     400000,
@@ -481,6 +742,8 @@ test("the calling model receives runtime accounting before and after Task compac
     expect(compacted).toContain("Runtime accounting:")
     expect(compacted).toContain("shared pool available")
     expect(compacted).toContain("model=stress/fixture-model")
+    expect(result.output).toContain("Task completion: unverified.")
+    expect(compacted).toContain("Task completion: unverified.")
   })
 })
 
@@ -500,6 +763,174 @@ test("a Standard priced Task can start within its default USD 1.25 grant while F
     600000,
     200000,
     0,
+    false,
+    false,
+    true,
+  )
+})
+
+for (const mode of ["preaborted", "cancelled", "all-cancelled", "mixed", "joined"] as const) {
+  test(`background completion delivery survives ${mode} waiters`, async () => {
+    await fixture(
+      async ({ parent, execute, requests }) => {
+        const first = await execute(undefined, true)
+        const childID = first.metadata.sessionId as string
+        while (!requests.length) await Bun.sleep(5)
+        const controller = new AbortController()
+        if (mode === "preaborted") controller.abort()
+        const waiting = execute(childID, false, false, controller.signal)
+        const cancelled = mode !== "joined"
+        const failure = waiting.catch((error: unknown) => error)
+        const second =
+          mode === "mixed" || mode === "joined" || mode === "all-cancelled"
+            ? execute(childID, false, false, mode === "all-cancelled" ? controller.signal : undefined)
+            : undefined
+        const secondResult = second?.catch((error: unknown) => error)
+        if (cancelled && mode !== "preaborted") {
+          await Bun.sleep(50)
+          controller.abort()
+        }
+        const result = await failure
+        if (cancelled) expect(result).toMatchObject({ message: expect.stringContaining("cancelled") })
+        else
+          expect(result).toMatchObject({
+            metadata: { sessionId: childID, outcome: "completed" },
+            output: expect.stringContaining("Waited for this background worker"),
+          })
+        if (secondResult) {
+          const result = await secondResult
+          if (mode === "all-cancelled") expect(result).toMatchObject({ message: expect.stringContaining("cancelled") })
+          else
+            expect(result).toMatchObject({
+              metadata: { sessionId: childID, outcome: "completed" },
+              output: expect.stringContaining("Waited for this background worker"),
+            })
+        }
+        const until = Date.now() + 5000
+        while ((await SubagentBudget.read(childID))?.worker.active && Date.now() < until) await Bun.sleep(10)
+        const shouldWake = mode === "preaborted" || mode === "cancelled" || mode === "all-cancelled"
+        const reports = async () =>
+          (await Session.messages({ sessionID: parent.id }))
+            .flatMap((message) => message.parts)
+            .filter((part) => part.type === "text" && part.synthetic && part.text.includes(`task_id: ${childID}`))
+        while (shouldWake && !(await reports()).length && Date.now() < until) await Bun.sleep(10)
+        expect((await SubagentBudget.read(childID))?.worker.stopReason).not.toBe("cancelled")
+        expect(await reports()).toHaveLength(shouldWake ? 1 : 0)
+        if (shouldWake) {
+          while (
+            (await Session.messages({ sessionID: parent.id })).every(
+              (message) => message.info.role !== "assistant" || !message.info.time.completed,
+            ) &&
+            Date.now() < until
+          )
+            await Bun.sleep(10)
+        }
+        expect(
+          requests.filter((request) => !JSON.stringify(request).includes("You are a title generator")).length,
+        ).toBe(shouldWake ? 2 : 1)
+      },
+      600000,
+      200000,
+      400,
+    )
+  })
+}
+
+test("actual Task preserves available tools after 75 percent elapsed and requires result assessment", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const pending = execute()
+      while (!requests.length) await Bun.sleep(5)
+      const child = (await Session.children(parent.id))[0]!
+      const state = (await SubagentBudget.read(child.id))!
+      const now = Date.now()
+      state.worker.acceptedAt = now - 8000
+      state.worker.deadline = now + 2000
+      await Storage.write(["subagent_budget", parent.projectID, parent.id], state.pool)
+      const result = await pending
+      expect(result.metadata).toMatchObject({ outcome: "partial", stopReason: "reported_incomplete" })
+      expect(result.output).toContain("Task completion: unverified.")
+      const after = (await SubagentBudget.read(child.id))!
+      expect(after.worker).toMatchObject({ acceptedAt: now - 8000, deadline: now + 2000 })
+      expect(after.worker.wrapupReason).toBeUndefined()
+      const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+      expect(visible).toHaveLength(2)
+      expect(JSON.stringify(visible[0])).toContain('"name":"read"')
+      expect(JSON.stringify(visible[1])).toContain('"name":"read"')
+      expect(JSON.stringify(visible)).not.toContain("Runtime deadline notice")
+    },
+    600000,
+    400000,
+    200,
+    "deadline",
+    false,
+    true,
+  )
+})
+
+for (const failure of ["rejected", "timed out"] as const) {
+  test(`Task permission ${failure} leaves no attempt or grant and a later approved call succeeds`, async () => {
+    await fixture(async ({ parent, execute, selection, requests }) => {
+      selection.permission = async () => {
+        expect(await Session.children(parent.id)).toHaveLength(0)
+        if (failure === "timed out") await Bun.sleep(30)
+        throw new Error(`Permission ${failure}`)
+      }
+      await expect(execute()).rejects.toThrow(`Permission ${failure}`)
+      expect(await Storage.list(["task_attempt", parent.projectID])).toHaveLength(0)
+      expect(await SubagentBudget.inspect(parent.id)).toBeUndefined()
+      expect(requests).toHaveLength(0)
+      selection.permission = async () => {
+        expect(await Session.children(parent.id)).toHaveLength(0)
+      }
+      expect((await execute()).metadata.outcome).toBe("completed")
+    })
+  })
+}
+
+test("permission and queue elapsed time can expire Task before any provider call", async () => {
+  await fixture(async ({ parent, execute, selection, requests }) => {
+    const acceptedAt = Date.now() - 11000
+    selection.queuedAt = acceptedAt
+    selection.permission = async () => {
+      expect(await Session.children(parent.id)).toHaveLength(0)
+      await Bun.sleep(30)
+    }
+    const result = await execute()
+    expect(result.metadata).toMatchObject({ outcome: "partial", stopReason: "deadline" })
+    expect(requests).toHaveLength(0)
+    const childID = result.metadata.sessionId as string
+    const state = (await SubagentBudget.read(childID))!
+    expect(state.worker).toMatchObject({ acceptedAt, deadline: acceptedAt + 10000, active: false })
+    expect(Object.keys(state.worker.calls)).toHaveLength(0)
+    expect(result.output).toContain("new assignment deadline")
+    selection.permission = undefined
+    selection.queuedAt = undefined
+    expect((await execute(childID)).metadata.outcome).toBe("completed")
+    expect((await SubagentBudget.read(childID))!.worker.acceptedAt).toBeGreaterThan(acceptedAt)
+  }, 10000)
+})
+
+test("the hard deadline cancels work without an extra report call", async () => {
+  await fixture(
+    async ({ execute, selection, requests }) => {
+      selection.queuedAt = Date.now() - 8000
+      const result = await execute()
+      expect(result.metadata).toMatchObject({ outcome: "partial", stopReason: "deadline" })
+      const visible = requests.filter((request) => !JSON.stringify(request).includes("You are a title generator"))
+      expect(visible).toHaveLength(1)
+      expect(JSON.stringify(visible[0])).not.toContain("Runtime deadline notice")
+      expect(JSON.stringify(visible[0])).toContain('"name":"read"')
+      const state = (await SubagentBudget.read(result.metadata.sessionId as string))!
+      expect(state.worker.active).toBe(false)
+      expect(state.worker.wrapupReason).toBeUndefined()
+      expect(Object.values(state.worker.calls).length).toBeGreaterThan(0)
+      expect(Object.values(state.worker.calls).every((call) => call.state === "pending")).toBe(true)
+      expect(result.output).toContain("Task completion: unverified.")
+    },
+    10000,
+    200000,
+    3000,
     false,
     false,
     true,

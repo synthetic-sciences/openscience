@@ -71,6 +71,7 @@ async function mount(
     active?: boolean
     parent?: string
     cooperative?: boolean
+    reason?: string
     enabled?: boolean
     ancestorLimited?: boolean
   } = {},
@@ -94,6 +95,10 @@ async function mount(
   }
   state.pool.workers.child.active = options.active ?? false
   state.pool.workers.child.parentSessionID = options.parent ?? "parent"
+  if (options.reason) {
+    state.pool.workers.child.stopReason = options.reason
+    state.pool.workers.child.reportReason = options.reason
+  }
   if (options.cooperative) {
     Reflect.deleteProperty(state.pool.workers.child, "stopReason")
     state.pool.workers.child.reportReason = "budget_wrapup"
@@ -224,6 +229,16 @@ test("legacy snapshots without an enabled field retain bounded allowance control
   expect(app.host.textContent).not.toContain("Deducted from Wallet")
   expect(app.state.writes).toEqual([])
   expect(app.button("Increase limit by")).toBeDefined()
+})
+
+test("deadline wrap-up has a clear reason without offering a budget increase", async () => {
+  const app = await mount({ reason: "deadline_wrapup", available: 1_000_000_000 })
+  await app.load()
+  expect(app.host.textContent).toContain("Deadline wrap-up")
+  expect(app.host.textContent).not.toContain("deadline_wrapup")
+  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Continue with remaining allowance")).toBeUndefined()
+  expect(app.state.writes).toEqual([])
 })
 
 test("a conversation with bounded runs off has no approval or continuation controls", async () => {

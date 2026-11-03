@@ -9,7 +9,7 @@ await Instance.provide({
     await Bun.write(ready, "ready")
     while (!(await Bun.file(gate).exists())) await Bun.sleep(10)
     const result = await (
-      mode === "open"
+      mode === "open" || mode === "recover"
         ? SubagentBudget.open({
             rootSessionID: "root",
             parentSessionID: "root",
@@ -25,7 +25,10 @@ await Instance.provide({
           })
         : SubagentBudget.reserve(sessionID, identity, 150)
     )
-      .then(() => ({ admitted: true }))
+      .then((worker) => ({
+        admitted: true,
+        ...(worker ? { acceptedAt: worker.acceptedAt, deadline: worker.deadline } : {}),
+      }))
       .catch((error: unknown) => {
         if (error instanceof SubagentBudget.LimitError) return { admitted: false, reason: error.reason }
         throw error

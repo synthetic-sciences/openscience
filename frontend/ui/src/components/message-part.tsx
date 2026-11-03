@@ -1368,6 +1368,7 @@ const taskReasons: Record<string, string> = {
   budget_limit: "USD limit reached",
   token_limit: "Token limit reached",
   budget_wrapup: "Budget wrap-up",
+  deadline_wrapup: "Deadline wrap-up",
   deadline: "Deadline reached",
   cancelled: "Cancelled",
   route_changed: "Access route changed",

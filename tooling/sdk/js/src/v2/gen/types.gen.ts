@@ -12154,11 +12154,13 @@ export type SessionSubagentBudgetResponses = {
           providerID: string
           modelID: string
         }
+        variant?: string
         route: string
         unit: "usd" | "tokens"
         limit: number
         spent: number
         active: boolean
+        acceptedAt?: number
         deadline: number
         stopReason?:
           | "budget_limit"
@@ -12168,8 +12170,10 @@ export type SessionSubagentBudgetResponses = {
           | "pricing_unavailable"
           | "setup_required"
           | "budget_wrapup"
+          | "deadline_wrapup"
           | "cancelled"
         wrapup?: boolean
+        wrapupReason?: "budget_wrapup" | "deadline_wrapup"
         handoffCallID?: string
         handoff?: string
         outcome?: "completed" | "partial" | "error"
@@ -12320,11 +12324,13 @@ export type SessionIncreaseSubagentBudgetResponses = {
           providerID: string
           modelID: string
         }
+        variant?: string
         route: string
         unit: "usd" | "tokens"
         limit: number
         spent: number
         active: boolean
+        acceptedAt?: number
         deadline: number
         stopReason?:
           | "budget_limit"
@@ -12334,8 +12340,10 @@ export type SessionIncreaseSubagentBudgetResponses = {
           | "pricing_unavailable"
           | "setup_required"
           | "budget_wrapup"
+          | "deadline_wrapup"
           | "cancelled"
         wrapup?: boolean
+        wrapupReason?: "budget_wrapup" | "deadline_wrapup"
         handoffCallID?: string
         handoff?: string
         outcome?: "completed" | "partial" | "error"

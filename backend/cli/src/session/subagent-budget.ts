@@ -39,6 +39,7 @@ export namespace SubagentBudget {
     "pricing_unavailable",
     "setup_required",
     "budget_wrapup",
+    "deadline_wrapup",
     "cancelled",
   ])
   export type Reason = z.infer<typeof Reason>
@@ -59,14 +60,17 @@ export namespace SubagentBudget {
     objective: z.string(),
     expectedOutput: z.string(),
     model: z.object({ providerID: z.string(), modelID: z.string() }),
+    variant: z.string().optional(),
     route: z.string(),
     unit: Unit,
     limit: Amount,
     spent: Amount,
     active: z.boolean(),
+    acceptedAt: z.number().optional(),
     deadline: z.number(),
     stopReason: Reason.optional(),
     wrapup: z.boolean().optional(),
+    wrapupReason: z.enum(["budget_wrapup", "deadline_wrapup"]).optional(),
     handoffCallID: z.string().optional(),
     handoff: z.string().optional(),
     outcome: z.enum(["completed", "partial", "error"]).optional(),
@@ -397,10 +401,12 @@ export namespace SubagentBudget {
     objective: string
     expectedOutput: string
     model: Worker["model"]
+    variant?: string
     route: string
     unit: Unit
     allocation?: number
     settings: Settings
+    acceptedAt?: number
     deadline?: number
     agent?: string
   }): Promise<Worker> {
@@ -443,6 +449,7 @@ export namespace SubagentBudget {
         spent: prior?.spent ?? 0,
         calls: prior?.calls ?? {},
         active: true,
+        acceptedAt: input.acceptedAt ?? Date.now(),
         deadline: input.deadline ?? Date.now() + settings.deadlineMs,
       })
       pool.workers[input.sessionID] = worker
@@ -457,10 +464,6 @@ export namespace SubagentBudget {
       const w = pool.workers[sessionID]
       if (w.calls[callID]) return { pool, result: undefined }
       if (w.stopReason === "cancelled") return { pool, result: "cancelled" }
-      if (handoff && w.handoffCallID && w.handoffCallID !== callID) {
-        w.stopReason = "budget_wrapup"
-        return { pool, result: "budget_wrapup" }
-      }
       const reason =
         w.deadline <= Date.now()
           ? "deadline"
@@ -472,6 +475,10 @@ export namespace SubagentBudget {
       if (reason) {
         w.stopReason = reason
         return { pool, result: reason }
+      }
+      if (handoff && w.handoffCallID && w.handoffCallID !== callID) {
+        w.stopReason = w.wrapupReason ?? "budget_wrapup"
+        return { pool, result: w.stopReason }
       }
       w.calls[callID] = { amount: Amount.parse(amount), state: "pending" }
       if (handoff) w.handoffCallID = callID
@@ -512,12 +519,14 @@ export namespace SubagentBudget {
       return { pool, result: undefined }
     })
   }
-  export async function wrapup(sessionID: string) {
+  export async function wrapup(sessionID: string, reason: "budget_wrapup" | "deadline_wrapup" = "budget_wrapup") {
     const id = await root(sessionID)
     if (!id) return
     await mutate(id, (current) => {
       const pool = current!
-      pool.workers[sessionID].wrapup = true
+      const worker = pool.workers[sessionID]
+      worker.wrapupReason ??= worker.wrapup ? "budget_wrapup" : reason
+      worker.wrapup = true
       return { pool, result: undefined }
     })
   }

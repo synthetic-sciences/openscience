@@ -10,7 +10,6 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SubtaskAttachments } from "../../src/session/subtask-attachments"
 import { PermissionNext } from "../../src/permission/next"
-import { ReadTool } from "../../src/tool/read"
 import { SafeFileIO } from "../../src/file/safe-io"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
@@ -148,21 +147,9 @@ test.each(["isolated", "project"] as const)(
         // directory, so the files it writes are the parent's deliverables.
         const workspace = await SessionFilesystem.workspace(child.id)
         expect(await SessionFilesystem.toolDirectory(child.id)).toBe(await SessionFilesystem.toolDirectory(parent.id))
-        const read = await (
-          await ReadTool.init()
-        ).execute(
-          { filePath: projectInput },
-          {
-            sessionID: child.id,
-            messageID: "msg_child_project_read",
-            agent: "explore",
-            abort: AbortSignal.any([]),
-            messages: [],
-            metadata: () => {},
-            ask: async () => {},
-          },
-        )
-        expect(read.output).toContain("existing project evidence")
+        // The assignment has ended; verify file access without executing a new worker tool.
+        await SessionFilesystem.authorize({ sessionID: child.id, path: projectInput, access: "read" })
+        expect(await Bun.file(projectInput).text()).toBe("existing project evidence")
         const files = (await fs.readdir(workspace)).filter((name) => name.startsWith(".task-attachment-"))
         expect(files).toHaveLength(2)
         expect((await fs.readdir(tmp.path)).some((name) => name.startsWith(".task-attachment-"))).toBe(false)
@@ -281,22 +268,9 @@ test("a one-shot parent file grant becomes a durable byte snapshot without grant
       expect(file.type).toBe("file")
       if (file.type !== "file") throw new Error("Expected file")
       expect(fileURLToPath(file.url).startsWith(await SessionFilesystem.workspace(child.id))).toBe(true)
-      const output = await (
-        await ReadTool.init()
-      ).execute(
-        { filePath: fileURLToPath(file.url) },
-        {
-          sessionID: child.id,
-          messageID: file.messageID,
-          agent: "explore",
-          abort: AbortSignal.any([]),
-          messages: [],
-          metadata: () => {},
-          ask: async () => {},
-        },
-      )
-      expect(output.output).toContain("original approved bytes")
-      expect(output.output).not.toContain("changed after approval")
+      const copied = fileURLToPath(file.url)
+      await SessionFilesystem.authorize({ sessionID: child.id, path: copied, access: "read" })
+      expect(await Bun.file(copied).text()).toBe("original approved bytes")
       await expect(
         SessionFilesystem.authorize({ sessionID: child.id, path: source, access: "read" }),
       ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)

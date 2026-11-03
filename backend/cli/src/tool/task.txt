@@ -1,10 +1,8 @@
-Delegate one independent job. Do simple reads/searches and self-checks yourself.
-
+Delegate one independent job; keep simple reads/searches and self-checks yourself.
 Agents (subagent_type):
 {agents}
 
-Brief: objective, full input paths, constraints, project output files, checks, expected report, edit permissions. Relative paths use your working directory. Run independent jobs together; never duplicate them. Check the Verification command, exit code and evidence; summarize the report for the user.
-
-background=true returns immediately and notifies you on completion; do not poll or sleep. task_id in a NEW call continues the same stopped child. Replaying an old call returns its cached result.
-
-With bounded runs on, allocation uses approved pools: USD for priced BYOK/Ace, tokens for subscription/local inference, including helper calls. Default: up to one quarter of the pool. You cannot raise the total; ask the user if exhausted. Keep the model and route on budget continuation. At the wrap-up notice, stop exploration and report Outcome: Complete or Incomplete, findings, files, checks and remaining work. Runtime limits apply independently.
+Brief: objective, full paths, constraints, permissions, outputs and checks. Relative paths use your directory. Run independent jobs together; never duplicate.
+background=true sends completion notices: do not poll, sleep or join. NEW calls with task_id continue that child; replay returns the cached result.
+Bounded inference includes helpers: USD for paid routes, tokens otherwise. Default grant: up to 1/4 pool. Never raise pools yourself. Stopped workers keep model/route. Fresh runs may use full allowance; saved wrap-up rules remain.
+Check EVERY result against objective/expected_output. Normal exit is not verified completion. Use saved output, artifacts and command receipts; incomplete excerpts are not full results. Keep runtime reasons. Proceed, use partial work, continue/delegate within approval, stop or ask for more funds. Never auto-resume limit stops. Limit stops do not prove spend: quote recorded use/pending.

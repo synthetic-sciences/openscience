@@ -1179,10 +1179,10 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     const apiID = model.api.id.toLowerCase()
-    if (/(^|\/)gpt-(?:6-astra|6-sol|6[.-]1-sol)$|(^|\/)claude-fable-5[.-]1$/.test(apiID)) {
+    if (/(^|\/)gpt-(?:6-astra|6-sol|6[.-]1-sol)$|(^|\/)claude-(?:fable-5[.-]1|opus-5[.-]5)$/.test(apiID)) {
       return model.api.npm === "@openrouter/ai-sdk-provider"
         ? { reasoning: { effort: "low" } }
-        : apiID.includes("claude-fable")
+        : apiID.includes("claude-")
           ? { thinking: { type: "adaptive" }, effort: "low" }
           : { reasoningEffort: "low" }
     }

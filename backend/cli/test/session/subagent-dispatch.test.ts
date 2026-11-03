@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import { Provider } from "../../src/provider/provider"
 import { Instance } from "../../src/project/instance"
 import { SubagentBudget } from "../../src/session/subagent-budget"
 import { SubagentDispatch } from "../../src/session/subagent-dispatch"
+import { Storage } from "../../src/storage/storage"
 import { Tool } from "../../src/tool/tool"
 import z from "zod"
 import { tmpdir } from "../fixture/fixture"
@@ -73,7 +74,7 @@ test("dispatch preserves unbounded main calls but rejects child calls outside al
     expect((await SubagentBudget.read("child"))?.worker.stopReason).toBe("token_limit")
   })
 })
-test("measured75percent enters a bounded text handoff rather than trusting a prompt", async () => {
+test("measured75percent preserves work and uses the remaining allowance", async () => {
   await fixture(async (model) => {
     await SubagentBudget.reserve("child", "earlier", 7500)
     await SubagentBudget.settle("child", "earlier", 7500)
@@ -84,9 +85,10 @@ test("measured75percent enters a bounded text handoff rather than trusting a pro
       inputTokens: 1000,
       maxOutputTokens: 4000,
     })
-    expect(plan?.wrapup).toBe(true)
-    expect(plan?.maxOutputTokens).toBeLessThanOrEqual(1500)
-    expect(plan?.notice).toContain("75%")
+    expect(plan?.wrapup).toBe(false)
+    expect(plan?.maxOutputTokens).toBe(1500)
+    expect(plan?.notice).toBeUndefined()
+    expect((await SubagentBudget.read("child"))!.worker.wrapup).toBeUndefined()
   })
 })
 test("actual wire dispatch reservation counts internal calls and retains unknown outcomes", async () => {
@@ -251,7 +253,7 @@ test("runtime tools reject cancelled assignments even without a wrap-up prompt",
   })
 })
 
-test("handoff admission accounts for the next input replay before reaching 75 percent", async () => {
+test("admission uses the current input and output without reserving another report call", async () => {
   await fixture(async (model) => {
     await SubagentBudget.open({
       rootSessionID: "larger",
@@ -275,8 +277,9 @@ test("handoff admission accounts for the next input replay before reaching 75 pe
       inputTokens: 30000,
       maxOutputTokens: 4000,
     })
-    expect(plan?.wrapup).toBe(true)
-    expect(plan?.notice).toContain("handoff")
+    expect(plan?.wrapup).toBe(false)
+    expect(plan?.maxOutputTokens).toBe(4000)
+    expect(plan?.notice).toBeUndefined()
   })
 })
 
@@ -319,7 +322,7 @@ test("Standard admission prices input separately and does not reserve unused Fas
       sessionID: "standard-child",
       model,
       route: "managed",
-      inputTokens: 10000,
+      inputTokens: 11000,
       maxOutputTokens: 32000,
     })
     expect(prepared?.maxOutputTokens).toBeGreaterThanOrEqual(512)
@@ -337,7 +340,7 @@ test("Standard admission prices input separately and does not reserve unused Fas
   })
 })
 
-test("Fast admission keeps its own output price and handoff capacity", async () => {
+test("Fast admission keeps its own output price within the remaining allowance", async () => {
   await fixture(async (base) => {
     const model: Provider.Model = {
       ...base,
@@ -368,30 +371,136 @@ test("Fast admission keeps its own output price and handoff capacity", async () 
   }, "usd")
 })
 
-test("trimming an exploration output also reserves replay space for its handoff", async () => {
+test("a call can use all remaining output capacity without a report reserve", async () => {
   await fixture(async (model) => {
-    const first = await SubagentDispatch.prepare({
+    const plan = await SubagentDispatch.prepare({
       sessionID: "child",
       model,
       route: "local",
       inputTokens: 1000,
       maxOutputTokens: 32000,
     })
-    expect(first?.wrapup).toBe(false)
-    expect(first!.maxOutputTokens).toBeGreaterThanOrEqual(512)
-    const used = 1000 + first!.maxOutputTokens
-    await SubagentBudget.reserve("child", "explore", used)
-    await SubagentBudget.settle("child", "explore", used)
-    const replay = 1000 + first!.maxOutputTokens * 4 + 256
-    const handoff = await SubagentDispatch.prepare({
+    expect(plan).toMatchObject({ maxOutputTokens: 9000, wrapup: false })
+    expect(plan?.notice).toBeUndefined()
+    await SubagentBudget.reserve("child", "work", 10000)
+    await SubagentBudget.settle("child", "work", 10000)
+    await expect(
+      SubagentDispatch.prepare({ sessionID: "child", model, route: "local", inputTokens: 1, maxOutputTokens: 1 }),
+    ).rejects.toMatchObject({ reason: "token_limit" })
+  })
+})
+
+for (const elapsed of [7499, 7500, 9999]) {
+  test(`assignment time at ${elapsed}/10000 ms keeps work enabled until the hard deadline`, async () => {
+    await fixture(async (model) => {
+      const now = Date.now()
+      await SubagentBudget.open({
+        rootSessionID: "time-root",
+        parentSessionID: "time-root",
+        sessionID: "time-child",
+        assignmentID: "time",
+        objective: "test",
+        expectedOutput: "report",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        allocation: 100000,
+        settings: { tokens: 100000 },
+        acceptedAt: now - elapsed,
+        deadline: now + (10000 - elapsed),
+      })
+      const clock = spyOn(Date, "now").mockReturnValue(now)
+      try {
+        const plan = await SubagentDispatch.prepare({
+          sessionID: "time-child",
+          model,
+          route: "local",
+          inputTokens: 10,
+          maxOutputTokens: 100,
+        })
+        expect(plan).toMatchObject({ maxOutputTokens: 100, wrapup: false })
+        expect(plan?.notice).toBeUndefined()
+        expect((await SubagentBudget.read("time-child"))!.worker.wrapupReason).toBeUndefined()
+      } finally {
+        clock.mockRestore()
+      }
+    })
+  })
+}
+
+test("runtime tools reject an inactive assignment without a model instruction", async () => {
+  await fixture(async () => {
+    const actions: string[] = []
+    const tool = await Tool.define("probe", {
+      description: "fixture",
+      parameters: z.object({}),
+      execute: async () => {
+        actions.push("executed")
+        return { title: "fixture", metadata: {}, output: "done" }
+      },
+    }).init()
+    await SubagentBudget.release("child")
+    await expect(
+      tool.execute(
+        {},
+        {
+          sessionID: "child",
+          messageID: "msg_fixture",
+          agent: "research",
+          abort: new AbortController().signal,
+          messages: [],
+          metadata: async () => {},
+          ask: async () => {},
+        },
+      ),
+    ).rejects.toThrow(/active|cancel/)
+    expect(actions).toHaveLength(0)
+  })
+})
+
+test("elapsed time never grants a handoff beyond an exhausted allowance or expired deadline", async () => {
+  await fixture(async (model) => {
+    for (const [sessionID, acceptedAt, deadline, allocation, reason] of [
+      ["expired", Date.now() - 10000, Date.now() - 1, 100000, "deadline"],
+      ["unfunded", Date.now() - 8000, Date.now() + 2000, 1, "token_limit"],
+    ] as const) {
+      await SubagentBudget.open({
+        rootSessionID: `${sessionID}-root`,
+        parentSessionID: `${sessionID}-root`,
+        sessionID,
+        assignmentID: sessionID,
+        objective: "test",
+        expectedOutput: "report",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        acceptedAt,
+        deadline,
+        allocation,
+        settings: { tokens: 100000 },
+      })
+      await expect(
+        SubagentDispatch.prepare({ sessionID, model, route: "local", inputTokens: 10, maxOutputTokens: 100 }),
+      ).rejects.toMatchObject({ reason })
+      expect((await SubagentBudget.read(sessionID))!.worker.calls).toEqual({})
+    }
+  })
+})
+
+test("legacy contracts retain their hard deadline without inventing an earlier acceptance time", async () => {
+  await fixture(async (model) => {
+    const state = (await SubagentBudget.read("child"))!
+    Reflect.deleteProperty(state.worker, "acceptedAt")
+    state.worker.deadline = Date.now() + 2000
+    await Storage.write(["subagent_budget", state.pool.projectID, state.pool.rootSessionID], state.pool)
+    const plan = await SubagentDispatch.prepare({
       sessionID: "child",
       model,
       route: "local",
-      inputTokens: replay,
-      maxOutputTokens: 32000,
+      inputTokens: 10,
+      maxOutputTokens: 100,
     })
-    expect(handoff?.wrapup).toBe(true)
-    expect(handoff!.maxOutputTokens).toBeGreaterThanOrEqual(512)
-    expect(used + replay + handoff!.maxOutputTokens).toBeLessThanOrEqual(10000)
+    expect(plan?.wrapup).toBe(false)
+    expect((await SubagentBudget.read("child"))!.worker.acceptedAt).toBeUndefined()
   })
 })

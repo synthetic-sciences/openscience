@@ -8,7 +8,15 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Correct premature subagent budget stops by pricing input and output at the selected speed and context tier, reserving room for the final report, and showing each worker's grant in its accounting receipt.
+- Explain refused subagent requests without implying unused allowances were spent. Keep bounded command output, including interrupted output, in worker reports and compacted receipts.
+
+- Let subagents use their full approved work allowance until completion or a runtime limit. Return execution evidence for main-agent assessment on every exit, including normal completion, without an automatic early handoff or separate summarizer.
+
+- Preserve stopped workers' model and reasoning variant and deliver background completion notices after cancelled waits. Retain bounded command and test-output receipts when a worker cannot finish its report.
+
+- Use supported low reasoning effort for Claude Opus 5.5 internal summaries.
+
+- Correct premature subagent budget stops by pricing input and output at the selected speed and context tier, showing each worker's grant in its accounting receipt.
 
 - Apply USD allowances to priced local model proxies, preserve worker accounting in handoffs, and check ancestor allocations before nested workers continue.
 

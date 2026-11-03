@@ -28673,6 +28673,9 @@
                                   "modelID"
                                 ]
                               },
+                              "variant": {
+                                "type": "string"
+                              },
                               "route": {
                                 "type": "string"
                               },
@@ -28696,6 +28699,9 @@
                               "active": {
                                 "type": "boolean"
                               },
+                              "acceptedAt": {
+                                "type": "number"
+                              },
                               "deadline": {
                                 "type": "number"
                               },
@@ -28709,11 +28715,19 @@
                                   "pricing_unavailable",
                                   "setup_required",
                                   "budget_wrapup",
+                                  "deadline_wrapup",
                                   "cancelled"
                                 ]
                               },
                               "wrapup": {
                                 "type": "boolean"
+                              },
+                              "wrapupReason": {
+                                "type": "string",
+                                "enum": [
+                                  "budget_wrapup",
+                                  "deadline_wrapup"
+                                ]
                               },
                               "handoffCallID": {
                                 "type": "string"
@@ -29159,6 +29173,9 @@
                               "modelID"
                             ]
                           },
+                          "variant": {
+                            "type": "string"
+                          },
                           "route": {
                             "type": "string"
                           },
@@ -29182,6 +29199,9 @@
                           "active": {
                             "type": "boolean"
                           },
+                          "acceptedAt": {
+                            "type": "number"
+                          },
                           "deadline": {
                             "type": "number"
                           },
@@ -29195,11 +29215,19 @@
                               "pricing_unavailable",
                               "setup_required",
                               "budget_wrapup",
+                              "deadline_wrapup",
                               "cancelled"
                             ]
                           },
                           "wrapup": {
                             "type": "boolean"
+                          },
+                          "wrapupReason": {
+                            "type": "string",
+                            "enum": [
+                              "budget_wrapup",
+                              "deadline_wrapup"
+                            ]
                           },
                           "handoffCallID": {
                             "type": "string"

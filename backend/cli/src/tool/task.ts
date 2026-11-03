@@ -1,3 +1,4 @@
+import { SubagentResult } from "../session/subagent-result"
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
@@ -333,13 +334,13 @@ const BACKGROUND_STARTED = [
 
 /** Background children in flight, by child session id, so a completion can
  * wake the parent exactly once and a second call can find the first. `result`
- * never rejects; `joined` records that a later call is already waiting for the
- * report, so the completion must not deliver it a second time as a wake-up. */
+ * never rejects; `delivered` records a successful wait, so a cancelled waiter
+ * cannot suppress the completion wake-up. */
 type Background = {
   parentID: string
   controller: AbortController
   result: Promise<TaskAttempt.Result>
-  joined: boolean
+  delivered: boolean
 }
 const background = new Map<string, Background>()
 
@@ -360,12 +361,22 @@ const JOINED =
 
 /** Wait for a running background child, or stop when the caller's turn does. */
 function join(entry: Background, abort: AbortSignal) {
-  entry.joined = true
   return new Promise<TaskAttempt.Result>((resolve, reject) => {
-    const cancel = () => reject(new Error("Waiting for the background worker was cancelled with the turn."))
+    const waiting = { active: true }
+    const cancel = () => {
+      waiting.active = false
+      abort.removeEventListener("abort", cancel)
+      reject(new Error("Waiting for the background worker was cancelled with the turn."))
+    }
     if (abort.aborted) return cancel()
     abort.addEventListener("abort", cancel, { once: true })
-    entry.result.then(resolve, reject).finally(() => abort.removeEventListener("abort", cancel))
+    entry.result.then((result) => {
+      if (!waiting.active) return
+      waiting.active = false
+      abort.removeEventListener("abort", cancel)
+      entry.delivered = true
+      resolve(result)
+    }, reject)
   })
 }
 
@@ -396,6 +407,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       return { ...rest, task_id: rest.task_id ?? session_id }
     },
     async execute(params: z.infer<typeof parameters>, ctx) {
+      const entered = Date.now()
       if (publishingBrief(`${params.description}\n${params.prompt}`)) {
         throw new Error(
           "Publishing stays with the lead: pushes, releases and uploads use this session's approvals and credentials. Delegate preparation or verification if useful, then push or upload from here.",
@@ -471,16 +483,32 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
         childSessionID: continuation?.id,
       })
-      const started = reserved.createdAt
+      const part = (await MessageV2.parts(ctx.messageID)).find(
+        (part) => part.type === "tool" && part.callID === ctx.callID,
+      )
+      // The running tool part predates permission and queue waits and survives recovery.
+      const started = Math.min(
+        reserved.createdAt,
+        part?.type === "tool" && part.state.status !== "pending" ? part.state.time.start : entered,
+      )
       const pinned = await SubagentBudget.read(reserved.childSessionID)
+      const contract =
+        pinned &&
+        (pinned.worker.stopReason ||
+          pinned.worker.reportReason === "budget_wrapup" ||
+          pinned.worker.reportReason === "deadline_wrapup" ||
+          pinned.worker.assignmentID === identity.callID)
+          ? pinned.worker
+          : undefined
       const model =
-        pinned && (pinned.worker.stopReason || pinned.worker.assignmentID === identity.callID)
-          ? pinned.worker.model
-          : userLimits.model
-            ? Provider.parseModel(userLimits.model)
-            : (settings.workerModel ?? leadModel)
-      const variant =
-        model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
+        contract?.model ??
+        (userLimits.model ? Provider.parseModel(userLimits.model) : (settings.workerModel ?? leadModel))
+      const variant = contract
+        ? (contract.variant ??
+          (await Session.messages({ sessionID: reserved.childSessionID }))
+            .map((message) => message.info)
+            .findLast((message): message is MessageV2.User => message.role === "user")?.variant)
+        : model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
           ? typeof ctx.extra?.variant === "string"
             ? ctx.extra.variant
             : undefined
@@ -532,7 +560,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const run = async (signal: AbortSignal, live: boolean): Promise<TaskAttempt.Result> => {
         await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
-        return attemptLease.during(async () => {
+        return await attemptLease.during(async () => {
           const current = await TaskAttempt.read(identity)
           if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
           if (current.status === "completed" && current.result) return current.result
@@ -666,6 +694,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     agent: agent.name,
                     expectedOutput: params.expected_output ?? "Return findings, artifacts, checks and limitations.",
                     model,
+                    variant,
                     route,
                     unit,
                     settings: userLimits,
@@ -675,6 +704,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                           ? undefined
                           : SubagentBudget.dollars(params.allocation.usd)
                         : params.allocation?.tokens,
+                    acceptedAt: started,
                     deadline:
                       stored?.worker.assignmentID === identity.callID
                         ? stored.worker.deadline
@@ -729,11 +759,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           const taskOutcome: TaskOutcome = limitReason
             ? { outcome: "partial", stopReason: limitReason }
             : reportedIncomplete
-              ? { outcome: "partial", stopReason: budget?.worker.wrapup ? "budget_wrapup" : "reported_incomplete" }
+              ? {
+                  outcome: "partial",
+                  stopReason: budget?.worker.wrapup
+                    ? (budget.worker.wrapupReason ?? "budget_wrapup")
+                    : "reported_incomplete",
+                }
               : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
           const note = limitReason
-            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} Continue with this task_id only after an allowance is available.`
+            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${limitReason === "deadline" || limitReason === "deadline_wrapup" ? "Continue with this task_id under a new assignment deadline if more work is needed." : limitReason === "cancelled" ? "Continue with this task_id only if the stopped work is requested again." : "Continue with this task_id only after an allowance is available."}`
             : taskOutcome.stopReason === "max_steps"
               ? "The subagent reached its step limit; partial result follows."
               : taskOutcome.stopReason === "tool_failures"
@@ -759,6 +794,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               })()
             : undefined
           const body = [
+            SubagentResult.describe(taskOutcome.outcome, taskOutcome.stopReason),
             accounting,
             text || `(no text; ${summary.length} tool calls in this turn)`,
             TaskEvidence.describe(evidence),
@@ -784,6 +820,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               stopReason: taskOutcome.stopReason,
               handoff: text,
               evidence,
+              commandReceipts: TaskEvidence.describeCommands(evidence.commands),
             },
             output: renderTaskOutput({ sessionID: session.id, state, summary: note, text: body }),
           })
@@ -831,29 +868,35 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         // and the wake-up run after that turn has finished. A failure becomes
         // an error result so a caller waiting on the entry always gets one.
         const controller = new AbortController()
-        const outcome = SessionPrompt.detached(() => run(controller.signal, false)).catch((error: unknown) =>
-          TaskAttempt.Result.parse({
+        const outcome = SessionPrompt.detached(() => run(controller.signal, false)).catch((error: unknown) => {
+          const observed =
+            error instanceof SubagentBudget.LimitError
+              ? { outcome: "partial" as const, stopReason: error.reason }
+              : classifyTaskOutcome({ error })
+          return TaskAttempt.Result.parse({
             title: params.description,
             metadata: {
               ...metadata,
-              ...classifyTaskOutcome({ error }),
-              ...(error instanceof SubagentBudget.LimitError ? { outcome: "partial", stopReason: error.reason } : {}),
+              ...observed,
             },
             output: renderTaskOutput({
               sessionID: session.id,
               state: "error",
               summary: `Background task failed: ${params.description}`,
-              text: error instanceof Error ? error.message : String(error),
+              text: [
+                SubagentResult.describe(observed.outcome, observed.stopReason),
+                error instanceof Error ? error.message : String(error),
+              ].join("\n\n"),
             }),
-          }),
-        )
-        const entry: Background = { parentID: ctx.sessionID, controller, result: outcome, joined: false }
+          })
+        })
+        const entry: Background = { parentID: ctx.sessionID, controller, result: outcome, delivered: false }
         background.set(session.id, entry)
         outcome.then(async (result) => {
           background.delete(session.id)
           await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
           // A call that joined the worker has already taken the report.
-          if (entry.joined) return
+          if (entry.delivered) return
           if (result.metadata.stopReason === "cancelled") return
           await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
             log.error("background task completion could not wake the parent", { error }),
