@@ -22,6 +22,42 @@ const SOURCE_BYTES = 256 * 1024
 const TOTAL_BYTES = 1024 * 1024
 const SOURCE_COUNT = 64
 
+// Project memory: notes that should outlive a session boundary. It is a directory
+// convention rather than a new config key, so a project adopts it by writing files
+// and nothing has to be enabled first.
+const MEMORY_DIR = path.join(".openscience", "memory")
+
+// Reading is only half of a memory. Without a stated place to put a new note the
+// directory stays empty and each session still restates what earlier ones decided,
+// so the convention ships with one sentence of operating context. It is not a
+// capture pipeline: the model writes only when the user asks, so nothing lands in
+// the project's memory without a turn that asked for it.
+const MEMORY_GUIDE = [
+  "This project keeps notes that outlive a session in .openscience/memory/, loaded above.",
+  "When the user asks you to remember something, or a decision is settled that a later session must know,",
+  "append a short entry to .openscience/memory/decision.md with your file tools instead of only restating it here.",
+].join(" ")
+
+async function memoryFiles(limit: number) {
+  if (limit <= 0) return [] as string[]
+  const found: string[] = []
+  try {
+    const glob = new Bun.Glob("**/*.md")
+    for await (const match of glob.scan({
+      cwd: path.join(Instance.directory, MEMORY_DIR),
+      absolute: true,
+      onlyFiles: true,
+      dot: false,
+    })) {
+      found.push(path.resolve(match))
+      if (found.length >= limit) break
+    }
+  } catch {
+    // A missing or unreadable memory directory must not break the session.
+  }
+  return found.sort()
+}
+
 function globalFiles() {
   const files = [path.join(Global.Path.config, "AGENTS.md")]
   if (!Flag.OPENSCIENCE_DISABLE_CLAUDE_CODE_PROMPT) {
@@ -225,6 +261,16 @@ export namespace InstructionPrompt {
       }
     }
 
+    // Project memory is added last on purpose: `bounded()` drops entries once the
+    // combined limit is reached, so instructions keep their priority and memory is
+    // the first thing sacrificed when a project gets greedy.
+    if (!Flag.OPENSCIENCE_DISABLE_PROJECT_CONFIG) {
+      for (const file of await memoryFiles(SOURCE_COUNT - paths.size)) {
+        if (paths.size >= SOURCE_COUNT) break
+        paths.add(file)
+      }
+    }
+
     return paths
   }
 
@@ -245,7 +291,10 @@ export namespace InstructionPrompt {
           .then((content) => (content ? "Instructions from: " + source.label + "\n" + content : "")),
       ),
     )
-    return bounded(entries)
+    // The guide is appended outside bounded(): it is the write half of the same
+    // convention, it is short, and a project whose instruction budget is already
+    // full still needs to know where a new note goes.
+    return [...bounded(entries), ...(Flag.OPENSCIENCE_DISABLE_PROJECT_CONFIG ? [] : [MEMORY_GUIDE])]
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
