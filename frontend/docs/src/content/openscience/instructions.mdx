@@ -40,6 +40,27 @@ This avoids duplicating a long protocol in multiple places. Keep referenced file
 
 OpenScience also recognizes `CLAUDE.md` for compatibility. Prefer one clear source of project rules rather than conflicting copies.
 
+## Project memory
+
+OpenScience saves conversations automatically. At the start of a turn, it recalls recent completed exchanges from other sessions in the same project directory, so a new session can use earlier project context without asking you to repeat it. You do not need to say "remember this" or create a memory file.
+
+Recall includes the latest completed exchange from up to four recent eligible sessions. Each question and answer is excerpted to about 2 KiB, and automatic recall is capped at 16 KiB. This is recent conversation context, not a summary of the entire project: older decisions or long exchanges may be absent. It uses saved conversation text without an additional model call.
+
+Child-agent, archived and reverted sessions are excluded, along with failed or unfinished replies, tool output, reasoning and synthetic text. Deleting or archiving a source session removes it from future recall. Recalled context stays fixed during the current turn's model/tool loop and refreshes on the next turn.
+
+For facts you want to keep beyond recent conversations, maintain Markdown notes under `.openscience/memory/`:
+
+```markdown
+# .openscience/memory/decision.md
+
+- Project codename: ORION-9.
+- Main dataset: VisDrone.
+```
+
+These optional files are read recursively whenever the system prompt is assembled. OpenScience does not automatically create or edit them. Filenames are sorted, so `00-` prefixes prioritize notes when space is limited. Keep rules in `AGENTS.md`: local and remote instructions receive budget before notes and recalled conversations. All share the existing 64-source and 1 MiB limits, so memory may be omitted when instructions fill the context budget.
+
+To disable both forms of recall, set `OPENSCIENCE_DISABLE_PROJECT_MEMORY=1` before starting OpenScience. `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1` also disables them. These switches do not delete conversation history or your notes.
+
 ## Personal instructions
 
 Use `AGENTS.md` in the global OpenScience configuration directory for preferences that apply across projects. Run `openscience debug paths` to find the directory.
@@ -51,6 +72,7 @@ Personal preferences should not silently change a shared scientific protocol. Ke
 | Mechanism | Use it for |
 | --- | --- |
 | Project instructions | Rules that should apply throughout the project. |
+| [Project memory](#project-memory) | Recent conversations and curated project facts, recalled within the context budget. |
 | [Skills](/openscience/skills) | A detailed procedure loaded when relevant. |
 | [Custom commands](/openscience/slash-commands) | A reusable request you invoke by name. |
 | [Custom agents](/openscience/agents) | A specialized role with its own instructions and action rules. |

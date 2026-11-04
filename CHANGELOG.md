@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Recall recent saved conversations across sessions in the same project, with bounded context, optional .openscience/memory notes, and a project-memory disable switch.
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
 - Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.

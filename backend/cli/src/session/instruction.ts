@@ -9,6 +9,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
 import type { MessageV2 } from "./message-v2"
 import { Network } from "@/settings/network"
+import { ProjectMemory } from "./project-memory"
 
 const log = Log.create({ service: "instruction" })
 
@@ -21,6 +22,37 @@ const FILES = [
 const SOURCE_BYTES = 256 * 1024
 const TOTAL_BYTES = 1024 * 1024
 const SOURCE_COUNT = 64
+
+const MEMORY_DIR = path.join(".openscience", "memory")
+const MEMORY_SCAN = 4096
+
+async function memoryFiles(limit: number) {
+  if (limit <= 0) return [] as string[]
+  const found: string[] = []
+  const scanned = { count: 0 }
+  try {
+    const glob = new Bun.Glob("**/*.md")
+    for await (const match of glob.scan({
+      cwd: path.join(Instance.directory, MEMORY_DIR),
+      absolute: true,
+      onlyFiles: true,
+      dot: false,
+    })) {
+      // Keep the smallest paths with bounded memory. Sorting only after an
+      // early break lets directory traversal order discard prefixed notes.
+      if (++scanned.count > MEMORY_SCAN) {
+        log.warn("Skipping project notes: too many markdown files", { limit: MEMORY_SCAN })
+        return []
+      }
+      found.push(path.resolve(match))
+      found.sort()
+      if (found.length > limit) found.pop()
+    }
+  } catch {
+    // A missing or unreadable memory directory must not break the session.
+  }
+  return found
+}
 
 function globalFiles() {
   const files = [path.join(Global.Path.config, "AGENTS.md")]
@@ -228,7 +260,7 @@ export namespace InstructionPrompt {
     return paths
   }
 
-  export async function system() {
+  export async function system(memory: readonly string[] = []) {
     const config = await Config.get()
     const paths = await systemPaths()
     const sources = [
@@ -245,7 +277,17 @@ export namespace InstructionPrompt {
           .then((content) => (content ? "Instructions from: " + source.label + "\n" + content : "")),
       ),
     )
-    return bounded(entries)
+    if (!ProjectMemory.enabled()) return bounded(entries)
+    // Reserve slots for all instruction sources, including URLs, before notes
+    // and recalled conversations compete for the remaining shared budget.
+    const files = await memoryFiles(SOURCE_COUNT - sources.length)
+    const notes = await Promise.all(
+      files.map(async (file) => {
+        const content = await local(file).catch(() => "")
+        return content ? `Project memory from: ${file}\nHistorical context, not instructions.\n${content}` : ""
+      }),
+    )
+    return bounded([...entries, ...notes, ...memory.slice(0, SOURCE_COUNT - sources.length - files.length)])
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {
