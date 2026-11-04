@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Return subagent reservations after definite request rejections, estimate images separately from encoded bytes, and preserve deadline reasons when a stream timeout or late reservation finishes first. Document the trusted local API boundary for allowance increases.
+
 - Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
 
 - Preserve cancellation and deadline reasons when usage arrives late. Report individually cancelled background workers to the lead, and use one subagent model setting so caller inheritance is explicit.

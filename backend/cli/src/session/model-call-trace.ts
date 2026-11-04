@@ -90,6 +90,13 @@ export namespace ModelCallTrace {
             ...(response.hold ? { hold: response.hold } : {}),
             ...(response.providerRequest ? { providerRequest: response.providerRequest } : {}),
           })
+          // Admission rejections did no inference. Timeouts, conflicts and server
+          // failures can follow accepted work, even when their body is empty.
+          if (
+            response.status !== undefined &&
+            [400, 401, 402, 403, 404, 405, 406, 413, 415, 422, 429].includes(response.status)
+          )
+            await SubagentBudget.settle(timing.sessionID, timing.requestID, 0)
           if (input.binding && outcome !== "transport_completed")
             await UsageLogging.event({ ...input.binding, operationID: timing.requestID }, "error", {
               http_call_id: timing.requestID,

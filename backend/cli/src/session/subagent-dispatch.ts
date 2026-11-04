@@ -6,6 +6,7 @@ import { ManagedPricing } from "@/provider/managed-pricing"
 import { Session } from "."
 import { UsageLogging } from "./usage-logging"
 import { SubagentBudget } from "./subagent-budget"
+import { SubagentInput } from "./subagent-input"
 
 /** Provider-independent admission; physical transport retries reserve separately. */
 export namespace SubagentDispatch {
@@ -107,7 +108,7 @@ export namespace SubagentDispatch {
   export async function begin(input: Context & { callID: string; body: unknown; outputBound?: number }) {
     const text = typeof input.body === "string" ? input.body : JSON.stringify(input.body ?? {})
     const body: Record<string, unknown> = JSON.parse(text)
-    const tokens = Buffer.byteLength(text) + 256
+    const tokens = SubagentInput.estimate(body)
     const state = await checked(input, tokens)
     if (!state) return
     if (state.worker.wrapup && input.internal)

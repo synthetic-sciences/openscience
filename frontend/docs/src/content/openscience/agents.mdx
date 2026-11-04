@@ -79,17 +79,34 @@ With bounded runs on, a task receives an allocation from the approved pool. By d
 
 USD uses the selected BYOK or Ace model's normal cost calculation. A local or custom proxy with configured prices also uses USD. Tokens include input, cache and output tokens for subscriptions and unpriced local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
 
-Before each call, the runtime estimates input and output separately at the selected speed and context prices. It reduces the output cap to fit that request inside the remaining allowance. New assignments can use the full work allowance; there is no automatic 75% wrap-up or reserved report call. Existing saved wrap-up contracts retain their final-call restriction until you continue them under a new assignment.
+Before each call, the runtime estimates input and output separately at the selected speed and context prices. It counts image tokens separately from their encoded file size and includes the offered tool schemas. It reduces the output cap to fit that request inside the remaining allowance. New assignments can use the full work allowance; there is no automatic 75% wrap-up or reserved report call. Existing saved wrap-up contracts retain their final-call restriction until you continue them under a new assignment.
 
 The runtime stops further calls when the allowance cannot cover them, cancels work at the hard deadline, and retains the actual stop reason, partial output and execution evidence. It does not start a separate summarization agent. A model response can end before a limit because of an error, cancellation, missing output or normal completion.
 
 The main agent checks every result against its objective and expected output before using it. A completed worker run is not verified task completion. A limit-stopped worker can also have produced sufficient work. The main agent can proceed, use a partial result, inspect more saved evidence, continue the same child within approved funds, delegate again, stop or ask you for a pool increase. The worker's runtime reason remains unchanged when the main agent assesses the task result.
 
-An allowance stop means another request cannot fit; it does not prove the grant was spent. Check recorded use and pending reservations. A request refused before dispatch adds no model usage. Worker reports retain bounded excerpts of saved command output, including output captured before interruption. Long or partial output is marked incomplete. These receipts survive context compaction, so the main agent can check small command results even when the worker did not finish its report.
+An allowance stop means another request cannot fit; it does not prove the grant was spent. Check recorded use and pending reservations. A request refused before dispatch adds no model usage. Definite authentication, validation and rate-limit rejections return their reserved allowance. Timeouts, conflicts and server errors remain uncertain, even with an empty body. Worker reports retain bounded excerpts of saved command output, including output captured before interruption. Long or partial output is marked incomplete. These receipts survive context compaction, so the main agent can check small command results even when the worker did not finish its report.
 
 Open the task context panel to inspect the subagent allowance. **Continue with remaining allowance** resumes the same child. If you configured an increment, **Increase limit by … and continue** raises the pool once and resumes the child through a new Task call. **Stop here** keeps its files and conversation. An increase does not buy Wallet credits or reset a provider quota. A deliberate change of access route requires a new child; historical tokens are never converted into dollars.
 
+The context-panel continuation assigns the available balance to the selected
+worker. Existing sibling grants stay protected; new assignments may need to wait
+until the continued worker returns unused allowance. The lead can instead use
+Task to request a smaller allocation from the approved pool.
+
 A nested worker also needs allowance from its parent. If that allocation is exhausted, continue the parent task first so it can receive and allocate more. Increasing the root pool alone does not renew the parent's allocation. Worker reports include a short accounting receipt for the lead, retained when the report is compacted.
+
+The local server and its clients are trusted. These limits do not isolate
+untrusted code running as your operating-system user. A shell or plugin that
+can reach the control API can submit an allowance increase; code that can write
+the app's state can modify its ledger. Revision checks prevent duplicate or stale
+increases but do not prove human approval. Isolate untrusted execution from both
+the control API and app state. A server bearer token alone does not separate
+clients that already have that token.
+
+Internal model calls owned by a bounded child use its pinned model and route.
+They can therefore cost more than the configured small model. Internal calls
+owned by the main agent keep the ordinary small-model selection.
 
 An active or limit-stopped assignment keeps its model, reasoning variant and route when continued. A completed task can accept a deliberate follow-up with a different model on the same route. Revoked access stops it. Normal completion of the lead's response leaves background workers running; the explicit Stop action cancels its descendants.
 

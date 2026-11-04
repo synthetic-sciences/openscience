@@ -83,6 +83,38 @@ describe("bounded subagent ledger", () => {
       },
     })
   })
+  test("a late failed reservation preserves the original deadline stop", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        await SubagentBudget.open(input("a"))
+        await SubagentBudget.reserve("a", "accepted", 100)
+        await SubagentBudget.stop("a", "deadline")
+        await expect(SubagentBudget.reserve("a", "late", 1)).rejects.toMatchObject({ reason: "deadline" })
+        const state = (await SubagentBudget.read("a"))!
+        expect(state.worker.stopReason).toBe("deadline")
+        expect(state.worker.calls.late).toBeUndefined()
+      },
+    })
+  })
+  test("a stream timeout records the elapsed deadline before releasing the worker", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const worker = await SubagentBudget.open({ ...input("a"), deadline: Date.now() - 1 })
+        const guard = await SubagentBudget.watch(
+          worker,
+          AbortSignal.abort(new DOMException("Stream deadline", "TimeoutError")),
+        )
+        await guard[Symbol.asyncDispose]()
+        const state = (await SubagentBudget.read("a"))!
+        expect(state.worker.stopReason).toBe("deadline")
+        expect(state.worker.active).toBe(false)
+      },
+    })
+  })
   test("returns unused allocation and reacquires it without resetting consumption", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({

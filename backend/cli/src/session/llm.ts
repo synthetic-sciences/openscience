@@ -35,6 +35,7 @@ import { ModelCallTrace } from "./model-call-trace"
 import { ManagedPricing } from "@/provider/managed-pricing"
 import { SubagentBudget } from "./subagent-budget"
 import { SubagentDispatch } from "./subagent-dispatch"
+import { SubagentInput } from "./subagent-input"
 import { CallLink } from "@/provider/call-link"
 
 export namespace LLM {
@@ -329,15 +330,17 @@ export namespace LLM {
         }
       : undefined
     if (binding) await UsageLogging.bind(binding)
-    const allowance = await SubagentDispatch.prepare({
-      sessionID: input.sessionID,
-      model: input.model,
-      route: traceRoute,
-      inputTokens: Buffer.byteLength(JSON.stringify({ system, messages: providerMessages, tools })) + 1024,
-      tier: input.small ? undefined : input.user.tier,
-      maxOutputTokens: requestedOutputTokens,
-      internal: input.small,
-    })
+    const allowance = bounded
+      ? await SubagentDispatch.prepare({
+          sessionID: input.sessionID,
+          model: input.model,
+          route: traceRoute,
+          inputTokens: await SubagentInput.prompt({ system, messages: providerMessages, tools }),
+          tier: input.small ? undefined : input.user.tier,
+          maxOutputTokens: requestedOutputTokens,
+          internal: input.small,
+        })
+      : undefined
     if (allowance?.notice && !input.small)
       providerMessages.push({ role: "user", content: `<system-reminder>${allowance.notice}</system-reminder>` })
     const maxOutputTokens = isCodex ? undefined : (allowance?.maxOutputTokens ?? requestedOutputTokens)

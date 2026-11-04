@@ -51,6 +51,112 @@ async function fixture(fn: (model: Provider.Model) => Promise<void>, unit: "toke
   })
 }
 
+for (const format of ["openai", "anthropic", "responses", "google", "bedrock"] as const) {
+  test(`${format} image requests fit the default token grant without charging base64 as text`, async () => {
+    await fixture(async (model) => {
+      await SubagentBudget.open({
+        rootSessionID: "image-root",
+        parentSessionID: "image-root",
+        sessionID: "image-child",
+        assignmentID: "image",
+        objective: "Read a figure",
+        expectedOutput: "Figure description",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        settings: { tokens: 1000000 },
+      })
+      const data = Buffer.alloc(1024 * 1024).toString("base64")
+      const image =
+        format === "google"
+          ? { inlineData: { mimeType: "image/png", data } }
+          : format === "bedrock"
+            ? { image: { format: "png", source: { bytes: data } } }
+            : format === "anthropic"
+              ? { type: "image", source: { type: "base64", media_type: "image/png", data } }
+              : format === "responses"
+                ? { type: "input_image", image_url: `data:image/png;base64,${data}` }
+                : { type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }
+      await SubagentDispatch.begin({
+        sessionID: "image-child",
+        callID: "image-call",
+        model,
+        route: "local",
+        body: {
+          messages: [{ role: "user", content: [{ type: "text", text: "Read the figure. ".repeat(2000) }, image] }],
+          max_tokens: 32000,
+        },
+      })
+      const state = (await SubagentBudget.read("image-child"))!
+      expect(state.worker.limit).toBe(250000)
+      expect(state.worker.calls["image-call"].state).toBe("pending")
+      expect(state.worker.calls["image-call"].amount).toBeGreaterThan(35000)
+      expect(state.worker.calls["image-call"].amount).toBeLessThan(70000)
+    })
+  })
+}
+
+for (const format of ["sdk", "anthropic", "responses", "google", "bedrock"] as const) {
+  test(`${format} PDF requests reserve pages rather than encoded file bytes`, async () => {
+    await fixture(async (model) => {
+      const data = Buffer.from(
+        `%PDF-1.4\n1 0 obj << /Type /Page >> endobj\n2 0 obj << /Type /Page >> endobj\n%${" ".repeat(1024 * 1024)}\n%%EOF`,
+      ).toString("base64")
+      const file =
+        format === "google"
+          ? { inlineData: { mimeType: "application/pdf", data } }
+          : format === "bedrock"
+            ? { document: { format: "pdf", name: "paper", source: { bytes: data } } }
+            : format === "anthropic"
+              ? { type: "document", source: { type: "base64", media_type: "application/pdf", data } }
+              : format === "responses"
+                ? { type: "input_file", filename: "paper.pdf", file_data: `data:application/pdf;base64,${data}` }
+                : { type: "file", mediaType: "application/pdf", data }
+      await SubagentBudget.open({
+        rootSessionID: "pdf-root",
+        parentSessionID: "pdf-root",
+        sessionID: "pdf-child",
+        assignmentID: "pdf",
+        objective: "Read a paper",
+        expectedOutput: "Summary",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        settings: { tokens: 1000000 },
+      })
+      await SubagentDispatch.begin({
+        sessionID: "pdf-child",
+        callID: "paper",
+        model,
+        route: "local",
+        body: { messages: [{ role: "user", content: [file] }], max_tokens: 1000 },
+      })
+      const state = (await SubagentBudget.read("pdf-child"))!
+      expect(state.worker.calls.paper.amount).toBeGreaterThan(7000)
+      expect(state.worker.calls.paper.amount).toBeLessThan(12000)
+    })
+  })
+}
+
+test("base64 written as user text still consumes the text input allowance", async () => {
+  await fixture(async (model) => {
+    await expect(
+      SubagentDispatch.begin({
+        sessionID: "child",
+        callID: "literal",
+        model,
+        route: "local",
+        body: {
+          messages: [
+            { role: "user", content: [{ type: "text", text: `data:image/png;base64,${"A".repeat(100000)}` }] },
+          ],
+          max_tokens: 100,
+        },
+      }),
+    ).rejects.toMatchObject({ reason: "token_limit" })
+  })
+})
+
 test("dispatch preserves unbounded main calls but rejects child calls outside allowance", async () => {
   await fixture(async (model) => {
     expect(
@@ -364,10 +470,10 @@ test("Fast admission keeps its own output price within the remaining allowance",
     expect(fast?.maxOutputTokens).toBeLessThan(standard!.maxOutputTokens)
     expect(fast?.wrapup).toBe(false)
     const body = JSON.stringify({ messages: [{ role: "user", content: "fast" }], max_tokens: 100 })
+    await SubagentDispatch.begin({ sessionID: "child", model, route: "byok", callID: "standard", body })
     await SubagentDispatch.begin({ sessionID: "child", model, route: "byok", tier: "fast", callID: "fast", body })
-    expect((await SubagentBudget.read("child"))?.worker.calls.fast.amount).toBe(
-      (Buffer.byteLength(body) + 256) * 8000 + 100 * 16000,
-    )
+    const state = (await SubagentBudget.read("child"))!
+    expect(state.worker.calls.fast.amount).toBe(state.worker.calls.standard.amount * 8)
   }, "usd")
 })
 

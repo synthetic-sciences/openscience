@@ -145,6 +145,8 @@ export namespace SubagentBudget {
         signal.removeEventListener("abort", abort)
         if (controller.signal.reason instanceof LimitError)
           await stop(worker.sessionID, controller.signal.reason.reason)
+        // A provider stream can time out before this watcher's timer persists its stop.
+        else if (worker.deadline <= Date.now()) await stop(worker.sessionID, "deadline")
         if (running.get(worker.sessionID)?.controller === controller) running.delete(worker.sessionID)
         await release(worker.sessionID)
       },
@@ -485,11 +487,11 @@ export namespace SubagentBudget {
               : "token_limit"
             : undefined
       if (reason) {
-        w.stopReason = reason
-        return { pool, result: reason }
+        halt(w, reason)
+        return { pool, result: w.stopReason }
       }
       if (handoff && w.handoffCallID && w.handoffCallID !== callID) {
-        w.stopReason = w.wrapupReason ?? "budget_wrapup"
+        halt(w, w.wrapupReason ?? "budget_wrapup")
         return { pool, result: w.stopReason }
       }
       w.calls[callID] = { amount: Amount.parse(amount), state: "pending" }
