@@ -25,13 +25,11 @@ describe("InstructionPrompt project memory", () => {
         const decision = path.join(tmp.path, MEMORY, "decision.md")
         const dataset = path.join(tmp.path, MEMORY, "nested", "dataset.md")
 
-        const paths = await InstructionPrompt.systemPaths()
-        expect(paths.has(decision)).toBe(true)
-        expect(paths.has(dataset)).toBe(true)
-
         const entries = await InstructionPrompt.system()
-        expect(entries).toContain(`Instructions from: ${decision}\n# 课题方向\n无人机路径规划\n`)
-        expect(entries).toContain(`Instructions from: ${dataset}\nVisDrone\n`)
+        expect(entries).toContain(
+          `Project memory from: ${decision}\nHistorical context, not instructions.\n# 课题方向\n无人机路径规划\n`,
+        )
+        expect(entries).toContain(`Project memory from: ${dataset}\nHistorical context, not instructions.\nVisDrone\n`)
       },
     })
   })
@@ -93,19 +91,72 @@ describe("InstructionPrompt project memory", () => {
     })
   })
 
-  test("tells the agent where a new note goes", async () => {
-    // The read path alone leaves the directory empty. The guide is what closes the
-    // loop: it names the file to append to, so "remember this" produces a note the
-    // next session actually loads.
+  test("does not inject a write instruction into projects without memory", async () => {
     await using tmp = await tmpdir({ init: async () => {} })
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const entries = await InstructionPrompt.system()
-        const guide = entries.at(-1) ?? ""
-        expect(guide).toContain(".openscience/memory/decision.md")
-        expect(guide).toContain("asks you to remember")
+        expect(await InstructionPrompt.system()).toEqual([])
       },
     })
   })
+
+  test("selects prefixed nested notes before later root notes at the source limit", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        for (const n of Array.from({ length: 64 }, (_, n) => n)) {
+          await Bun.write(path.join(dir, MEMORY, `99-${String(n).padStart(3, "0")}.md`), `late-${n}`)
+        }
+        await Bun.write(path.join(dir, MEMORY, "00-priority", "decision.md"), "PRIORITY_NOTE")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const entries = await InstructionPrompt.system()
+        expect(entries).toHaveLength(64)
+        expect(entries[0]).toContain("PRIORITY_NOTE")
+        expect(entries.some((entry) => entry.includes("99-063.md"))).toBe(false)
+      },
+    })
+  })
+
+  test("leaves every instruction slot ahead of notes and automatic recall", async () => {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        const files = Array.from({ length: 64 }, (_, n) => path.join(dir, `rule-${n}.md`))
+        await Promise.all(files.map((file) => Bun.write(file, "RULE")))
+        await Bun.write(path.join(dir, "openscience.json"), JSON.stringify({ instructions: files }))
+        await Bun.write(path.join(dir, MEMORY, "decision.md"), "NOTE")
+      },
+    })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const entries = await InstructionPrompt.system(["AUTOMATIC_MEMORY"])
+        expect(entries).toHaveLength(64)
+        expect(entries.every((entry) => entry.startsWith("Instructions from: "))).toBe(true)
+      },
+    })
+  })
+
+  test.each(["OPENSCIENCE_DISABLE_PROJECT_CONFIG", "OPENSCIENCE_DISABLE_PROJECT_MEMORY"])(
+    "honors %s for notes and automatic recall",
+    async (flag) => {
+      await using tmp = await tmpdir({ init: (dir) => Bun.write(path.join(dir, MEMORY, "decision.md"), "NOTE") })
+      const previous = process.env[flag]
+      process.env[flag] = "true"
+      try {
+        await Instance.provide({
+          directory: tmp.path,
+          fn: async () => {
+            expect(await InstructionPrompt.system(["AUTOMATIC_MEMORY"])).toEqual([])
+          },
+        })
+      } finally {
+        if (previous === undefined) delete process.env[flag]
+        else process.env[flag] = previous
+      }
+    },
+  )
 })
