@@ -40,6 +40,22 @@ This avoids duplicating a long protocol in multiple places. Keep referenced file
 
 OpenScience also recognizes `CLAUDE.md` for compatibility. Prefer one clear source of project rules rather than conflicting copies.
 
+## Project memory
+
+Instructions describe how work must be done. Decisions that earlier sessions reached describe what the project has already settled, and they belong in `.openscience/memory/` instead:
+
+```markdown
+# .openscience/memory/decision.md
+
+- Direction: drone path planning in a static 2D obstacle field.
+- Core contribution: improved A\*/RRT\* with a comparison experiment.
+- Next step: literature review → implementation → comparison → paper outline.
+```
+
+Every `**/*.md` file under that directory is read once at session start, so a new session begins with those notes instead of an empty conversation. Notes are rendered after the instruction sources and share their budget, which means memory is the first thing dropped when a project's context is full: keep notes short, and keep rules in `AGENTS.md`.
+
+Memory is written explicitly — by you, or by asking the agent to remember something, which appends an entry to `.openscience/memory/decision.md` with its file tools. There is no automatic capture, and nothing is remembered that someone did not ask for.
+
 ## Personal instructions
 
 Use `AGENTS.md` in the global OpenScience configuration directory for preferences that apply across projects. Run `openscience debug paths` to find the directory.
@@ -51,6 +67,7 @@ Personal preferences should not silently change a shared scientific protocol. Ke
 | Mechanism | Use it for |
 | --- | --- |
 | Project instructions | Rules that should apply throughout the project. |
+| [Project memory](#project-memory) | Decisions the project has already made, recalled in every session. |
 | [Skills](/openscience/skills) | A detailed procedure loaded when relevant. |
 | [Custom commands](/openscience/slash-commands) | A reusable request you invoke by name. |
 | [Custom agents](/openscience/agents) | A specialized role with its own instructions and action rules. |

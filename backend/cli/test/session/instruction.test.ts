@@ -21,7 +21,9 @@ describe("InstructionPrompt.resolve", () => {
         directory: project.path,
         fn: async () => {
           const result = await InstructionPrompt.system()
-          expect(result).toHaveLength(2)
+          // Count instruction entries rather than every line: the input also carries
+          // the project-memory convention, which is not a resolved instruction source.
+          expect(result.filter((entry) => entry.startsWith("Instructions from: "))).toHaveLength(2)
           expect(result).toContain(
             `Instructions from: ${path.join(isolated.path, ".claude", "CLAUDE.md")}\nIsolated compatibility instructions`,
           )
