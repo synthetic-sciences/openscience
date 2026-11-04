@@ -9,6 +9,7 @@ import { Flag } from "@/flag/flag"
 import { Log } from "../util/log"
 import type { MessageV2 } from "./message-v2"
 import { Network } from "@/settings/network"
+import { ProjectMemory } from "./project-memory"
 
 const log = Log.create({ service: "instruction" })
 
@@ -22,25 +23,13 @@ const SOURCE_BYTES = 256 * 1024
 const TOTAL_BYTES = 1024 * 1024
 const SOURCE_COUNT = 64
 
-// Project memory: notes that should outlive a session boundary. It is a directory
-// convention rather than a new config key, so a project adopts it by writing files
-// and nothing has to be enabled first.
 const MEMORY_DIR = path.join(".openscience", "memory")
-
-// Reading is only half of a memory. Without a stated place to put a new note the
-// directory stays empty and each session still restates what earlier ones decided,
-// so the convention ships with one sentence of operating context. It is not a
-// capture pipeline: the model writes only when the user asks, so nothing lands in
-// the project's memory without a turn that asked for it.
-const MEMORY_GUIDE = [
-  "This project keeps notes that outlive a session in .openscience/memory/, loaded above.",
-  "When the user asks you to remember something, or a decision is settled that a later session must know,",
-  "append a short entry to .openscience/memory/decision.md with your file tools instead of only restating it here.",
-].join(" ")
+const MEMORY_SCAN = 4096
 
 async function memoryFiles(limit: number) {
   if (limit <= 0) return [] as string[]
   const found: string[] = []
+  const scanned = { count: 0 }
   try {
     const glob = new Bun.Glob("**/*.md")
     for await (const match of glob.scan({
@@ -49,13 +38,20 @@ async function memoryFiles(limit: number) {
       onlyFiles: true,
       dot: false,
     })) {
+      // Keep the smallest paths with bounded memory. Sorting only after an
+      // early break lets directory traversal order discard prefixed notes.
+      if (++scanned.count > MEMORY_SCAN) {
+        log.warn("Skipping project notes: too many markdown files", { limit: MEMORY_SCAN })
+        return []
+      }
       found.push(path.resolve(match))
-      if (found.length >= limit) break
+      found.sort()
+      if (found.length > limit) found.pop()
     }
   } catch {
     // A missing or unreadable memory directory must not break the session.
   }
-  return found.sort()
+  return found
 }
 
 function globalFiles() {
@@ -261,20 +257,10 @@ export namespace InstructionPrompt {
       }
     }
 
-    // Project memory is added last on purpose: `bounded()` drops entries once the
-    // combined limit is reached, so instructions keep their priority and memory is
-    // the first thing sacrificed when a project gets greedy.
-    if (!Flag.OPENSCIENCE_DISABLE_PROJECT_CONFIG) {
-      for (const file of await memoryFiles(SOURCE_COUNT - paths.size)) {
-        if (paths.size >= SOURCE_COUNT) break
-        paths.add(file)
-      }
-    }
-
     return paths
   }
 
-  export async function system() {
+  export async function system(memory: readonly string[] = []) {
     const config = await Config.get()
     const paths = await systemPaths()
     const sources = [
@@ -291,10 +277,17 @@ export namespace InstructionPrompt {
           .then((content) => (content ? "Instructions from: " + source.label + "\n" + content : "")),
       ),
     )
-    // The guide is appended outside bounded(): it is the write half of the same
-    // convention, it is short, and a project whose instruction budget is already
-    // full still needs to know where a new note goes.
-    return [...bounded(entries), ...(Flag.OPENSCIENCE_DISABLE_PROJECT_CONFIG ? [] : [MEMORY_GUIDE])]
+    if (!ProjectMemory.enabled()) return bounded(entries)
+    // Reserve slots for all instruction sources, including URLs, before notes
+    // and recalled conversations compete for the remaining shared budget.
+    const files = await memoryFiles(SOURCE_COUNT - sources.length)
+    const notes = await Promise.all(
+      files.map(async (file) => {
+        const content = await local(file).catch(() => "")
+        return content ? `Project memory from: ${file}\nHistorical context, not instructions.\n${content}` : ""
+      }),
+    )
+    return bounded([...entries, ...notes, ...memory.slice(0, SOURCE_COUNT - sources.length - files.length)])
   }
 
   export function loaded(messages: MessageV2.WithParts[]) {

@@ -1,93 +1,84 @@
 # Project memory
 
-Project memory is a directory of markdown notes that a session reads before it
-starts work: `.openscience/memory/` inside the project directory. It exists so a
-decision recorded in one session is still available in the next one, without
-turning the conversation history into context.
+OpenScience automatically persists conversation messages in its existing session
+store. A new session can now recall recent completed exchanges from that store,
+without a remember command, an extra model call, or an agent-written memory file.
 
-The reader is `InstructionPrompt.systemPaths()` in
-`backend/cli/src/session/instruction.ts`. Memory is a directory convention
-rather than a config key, so a project adopts it by writing files; nothing has
-to be enabled first.
+## Automatic recall
 
-## Where it goes
+At the start of each turn, `ProjectMemory.recall()` selects up to eight recent
+eligible session records in the current project and directory, ordered by update
+time with session ID as the tie-breaker. It examines the latest 32 messages in
+each candidate and includes the latest completed visible user/assistant exchange
+from at most four sessions. This is bounded conversation recall, not a semantic
+summary or a complete reconstruction of every earlier decision.
 
-```
-<project>/.openscience/memory/
-  decision.md          # any markdown file, any depth
-  datasets/visdrone.md
-  conventions/repo.md
-```
+The current session, child-agent sessions, archived sessions and sessions with an
+active revert are excluded. A reply must be completed, have a `stop` finish reason,
+and have neither an error nor the compaction-summary flag. Only visible text is
+included: tool output, reasoning, ignored text and synthetic messages are omitted.
+A continuation reply can use its original user request when that request is still
+in the inspected window. Unavailable records are skipped.
 
-- Every `**/*.md` file under the directory is injected, recursively. Hidden
-  paths are not scanned.
-- The file name is the only label: there is no frontmatter contract, no schema,
-  and no required heading. Write what a new session needs to know.
-- Files are injected in sorted path order, so `00-…`/`01-…` prefixes are the
-  supported way to control ordering within memory.
+Each user/assistant excerpt is limited to 2 KiB of UTF-8 text plus a truncation
+marker. Rendered automatic recall totals at most 16 KiB and carries source session
+IDs and completion timestamps. It is labeled historical context, not instructions;
+current requests and project rules take priority. Facts can be stale and should
+be checked when they matter.
 
-## What a session sees
+The recall snapshot is held for one turn's model/tool loop, keeping its provider
+prefix stable. The next turn refreshes it. The source is the existing durable
+history, so a server restart does not lose memory and deleted/archived/reverted
+sessions are excluded on the next recall. Disabling recall does not erase history.
+Previously saved conversations are eligible as well; there is no second store to
+migrate or synchronize. No project file is created automatically.
 
-Each file is rendered exactly like an instruction source:
+## Curated project notes
 
-```
-Instructions from: <project>/.openscience/memory/decision.md
-<file contents>
-```
+Long-lived facts can also be kept in `.openscience/memory/**/*.md` under the opened
+project directory. The user or an ordinary requested file-editing task maintains
+these files. There is no system instruction to append decisions automatically.
+Notes are read whenever the instruction prompt is assembled, including later
+steps in the same turn; they are not a session-start snapshot.
 
-Memory is appended **after** every other instruction source, which has two
-consequences worth knowing before you rely on it:
+Hidden paths are skipped. Notes are selected and rendered in sorted absolute-path
+order, including when the source limit is reached; `00-` prefixes can prioritize
+notes. Selection retains only the remaining number of paths in memory. If a scan
+finds more than 4,096 markdown files, it skips curated notes and logs a warning
+instead of selecting an arbitrary traversal-order subset. A missing or unreadable
+directory does not prevent a session from starting.
 
-| Limit      | Value   | Effect on memory                                                                                                               |
-| ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Per source | 256 KiB | A larger memory file is skipped entirely.                                                                                      |
-| Combined   | 1 MiB   | Memory is appended last, so `bounded()` drops memory entries before it drops `AGENTS.md` or a configured `instructions` entry. |
-| Sources    | 64      | Memory files are only added while slots remain; a project with many configured sources may have no memory injected at all.     |
+## Shared limits and precedence
 
-The ordering is deliberate: instructions describe how work must be done, memory
-describes what was decided. When a project gets greedy with context, the
-instructions keep their priority and memory is the first thing sacrificed.
+`InstructionPrompt.system()` orders sources as follows:
 
-## How a note gets written
+1. Existing local/global/configured instruction files, in their existing order.
+2. Configured URL instructions, in their existing order.
+3. Curated project notes, in sorted path order.
+4. Automatically recalled exchanges, newest candidate first.
 
-When the user asks the agent to remember something, the session prompt tells it
-to append a short entry to `.openscience/memory/decision.md` with its file tools
-instead of only restating the decision in the conversation. That sentence is
-appended after the instruction sources and outside the byte budget, so it
-survives even when a project's instructions are already at the 1 MiB limit.
+All entries share the existing 64-source and 1 MiB rendered-byte limits. Notes and
+recall only use slots left after instruction sources. The existing local reader
+rejects non-regular files and files over 256 KiB, and detects concurrent changes.
+Nothing is appended outside the combined budget. Memory can be omitted when
+instructions consume the budget; the prompt makes no claim that omitted notes
+were loaded. Notes are labeled `Project memory from:`, separately from instructions.
 
-The agent writes; the product does not:
+## Disable
 
-- You can also write the file yourself, or edit a note the agent produced.
-- `openscience.jsonc` in the project root is a regular source; memory is a
-  different one. Do not put memory content in `openscience.json`'s
-  `instructions` — it would then outrank `AGENTS.md`.
+Set `OPENSCIENCE_DISABLE_PROJECT_MEMORY=1` before launching the server to disable
+both automatic recall and curated notes. `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1`
+also suppresses both. Neither switch deletes saved conversations or notes.
 
-There is no automatic capture, no summarization hook, and no background writer.
-A write happens on a turn where somebody asked for it, which keeps every entry
-reviewable and attributable. The alternative — capturing every turn and letting
-the model decide what is worth keeping — has to answer questions this change
-leaves open: what is stale, and how two sessions that disagree are reconciled.
+## Verification
 
-## What it is not
-
-- **Not conversation history.** Sessions are already durable and listed in the
-  workspace; a new session still starts with an empty message list. Memory is a
-  project-level fact file, and it is why a fresh session can answer "what did we
-  decide" without reading another session's transcript.
-- **Not scoped to a user.** Memory belongs to the project directory, so every
-  session in that project reads the same notes.
-- **Not a vector store or retrieval system.** Everything under the directory is
-  injected, bounded by the limits above. If memory outgrows the budget, the
-  correct fix is pruning notes, not adding retrieval.
-- **Not global.** There is no cross-project memory; the global compatibility
-  sources (`~/.claude/CLAUDE.md`, the config-root `AGENTS.md`) are unrelated.
-
-## Related
-
-- `backend/cli/src/session/instruction.ts` — the reader: `memoryFiles()` and
-  `InstructionPrompt.systemPaths()`.
-- `backend/cli/test/session/project-memory.test.ts` — injected, absent, budget
-  exhaustion, precedence.
-- [adding-a-skill.md](adding-a-skill.md) — knowledge that ships with the
-  product rather than living in one project.
+- `project-memory.test.ts`: curated notes, source limits, sorting and switches.
+- `project-memory-budget.test.ts`: URL precedence and the exact combined limit.
+- `project-memory-recall.test.ts`: durable recall, isolation, deletion, filtering
+  and bounded UTF-8 excerpts.
+- `project-memory-prompt.test.ts`: actual session prompt executions against a
+  local deterministic provider in independent processes; the second process
+  receives the earlier fact only in its system context. A queued-turn scenario
+  archives the sources during a request and checks that the next epoch refreshes
+  recall. This verifies runtime integration without evaluating a real model's
+  recall quality.

@@ -42,19 +42,24 @@ OpenScience also recognizes `CLAUDE.md` for compatibility. Prefer one clear sour
 
 ## Project memory
 
-Instructions describe how work must be done. Decisions that earlier sessions reached describe what the project has already settled, and they belong in `.openscience/memory/` instead:
+OpenScience saves conversations automatically. At the start of a turn, it recalls recent completed exchanges from other sessions in the same project directory, so a new session can use earlier project context without asking you to repeat it. You do not need to say "remember this" or create a memory file.
+
+Recall includes the latest completed exchange from up to four recent eligible sessions. Each question and answer is excerpted to about 2 KiB, and automatic recall is capped at 16 KiB. This is recent conversation context, not a summary of the entire project: older decisions or long exchanges may be absent. It uses saved conversation text without an additional model call.
+
+Child-agent, archived and reverted sessions are excluded, along with failed or unfinished replies, tool output, reasoning and synthetic text. Deleting or archiving a source session removes it from future recall. Recalled context stays fixed during the current turn's model/tool loop and refreshes on the next turn.
+
+For facts you want to keep beyond recent conversations, maintain Markdown notes under `.openscience/memory/`:
 
 ```markdown
 # .openscience/memory/decision.md
 
-- Direction: drone path planning in a static 2D obstacle field.
-- Core contribution: improved A\*/RRT\* with a comparison experiment.
-- Next step: literature review → implementation → comparison → paper outline.
+- Project codename: ORION-9.
+- Main dataset: VisDrone.
 ```
 
-Every `**/*.md` file under that directory is read once at session start, so a new session begins with those notes instead of an empty conversation. Notes are rendered after the instruction sources and share their budget, which means memory is the first thing dropped when a project's context is full: keep notes short, and keep rules in `AGENTS.md`.
+These optional files are read recursively whenever the system prompt is assembled. OpenScience does not automatically create or edit them. Filenames are sorted, so `00-` prefixes prioritize notes when space is limited. Keep rules in `AGENTS.md`: local and remote instructions receive budget before notes and recalled conversations. All share the existing 64-source and 1 MiB limits, so memory may be omitted when instructions fill the context budget.
 
-Memory is written explicitly — by you, or by asking the agent to remember something, which appends an entry to `.openscience/memory/decision.md` with its file tools. There is no automatic capture, and nothing is remembered that someone did not ask for.
+To disable both forms of recall, set `OPENSCIENCE_DISABLE_PROJECT_MEMORY=1` before starting OpenScience. `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1` also disables them. These switches do not delete conversation history or your notes.
 
 ## Personal instructions
 
@@ -67,7 +72,7 @@ Personal preferences should not silently change a shared scientific protocol. Ke
 | Mechanism | Use it for |
 | --- | --- |
 | Project instructions | Rules that should apply throughout the project. |
-| [Project memory](#project-memory) | Decisions the project has already made, recalled in every session. |
+| [Project memory](#project-memory) | Recent conversations and curated project facts, recalled within the context budget. |
 | [Skills](/openscience/skills) | A detailed procedure loaded when relevant. |
 | [Custom commands](/openscience/slash-commands) | A reusable request you invoke by name. |
 | [Custom agents](/openscience/agents) | A specialized role with its own instructions and action rules. |

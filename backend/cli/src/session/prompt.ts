@@ -41,6 +41,7 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { ConfigMarkdown } from "../config/markdown"
 import { Config } from "../config/config"
 import { SessionSummary } from "./summary"
+import { ProjectMemory } from "./project-memory"
 import { NamedError } from "@synsci/util/error"
 import { fn } from "@synsci/util/fn"
 import { SessionProcessor } from "./processor"
@@ -985,6 +986,9 @@ export namespace SessionPrompt {
       return output.message
     }
     const workspace = await SessionFilesystem.workspace(sessionID)
+    // Freeze recalled conversations for this turn's model/tool loop so another
+    // session cannot rewrite the cached prefix between provider requests.
+    const memory = ProjectMemory.reader(sessionID)
     // Old tool results are cleared at every turn boundary, as OpenCode does:
     // the newest 40k tokens of output stay, older results become one-line
     // summaries the model can re-run. A gate that waited for a cold cache
@@ -1800,7 +1804,7 @@ export namespace SessionPrompt {
       const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
       const system = [
         ...(await SystemPrompt.environment(model, sessionID, envLines)),
-        ...(await InstructionPrompt.system()),
+        ...(await InstructionPrompt.system(await memory(turn))),
         // The lead carries the curated core index; the full catalog appears
         // only for an explicit /skill invocation. Workers with a prompt of
         // their own carry their domain index inside that prompt.
