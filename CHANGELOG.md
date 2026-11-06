@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Refresh the bundled Folklore skill for MCP 2.0.0, eleven public tools, optional API-key access and version-2 public response contracts.
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
 - Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.
