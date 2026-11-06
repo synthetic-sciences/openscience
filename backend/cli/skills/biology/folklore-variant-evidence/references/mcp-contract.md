@@ -9,11 +9,12 @@ no scientific requests were executed. The current VUS prompt is `assess_vus`.
 ## Connection
 
 - Endpoint: `https://api.helena.bio/folklore/v1/mcp`
-- Authentication: none
+- Authentication for the public workflow: none
 - Transport: stateless Streamable HTTP
 - Publisher: Helena Bioinformatics
-- Adapter release: 1.7.0
-- Hosted inventory: ten scientific tools plus the separate, opt-in `support_helena` helper
+- Adapter release: 2.0.0
+- Public inventory: ten scientific tools plus the separate, opt-in `support_helena` helper
+- An optional Folklore Bearer API key enables eighteen additional case, approved-source and report tools at the same endpoint.
 - Registry identity: `io.github.helena-bioinformatics/folklore`
 
 Verify tools with `tools/list` at call time. Do not infer tool availability from
@@ -169,6 +170,6 @@ classification. An empty bounded result does not establish universal absence.
 
 ## Current release sources
 
-- Release: <https://github.com/helena-bioinformatics/folklore-mcp/releases/tag/folklore-mcp-v1.7.0>
+- Release: <https://github.com/helena-bioinformatics/folklore-mcp/releases/tag/folklore-mcp-v2.0.0>
 - Current discovery: <https://folklore.helena.bio/.well-known/mcp/server-card.json>
 - Public gene workflow: <https://github.com/helena-bioinformatics/folklore-mcp/blob/55a332c6dd6bd4650e921c12ac145b8e0f90476a/docs/PUBLIC_GENE_PROFILES.md>

@@ -3,7 +3,7 @@ name: folklore-variant-evidence
 description: "Provides ACMG/AMP germline variant classification, gene profiles, disease associations and literature through Folklore MCP. Use for one public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp, source-qualified public gene reference, explicit ambiguity/outcome handling and provenance. Use public identifiers; patient-specific interpretation requires a separate clinical workflow."
 category: biology
 license: MIT
-compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials); works from any MCP-capable host or via JSON-RPC POST with curl.
+compatibility: Requires network access to api.helena.bio (stateless Streamable HTTP MCP, no credentials for the public workflow); works from any MCP-capable host or via JSON-RPC POST with curl.
 metadata:
   upstream: K-Dense-AI/scientific-agent-skills
   upstream-url: https://github.com/K-Dense-AI/scientific-agent-skills
@@ -19,8 +19,8 @@ metadata:
 
 # Folklore Variant Evidence
 
-Folklore MCP 1.7.0 provides ACMG/AMP germline variant classification, gene
-profiles, disease associations and literature through eleven tools. Classify one
+Folklore MCP 2.0.0 provides ACMG/AMP germline variant classification, gene
+profiles, disease associations and literature through eleven public tools. Classify one
 public GRCh38 germline nuclear SNV or simple indel smaller than 50 bp with
 `classify_germline_variant`. Resolve public genes into source-qualified profiles,
 retrieve ClinGen assertions, and explore source-linked literature. Preserve
@@ -33,8 +33,11 @@ Bioinformatics. Its hosted endpoint is:
 https://api.helena.bio/folklore/v1/mcp
 ```
 
-No account or API key is required. The public Apache-2.0 adapter and contract are
-available at <https://github.com/helena-bioinformatics/folklore-mcp>.
+The public workflow needs no account or API key. A Folklore Bearer API key
+enables eighteen additional case, approved-source and report tools. This
+public-evidence skill uses the anonymous connection. See the
+[setup guide](https://folklore.helena.bio/integrations/mcp) for authenticated
+workflows. The public Apache-2.0 adapter and contract are available at <https://github.com/helena-bioinformatics/folklore-mcp>.
 
 ## Minimal connection example
 
@@ -93,7 +96,7 @@ Variant Interpretation MCP.
 ## Verify the live tool catalog
 
 Connect to the hosted endpoint and call `tools/list`. Verify the available tools
-instead of relying on model memory. The hosted 1.7.0 catalog contains ten scientific tools:
+instead of relying on model memory. The hosted 2.0.0 public catalog contains ten scientific tools:
 
 - `classify_germline_variant`
 - `search_variant_literature`
