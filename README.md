@@ -8,7 +8,7 @@
 **The open-source AI workbench for scientific research.**
 
 Give it a goal. It reads the literature, writes and runs the code, runs the experiments, and writes up what it found, with every step on the record.
-
+* [DaKES Multiscale Physical & Biomedical Datasets](https://github.com/fredyingye-usa/dakes) - Open-access benchmark datasets on heterocrystalline chimeric technology (HCT), multilayer h-backbones (KLRB1 immune-ageing & Alzheimer's Riluzole repurposing), and spiro-terpenoid scaffolds with permanent Zenodo DOIs.
 <br/>
 
 [![CI](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml/badge.svg)](https://github.com/synthetic-sciences/OpenScience/actions/workflows/ci.yml)
