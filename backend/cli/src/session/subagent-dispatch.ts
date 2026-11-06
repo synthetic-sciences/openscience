@@ -11,10 +11,8 @@ import { SubagentInput } from "./subagent-input"
 /** Provider-independent admission; physical transport retries reserve separately. */
 export namespace SubagentDispatch {
   type Context = { sessionID: string; model: Provider.Model; route: AccessRoute; internal?: boolean; tier?: string }
-  const notice =
-    "Runtime allowance notice: this saved assignment is already in its final handoff. Return supported findings, artifacts, checks, remaining work and limitations without further tools. Start with Outcome: Complete or Outcome: Incomplete. The remaining allowance and hard deadline still apply."
-  const deadlineNotice =
-    "Runtime deadline notice: this saved assignment is already in its final handoff. Return supported findings, artifacts, checks, remaining work and limitations without further tools. Start with Outcome: Complete or Outcome: Incomplete. The remaining allowance and hard deadline still apply."
+  const handoff = (kind: "allowance" | "deadline") =>
+    `Runtime ${kind} notice: this saved assignment is already in its final handoff. Return supported findings, artifacts, checks, remaining work and limitations without further tools. Start with Outcome: Complete or Outcome: Incomplete. The remaining allowance and hard deadline still apply.`
 
   function prices(value: unknown): number[] {
     if (!value || typeof value !== "object") return []
@@ -102,7 +100,7 @@ export namespace SubagentDispatch {
     return {
       maxOutputTokens: output,
       wrapup,
-      notice: wrapup ? (reason === "deadline_wrapup" ? deadlineNotice : notice) : undefined,
+      notice: wrapup ? handoff(reason === "deadline_wrapup" ? "deadline" : "allowance") : undefined,
     }
   }
   export async function begin(input: Context & { callID: string; body: unknown; outputBound?: number }) {

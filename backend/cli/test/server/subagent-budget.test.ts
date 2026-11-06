@@ -46,6 +46,9 @@ test("session allowance routes scope reads and apply revisioned increases once",
       const replay = await fetch(base + "/increase", options)
       expect(replay.status).toBe(200)
       expect((await replay.json()).limits.tokens).toBe(300)
+      const reused = await fetch(base + "/increase", { ...options, body: JSON.stringify({ ...body, amount: 50 }) })
+      expect(reused.status).toBe(409)
+      expect(await reused.text()).toContain("Approval key conflict")
       const stale = await fetch(base + "/increase", {
         ...options,
         body: JSON.stringify({ ...body, key: crypto.randomUUID() }),
@@ -55,6 +58,46 @@ test("session allowance routes scope reads and apply revisioned increases once",
       expect(missing.status).toBe(404)
       const invalid = await fetch(base + "/increase", { ...options, body: JSON.stringify({ ...body, amount: 0 }) })
       expect(invalid.status).toBe(400)
+    },
+  })
+})
+
+test("continuing a child whose agent was not recorded refuses instead of guessing one", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const parent = await Session.create({})
+      const child = await Session.create({ parentID: parent.id })
+      await SubagentBudget.open({
+        rootSessionID: parent.id,
+        parentSessionID: parent.id,
+        sessionID: child.id,
+        assignmentID: "fixture",
+        objective: "review",
+        expectedOutput: "findings",
+        model: { providerID: "test", modelID: "test" },
+        route: "chatgpt",
+        unit: "tokens",
+        allocation: 100,
+        settings: { tokens: 200 },
+      })
+      await SubagentBudget.release(child.id)
+      const response = await Server.internalFetch()(
+        `http://openscience.internal/session/${parent.id}/subagents/${child.id}/continue`,
+        {
+          method: "POST",
+          headers: {
+            "x-openscience-project": Instance.project.id,
+            "x-openscience-directory": tmp.path,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ key: crypto.randomUUID() }),
+        },
+      )
+      expect(response.status).toBe(409)
+      expect(await response.text()).toContain("agent was not recorded")
+      expect((await SubagentBudget.inspect(parent.id))?.continuations).toEqual({})
     },
   })
 })

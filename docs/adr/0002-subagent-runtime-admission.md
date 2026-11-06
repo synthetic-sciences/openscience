@@ -75,3 +75,11 @@ hooks. Harness plugins cannot bypass the transport or tool boundary.
 Pool JSON parsing and settled-call retention can still grow with conversation
 length. Future profiling work can change storage and caching without weakening
 cross-process ownership, late settlement, idempotency or cancellation behavior.
+
+The allowance ledger lives in two new record tables, `subagent_budget` and
+`subagent_binding`. They are created on open when missing and do not raise the
+research database's `user_version`. Releases up to v2.0.153 refuse any version
+above 7, so a bump would make every upgraded database unreadable after a
+rollback even though older code ignores unknown tables. Reserve a version bump
+for changes that older code would misread, such as altered columns, constraints
+or the JSON shape of an existing record kind.

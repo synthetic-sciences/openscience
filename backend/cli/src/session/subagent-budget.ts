@@ -51,6 +51,8 @@ export namespace SubagentBudget {
       super(message, "AbortError")
     }
   }
+  /** A stale or conflicting allowance request; the caller should refresh and decide again. */
+  export class ConflictError extends Error {}
   const Call = z.object({ amount: Amount, state: z.enum(["pending", "settled"]), consumed: Amount.optional() })
   export const Worker = z.object({
     sessionID: z.string(),
@@ -602,15 +604,15 @@ export namespace SubagentBudget {
     return mutate(rootSessionID, (current) => {
       if (!current) throw new Error("Subagent allowance not found")
       const pool = current
-      if (!pool.enabled) throw new Error("Bounded runs are off for this conversation")
+      if (!pool.enabled) throw new ConflictError("Bounded runs are off for this conversation")
       const previous = pool.approvals[input.key]
       if (previous) {
         if (previous.unit !== input.unit || previous.amount !== input.amount || previous.revision !== input.revision)
-          throw new Error("Approval key conflict")
+          throw new ConflictError("Approval key conflict")
         return { pool, result: pool }
       }
       if (pool.revision !== input.revision)
-        throw new Error("Subagent allowance revision changed; refresh before approving")
+        throw new ConflictError("Subagent allowance revision changed; refresh before approving")
       if (input.amount <= 0) throw new Error("Increase must be positive")
       pool.limits[input.unit] = Amount.parse(pool.limits[input.unit] + Amount.parse(input.amount))
       pool.approvals[input.key] = { unit: input.unit, amount: input.amount, revision: input.revision }

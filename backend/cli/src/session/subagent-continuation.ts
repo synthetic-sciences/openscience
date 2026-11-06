@@ -25,6 +25,9 @@ export namespace SubagentContinuation {
     const saved = state.pool.continuations[key]
     if (saved?.childID !== undefined && saved.childID !== childID) throw new Error("Continuation key conflict")
     if (saved?.completed) return { sessionID: childID, callID: saved.callID }
+    // Resuming under a guessed agent would silently change the child's prompt and tools.
+    const subagent = state.worker.agent
+    if (!subagent) throw new Error("This subagent's agent was not recorded; start a new subagent instead")
     SessionPrompt.assertNotBusy(parentID)
     SessionPrompt.assertNotBusy(childID)
     const lease = await FileLease.acquire(SessionPrompt.loopLeasePath(parent.projectID, parentID), 500)
@@ -48,7 +51,7 @@ export namespace SubagentContinuation {
               prompt:
                 "Continue the saved task from its partial results. Complete the remaining work and return the final report.",
               task_id: childID,
-              subagent_type: state.worker.agent ?? "data",
+              subagent_type: subagent,
               expected_output: state.worker.expectedOutput,
               allocation:
                 state.worker.unit === "usd"
