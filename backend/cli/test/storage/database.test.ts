@@ -156,7 +156,7 @@ test("version-one databases gain the trace outbox without replacing existing ses
     id: "call_stable",
     outcome: "pending",
   })
-  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 8 })
+  expect(await upgraded.query((db) => db.query("PRAGMA user_version").get())).toEqual({ user_version: 7 })
   expect(await upgraded.query((db) => db.query("SELECT COUNT(*) AS count FROM trace_event").get())).toEqual({
     count: 0,
   })
@@ -277,6 +277,25 @@ test("a failed later rescan imports nothing and retries after the new source is 
   verify.close()
   await Bun.write(invalid, JSON.stringify({ id: "bad" }))
   expect(await store.list([])).toHaveLength(3)
+})
+
+test("added record tables reach version-seven databases without raising the rollback version", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["session", "project", "kept"], { id: "kept" })
+  const previous = new Database(store.filepath)
+  previous.exec("DROP TABLE subagent_budget; DROP TABLE subagent_binding;")
+  expect(previous.query("PRAGMA user_version").get()).toEqual({ user_version: 7 })
+  previous.close()
+  const upgraded = ResearchDatabase.create(tmp.path)
+  await upgraded.write(["subagent_budget", "project", "root"], { spent: 1 })
+  await upgraded.write(["subagent_binding", "project", "child"], { root: "root" })
+  expect(await upgraded.read<unknown>(["subagent_budget", "project", "root"])).toEqual({ spent: 1 })
+  expect(await upgraded.read<unknown>(["session", "project", "kept"])).toEqual({ id: "kept" })
+  // v2.0.153 rejects any user_version above 7, so additive tables must not raise it.
+  const verify = new Database(store.filepath, { readonly: true })
+  expect(verify.query("PRAGMA user_version").get()).toEqual({ user_version: 7 })
+  verify.close()
 })
 
 test("version-six upgrades import Task attempts and preserve completed replay evidence", async () => {

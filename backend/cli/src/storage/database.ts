@@ -82,6 +82,10 @@ export namespace ResearchDatabase {
         throw new Error("Invalid research record key")
       return { kind, scope: table.scope, parent: table.depth === 3 ? key[1]! : "", id: key.at(-1)! }
     }
+    const define = (db: Database, kind: Kind) =>
+      db.exec(`CREATE TABLE IF NOT EXISTS ${kind} (
+        ${tables[kind].scope} TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL CHECK(json_valid(data)),
+        updated_at INTEGER NOT NULL,PRIMARY KEY (${tables[kind].scope},id))`)
     const save = (db: Database, key: string[], value: unknown) => {
       const record = shape(key)
       const data = JSON.stringify(value)
@@ -110,19 +114,15 @@ export namespace ResearchDatabase {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
-        if (version > 8) throw new Error("This research database requires a newer OpenScience version")
-        if (version < 8)
+        if (version > 7) throw new Error("This research database requires a newer OpenScience version")
+        if (version < 7)
           db.transaction(() => {
             db.exec(`CREATE TABLE IF NOT EXISTS migration (name TEXT PRIMARY KEY, completed_at INTEGER NOT NULL);
               CREATE TABLE IF NOT EXISTS legacy_stage (
                 kind TEXT NOT NULL, parent TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL CHECK(json_valid(data)),
                 PRIMARY KEY(kind,parent,id));`)
 
-            for (const [kind, table] of Object.entries(tables)) {
-              db.exec(`CREATE TABLE IF NOT EXISTS ${kind} (
-              ${table.scope} TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL CHECK(json_valid(data)),
-              updated_at INTEGER NOT NULL,PRIMARY KEY (${table.scope},id))`)
-            }
+            for (const kind of Object.keys(tables) as Kind[]) define(db, kind)
             db.exec(`CREATE TABLE IF NOT EXISTS trace_settings (
               id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL CHECK(json_valid(data)));
             CREATE TABLE IF NOT EXISTS trace_event (
@@ -161,8 +161,18 @@ export namespace ResearchDatabase {
               kind TEXT NOT NULL,parent TEXT NOT NULL,id TEXT NOT NULL,
               state TEXT NOT NULL CHECK(state IN ('known','deleted','pending')),
               data TEXT CHECK(data IS NULL OR json_valid(data)),PRIMARY KEY(kind,parent,id));
-            PRAGMA user_version=8;`)
+            PRAGMA user_version=7;`)
           }).immediate()
+        // Record tables are additive: older releases ignore unknown tables, so adding a kind to
+        // `tables` must not raise user_version, which older releases treat as a refusal to open.
+        const present = new Set(
+          db
+            .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table'")
+            .all()
+            .map((row) => row.name),
+        )
+        const absent = (Object.keys(tables) as Kind[]).filter((kind) => !present.has(kind))
+        if (absent.length) db.transaction(() => absent.forEach((kind) => define(db, kind))).immediate()
         const revision = await fs
           .readFile(path.join(root, revisionFile), "utf8")
           .catch((error: NodeJS.ErrnoException) => {
