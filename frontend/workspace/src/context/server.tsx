@@ -3,6 +3,7 @@ import { createSimpleContext } from "@synsci/ui/context"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
+import { probeServerHealth } from "@/context/server-probe"
 import { Persist, persisted } from "@/utils/persist"
 
 type StoredProject = { projectID: string; expanded: boolean }
@@ -280,18 +281,7 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
 
     const isReady = createMemo(() => ready() && !!state.active)
 
-    const check = (url: string) => {
-      const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
-      const sdk = createOpenScienceClient({
-        baseUrl: url,
-        fetch: platform.fetch,
-        signal,
-      })
-      return sdk.global
-        .health()
-        .then((x) => x.data?.healthy === true)
-        .catch(() => false)
-    }
+    const check = async (url: string) => (await probeServerHealth(url, platform.fetch)).healthy === true
 
     const loadProjects = (url: string, force = false) => {
       const key = serverCatalogKey(url)

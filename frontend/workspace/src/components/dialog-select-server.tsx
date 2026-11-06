@@ -7,8 +7,8 @@ import { Button } from "@synsci/ui/button"
 import { IconButton } from "@synsci/ui/icon-button"
 import { TextField } from "@synsci/ui/text-field"
 import { normalizeServerUrl, serverDisplayName, useServer } from "@/context/server"
+import { probeServerHealth } from "@/context/server-probe"
 import { usePlatform } from "@/context/platform"
-import { createOpenScienceClient } from "@synsci/sdk/v2/client"
 import { useNavigate } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { DropdownMenu } from "@synsci/ui/dropdown-menu"
@@ -58,16 +58,7 @@ async function checkHealth(url: string, platform: ReturnType<typeof usePlatform>
   // user opens it. The local renderer keeps its same-origin CSP.
   if (platform.openWorkspace && URL.canParse(url) && new URL(url).origin !== window.location.origin)
     return { healthy: undefined }
-  const signal = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout?.(3000)
-  const sdk = createOpenScienceClient({
-    baseUrl: url,
-    fetch: platform.fetch,
-    signal,
-  })
-  return sdk.global
-    .health()
-    .then((x) => ({ healthy: x.data?.healthy === true, version: x.data?.version }))
-    .catch(() => ({ healthy: false }))
+  return probeServerHealth(url, platform.fetch)
 }
 
 function AddRow(props: AddRowProps) {
