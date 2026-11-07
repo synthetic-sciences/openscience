@@ -34,6 +34,7 @@ import { State } from "../project/state"
 import { McpSecretStorage } from "../mcp/secret-storage"
 import { McpRemoteUrl } from "../mcp/remote-url"
 import { CredentialLifecycle } from "../credentials/lifecycle"
+import { SubagentBudget } from "../session/subagent-budget"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -1319,6 +1320,9 @@ export namespace Config {
         .describe(
           "Default agent to use when none is specified. Must be a primary agent. Falls back to 'research' if not set or if the specified agent is invalid.",
         ),
+      subagents: SubagentBudget.Settings.optional().describe(
+        "User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded",
+      ),
       subagent_depth: z
         .number()
         .int()
@@ -1955,7 +1959,10 @@ export namespace Config {
     const existing = path.length
       ? findNodeAtLocation(parseTree(input) ?? { type: "null", offset: 0, length: 0 }, path)
       : undefined
-    const descend = isRecord(patch) && (path.length === 0 || existing?.type === "object")
+    const descend =
+      isRecord(patch) &&
+      !(path.length === 1 && path[0] === "subagents") &&
+      (path.length === 0 || existing?.type === "object")
     if (!descend) {
       const edits = modify(input, path, patch, {
         formattingOptions: {
@@ -2044,7 +2051,7 @@ export namespace Config {
    * configuration still require the normal full instance rebuild.
    */
   function canPreserveInstances(config: Info) {
-    const refreshOnly = new Set<keyof Info>(["billing", "model", "small_model"])
+    const refreshOnly = new Set<keyof Info>(["billing", "model", "small_model", "subagents"])
     return Object.keys(config).every(
       (key) =>
         refreshOnly.has(key as keyof Info) ||
@@ -2228,6 +2235,7 @@ export namespace Config {
 
       const existing = await McpSecretStorage.reveal(rawConfig(before, filepath))
       const merged = mergeDeep(existing, config)
+      if (Object.hasOwn(config, "subagents")) merged.subagents = config.subagents
       assertValid(merged, filepath)
       const next = await (async () => {
         if (!filepath.endsWith(".jsonc")) {

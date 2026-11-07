@@ -5,6 +5,7 @@ import type { PermissionNext } from "../permission/next"
 import { Truncate } from "./truncation"
 import { PlanMode } from "./plan-mode"
 import { SearchDedupe } from "@/session/search-dedupe"
+import { SubagentBudget } from "@/session/subagent-budget"
 
 export namespace Tool {
   interface Metadata {
@@ -100,6 +101,17 @@ export namespace Tool {
         const toolInfo = init instanceof Function ? await init(initCtx) : init
         const execute = toolInfo.execute
         toolInfo.execute = async (args, ctx) => {
+          const bounded = await SubagentBudget.read(ctx.sessionID)
+          if (bounded?.worker.stopReason) throw new SubagentBudget.LimitError(bounded.worker.stopReason)
+          if (bounded && !bounded.worker.active)
+            throw new SubagentBudget.LimitError("cancelled", "Subagent assignment is no longer active")
+          if (bounded?.worker.deadline && bounded.worker.deadline <= Date.now())
+            throw new SubagentBudget.LimitError("deadline")
+          if (bounded?.worker.wrapup)
+            throw new SubagentBudget.LimitError(
+              bounded.worker.wrapupReason ?? "budget_wrapup",
+              "Subagent is wrapping up; return the handoff without further tools",
+            )
           PlanMode.enforce(id, ctx.agent)
           // The parser's output is the public tool contract. Always execute
           // and dedupe with it so defaults, transforms, stripped fields, and

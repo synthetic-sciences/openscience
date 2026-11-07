@@ -4,6 +4,7 @@ import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
 import { useSDK } from "@/context/sdk"
 import { TaskReceipts } from "./task-receipts"
+import { SubagentAllowance } from "./subagent-allowance"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@synsci/util/encode"
@@ -344,16 +345,19 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
       <Show when={params.id}>
         {(sessionID) => (
-          <TaskReceipts
-            sessionID={sessionID()}
-            onReport={(report) => setSettlement("report", report)}
-            version={`${tokens()}:${cost()}:${counts().all}`}
-            load={async () => {
-              const result = await sdk.client.session.receipts({ sessionID: sessionID() })
-              if (!result.data) throw new Error("Receipt lookup failed")
-              return result.data
-            }}
-          />
+          <>
+            <SubagentAllowance sessionID={sessionID()} />
+            <TaskReceipts
+              sessionID={sessionID()}
+              onReport={(report) => setSettlement("report", report)}
+              version={`${tokens()}:${cost()}:${counts().all}`}
+              load={async () => {
+                const result = await sdk.client.session.receipts({ sessionID: sessionID() })
+                if (!result.data) throw new Error("Receipt lookup failed")
+                return result.data
+              }}
+            />
+          </>
         )}
       </Show>
 

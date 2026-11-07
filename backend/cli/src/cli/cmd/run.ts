@@ -594,7 +594,9 @@ export async function execute(input: RunInput): Promise<number> {
       ? {
           ...(level ? { level } : {}),
           ...(autonomy ? { autonomy } : {}),
-          ...(input.workerModel ? { workerModel: Provider.parseModel(input.workerModel) } : {}),
+          ...(input.workerModel
+            ? { workerModel: Provider.parseModel(input.workerModel), workerModelOverride: true }
+            : {}),
         }
       : undefined
   const controls = {
@@ -755,7 +757,7 @@ export const RunCommand = cmd({
       })
       .option("worker-model", {
         type: "string",
-        describe: "model workers run on, provider/model (default: the agent's or the lead's model)",
+        describe: "explicit worker model for this run, provider/model (default: Settings → Subagents)",
       })
       .option("autonomy", {
         type: "string",

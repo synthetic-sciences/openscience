@@ -9,6 +9,7 @@ import { MessageV2 } from "./message-v2"
 import { Log } from "../util/log"
 import { SessionRevert } from "./revert"
 import { Session } from "."
+import { SubagentBudget } from "./subagent-budget"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { asSchema, type Tool as AITool, tool, jsonSchema, type ToolCallOptions } from "ai"
@@ -45,7 +46,7 @@ import { NamedError } from "@synsci/util/error"
 import { fn } from "@synsci/util/fn"
 import { SessionProcessor } from "./processor"
 import { interruptionReceipt } from "./tool-outcome"
-import { normalizeTaskAttemptInput, TaskTool } from "@/tool/task"
+import { cancelBackgroundTasks, normalizeTaskAttemptInput, TaskTool } from "@/tool/task"
 import { SkillTool } from "@/tool/skill"
 import { Skill } from "@/skill"
 import { Tool } from "@/tool/tool"
@@ -525,8 +526,12 @@ export namespace SessionPrompt {
     const match = s[sessionID]
     const reserved = pending().get(sessionID)
     const controller = match?.abort ?? reserved
+    if (owner && controller?.signal !== owner) return
+    if (reason !== completed) {
+      cancelBackgroundTasks(sessionID)
+      SubagentBudget.cancel(sessionID)
+    }
     if (!controller) return
-    if (owner && controller.signal !== owner) return
     controller.abort(reason)
     for (const item of match?.callbacks ?? []) {
       item.reject()
@@ -3388,7 +3393,7 @@ or internal reasoning. Call plan_exit when the plan is ready for approval.`)
     if (!abort) {
       throw new Session.BusyError(input.sessionID)
     }
-    using _ = defer(() => cancel(input.sessionID, abort))
+    using _ = defer(() => cancel(input.sessionID, abort, completed))
 
     if (session.revert) {
       await SessionRevert.cleanup(session)

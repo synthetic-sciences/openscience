@@ -1,9 +1,11 @@
 import type { LanguageModelUsage, ProviderMetadata } from "ai"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import type { CallLink } from "@/provider/call-link"
 import type { AccessRoute } from "./access-route"
 import { SessionTraceStore } from "./trace-store"
 import { UsageLogging } from "./usage-logging"
+import { SubagentBudget } from "./subagent-budget"
+import { SubagentDispatch } from "./subagent-dispatch"
 
 /** Provider transport, structured calls and ordinary steps share this recorder. */
 export namespace ModelCallTrace {
@@ -13,6 +15,10 @@ export namespace ModelCallTrace {
     provider: string
     model: string
     binding?: UsageLogging.Binding
+    pricingModel?: Provider.Model
+    outputBound?: number
+    tier?: string
+    internal?: boolean
   }) {
     const calls = new Map<string, SessionTraceStore.ModelCall>()
     const finish = async (call: SessionTraceStore.ModelCall) => {
@@ -34,6 +40,20 @@ export namespace ModelCallTrace {
             outcome: "pending",
             attempt: timing.attempt,
           })
+          const bounded = await SubagentBudget.read(timing.sessionID)
+          if (bounded)
+            await SubagentDispatch.begin({
+              sessionID: timing.sessionID,
+              callID: timing.requestID,
+              body,
+              route: input.route,
+              model:
+                input.pricingModel ??
+                (await Provider.getModel(bounded.worker.model.providerID, bounded.worker.model.modelID)),
+              outputBound: input.outputBound,
+              tier: input.tier,
+              internal: input.internal,
+            })
           if (!input.binding) return
           const request: unknown =
             typeof body === "string"
@@ -70,6 +90,13 @@ export namespace ModelCallTrace {
             ...(response.hold ? { hold: response.hold } : {}),
             ...(response.providerRequest ? { providerRequest: response.providerRequest } : {}),
           })
+          // Admission rejections did no inference. Timeouts, conflicts and server
+          // failures can follow accepted work, even when their body is empty.
+          if (
+            response.status !== undefined &&
+            [400, 401, 402, 403, 404, 405, 406, 413, 415, 422, 429].includes(response.status)
+          )
+            await SubagentBudget.settle(timing.sessionID, timing.requestID, 0)
           if (input.binding && outcome !== "transport_completed")
             await UsageLogging.event({ ...input.binding, operationID: timing.requestID }, "error", {
               http_call_id: timing.requestID,
@@ -104,6 +131,19 @@ export namespace ModelCallTrace {
             : undefined
         if (!current) return
         const observed = UsageLogging.reported(usage, metadata, input.provider)
+        const bounded = await SubagentBudget.read(context.sessionID)
+        if (bounded)
+          await SubagentDispatch.complete({
+            sessionID: context.sessionID,
+            callID: current.id,
+            model:
+              input.pricingModel ??
+              (await Provider.getModel(bounded.worker.model.providerID, bounded.worker.model.modelID)),
+            route: input.route,
+            usage,
+            metadata,
+            tier: input.tier,
+          })
         await finish({
           ...current,
           outcome,

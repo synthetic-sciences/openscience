@@ -1179,10 +1179,10 @@ export namespace ProviderTransform {
 
   export function smallOptions(model: Provider.Model) {
     const apiID = model.api.id.toLowerCase()
-    if (/(^|\/)gpt-(?:6-astra|6-sol|6[.-]1-sol)$|(^|\/)claude-fable-5[.-]1$/.test(apiID)) {
+    if (/(^|\/)gpt-(?:6-astra|6-sol|6[.-]1-sol)$|(^|\/)claude-(?:fable-5[.-]1|opus-5[.-]5)$/.test(apiID)) {
       return model.api.npm === "@openrouter/ai-sdk-provider"
         ? { reasoning: { effort: "low" } }
-        : apiID.includes("claude-fable")
+        : apiID.includes("claude-")
           ? { thinking: { type: "adaptive" }, effort: "low" }
           : { reasoningEffort: "low" }
     }
@@ -1237,6 +1237,21 @@ export namespace ProviderTransform {
   export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
     const key = sdkKey(model.api.npm) ?? model.providerID
     return { [key]: options }
+  }
+
+  /** Output tokens the SDK adds to the wire max_tokens beyond maxOutputTokens (Anthropic thinking). */
+  export function thinkingTokens(npm: string, options: Record<string, any>): number {
+    if (npm !== "@ai-sdk/anthropic" && npm !== "@ai-sdk/google-vertex/anthropic") return 0
+    const thinking = options?.["thinking"]
+    const budget = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+    return thinking?.["type"] === "enabled" && budget > 0 ? budget : 0
+  }
+
+  /** Returns options with the Anthropic thinking budget lowered to `tokens`; the input is never mutated. */
+  export function fitThinking(npm: string, options: Record<string, any>, tokens: number | undefined) {
+    const current = thinkingTokens(npm, options)
+    if (tokens === undefined || !current || tokens >= current) return options
+    return { ...options, thinking: { ...options["thinking"], budgetTokens: tokens } }
   }
 
   export function maxOutputTokens(

@@ -1,3 +1,4 @@
+import { SubagentResult } from "../session/subagent-result"
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
@@ -18,7 +19,12 @@ import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { Log } from "@/util/log"
+import { FileLease } from "@/util/file-lease"
 import { SessionWake } from "@/session/wake"
+import { SubagentBudget } from "@/session/subagent-budget"
+import { SubagentDispatch } from "@/session/subagent-dispatch"
+import { Provider } from "@/provider/provider"
+import { resolveAccessRoute } from "@/session/access-route"
 
 const log = Log.create({ service: "tool.task" })
 
@@ -97,11 +103,7 @@ export async function resolveTaskContinuation(input: {
 }
 
 const parameters = z.object({
-  description: z
-    .string()
-    .describe(
-      "A one- to three-word title for the job, e.g. 'Split audit'; it names the worker's session, so a label, not a sentence.",
-    ),
+  description: z.string().describe("A short title for the worker session"),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The name of the subagent to use for this task"),
   task_id: z
@@ -109,16 +111,14 @@ const parameters = z.object({
     .trim()
     .nullish()
     .overwrite((value) => value || undefined)
-    .describe(
-      "Set only to resume a previous task: the task_id returned by an earlier call continues the same subagent session with its previous messages instead of starting fresh.",
-    ),
+    .describe("Reuse a returned task_id to continue the same child with its saved messages."),
   command: z.string().describe("The command that triggered this task").optional(),
-  background: z
-    .boolean()
+  expected_output: z.string().min(1).optional().describe("Expected artifacts, findings and checks"),
+  allocation: z
+    .object({ usd: z.number().positive().optional(), tokens: z.number().int().positive().optional() })
     .optional()
-    .describe(
-      "Run the agent in the background and return immediately. You will be notified when it completes; do not sleep, poll, or check on its progress.",
-    ),
+    .describe("Allocation from the approved shared pool; cannot raise its total"),
+  background: z.boolean().optional().describe("Return immediately; completion notifies you. Do not poll or sleep."),
 })
 
 /** Canonicalize model-supplied continuation placeholders before a Task attempt
@@ -241,7 +241,15 @@ export function taskText(messages: MessageV2.WithParts[], previous: Set<string>)
 export type TaskOutcome = {
   outcome: "completed" | "partial" | "error"
   stopReason:
-    "completed" | "max_steps" | "tool_failures" | "tool_partial" | "provider_error" | "cancelled" | "empty_handoff"
+    | "completed"
+    | "max_steps"
+    | "tool_failures"
+    | "tool_partial"
+    | "provider_error"
+    | "cancelled"
+    | "empty_handoff"
+    | SubagentBudget.Reason
+    | "reported_incomplete"
 }
 
 /**
@@ -326,10 +334,25 @@ const BACKGROUND_STARTED = [
 
 /** Background children in flight, by child session id, so a completion can
  * wake the parent exactly once and a second call can find the first. `result`
- * never rejects; `joined` records that a later call is already waiting for the
- * report, so the completion must not deliver it a second time as a wake-up. */
-type Background = { result: Promise<TaskAttempt.Result>; joined: boolean }
+ * never rejects; `delivered` records a successful wait, so a cancelled waiter
+ * cannot suppress the completion wake-up. */
+type Background = {
+  parentID: string
+  controller: AbortController
+  result: Promise<TaskAttempt.Result>
+  delivered: boolean
+  parentStopped: boolean
+}
 const background = new Map<string, Background>()
+
+export function cancelBackgroundTasks(parentID: string) {
+  for (const [childID, entry] of background) {
+    if (entry.parentID !== parentID) continue
+    entry.parentStopped = true
+    entry.controller.abort(new SubagentBudget.LimitError("cancelled"))
+    cancelBackgroundTasks(childID)
+  }
+}
 
 export function backgroundTasks() {
   return background.size
@@ -340,12 +363,22 @@ const JOINED =
 
 /** Wait for a running background child, or stop when the caller's turn does. */
 function join(entry: Background, abort: AbortSignal) {
-  entry.joined = true
   return new Promise<TaskAttempt.Result>((resolve, reject) => {
-    const cancel = () => reject(new Error("Waiting for the background worker was cancelled with the turn."))
+    const waiting = { active: true }
+    const cancel = () => {
+      waiting.active = false
+      abort.removeEventListener("abort", cancel)
+      reject(new Error("Waiting for the background worker was cancelled with the turn."))
+    }
     if (abort.aborted) return cancel()
     abort.addEventListener("abort", cancel, { once: true })
-    entry.result.then(resolve, reject).finally(() => abort.removeEventListener("abort", cancel))
+    entry.result.then((result) => {
+      if (!waiting.active) return
+      waiting.active = false
+      abort.removeEventListener("abort", cancel)
+      entry.delivered = true
+      resolve(result)
+    }, reject)
   })
 }
 
@@ -376,6 +409,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       return { ...rest, task_id: rest.task_id ?? session_id }
     },
     async execute(params: z.infer<typeof parameters>, ctx) {
+      const entered = Date.now()
       if (publishingBrief(`${params.description}\n${params.prompt}`)) {
         throw new Error(
           "Publishing stays with the lead: pushes, releases and uploads use this session's approvals and credentials. Delegate preparation or verification if useful, then push or upload from here.",
@@ -409,6 +443,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (running) {
         const result = await join(running, ctx.abort)
         return { ...result, output: `${JOINED}\n${result.output}` }
+      }
+      // A foreground run (or a user continuation) of this child is still going: say so, rather than
+      // starting a second run whose refusal would be reported as a provider error.
+      if (continuation) {
+        try {
+          SessionPrompt.assertNotBusy(continuation.id)
+        } catch (error) {
+          if (!(error instanceof Session.BusyError)) throw error
+          throw new Error(
+            `Subagent ${continuation.id} is still running; wait for its report, or omit task_id to start a new task.`,
+          )
+        }
       }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
@@ -445,24 +491,46 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const settings = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
       const leadModel = { modelID: assistant.modelID, providerID: assistant.providerID }
-      // The subagent's configured model wins; the composer's worker model is
-      // the user's override for agents without one; otherwise the lead's model.
-      const model = agent.model ?? settings.workerModel ?? leadModel
-      // A worker on the lead's model thinks as hard as the lead. On its own
-      // model it uses its own configured variant, or the model's default.
-      const variant =
-        model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
-          ? typeof ctx.extra?.variant === "string"
-            ? ctx.extra.variant
-            : undefined
-          : agent.variant
-
+      const userLimits = SubagentBudget.settings((await Config.getGlobal()).subagents)
       const reserved = await TaskAttempt.reserve({
         ...identity,
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
         childSessionID: continuation?.id,
       })
-      const started = reserved.createdAt
+      const part = (await MessageV2.parts(ctx.messageID)).find(
+        (part) => part.type === "tool" && part.callID === ctx.callID,
+      )
+      // The running tool part predates permission and queue waits and survives recovery.
+      const started = Math.min(
+        reserved.createdAt,
+        part?.type === "tool" && part.state.status !== "pending" ? part.state.time.start : entered,
+      )
+      const pinned = await SubagentBudget.read(reserved.childSessionID)
+      const contract =
+        pinned &&
+        (pinned.worker.stopReason ||
+          pinned.worker.reportReason === "budget_wrapup" ||
+          pinned.worker.reportReason === "deadline_wrapup" ||
+          pinned.worker.assignmentID === identity.callID)
+          ? pinned.worker
+          : undefined
+      const model =
+        contract?.model ??
+        (settings.workerModelOverride && settings.workerModel
+          ? settings.workerModel
+          : userLimits.model
+            ? Provider.parseModel(userLimits.model)
+            : leadModel)
+      const variant = contract
+        ? (contract.variant ??
+          (await Session.messages({ sessionID: reserved.childSessionID }))
+            .map((message) => message.info)
+            .findLast((message): message is MessageV2.User => message.role === "user")?.variant)
+        : model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
+          ? typeof ctx.extra?.variant === "string"
+            ? ctx.extra.variant
+            : undefined
+          : agent.variant
 
       const existing =
         continuation ??
@@ -482,6 +550,14 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             title: params.description,
             permission: childPermissionRules(agent, config.experimental?.primary_tools, parentRules),
           })
+      if (existing)
+        await Session.update(
+          session.id,
+          (info) => {
+            info.permission = childPermissionRules(agent, config.experimental?.primary_tools, parentRules)
+          },
+          { touch: false },
+        )
       // The child keeps its own scratch for staged inputs and side outputs but
       // works in the parent's directory: the files it writes there are the
       // parent's deliverables.
@@ -502,7 +578,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
 
       const run = async (signal: AbortSignal, live: boolean): Promise<TaskAttempt.Result> => {
         await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
-        return attemptLease.during(async () => {
+        return await attemptLease.during(async () => {
           const current = await TaskAttempt.read(identity)
           if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
           if (current.status === "completed" && current.result) return current.result
@@ -527,6 +603,16 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
             })
 
+          if (terminal) {
+            await using recovery = await FileLease.acquire(
+              SessionPrompt.loopLeasePath(Instance.project.id, session.id),
+              10000,
+              signal,
+            )
+            SessionPrompt.assertNotBusy(session.id)
+            await SubagentBudget.release(session.id, identity.callID)
+          }
+
           // A prior process may have died mid-turn; close its interval at its
           // last heartbeat before this process opens its own. Time between
           // reservation and activation is queueing, not child work.
@@ -549,7 +635,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const exists = initial.some(
                   (message) => message.info.role === "user" && message.info.id === reserved.childMessageID,
                 )
-                const dispatch = async () => {
+                const dispatch = async (childSignal: AbortSignal) => {
                   if (exists) return SessionPrompt.loop(session.id)
                   return SessionPrompt.prompt({
                     messageID: reserved.childMessageID,
@@ -560,8 +646,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     effort,
                     delegationSettings: settings,
                     parts: [
-                      ...(await SessionPrompt.resolvePromptParts(params.prompt)),
-                      ...(await SubtaskAttachments.materialize(attachments, session.id, signal)),
+                      ...(await SessionPrompt.resolvePromptParts(
+                        `${params.prompt}\n\nExpected output: ${params.expected_output ?? "Return findings, artifact references, checks performed, remaining work and limitations."} Start the final report with Outcome: Complete or Outcome: Incomplete.`,
+                      )),
+                      ...(await SubtaskAttachments.materialize(attachments, session.id, childSignal)),
                     ],
                   })
                 }
@@ -602,10 +690,55 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   : undefined
                 try {
                   // Keep progress and cancellation connected until the child settles.
-                  return await SessionPrompt.withCancellation(session.id, dispatch, signal).then(
+                  const root = await (async function top(id: string): Promise<string> {
+                    const info = await Session.get(id)
+                    return info.parentID ? top(info.parentID) : id
+                  })(ctx.sessionID)
+                  const bounded = await SubagentBudget.initialize(root, userLimits)
+                  if (!bounded)
+                    return await SessionPrompt.withCancellation(session.id, () => dispatch(signal), signal).then(
+                      (result) => ({ result, error: undefined }),
+                      (error: unknown) => ({ result: undefined, error }),
+                    )
+                  const route = await resolveAccessRoute(model.providerID, model.modelID)
+                  const unit = SubagentDispatch.unit(await Provider.getModel(model.providerID, model.modelID), route)
+                  const stored = await SubagentBudget.read(session.id)
+                  const contract = await SubagentBudget.open({
+                    rootSessionID: root,
+                    parentSessionID: ctx.sessionID,
+                    sessionID: session.id,
+                    assignmentID: identity.callID,
+                    objective: params.prompt,
+                    agent: agent.name,
+                    expectedOutput: params.expected_output ?? "Return findings, artifacts, checks and limitations.",
+                    model,
+                    variant,
+                    route,
+                    unit,
+                    settings: userLimits,
+                    allocation:
+                      unit === "usd"
+                        ? params.allocation?.usd === undefined
+                          ? undefined
+                          : SubagentBudget.dollars(params.allocation.usd)
+                        : params.allocation?.tokens,
+                    acceptedAt: started,
+                    deadline:
+                      stored?.worker.assignmentID === identity.callID
+                        ? stored.worker.deadline
+                        : started + (userLimits.deadlineMs ?? 600000),
+                  })
+                  await using allowance = await SubagentBudget.watch(contract, signal)
+                  return await SessionPrompt.withCancellation(
+                    session.id,
+                    () => dispatch(allowance.signal),
+                    allowance.signal,
+                  ).then(
                     (result) => ({ result, error: undefined }),
                     (error: unknown) => ({ result: undefined, error }),
                   )
+                } catch (error) {
+                  return { result: undefined, error }
                 } finally {
                   clearInterval(pulse)
                   unsubscribe?.()
@@ -627,7 +760,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
           const failedToolCalls = summary.filter((part) => part.state.status === "error").length
           const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
-          const taskOutcome = classifyTaskOutcome({
+          const budgetState = await SubagentBudget.read(session.id)
+          const budget = budgetState?.worker.assignmentID === identity.callID ? budgetState : undefined
+          const observed = classifyTaskOutcome({
             finish: child?.finish,
             error: execution.error ?? child?.error,
             hasText: text.trim().length > 0,
@@ -635,9 +770,24 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             failedToolCalls,
             partialToolCalls,
           })
+          const reportedIncomplete = /^\s*(?:\*\*)?Outcome:\s*(?:\*\*)?\s*Incomplete\b/im.test(text)
+          const limitReason =
+            budget?.worker.stopReason ??
+            (execution.error instanceof SubagentBudget.LimitError ? execution.error.reason : undefined)
+          const taskOutcome: TaskOutcome = limitReason
+            ? { outcome: "partial", stopReason: limitReason }
+            : reportedIncomplete
+              ? {
+                  outcome: "partial",
+                  stopReason: budget?.worker.wrapup
+                    ? (budget.worker.wrapupReason ?? "budget_wrapup")
+                    : "reported_incomplete",
+                }
+              : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
-          const note =
-            taskOutcome.stopReason === "max_steps"
+          const note = limitReason
+            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${limitReason === "deadline" || limitReason === "deadline_wrapup" ? "Continue with this task_id under a new assignment deadline if more work is needed." : limitReason === "cancelled" ? "Continue with this task_id only if the stopped work is requested again." : "Continue with this task_id only after an allowance is available."}`
+            : taskOutcome.stopReason === "max_steps"
               ? "The subagent reached its step limit; partial result follows."
               : taskOutcome.stopReason === "tool_failures"
                 ? "Every subagent tool call failed; treat this as a blocked partial result."
@@ -652,7 +802,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                         : failedToolCalls > 0
                           ? `${failedToolCalls} of ${summary.length} tool calls failed along the way; the report is the worker's own account.`
                           : undefined
+          const accounting = budget
+            ? (() => {
+                const w = budget.worker
+                const details = SubagentBudget.summary(budget.pool, w)
+                const format = (value: number) =>
+                  w.unit === "usd" ? `USD ${SubagentBudget.usd(value)}` : `${value} tokens`
+                return `Runtime accounting: model=${w.model.providerID}/${w.model.modelID}; route=${w.route}; grant=${format(w.limit)}; ${format(w.spent)} used; ${format(details.remaining)} assignment remaining; ${format(details.pending)} pending; ${format(SubagentBudget.available(budget.pool, w.unit))} shared pool available. ${w.unit === "usd" ? "Calculated allowance use, not a settled Wallet charge." : "Provider token use, not account quota."}`
+              })()
+            : undefined
           const body = [
+            SubagentResult.describe(taskOutcome.outcome, taskOutcome.stopReason),
+            accounting,
             text || `(no text; ${summary.length} tool calls in this turn)`,
             TaskEvidence.describe(evidence),
             `task_id: ${session.id}`,
@@ -671,13 +832,22 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               failedToolCalls,
               partialToolCalls,
               usage,
+              ...(accounting ? { accounting } : {}),
+              ...(budget ? { budget: SubagentBudget.summary(budget.pool, budget.worker) } : {}),
               outcome: taskOutcome.outcome,
               stopReason: taskOutcome.stopReason,
               handoff: text,
               evidence,
+              commandReceipts: TaskEvidence.describeCommands(evidence.commands),
             },
             output: renderTaskOutput({ sessionID: session.id, state, summary: note, text: body }),
           })
+          if (budget)
+            await SubagentBudget.report(session.id, {
+              handoff: text,
+              outcome: taskOutcome.outcome,
+              reason: taskOutcome.stopReason,
+            })
           await TaskAttempt.complete({ ...identity, result })
           return result
         })
@@ -715,25 +885,43 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         // Detached from the dispatching turn's admission context: the child
         // and the wake-up run after that turn has finished. A failure becomes
         // an error result so a caller waiting on the entry always gets one.
-        const outcome = SessionPrompt.detached(() => run(new AbortController().signal, false)).catch((error: unknown) =>
-          TaskAttempt.Result.parse({
+        const controller = new AbortController()
+        const outcome = SessionPrompt.detached(() => run(controller.signal, false)).catch((error: unknown) => {
+          const observed =
+            error instanceof SubagentBudget.LimitError
+              ? { outcome: "partial" as const, stopReason: error.reason }
+              : classifyTaskOutcome({ error })
+          return TaskAttempt.Result.parse({
             title: params.description,
-            metadata: { ...metadata, outcome: "error", stopReason: "provider_error" },
+            metadata: {
+              ...metadata,
+              ...observed,
+            },
             output: renderTaskOutput({
               sessionID: session.id,
               state: "error",
               summary: `Background task failed: ${params.description}`,
-              text: error instanceof Error ? error.message : String(error),
+              text: [
+                SubagentResult.describe(observed.outcome, observed.stopReason),
+                error instanceof Error ? error.message : String(error),
+              ].join("\n\n"),
             }),
-          }),
-        )
-        const entry: Background = { result: outcome, joined: false }
+          })
+        })
+        const entry: Background = {
+          parentID: ctx.sessionID,
+          controller,
+          result: outcome,
+          delivered: false,
+          parentStopped: false,
+        }
         background.set(session.id, entry)
         outcome.then(async (result) => {
           background.delete(session.id)
           await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
           // A call that joined the worker has already taken the report.
-          if (entry.joined) return
+          if (entry.delivered) return
+          if (entry.parentStopped) return
           await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
             log.error("background task completion could not wake the parent", { error }),
           )

@@ -1,6 +1,6 @@
 /** Classify user-owned provider access for local trace labels. */
 
-import { Auth } from "@/auth"
+import { Auth, OAUTH_DUMMY_KEY } from "@/auth"
 import { OpenScience } from "@/openscience"
 import { Provider } from "@/provider/provider"
 
@@ -17,6 +17,7 @@ export async function resolveCredentialSource(providerID: string, _modelID: stri
     return "managed"
   }
   if (auth?.type === "oauth") return "oauth"
+  if (effective && effective !== OAUTH_DUMMY_KEY) return "byok"
   if (OAUTH_PROVIDERS.has(providerID) && !auth) return "oauth"
   return "byok"
 }

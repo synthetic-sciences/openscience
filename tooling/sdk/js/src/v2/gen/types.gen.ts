@@ -240,6 +240,10 @@ export type UserMessage = {
       providerID: string
       modelID: string
     }
+    /**
+     * Explicit user model override for this run
+     */
+    workerModelOverride?: boolean
     autonomy?: "interactive" | "balanced" | "autonomous"
   }
   variant?: string
@@ -2712,6 +2716,18 @@ export type Config = {
    * Default agent to use when none is specified. Must be a primary agent. Falls back to 'research' if not set or if the specified agent is invalid.
    */
   default_agent?: string
+  /**
+   * User-approved limits and model policy for bounded Task subagents; main-agent calls are excluded
+   */
+  subagents?: {
+    enabled?: boolean
+    model?: string
+    usd?: number
+    tokens?: number
+    deadlineMs?: number
+    usdIncrease?: number
+    tokenIncrease?: number
+  }
   /**
    * How many levels of subagents a session may nest (default 1: only the lead dispatches workers)
    */
@@ -6397,6 +6413,10 @@ export type SettingsComputeJobsStartErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsStartError = SettingsComputeJobsStartErrors[keyof SettingsComputeJobsStartErrors]
@@ -7219,6 +7239,10 @@ export type SettingsComputeJobsPlanErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsPlanError = SettingsComputeJobsPlanErrors[keyof SettingsComputeJobsPlanErrors]
@@ -7428,6 +7452,10 @@ export type SettingsComputeJobsRetryErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsRetryError = SettingsComputeJobsRetryErrors[keyof SettingsComputeJobsRetryErrors]
@@ -8203,6 +8231,10 @@ export type SettingsComputeJobsReleaseErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsReleaseError = SettingsComputeJobsReleaseErrors[keyof SettingsComputeJobsReleaseErrors]
@@ -12096,6 +12128,299 @@ export type ExperimentalResourceListResponses = {
 export type ExperimentalResourceListResponse =
   ExperimentalResourceListResponses[keyof ExperimentalResourceListResponses]
 
+export type SessionSubagentBudgetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/budget"
+}
+
+export type SessionSubagentBudgetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionSubagentBudgetError = SessionSubagentBudgetErrors[keyof SessionSubagentBudgetErrors]
+
+export type SessionSubagentBudgetResponses = {
+  /**
+   * Shared subagent pools and assignments; main-agent inference is excluded
+   */
+  200: {
+    enabled?: boolean
+    version: 1
+    projectID: string
+    rootSessionID: string
+    revision: number
+    limits: {
+      usd: number
+      tokens: number
+    }
+    workers: {
+      [key: string]: {
+        sessionID: string
+        parentSessionID: string
+        rootSessionID: string
+        assignmentID: string
+        objective: string
+        expectedOutput: string
+        model: {
+          providerID: string
+          modelID: string
+        }
+        variant?: string
+        route: string
+        unit: "usd" | "tokens"
+        limit: number
+        spent: number
+        active: boolean
+        acceptedAt?: number
+        deadline: number
+        stopReason?:
+          | "budget_limit"
+          | "token_limit"
+          | "deadline"
+          | "route_changed"
+          | "pricing_unavailable"
+          | "setup_required"
+          | "budget_wrapup"
+          | "deadline_wrapup"
+          | "cancelled"
+        wrapup?: boolean
+        wrapupReason?: "budget_wrapup" | "deadline_wrapup"
+        handoffCallID?: string
+        handoff?: string
+        outcome?: "completed" | "partial" | "error"
+        reportReason?: string
+        agent?: string
+        deleted?: boolean
+        calls: {
+          [key: string]: {
+            amount: number
+            state: "pending" | "settled"
+            consumed?: number
+          }
+        }
+      }
+    }
+    approvals: {
+      [key: string]: {
+        unit: "usd" | "tokens"
+        amount: number
+        revision: number
+      }
+    }
+    continuations?: {
+      [key: string]: {
+        childID: string
+        userID: string
+        messageID: string
+        partID: string
+        callID: string
+        amount: number
+        completed: boolean
+      }
+    }
+    available: {
+      usd: number
+      tokens: number
+    }
+    continuationCapacity: {
+      [key: string]: {
+        available: number
+        ancestorLimited: boolean
+      }
+    }
+  } | null
+}
+
+export type SessionSubagentBudgetResponse = SessionSubagentBudgetResponses[keyof SessionSubagentBudgetResponses]
+
+export type SessionContinueSubagentData = {
+  body?: {
+    key: string
+  }
+  path: {
+    sessionID: string
+    childID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/{childID}/continue"
+}
+
+export type SessionContinueSubagentErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
+}
+
+export type SessionContinueSubagentError = SessionContinueSubagentErrors[keyof SessionContinueSubagentErrors]
+
+export type SessionContinueSubagentResponses = {
+  /**
+   * Accepted a new Task call for the same child
+   */
+  202: {
+    sessionID: string
+    callID: string
+  }
+}
+
+export type SessionContinueSubagentResponse = SessionContinueSubagentResponses[keyof SessionContinueSubagentResponses]
+
+export type SessionIncreaseSubagentBudgetData = {
+  body?:
+    | {
+        unit: "usd"
+        amount: number
+        revision: number
+        key: string
+      }
+    | {
+        unit: "tokens"
+        amount: number
+        revision: number
+        key: string
+      }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/{sessionID}/subagents/budget/increase"
+}
+
+export type SessionIncreaseSubagentBudgetErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
+}
+
+export type SessionIncreaseSubagentBudgetError =
+  SessionIncreaseSubagentBudgetErrors[keyof SessionIncreaseSubagentBudgetErrors]
+
+export type SessionIncreaseSubagentBudgetResponses = {
+  /**
+   * User-approved pool total; existing usage is preserved
+   */
+  200: {
+    enabled?: boolean
+    version: 1
+    projectID: string
+    rootSessionID: string
+    revision: number
+    limits: {
+      usd: number
+      tokens: number
+    }
+    workers: {
+      [key: string]: {
+        sessionID: string
+        parentSessionID: string
+        rootSessionID: string
+        assignmentID: string
+        objective: string
+        expectedOutput: string
+        model: {
+          providerID: string
+          modelID: string
+        }
+        variant?: string
+        route: string
+        unit: "usd" | "tokens"
+        limit: number
+        spent: number
+        active: boolean
+        acceptedAt?: number
+        deadline: number
+        stopReason?:
+          | "budget_limit"
+          | "token_limit"
+          | "deadline"
+          | "route_changed"
+          | "pricing_unavailable"
+          | "setup_required"
+          | "budget_wrapup"
+          | "deadline_wrapup"
+          | "cancelled"
+        wrapup?: boolean
+        wrapupReason?: "budget_wrapup" | "deadline_wrapup"
+        handoffCallID?: string
+        handoff?: string
+        outcome?: "completed" | "partial" | "error"
+        reportReason?: string
+        agent?: string
+        deleted?: boolean
+        calls: {
+          [key: string]: {
+            amount: number
+            state: "pending" | "settled"
+            consumed?: number
+          }
+        }
+      }
+    }
+    approvals: {
+      [key: string]: {
+        unit: "usd" | "tokens"
+        amount: number
+        revision: number
+      }
+    }
+    continuations?: {
+      [key: string]: {
+        childID: string
+        userID: string
+        messageID: string
+        partID: string
+        callID: string
+        amount: number
+        completed: boolean
+      }
+    }
+    available: {
+      usd: number
+      tokens: number
+    }
+    continuationCapacity: {
+      [key: string]: {
+        available: number
+        ancestorLimited: boolean
+      }
+    }
+  }
+}
+
+export type SessionIncreaseSubagentBudgetResponse =
+  SessionIncreaseSubagentBudgetResponses[keyof SessionIncreaseSubagentBudgetResponses]
+
 export type SessionListData = {
   body?: never
   path?: never
@@ -12157,6 +12482,10 @@ export type SessionCreateErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]
@@ -13397,6 +13726,10 @@ export type SessionPromptData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     system?: string
@@ -13597,6 +13930,10 @@ export type SessionPromptAsyncData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     system?: string
@@ -13655,6 +13992,10 @@ export type SessionCommandData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     variant?: string
@@ -13887,6 +14228,10 @@ export type RuntimePromptData = {
         providerID: string
         modelID: string
       }
+      /**
+       * Explicit user model override for this run
+       */
+      workerModelOverride?: boolean
       autonomy?: "interactive" | "balanced" | "autonomous"
     }
     requestID?: string
@@ -19895,6 +20240,10 @@ export type SettingsSkillsAddRootErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsSkillsAddRootError = SettingsSkillsAddRootErrors[keyof SettingsSkillsAddRootErrors]
