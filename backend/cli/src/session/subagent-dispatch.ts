@@ -83,7 +83,11 @@ export namespace SubagentDispatch {
         : 0
       : Decimal.max(0, remaining.minus(inputCost).div(state.rates.output).floor()).toNumber()
     // Providers that add a thinking budget to max_tokens bill it as output, so it comes out of the text cap.
-    const thinking = state.rates.output.isZero() ? 0 : (input.thinkingTokens ?? 0)
+    // Near the limit the budget shrinks to half of what is left (never below Anthropic's 1024 minimum),
+    // so a fixed budget does not strand the end of the allowance.
+    const requested = state.rates.output.isZero() ? 0 : (input.thinkingTokens ?? 0)
+    const thinking =
+      requested > affordable / 2 ? Math.min(requested, Math.max(1024, Math.floor(affordable / 2))) : requested
     const output = Math.min(desired, affordable - thinking)
     if (output < 1) {
       const reason = state.worker.unit === "usd" ? "budget_limit" : "token_limit"
@@ -103,6 +107,7 @@ export namespace SubagentDispatch {
       throw new SubagentBudget.LimitError(reason, "Internal work deferred to preserve the subagent handoff")
     return {
       maxOutputTokens: output,
+      thinkingTokens: requested ? thinking : undefined,
       wrapup,
       notice: wrapup ? handoff(reason === "deadline_wrapup" ? "deadline" : "allowance") : undefined,
     }

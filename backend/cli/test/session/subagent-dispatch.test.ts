@@ -498,16 +498,30 @@ test("a thinking budget the provider adds to max_tokens is fitted inside the all
     })
     expect((await SubagentBudget.read("child"))?.worker.stopReason).toBeUndefined()
     await SubagentBudget.settle("child", "thinking", 0)
-    await expect(
+  })
+})
+
+test("near the limit the thinking budget shrinks so the remaining allowance stays usable", async () => {
+  await fixture(async (model) => {
+    const call = (thinkingTokens: number) =>
       SubagentDispatch.prepare({
         sessionID: "child",
         model,
         route: "local",
         inputTokens: 1000,
         maxOutputTokens: 32000,
-        thinkingTokens: 9000,
-      }),
-    ).rejects.toMatchObject({ reason: "token_limit" })
+        thinkingTokens,
+      })
+    // 9000 output tokens are affordable; a 16000 budget no longer refuses the call, it splits what is left.
+    expect(await call(16000)).toMatchObject({ maxOutputTokens: 4500, thinkingTokens: 4500 })
+    expect(await call(4000)).toMatchObject({ maxOutputTokens: 5000, thinkingTokens: 4000 })
+    await SubagentBudget.reserve("child", "work", 7000)
+    await SubagentBudget.settle("child", "work", 7000)
+    // 2000 left: Anthropic's 1024-token minimum budget is kept and the text gets the rest.
+    expect(await call(16000)).toMatchObject({ maxOutputTokens: 976, thinkingTokens: 1024 })
+    await SubagentBudget.reserve("child", "more", 1000)
+    await SubagentBudget.settle("child", "more", 1000)
+    await expect(call(16000)).rejects.toMatchObject({ reason: "token_limit" })
   })
 })
 

@@ -242,6 +242,18 @@ describe("ProviderTransform.variants - exact catalog efforts", () => {
   })
 })
 
+describe("ProviderTransform.fitThinking", () => {
+  test("rewrites only an enabled Anthropic thinking budget and leaves the caller's options untouched", () => {
+    const options = { thinking: { type: "enabled", budgetTokens: 16000 }, other: 1 }
+    const fitted = ProviderTransform.fitThinking("@ai-sdk/anthropic", options, 4500)
+    expect(fitted).toEqual({ thinking: { type: "enabled", budgetTokens: 4500 }, other: 1 })
+    expect(options.thinking.budgetTokens).toBe(16000)
+    expect(ProviderTransform.fitThinking("@ai-sdk/anthropic", options, 16000)).toBe(options)
+    expect(ProviderTransform.fitThinking("@ai-sdk/openai", options, 4500)).toBe(options)
+    expect(ProviderTransform.fitThinking("@ai-sdk/anthropic", options, undefined)).toBe(options)
+  })
+})
+
 describe("ProviderTransform.thinkingTokens", () => {
   test("reports the Anthropic thinking budget the SDK adds to max_tokens", () => {
     const enabled = { thinking: { type: "enabled", budgetTokens: 16000 } }

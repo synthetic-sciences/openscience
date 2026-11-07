@@ -422,7 +422,10 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
+      providerOptions: ProviderTransform.providerOptions(
+        input.model,
+        ProviderTransform.fitThinking(input.model.api.npm, params.options, allowance?.thinkingTokens),
+      ),
       activeTools,
       tools,
       ...(allowance?.wrapup

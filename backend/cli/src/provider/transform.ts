@@ -1247,6 +1247,13 @@ export namespace ProviderTransform {
     return thinking?.["type"] === "enabled" && budget > 0 ? budget : 0
   }
 
+  /** Returns options with the Anthropic thinking budget lowered to `tokens`; the input is never mutated. */
+  export function fitThinking(npm: string, options: Record<string, any>, tokens: number | undefined) {
+    const current = thinkingTokens(npm, options)
+    if (tokens === undefined || !current || tokens >= current) return options
+    return { ...options, thinking: { ...options["thinking"], budgetTokens: tokens } }
+  }
+
   export function maxOutputTokens(
     npm: string,
     options: Record<string, any>,
