@@ -91,7 +91,9 @@ export namespace SubagentDispatch {
     const output = Math.min(desired, affordable - thinking)
     if (output < 1) {
       const reason = state.worker.unit === "usd" ? "budget_limit" : "token_limit"
-      await SubagentBudget.stop(input.sessionID, reason)
+      // Internal calls (titles, summaries) run beside the worker's own call and can lose to its
+      // in-flight reservation; skipping one must not end the worker's assignment.
+      if (!input.internal) await SubagentBudget.stop(input.sessionID, reason)
       const minimum = inputCost.plus(state.rates.output.mul(1 + thinking))
       const amount = (value: Decimal) =>
         state.worker.unit === "usd" ? `USD ${value.div(1_000_000_000).toString()}` : `${value.toString()} tokens`
@@ -126,7 +128,13 @@ export namespace SubagentDispatch {
     const cap = body.max_tokens ?? body.max_completion_tokens ?? body.max_output_tokens
     const output = typeof cap === "number" ? cap : (input.outputBound ?? 2048)
     const amount = state.rates.input.mul(tokens).plus(state.rates.output.mul(output)).ceil().toNumber()
-    await SubagentBudget.reserve(input.sessionID, input.callID, amount, !!state.worker.wrapup && !input.internal)
+    await SubagentBudget.reserve(
+      input.sessionID,
+      input.callID,
+      amount,
+      !!state.worker.wrapup && !input.internal,
+      input.internal,
+    )
   }
   export async function complete(
     input: Context & { callID: string; usage: LanguageModelUsage; metadata?: ProviderMetadata; tier?: string },

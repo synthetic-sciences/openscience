@@ -473,7 +473,7 @@ export namespace SubagentBudget {
       return { pool, result: worker, binding: input.sessionID }
     })
   }
-  export async function reserve(sessionID: string, callID: string, amount: number, handoff = false) {
+  export async function reserve(sessionID: string, callID: string, amount: number, handoff = false, internal = false) {
     const id = await root(sessionID)
     if (!id) return
     const failure = await mutate<Reason | undefined>(id, (current) => {
@@ -489,6 +489,8 @@ export namespace SubagentBudget {
               ? "budget_limit"
               : "token_limit"
             : undefined
+      // An internal call that loses to the worker's own in-flight reservation is skipped, not fatal.
+      if (reason && internal && w.active && reason !== "deadline") return { pool, result: reason }
       if (reason) {
         halt(w, reason)
         return { pool, result: w.stopReason }

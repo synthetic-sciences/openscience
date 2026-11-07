@@ -501,6 +501,38 @@ test("a thinking budget the provider adds to max_tokens is fitted inside the all
   })
 })
 
+test("an internal call that cannot fit beside an in-flight call is skipped without stopping the worker", async () => {
+  await fixture(async (model) => {
+    // The child's main call holds most of the allowance while a title call for the same session starts.
+    await SubagentBudget.reserve("child", "main", 9500)
+    await expect(
+      SubagentDispatch.prepare({
+        sessionID: "child",
+        model,
+        route: "local",
+        inputTokens: 1000,
+        maxOutputTokens: 2048,
+        internal: true,
+      }),
+    ).rejects.toMatchObject({ reason: "token_limit" })
+    // The same race at reservation time: the main call reserved between the title call's prepare and begin.
+    await expect(
+      SubagentDispatch.begin({
+        sessionID: "child",
+        model,
+        route: "local",
+        callID: "title",
+        body: { messages: [{ role: "user", content: "x".repeat(4000) }], max_tokens: 400 },
+        internal: true,
+      }),
+    ).rejects.toMatchObject({ reason: "token_limit" })
+    const state = (await SubagentBudget.read("child"))!
+    expect(state.worker.active).toBe(true)
+    expect(state.worker.stopReason).toBeUndefined()
+    expect(state.worker.calls.title).toBeUndefined()
+  })
+})
+
 test("near the limit the thinking budget shrinks so the remaining allowance stays usable", async () => {
   await fixture(async (model) => {
     const call = (thinkingTokens: number) =>
