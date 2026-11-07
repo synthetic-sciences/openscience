@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Keep the research database at schema version 7 so earlier releases can still open it; the subagent allowance tables are added on open. Fit Anthropic thinking budgets inside subagent allowances and shrink them near the limit instead of stopping early. A finished subagent is no longer marked as limit-reached when its session-title call cannot fit beside its own request. Retried continuations return the running call, unknown subagents return 404, and conflicts are documented as 409. The allowance panel refreshes as workers start and stop and keeps each subagent's original task as its label.
 - Return subagent reservations after definite request rejections, estimate images separately from encoded bytes, and preserve deadline reasons when a stream timeout or late reservation finishes first. Document the trusted local API boundary for allowance increases.
 
 - Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
