@@ -6413,6 +6413,10 @@ export type SettingsComputeJobsStartErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsStartError = SettingsComputeJobsStartErrors[keyof SettingsComputeJobsStartErrors]
@@ -7235,6 +7239,10 @@ export type SettingsComputeJobsPlanErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsPlanError = SettingsComputeJobsPlanErrors[keyof SettingsComputeJobsPlanErrors]
@@ -7444,6 +7452,10 @@ export type SettingsComputeJobsRetryErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsRetryError = SettingsComputeJobsRetryErrors[keyof SettingsComputeJobsRetryErrors]
@@ -8219,6 +8231,10 @@ export type SettingsComputeJobsReleaseErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsComputeJobsReleaseError = SettingsComputeJobsReleaseErrors[keyof SettingsComputeJobsReleaseErrors]
@@ -12249,6 +12265,10 @@ export type SessionContinueSubagentErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SessionContinueSubagentError = SessionContinueSubagentErrors[keyof SessionContinueSubagentErrors]
@@ -12297,6 +12317,10 @@ export type SessionIncreaseSubagentBudgetErrors = {
    * Not found
    */
   404: NotFoundError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SessionIncreaseSubagentBudgetError =
@@ -12458,6 +12482,10 @@ export type SessionCreateErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SessionCreateError = SessionCreateErrors[keyof SessionCreateErrors]
@@ -20212,6 +20240,10 @@ export type SettingsSkillsAddRootErrors = {
    * Bad request
    */
   400: BadRequestError
+  /**
+   * Conflict with the current state; refresh and retry
+   */
+  409: unknown
 }
 
 export type SettingsSkillsAddRootError = SettingsSkillsAddRootErrors[keyof SettingsSkillsAddRootErrors]

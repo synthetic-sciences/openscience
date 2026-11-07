@@ -325,6 +325,18 @@ test("a revision conflict refreshes totals and requires another explicit approva
   expect(app.state.writes[1]!.body.key).not.toBe(app.state.writes[0]!.body.key)
 })
 
+test("a continuation that ended without starting a new assignment releases the queued state", async () => {
+  const app = await mount({ available: 1_000_000_000, increments: false })
+  await app.load()
+  app.button("Continue with remaining allowance").click()
+  await ready(() => app.host.textContent?.includes("Continuation queued") === true)
+  const key = String(app.state.writes[0]!.body.key)
+  Object.assign(app.state.pool, { continuations: { [key]: { childID: "child", completed: true } } })
+  app.button("Refresh subagent allowance").click()
+  await ready(() => app.host.textContent?.includes("Continuation queued") === false)
+  expect(app.button("Continue with remaining allowance")).toBeDefined()
+})
+
 test("remaining approved allowance continues the child without any increase", async () => {
   const app = await mount({ available: 1_000_000_000, increments: false })
   await app.load()

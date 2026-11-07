@@ -34,6 +34,7 @@ type Pool = {
   limits: Record<Unit, number>
   available: Record<Unit, number>
   continuationCapacity?: Record<string, { available: number; ancestorLimited: boolean }>
+  continuations?: Record<string, { childID: string; completed: boolean }>
   workers: Record<string, Worker>
 }
 type Services = { request: ProjectRequest; scope: string; defaults: () => Promise<Defaults> }
@@ -141,7 +142,10 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
     if (epoch !== state.epoch) return
     setState("pool", reconcile(pool))
     for (const [id, attempt] of Object.entries(state.attempts)) {
-      if (attempt?.stage === "done" && pool?.workers[id]?.assignmentID !== attempt.assignmentID) {
+      const worker = pool?.workers[id]
+      // A continuation can finish without a new assignment (e.g. a provider error); it is no longer queued.
+      const ended = !!pool?.continuations?.[attempt?.continuation ?? ""]?.completed && !worker?.active
+      if (attempt?.stage === "done" && (worker?.assignmentID !== attempt.assignmentID || ended)) {
         setState("attempts", id, undefined)
       }
     }

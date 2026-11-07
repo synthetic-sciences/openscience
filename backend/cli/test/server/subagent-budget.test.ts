@@ -56,6 +56,10 @@ test("session allowance routes scope reads and apply revisioned increases once",
       expect(stale.status).toBe(409)
       const missing = await fetch("http://openscience.internal/session/ses_missing/subagents/budget")
       expect(missing.status).toBe(404)
+      const unpooled = await Session.create({})
+      const none = await fetch(`http://openscience.internal/session/${unpooled.id}/subagents/budget/increase`, options)
+      expect(none.status).toBe(404)
+      expect((await none.json()).name).toBe("NotFoundError")
       const invalid = await fetch(base + "/increase", { ...options, body: JSON.stringify({ ...body, amount: 0 }) })
       expect(invalid.status).toBe(400)
     },
@@ -98,6 +102,20 @@ test("continuing a child whose agent was not recorded refuses instead of guessin
       expect(response.status).toBe(409)
       expect(await response.text()).toContain("agent was not recorded")
       expect((await SubagentBudget.inspect(parent.id))?.continuations).toEqual({})
+      const unknown = await Server.internalFetch()(
+        `http://openscience.internal/session/${parent.id}/subagents/ses_000000000000unknownxxxxxx/continue`,
+        {
+          method: "POST",
+          headers: {
+            "x-openscience-project": Instance.project.id,
+            "x-openscience-directory": tmp.path,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ key: crypto.randomUUID() }),
+        },
+      )
+      expect(unknown.status).toBe(404)
+      expect((await unknown.json()).name).toBe("NotFoundError")
     },
   })
 })
@@ -157,4 +175,10 @@ test("disabled conversations expose no approved funds and reject increases", asy
       expect(await SubagentBudget.inspect(parent.id)).toEqual(before)
     },
   })
+})
+
+test("subagent routes document their conflict responses", async () => {
+  const { errors } = await import("../../src/server/error")
+  expect(Object.keys(errors(400, 404, 409))).toEqual(["400", "404", "409"])
+  expect(() => errors(418)).toThrow()
 })

@@ -477,6 +477,40 @@ test("Fast admission keeps its own output price within the remaining allowance",
   }, "usd")
 })
 
+test("a thinking budget the provider adds to max_tokens is fitted inside the allowance", async () => {
+  await fixture(async (model) => {
+    const plan = await SubagentDispatch.prepare({
+      sessionID: "child",
+      model,
+      route: "local",
+      inputTokens: 1000,
+      maxOutputTokens: 32000,
+      thinkingTokens: 4000,
+    })
+    expect(plan).toMatchObject({ maxOutputTokens: 5000 })
+    // Anthropic sends max_tokens = maxOutputTokens + thinking budget; that wire request must still be admitted.
+    await SubagentDispatch.begin({
+      sessionID: "child",
+      model,
+      route: "local",
+      callID: "thinking",
+      body: { messages: [{ role: "user", content: "x".repeat(10) }], max_tokens: plan!.maxOutputTokens + 4000 },
+    })
+    expect((await SubagentBudget.read("child"))?.worker.stopReason).toBeUndefined()
+    await SubagentBudget.settle("child", "thinking", 0)
+    await expect(
+      SubagentDispatch.prepare({
+        sessionID: "child",
+        model,
+        route: "local",
+        inputTokens: 1000,
+        maxOutputTokens: 32000,
+        thinkingTokens: 9000,
+      }),
+    ).rejects.toMatchObject({ reason: "token_limit" })
+  })
+})
+
 test("a call can use all remaining output capacity without a report reserve", async () => {
   await fixture(async (model) => {
     const plan = await SubagentDispatch.prepare({

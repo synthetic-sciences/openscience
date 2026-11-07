@@ -286,6 +286,23 @@ test("conversation mode freezes on first admission and old pools stay bounded", 
   })
 })
 
+test("an active parent's own grant decides a grandchild's continuation, not the exhausted pool above it", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 100))
+      await SubagentBudget.open({ ...input("b", 100), parentSessionID: "a" })
+      await SubagentBudget.open({ ...input("c", 50), parentSessionID: "b" })
+      await SubagentBudget.release("c")
+      expect((await SubagentBudget.snapshot("root"))?.continuationCapacity.c).toEqual({
+        available: 100,
+        ancestorLimited: false,
+      })
+    },
+  })
+})
+
 test("a nested continuation reports an exhausted ancestor even after a root increase", async () => {
   await using tmp = await tmpdir({ git: true })
   await Instance.provide({

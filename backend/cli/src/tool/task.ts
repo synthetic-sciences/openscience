@@ -444,6 +444,18 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         const result = await join(running, ctx.abort)
         return { ...result, output: `${JOINED}\n${result.output}` }
       }
+      // A foreground run (or a user continuation) of this child is still going: say so, rather than
+      // starting a second run whose refusal would be reported as a provider error.
+      if (continuation) {
+        try {
+          SessionPrompt.assertNotBusy(continuation.id)
+        } catch (error) {
+          if (!(error instanceof Session.BusyError)) throw error
+          throw new Error(
+            `Subagent ${continuation.id} is still running; wait for its report, or omit task_id to start a new task.`,
+          )
+        }
+      }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
       if (!ctx.extra?.bypassAgentCheck) {

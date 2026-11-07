@@ -10,6 +10,7 @@ import { PermissionNext } from "@/permission/next"
 import { ProjectAccess } from "@/project/access"
 import { Agent } from "@/agent/agent"
 import { Log } from "@/util/log"
+import { Storage } from "@/storage/storage"
 
 /** A user action creates a new durable Task call, never replays the old one. */
 export namespace SubagentContinuation {
@@ -21,16 +22,24 @@ export namespace SubagentContinuation {
     const child = await Session.get(childID)
     if (child.parentID !== parentID) throw new Error("Continue the subagent from its direct parent session")
     const state = await SubagentBudget.read(childID)
-    if (!state || state.worker.deleted) throw new Error("Subagent not found")
+    if (!state || state.worker.deleted) throw new Storage.NotFoundError({ message: "Subagent not found" })
     const saved = state.pool.continuations[key]
     if (saved?.childID !== undefined && saved.childID !== childID) throw new Error("Continuation key conflict")
     if (saved?.completed) return { sessionID: childID, callID: saved.callID }
     // Resuming under a guessed agent would silently change the child's prompt and tools.
     const subagent = state.worker.agent
     if (!subagent) throw new Error("This subagent's agent was not recorded; start a new subagent instead")
-    SessionPrompt.assertNotBusy(parentID)
-    SessionPrompt.assertNotBusy(childID)
-    const lease = await FileLease.acquire(SessionPrompt.loopLeasePath(parent.projectID, parentID), 500)
+    const lease = await (async () => {
+      SessionPrompt.assertNotBusy(parentID)
+      SessionPrompt.assertNotBusy(childID)
+      return FileLease.acquire(SessionPrompt.loopLeasePath(parent.projectID, parentID), 500)
+    })().catch(async (error) => {
+      // A retry of a continuation that is already running gets that run, not a conflict.
+      const running = (await SubagentBudget.read(childID))?.pool.continuations[key]
+      if (running?.childID === childID) return { sessionID: childID, callID: running.callID }
+      throw error
+    })
+    if (!(Symbol.asyncDispose in lease)) return lease
     try {
       SessionPrompt.assertNotBusy(parentID)
       const operation = await SubagentBudget.continuation(state.pool.rootSessionID, childID, key)

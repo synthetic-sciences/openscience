@@ -338,6 +338,7 @@ export namespace LLM {
           inputTokens: await SubagentInput.prompt({ system, messages: providerMessages, tools }),
           tier: input.small ? undefined : input.user.tier,
           maxOutputTokens: requestedOutputTokens,
+          thinkingTokens: isCodex ? 0 : ProviderTransform.thinkingTokens(input.model.api.npm, params.options),
           internal: input.small,
         })
       : undefined

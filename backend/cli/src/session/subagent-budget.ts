@@ -273,7 +273,8 @@ export namespace SubagentBudget {
     return {
       // Inactive ancestors have returned their unused grants to the outer pool.
       available: Math.min(free, parent.active ? spendable(pool, parent.sessionID) : prior.available),
-      ancestorLimited: free === 0 || prior.ancestorLimited,
+      // An active parent's held grant is the binding limit; only an inactive one inherits its ancestors' limit.
+      ancestorLimited: free === 0 || (!parent.active && prior.ancestorLimited),
     }
   }
   async function root(sessionID: string) {

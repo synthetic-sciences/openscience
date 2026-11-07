@@ -12435,6 +12435,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "parameters": [
@@ -13168,6 +13171,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "parameters": [
@@ -16264,6 +16270,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "parameters": [
@@ -18939,6 +18948,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "parameters": [
@@ -29035,6 +29047,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "requestBody": {
@@ -29457,6 +29472,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "requestBody": {
@@ -29639,6 +29657,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "requestBody": {
@@ -56863,6 +56884,9 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state; refresh and retry"
           }
         },
         "requestBody": {

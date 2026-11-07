@@ -1239,6 +1239,14 @@ export namespace ProviderTransform {
     return { [key]: options }
   }
 
+  /** Output tokens the SDK adds to the wire max_tokens beyond maxOutputTokens (Anthropic thinking). */
+  export function thinkingTokens(npm: string, options: Record<string, any>): number {
+    if (npm !== "@ai-sdk/anthropic" && npm !== "@ai-sdk/google-vertex/anthropic") return 0
+    const thinking = options?.["thinking"]
+    const budget = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
+    return thinking?.["type"] === "enabled" && budget > 0 ? budget : 0
+  }
+
   export function maxOutputTokens(
     npm: string,
     options: Record<string, any>,

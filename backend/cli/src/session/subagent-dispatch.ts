@@ -69,7 +69,9 @@ export namespace SubagentDispatch {
     }
     return { ...state, rates }
   }
-  export async function prepare(input: Context & { inputTokens: number; maxOutputTokens?: number }) {
+  export async function prepare(
+    input: Context & { inputTokens: number; maxOutputTokens?: number; thinkingTokens?: number },
+  ) {
     const state = await checked(input, input.inputTokens)
     if (!state) return
     const remaining = new Decimal(SubagentBudget.spendable(state.pool, input.sessionID))
@@ -80,11 +82,13 @@ export namespace SubagentDispatch {
         ? desired
         : 0
       : Decimal.max(0, remaining.minus(inputCost).div(state.rates.output).floor()).toNumber()
-    const output = Math.min(desired, affordable)
+    // Providers that add a thinking budget to max_tokens bill it as output, so it comes out of the text cap.
+    const thinking = state.rates.output.isZero() ? 0 : (input.thinkingTokens ?? 0)
+    const output = Math.min(desired, affordable - thinking)
     if (output < 1) {
       const reason = state.worker.unit === "usd" ? "budget_limit" : "token_limit"
       await SubagentBudget.stop(input.sessionID, reason)
-      const minimum = inputCost.plus(state.rates.output)
+      const minimum = inputCost.plus(state.rates.output.mul(1 + thinking))
       const amount = (value: Decimal) =>
         state.worker.unit === "usd" ? `USD ${value.div(1_000_000_000).toString()}` : `${value.toString()} tokens`
       throw new SubagentBudget.LimitError(

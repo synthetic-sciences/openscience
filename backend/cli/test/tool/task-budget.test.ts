@@ -545,6 +545,56 @@ test("user increase and continue resumes the same real Task child once", async (
   )
 })
 
+test("replaying a continuation key while it runs returns the same call instead of a conflict", async () => {
+  await fixture(
+    async ({ parent, execute, requests }) => {
+      const first = await execute()
+      expect(first.metadata.stopReason).toBe("token_limit")
+      const childID = first.metadata.sessionId as string
+      const internal = Server.internalFetch()
+      const fetch = (url: string, options?: RequestInit) => {
+        const headers = new Headers(options?.headers)
+        headers.set("x-openscience-project", parent.projectID)
+        headers.set("x-openscience-directory", parent.directory)
+        return internal(url, { ...options, headers })
+      }
+      const pool = (await SubagentBudget.snapshot(parent.id))!
+      await fetch(`http://openscience.internal/session/${parent.id}/subagents/budget/increase`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ unit: "tokens", amount: 200000, revision: pool.revision, key: crypto.randomUUID() }),
+      })
+      const endpoint = `http://openscience.internal/session/${parent.id}/subagents/${childID}/continue`
+      const options = {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ key: crypto.randomUUID() }),
+      }
+      const before = requests.length
+      const [a, b] = await Promise.all([fetch(endpoint, options), fetch(endpoint, options)])
+      const replay = await fetch(endpoint, options)
+      const bodies = await Promise.all([a, b, replay].map((r) => r.text()))
+      expect([a.status, b.status, replay.status], bodies.join(" | ")).toEqual([202, 202, 202])
+      const ids = new Set(bodies.map((body) => JSON.parse(body).callID))
+      expect(ids.size).toBe(1)
+      const other = await fetch(endpoint, { ...options, body: JSON.stringify({ key: crypto.randomUUID() }) })
+      expect(other.status).toBe(409)
+      const until = Date.now() + 10000
+      while (Date.now() < until && !(await SubagentBudget.read(childID))?.pool.continuations) await Bun.sleep(10)
+      while (Date.now() < until) {
+        const current = await SubagentBudget.read(childID)
+        if (Object.values(current?.pool.continuations ?? {}).every((c) => c.completed)) break
+        await Bun.sleep(20)
+      }
+      const turns = requests.slice(before).filter((r) => !JSON.stringify(r).includes("You are a title generator"))
+      expect(turns).toHaveLength(1)
+    },
+    600000,
+    100,
+    600,
+  )
+}, 30000)
+
 test("enabling bounded runs with omitted amounts uses the suggested allowances", async () => {
   await fixture(async ({ parent, execute }) => {
     await Config.updateGlobal({ subagents: { enabled: true, deadlineMs: 600000 } }, { preserveInstances: true })
@@ -721,8 +771,8 @@ test("a second foreground Task cannot change a live child's assignment or releas
       while (!requests.length) await Bun.sleep(5)
       const child = (await Session.children(parent.id))[0]!
       const before = (await SubagentBudget.read(child.id))!
-      const second = await execute(child.id)
-      expect(second.metadata.outcome).not.toBe("completed")
+      // A refusal names the real cause instead of reporting a provider error.
+      await expect(execute(child.id)).rejects.toThrow(/still running/)
       const during = (await SubagentBudget.read(child.id))!
       expect(during.worker.active).toBe(true)
       expect(during.worker.assignmentID).toBe(before.worker.assignmentID)

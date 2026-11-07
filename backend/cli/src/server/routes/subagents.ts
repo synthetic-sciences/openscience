@@ -6,6 +6,7 @@ import { Session } from "@/session"
 import { SubagentContinuation } from "@/session/subagent-continuation"
 import { SubagentBudget } from "@/session/subagent-budget"
 import { Identifier } from "@/id/id"
+import { Storage } from "@/storage/storage"
 import { lazy } from "@synsci/util/lazy"
 import { errors } from "../error"
 
@@ -69,6 +70,7 @@ export const SubagentRoutes = lazy(() =>
         await Session.assertDirectory(input.sessionID)
         const result = await SubagentContinuation.start(input.sessionID, input.childID, c.req.valid("json").key).catch(
           (error) => {
+            if (Storage.NotFoundError.isInstance(error)) throw error
             if (error instanceof Error) throw new HTTPException(409, { message: error.message })
             throw error
           },
@@ -95,14 +97,13 @@ export const SubagentRoutes = lazy(() =>
         const { sessionID } = c.req.valid("param")
         await Session.assertDirectory(sessionID)
         const pool = await SubagentBudget.snapshot(sessionID)
-        if (!pool) throw new HTTPException(404, { message: "Subagent allowance not found" })
+        if (!pool) throw new Storage.NotFoundError({ message: "Subagent allowance not found" })
         const input = c.req.valid("json")
         await SubagentBudget.increase(pool.rootSessionID, {
           ...input,
           amount: input.unit === "usd" ? SubagentBudget.dollars(input.amount) : input.amount,
         }).catch((error) => {
-          if (error instanceof SubagentBudget.ConflictError)
-            throw new HTTPException(409, { message: error.message })
+          if (error instanceof SubagentBudget.ConflictError) throw new HTTPException(409, { message: error.message })
           throw error
         })
         return c.json((await SubagentBudget.snapshot(pool.rootSessionID))!)

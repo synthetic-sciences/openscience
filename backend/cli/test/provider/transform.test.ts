@@ -242,6 +242,17 @@ describe("ProviderTransform.variants - exact catalog efforts", () => {
   })
 })
 
+describe("ProviderTransform.thinkingTokens", () => {
+  test("reports the Anthropic thinking budget the SDK adds to max_tokens", () => {
+    const enabled = { thinking: { type: "enabled", budgetTokens: 16000 } }
+    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", enabled)).toBe(16000)
+    expect(ProviderTransform.thinkingTokens("@ai-sdk/google-vertex/anthropic", enabled)).toBe(16000)
+    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", { thinking: { type: "adaptive" } })).toBe(0)
+    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", {})).toBe(0)
+    expect(ProviderTransform.thinkingTokens("@ai-sdk/openai", enabled)).toBe(0)
+  })
+})
+
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000
