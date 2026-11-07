@@ -169,6 +169,8 @@ async function mount(
     directory: () => scope.directory,
     fetch: () => fetch,
   })
+  const listeners = new Set<(sessionID: string) => void>()
+  const emit = (sessionID: string) => listeners.forEach((listener) => listener(sessionID))
   const host = document.createElement("div")
   document.body.append(host)
   const dispose = web.render(
@@ -185,6 +187,10 @@ async function mount(
           defaults: async () => {
             if (options.defaultsError) throw new Error("Defaults unavailable")
             return options.increments === false ? {} : { usdIncrease: 1.25, tokenIncrease: 2000 }
+          },
+          events: (listener) => {
+            listeners.add(listener)
+            return () => listeners.delete(listener)
           },
         },
       }),
@@ -206,7 +212,7 @@ async function mount(
         ) === true,
     )
   }
-  return { state, host, button, load, setScope }
+  return { state, host, button, load, setScope, emit, listeners }
 }
 
 afterAll(() => vite.close())
@@ -335,6 +341,37 @@ test("a continuation that ended without starting a new assignment releases the q
   app.button("Refresh subagent allowance").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === false)
   expect(app.button("Continue with remaining allowance")).toBeDefined()
+})
+
+test("a loaded panel follows status changes of its conversation and workers without a manual refresh", async () => {
+  const app = await mount({ available: 1_000_000_000, increments: false })
+  app.emit("parent")
+  await Bun.sleep(400)
+  expect(app.state.reads).toHaveLength(0)
+  await app.load()
+  app.button("Continue with remaining allowance").click()
+  await ready(() => app.host.textContent?.includes("Continuation queued") === true)
+  const reads = app.state.reads.length
+  app.emit("unrelated")
+  await Bun.sleep(400)
+  expect(app.state.reads).toHaveLength(reads)
+  Object.assign(app.state.pool.workers.child, { assignmentID: "continued", active: true })
+  Reflect.deleteProperty(app.state.pool.workers.child, "stopReason")
+  app.emit("child")
+  await ready(() => app.host.textContent?.includes("Review the controls · Running") === true)
+  expect(app.host.textContent).not.toContain("Continuation queued")
+  Object.assign(app.state.pool.workers.child, { active: false, stopReason: "budget_limit", spent: 1_000_000_000 })
+  app.emit("parent")
+  await ready(() => app.host.textContent?.includes("USD 1 used of USD 1") === true)
+  expect(app.button("Continue with remaining allowance")).toBeDefined()
+})
+
+test("status events are not followed after the panel unmounts", async () => {
+  const app = await mount()
+  await app.load()
+  expect(app.listeners.size).toBe(1)
+  cleanups.splice(0).forEach((cleanup) => cleanup())
+  expect(app.listeners.size).toBe(0)
 })
 
 test("remaining approved allowance continues the child without any increase", async () => {

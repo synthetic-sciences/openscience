@@ -37,7 +37,13 @@ type Pool = {
   continuations?: Record<string, { childID: string; completed: boolean }>
   workers: Record<string, Worker>
 }
-type Services = { request: ProjectRequest; scope: string; defaults: () => Promise<Defaults> }
+type Services = {
+  request: ProjectRequest
+  scope: string
+  defaults: () => Promise<Defaults>
+  /** Subscribes to session status changes; returns the unsubscribe function. */
+  events?: (listener: (sessionID: string) => void) => () => void
+}
 type Attempt = {
   assignmentID: string
   unit: Unit
@@ -88,6 +94,10 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
           const config: Config & { subagents?: Defaults } = (await global.client.global.config.get()).data ?? {}
           return config.subagents ?? {}
         },
+        events: (listener) =>
+          sdk.event.listen((event) => {
+            if (event.details.type === "session.status") listener(event.details.properties.sessionID)
+          }),
       }
     })()
   const [state, setState] = createStore<{
@@ -150,6 +160,25 @@ export function SubagentAllowance(props: { sessionID: string; services?: Service
       }
     }
   }
+  // Once loaded, the panel follows status changes of this conversation and its workers, so a
+  // continuation that starts or ends is reflected without a manual refresh.
+  const timer = { current: undefined as ReturnType<typeof setTimeout> | undefined }
+  const follow = (sessionID: string) => {
+    const pool = state.pool
+    if (!pool || (sessionID !== props.sessionID && !pool.workers[sessionID])) return
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => {
+      if (!state.pool) return
+      if (state.loading || state.busy) return follow(props.sessionID)
+      void read(props.sessionID, state.epoch).catch(() => undefined)
+    }, 250)
+  }
+  const unsubscribe = services.events?.(follow)
+  onCleanup(() => {
+    clearTimeout(timer.current)
+    unsubscribe?.()
+  })
+
   const load = async () => {
     if (state.loading || state.busy) return
     const epoch = state.epoch
