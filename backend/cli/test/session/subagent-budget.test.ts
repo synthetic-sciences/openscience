@@ -258,6 +258,23 @@ test("a new assignment cannot replace a child that is still active", async () =>
   })
 })
 
+test("continuing a child keeps its original objective as the assignment label", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open({ ...input("a", 100), objective: "Survey the literature" })
+      await SubagentBudget.release("a")
+      await SubagentBudget.open({
+        ...input("a", 20),
+        assignmentID: "continued",
+        objective: "Continue the saved task from its partial results.",
+      })
+      expect((await SubagentBudget.read("a"))?.worker.objective).toBe("Survey the literature")
+    },
+  })
+})
+
 test("bounded mode is opt-in and suggested amounts are shared defaults", () => {
   expect(SubagentBudget.Settings.parse({}).enabled).toBe(false)
   expect(SubagentBudget.settings({})).toMatchObject({

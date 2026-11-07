@@ -457,6 +457,8 @@ export namespace SubagentBudget {
         )
       const worker = Worker.parse({
         ...input,
+        // The objective labels the child; a follow-up prompt continues that task, it does not rename it.
+        objective: prior?.objective || input.objective,
         limit:
           (prior
             ? consumed(pool, prior.sessionID) +
