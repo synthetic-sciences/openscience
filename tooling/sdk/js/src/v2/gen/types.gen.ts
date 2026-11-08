@@ -12169,6 +12169,7 @@ export type SessionSubagentBudgetResponses = {
         rootSessionID: string
         assignmentID: string
         objective: string
+        description?: string
         expectedOutput: string
         model: {
           providerID: string
@@ -12347,6 +12348,7 @@ export type SessionIncreaseSubagentBudgetResponses = {
         rootSessionID: string
         assignmentID: string
         objective: string
+        description?: string
         expectedOutput: string
         model: {
           providerID: string

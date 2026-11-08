@@ -28667,6 +28667,9 @@
                               "objective": {
                                 "type": "string"
                               },
+                              "description": {
+                                "type": "string"
+                              },
                               "expectedOutput": {
                                 "type": "string"
                               },
@@ -29168,6 +29171,9 @@
                             "type": "string"
                           },
                           "objective": {
+                            "type": "string"
+                          },
+                          "description": {
                             "type": "string"
                           },
                           "expectedOutput": {
