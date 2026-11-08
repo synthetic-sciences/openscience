@@ -48,6 +48,7 @@ import { ImagePreview } from "./image-preview"
 import { PermissionActions, type PermissionReply } from "./permission-actions"
 import { useClock } from "./clock"
 import { findLast } from "@synsci/util/array"
+import { exactUsd, formatUsd } from "@synsci/util/money"
 import { getDirectory as _getDirectory, getFilename } from "@synsci/util/path"
 import { checksum } from "@synsci/util/encode"
 import { Tooltip } from "./tooltip"
@@ -1365,11 +1366,11 @@ function isTaskBudget(value: unknown): value is TaskBudget {
 }
 
 const taskReasons: Record<string, string> = {
-  budget_limit: "USD limit reached",
-  token_limit: "Token limit reached",
+  budget_limit: "Reached its limit",
+  token_limit: "Reached its limit",
   budget_wrapup: "Budget wrap-up",
   deadline_wrapup: "Deadline wrap-up",
-  deadline: "Deadline reached",
+  deadline: "Ran out of time",
   cancelled: "Cancelled",
   route_changed: "Access route changed",
   pricing_unavailable: "Pricing unavailable",
@@ -1388,9 +1389,9 @@ ToolRegistry.register({
       return isTaskBudget(value) ? value : undefined
     })
     const amount = (value: number) =>
-      budget()?.unit === "usd"
-        ? `USD ${new Intl.NumberFormat(i18n.locale(), { maximumFractionDigits: 9 }).format(value / 1e9)}`
-        : `${value.toLocaleString(i18n.locale())} tokens`
+      budget()?.unit === "usd" ? formatUsd(value / 1e9, i18n.locale()) : `${value.toLocaleString(i18n.locale())} tokens`
+    const exact = (value: number) =>
+      budget()?.unit === "usd" ? exactUsd(value / 1e9, i18n.locale()) : `${value.toLocaleString(i18n.locale())} tokens`
     const model = () => {
       const value: unknown = props.metadata.model
       if (!value || typeof value !== "object") return
@@ -1413,6 +1414,9 @@ ToolRegistry.register({
       const value = runtimeReason()
       return !!value && Object.hasOwn(taskReasons, value)
     }
+    // Limit and deadline stops can be continued by the user from the card.
+    const resumable = () =>
+      !live() && ["budget_limit", "token_limit", "deadline"].includes(runtimeReason() ?? "") && !!childSessionId()
     const reason = () => {
       const value = runtimeReason()
       return value ? (taskReasons[value] ?? value.replaceAll("_", " ")) : undefined
@@ -1625,12 +1629,22 @@ ToolRegistry.register({
             <div data-slot="delegation-report">
               <Show when={budget()}>
                 {(value) => (
-                  <p data-slot="delegation-budget">
+                  <p
+                    data-slot="delegation-budget"
+                    title={`${exact(value().spent)} used of ${exact(value().limit)} · ${exact(value().remaining)} remaining`}
+                  >
                     {amount(value().spent)} used of {amount(value().limit)} · {amount(value().remaining)} remaining
                   </p>
                 )}
               </Show>
               <Show when={reason()}>{(value) => <p data-slot="delegation-stop-reason">{value()}</p>}</Show>
+              <Show when={resumable() && data.renderTaskActions && child()?.parentID}>
+                {(parent) => (
+                  <div data-slot="delegation-actions">
+                    {data.renderTaskActions!({ sessionID: parent(), taskSessionID: childSessionId()! })}
+                  </div>
+                )}
+              </Show>
               <Show when={findings()}>{(value) => <p data-slot="delegation-findings">{value()}</p>}</Show>
               <details data-slot="delegation-report-details">
                 <summary>Assignment details</summary>

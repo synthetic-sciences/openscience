@@ -60,6 +60,8 @@ export namespace SubagentBudget {
     rootSessionID: z.string(),
     assignmentID: z.string(),
     objective: z.string(),
+    /** Short task label from the Task call; absent on records saved before it was kept. */
+    description: z.string().optional(),
     expectedOutput: z.string(),
     model: z.object({ providerID: z.string(), modelID: z.string() }),
     variant: z.string().optional(),
@@ -382,6 +384,7 @@ export namespace SubagentBudget {
         w.active = false
         w.deleted = true
         w.objective = ""
+        w.description = undefined
         w.expectedOutput = ""
         w.handoff = undefined
         w.stopReason = "cancelled"
@@ -416,6 +419,7 @@ export namespace SubagentBudget {
     sessionID: string
     assignmentID: string
     objective: string
+    description?: string
     expectedOutput: string
     model: Worker["model"]
     variant?: string
@@ -434,7 +438,7 @@ export namespace SubagentBudget {
     if (!limit)
       throw new LimitError(
         "setup_required",
-        `Configure the ${input.unit === "usd" ? "paid USD" : "subscription token"} subagent allowance in Settings before starting this worker.`,
+        `This conversation has no ${input.unit === "usd" ? "USD" : "token"} budget for subagents. Set a ${input.unit === "usd" ? "USD" : "token"} limit under Settings → General → Bounded runs, then start the worker again.`,
       )
     return mutate(input.rootSessionID, (current) => {
       const pool = current ?? create(input.rootSessionID, settings, true)
@@ -459,6 +463,7 @@ export namespace SubagentBudget {
         ...input,
         // The objective labels the child; a follow-up prompt continues that task, it does not rename it.
         objective: prior?.objective || input.objective,
+        description: prior?.description || input.description,
         limit:
           (prior
             ? consumed(pool, prior.sessionID) +
@@ -568,6 +573,10 @@ export namespace SubagentBudget {
       return { pool, result: undefined }
     })
   }
+  /** The smallest continuation worth starting: the cost of the worker's largest settled call. */
+  export function minimum(worker: Worker) {
+    return Object.values(worker.calls).reduce((max, call) => Math.max(max, call.consumed ?? 0), 0)
+  }
   export async function continuation(rootSessionID: string, childID: string, key: string) {
     return mutate(rootSessionID, (current) => {
       if (!current) throw new Error("Subagent allowance not found")
@@ -582,6 +591,12 @@ export namespace SubagentBudget {
       if (worker.active) throw new Error("Subagent is still running")
       const amount = capacity(pool, worker.unit, worker.parentSessionID).available
       if (!amount) throw new Error("Increase the subagent allowance before continuing")
+      // A continuation that cannot afford one more call like the last would stop at once.
+      const needed = minimum(worker)
+      if (amount < needed)
+        throw new Error(
+          `Only ${worker.unit === "usd" ? `USD ${usd(amount)}` : `${amount} tokens`} is available; this subagent's last model call used ${worker.unit === "usd" ? `USD ${usd(needed)}` : `${needed} tokens`}. Increase the subagent allowance before continuing.`,
+        )
       const operation = {
         childID,
         userID: Identifier.ascending("message"),

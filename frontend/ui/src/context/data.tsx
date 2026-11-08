@@ -1,3 +1,4 @@
+import type { JSX } from "solid-js"
 import type {
   Message,
   Session,
@@ -92,6 +93,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
     onOpenCredentials?: () => void
     /** Send a turn's user message again as a new request, after a provider stopped answering. */
     onResendTurn?: (input: { sessionID: string; messageID: string }) => void
+    /** Continue actions for a worker that stopped at a runtime limit, shown on its Task card. */
+    renderTaskActions?: (input: { sessionID: string; taskSessionID: string }) => JSX.Element
   }) => {
     return {
       get store() {
@@ -108,6 +111,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       openArtifact: props.onOpenArtifact,
       saveArtifact: props.onSaveArtifact,
       loadComputeJob: props.onLoadComputeJob,
+      renderTaskActions: props.renderTaskActions,
       resolveFileReceipts: props.onResolveFileReceipts,
       openCredentials: props.onOpenCredentials,
       resendTurn: props.onResendTurn,

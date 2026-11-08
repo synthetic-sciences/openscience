@@ -374,3 +374,36 @@ test("an active ancestor keeps its reserved capacity across an inactive intermed
     },
   })
 })
+
+test("a continuation must afford one more call like the worker's largest", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await SubagentBudget.open(input("a", 100))
+      await SubagentBudget.reserve("a", "first", 60)
+      await SubagentBudget.settle("a", "first", 60)
+      await SubagentBudget.open(input("b", 95))
+      await SubagentBudget.release("a")
+      // 200 total - 60 spent by a - 95 held by b leaves 45, less than a's 60-token call.
+      expect((await SubagentBudget.snapshot("root"))?.continuationCapacity.a?.available).toBe(45)
+      await expect(SubagentBudget.continuation("root", "a", "small")).rejects.toThrow(
+        /Only 45 tokens is available; this subagent's last model call used 60 tokens/,
+      )
+      await SubagentBudget.release("b")
+      expect((await SubagentBudget.continuation("root", "a", "enough")).amount).toBe(140)
+    },
+  })
+})
+
+test("a conversation without a budget explains where to set one", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await expect(
+        SubagentBudget.open({ ...input("a", 10), unit: "usd", route: "byok" as const, settings: { tokens: 200 } }),
+      ).rejects.toThrow(/Settings → General → Bounded runs/)
+    },
+  })
+})

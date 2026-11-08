@@ -32,6 +32,20 @@ const log = Log.create({ service: "tool.task" })
  * field. Every one of them unambiguously means "start a new child". */
 const CONTINUATION_PLACEHOLDER = /^(?:ses_)?(?:new|none|null|undefined|placeholder|current|parent|fresh)$/i
 
+/** What the lead should do after a runtime limit stop; the user decides whether to fund more work. */
+export namespace TaskLimit {
+  const ask = (action: string) =>
+    `If the saved partial result already answers the request, answer from it and say what is missing. Otherwise do not redo the remaining work yourself or start a replacement worker: end your turn and tell the user what the worker finished, what remains and what it used, and that they can ${action} from the worker card. Continue with this task_id only when the user asks.`
+  export function guidance(reason: string) {
+    if (reason === "budget_limit" || reason === "token_limit") return ask("add budget and continue it")
+    if (reason === "deadline") return ask("continue it with a new deadline")
+    if (reason === "deadline_wrapup")
+      return "Continue with this task_id under a new assignment deadline if more work is needed."
+    if (reason === "cancelled") return "Continue with this task_id only if the stopped work is requested again."
+    return "Continue with this task_id only after an allowance is available."
+  }
+}
+
 export type TaskContinuation = { kind: "new" } | { kind: "continue"; sessionID: string }
 
 /**
@@ -709,6 +723,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     sessionID: session.id,
                     assignmentID: identity.callID,
                     objective: params.prompt,
+                    description: params.description,
                     agent: agent.name,
                     expectedOutput: params.expected_output ?? "Return findings, artifacts, checks and limitations.",
                     model,
@@ -786,7 +801,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
           const note = limitReason
-            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${limitReason === "deadline" || limitReason === "deadline_wrapup" ? "Continue with this task_id under a new assignment deadline if more work is needed." : limitReason === "cancelled" ? "Continue with this task_id only if the stopped work is requested again." : "Continue with this task_id only after an allowance is available."}`
+            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${TaskLimit.guidance(limitReason)}`
             : taskOutcome.stopReason === "max_steps"
               ? "The subagent reached its step limit; partial result follows."
               : taskOutcome.stopReason === "tool_failures"

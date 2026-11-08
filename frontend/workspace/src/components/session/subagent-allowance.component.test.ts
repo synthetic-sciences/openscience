@@ -74,6 +74,7 @@ async function mount(
     reason?: string
     enabled?: boolean
     ancestorLimited?: boolean
+    only?: string
   } = {},
 ) {
   const state = {
@@ -86,6 +87,7 @@ async function mount(
     readPause: undefined as Promise<void> | undefined,
     writes: [] as { path: string; body: Record<string, unknown>; project?: string; directory?: string }[],
     reads: [] as string[],
+    titles: [] as string[],
     approved: new Set<string>(),
   }
   state.pool.available[state.pool.workers.child.unit] = options.available ?? 0
@@ -115,11 +117,16 @@ async function mount(
     }
     if (request.method === "OPTIONS") return json(null, 204)
     const path = request.url ?? ""
+    if (request.method === "GET" && !path.includes("/subagents/")) {
+      state.titles.push(path)
+      return json({ id: path.split("/").at(-1), title: "Child session title" })
+    }
     if (request.method === "GET") {
       state.reads.push(path)
       if (state.readError) return json({ message: "Allowance unavailable" }, 503)
       const pool = structuredClone(state.pool)
       await state.readPause
+      if (path.startsWith("/session/other/")) return json(null)
       return json(
         options.enabled === false
           ? { ...pool, enabled: false, limits: { usd: 0, tokens: 0 }, available: { usd: 0, tokens: 0 }, workers: {} }
@@ -179,6 +186,7 @@ async function mount(
         get sessionID() {
           return scope.sessionID
         },
+        only: options.only,
         services: {
           request,
           get scope() {
@@ -203,13 +211,12 @@ async function mount(
   })
   const button = (text: string) =>
     [...host.querySelectorAll<HTMLButtonElement>("button")].find((item) => item.textContent?.includes(text))!
+  // The panel loads itself on mount; wait for the first snapshot.
   const load = async () => {
-    button("Load subagent allowance").click()
-    await ready(
-      () =>
-        host.textContent?.includes(
-          options.enabled === false ? "Bounded runs are off for this conversation" : "Review the controls",
-        ) === true,
+    await ready(() =>
+      options.enabled === false
+        ? host.textContent?.includes("Bounded runs are off for this conversation") === true
+        : host.querySelector(".allowance__objective") !== null,
     )
   }
   return { state, host, button, load, setScope, emit, listeners }
@@ -223,18 +230,19 @@ afterEach(() => {
 
 test("legacy snapshots without an enabled field retain bounded allowance controls", async () => {
   const app = await mount()
-  expect(app.state.reads).toEqual([])
   await app.load()
-  expect(app.host.textContent).toContain("USD 2")
-  expect(app.host.textContent).toContain("USD 0.8")
-  expect(app.host.textContent).toContain("USD 0.2")
-  expect(app.host.textContent).toContain("main agent")
-  expect(app.host.textContent).toContain("USD limit reached")
+  expect(app.state.reads).toHaveLength(1)
+  expect(app.host.textContent).toContain("spent of $2.00")
+  expect(app.host.textContent).toContain("$0.80")
+  expect(app.host.textContent).toContain("$0.20 pending")
+  expect(app.host.textContent).not.toContain("USD 0")
+  expect(app.host.textContent).toContain("main agent is not limited")
+  expect(app.host.textContent).toContain("Reached its limit")
   expect(app.host.textContent).toContain("Verification remains unfinished")
   expect(app.host.querySelector("details")?.open).toBe(false)
   expect(app.host.textContent).not.toContain("Deducted from Wallet")
   expect(app.state.writes).toEqual([])
-  expect(app.button("Increase limit by")).toBeDefined()
+  expect(app.button("Add ")).toBeDefined()
 })
 
 test("deadline wrap-up has a clear reason without offering a budget increase", async () => {
@@ -242,8 +250,8 @@ test("deadline wrap-up has a clear reason without offering a budget increase", a
   await app.load()
   expect(app.host.textContent).toContain("Deadline wrap-up")
   expect(app.host.textContent).not.toContain("deadline_wrapup")
-  expect(app.button("Increase limit by")).toBeUndefined()
-  expect(app.button("Continue with remaining allowance")).toBeUndefined()
+  expect(app.button("Add ")).toBeUndefined()
+  expect(app.button("Continue with remaining budget")).toBeUndefined()
   expect(app.state.writes).toEqual([])
 })
 
@@ -252,12 +260,12 @@ test("a conversation with bounded runs off has no approval or continuation contr
   await app.load()
   expect(app.host.textContent).toContain("Bounded runs are off for this conversation")
   expect(app.host.textContent).toContain("start a new conversation")
-  expect(app.host.textContent).not.toContain("approved")
+  expect(app.host.textContent).not.toContain("spent of")
   expect(app.host.querySelector("details")).toBeNull()
-  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Add ")).toBeUndefined()
   expect(app.button("Continue")).toBeUndefined()
   expect(app.button("Stop here")).toBeUndefined()
-  app.button("Refresh subagent allowance").click()
+  app.emit("parent")
   await ready(() => app.state.reads.length === 2)
   expect(app.state.writes).toEqual([])
 })
@@ -265,8 +273,8 @@ test("a conversation with bounded runs off has no approval or continuation contr
 test("an explicit increase shows old and new totals and continues the same child with scoped requests", async () => {
   const app = await mount({ enabled: true })
   await app.load()
-  expect(app.host.textContent).toContain("USD 2 → USD 3.25")
-  app.button("Increase limit by USD 1.25 and continue").click()
+  expect(app.host.textContent).toContain("from $2.00 to $3.25")
+  app.button("Add $1.25 and continue").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === true)
   expect(app.state.writes.map((write) => write.path)).toEqual([
     "/session/parent/subagents/budget/increase",
@@ -281,23 +289,23 @@ test("an explicit increase shows old and new totals and continues the same child
 test("subscription increases use actual tokens and no dollar conversion", async () => {
   const app = await mount({ unit: "tokens" })
   await app.load()
-  app.button("Increase limit by 2,000 tokens and continue").click()
+  app.button("Add 2,000 tokens and continue").click()
   await ready(() => app.state.writes.length === 2)
   expect(app.state.writes[0]!.body).toMatchObject({ unit: "tokens", amount: 2000, revision: 7 })
   const worker = app.host.querySelector("details")!
   expect(worker.textContent).toContain("800 tokens")
-  expect(worker.textContent).not.toContain("USD")
+  expect(worker.textContent).not.toContain("$")
 })
 
 test("retrying an uncertain increase reuses its approval key and original revision", async () => {
   const app = await mount()
   await app.load()
   app.state.failIncrease = true
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.host.querySelector('[role="alert"]') !== null)
   expect(app.state.writes).toHaveLength(1)
   app.state.failIncrease = false
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === true)
   expect(app.state.writes[1]!.body).toEqual(app.state.writes[0]!.body)
   expect(app.state.pool.limits.usd).toBe(3_250_000_000)
@@ -308,7 +316,7 @@ test("a failed continuation retries only continuation with the same idempotency 
   const app = await mount()
   await app.load()
   app.state.failContinue = true
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.host.querySelector('[role="alert"]') !== null)
   app.state.failContinue = false
   app.button("Retry continuing").click()
@@ -321,11 +329,11 @@ test("a revision conflict refreshes totals and requires another explicit approva
   const app = await mount()
   await app.load()
   app.state.stale = true
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.host.textContent?.includes("Review the refreshed totals") === true)
-  expect(app.host.textContent).toContain("USD 3 → USD 4.25")
+  expect(app.host.textContent).toContain("from $3.00 to $4.25")
   expect(app.state.writes).toHaveLength(1)
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.state.writes.length === 3)
   expect(app.state.writes[1]!.body.revision).toBe(8)
   expect(app.state.writes[1]!.body.key).not.toBe(app.state.writes[0]!.body.key)
@@ -334,22 +342,20 @@ test("a revision conflict refreshes totals and requires another explicit approva
 test("a continuation that ended without starting a new assignment releases the queued state", async () => {
   const app = await mount({ available: 1_000_000_000, increments: false })
   await app.load()
-  app.button("Continue with remaining allowance").click()
+  app.button("Continue with remaining budget").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === true)
   const key = String(app.state.writes[0]!.body.key)
   Object.assign(app.state.pool, { continuations: { [key]: { childID: "child", completed: true } } })
-  app.button("Refresh subagent allowance").click()
+  app.emit("child")
   await ready(() => app.host.textContent?.includes("Continuation queued") === false)
-  expect(app.button("Continue with remaining allowance")).toBeDefined()
+  expect(app.button("Continue with remaining budget")).toBeDefined()
 })
 
-test("a loaded panel follows status changes of its conversation and workers without a manual refresh", async () => {
+test("the panel loads on open and follows status changes of its conversation and workers", async () => {
   const app = await mount({ available: 1_000_000_000, increments: false })
-  app.emit("parent")
-  await Bun.sleep(400)
-  expect(app.state.reads).toHaveLength(0)
   await app.load()
-  app.button("Continue with remaining allowance").click()
+  expect(app.state.reads).toHaveLength(1)
+  app.button("Continue with remaining budget").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === true)
   const reads = app.state.reads.length
   app.emit("unrelated")
@@ -358,12 +364,12 @@ test("a loaded panel follows status changes of its conversation and workers with
   Object.assign(app.state.pool.workers.child, { assignmentID: "continued", active: true })
   Reflect.deleteProperty(app.state.pool.workers.child, "stopReason")
   app.emit("child")
-  await ready(() => app.host.textContent?.includes("Review the controls · Running") === true)
+  await ready(() => app.host.querySelector('[data-slot="worker-status"]')?.textContent === "Running")
   expect(app.host.textContent).not.toContain("Continuation queued")
   Object.assign(app.state.pool.workers.child, { active: false, stopReason: "budget_limit", spent: 1_000_000_000 })
   app.emit("parent")
-  await ready(() => app.host.textContent?.includes("USD 1 used of USD 1") === true)
-  expect(app.button("Continue with remaining allowance")).toBeDefined()
+  await ready(() => app.host.textContent?.includes("$1.00 of its $1.00 limit") === true)
+  expect(app.button("Continue with remaining budget")).toBeDefined()
 })
 
 test("status events are not followed after the panel unmounts", async () => {
@@ -377,8 +383,8 @@ test("status events are not followed after the panel unmounts", async () => {
 test("remaining approved allowance continues the child without any increase", async () => {
   const app = await mount({ available: 1_000_000_000, increments: false })
   await app.load()
-  expect(app.button("Continue with remaining allowance")).toBeDefined()
-  app.button("Continue with remaining allowance").click()
+  expect(app.button("Continue with remaining budget")).toBeDefined()
+  app.button("Continue with remaining budget").click()
   await ready(() => app.state.writes.length === 1)
   expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
 })
@@ -388,16 +394,15 @@ test.each(["usd", "tokens"] as const)(
   async (unit) => {
     const app = await mount({ unit, available: 100 })
     await app.load()
-    expect(app.button("Continue with remaining allowance") !== undefined).toBe(true)
-    expect(app.button("Increase limit by") !== undefined).toBe(true)
+    expect(app.button("Continue with remaining budget") !== undefined).toBe(true)
+    expect(app.button("Add ") !== undefined).toBe(true)
     const actions = [...app.host.querySelectorAll<HTMLButtonElement>("button")].filter(
       (button) =>
-        button.textContent?.includes("Continue with remaining allowance") ||
-        button.textContent?.includes("Increase limit by"),
+        button.textContent?.includes("Continue with remaining budget") || button.textContent?.includes("Add "),
     )
-    expect(actions[0]!.textContent).toContain("Continue with remaining allowance")
+    expect(actions[0]!.textContent).toContain("Continue with remaining budget")
     expect(app.state.writes).toEqual([])
-    app.button("Increase limit by").click()
+    app.button("Add ").click()
     await ready(() => app.host.textContent?.includes("Continuation queued") === true)
     expect(app.state.writes.map((write) => write.path)).toEqual([
       "/session/parent/subagents/budget/increase",
@@ -410,7 +415,7 @@ test.each(["usd", "tokens"] as const)(
 test("choosing remaining allowance never increases the limit even when an increment is configured", async () => {
   const app = await mount({ unit: "tokens", available: 100 })
   await app.load()
-  app.button("Continue with remaining allowance").click()
+  app.button("Continue with remaining budget").click()
   await ready(() => app.host.textContent?.includes("Continuation queued") === true)
   expect(app.state.writes.map((write) => write.path)).toEqual(["/session/parent/subagents/child/continue"])
   expect(app.state.pool.limits.tokens).toBe(4000)
@@ -423,18 +428,18 @@ test("Stop here retains the report and performs no write or continuation", async
   expect(app.state.writes).toEqual([])
   expect(app.host.textContent).toContain("partial results are kept")
   expect(app.host.textContent).toContain("Found two controls")
-  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Add ")).toBeUndefined()
 })
 
 test("failed defaults loads and active children never expose an increase action", async () => {
   const app = await mount({ defaultsError: true })
   await app.load()
-  expect(app.button("Increase limit by")).toBeUndefined()
-  expect(app.host.textContent).toContain("Configure an increase amount")
+  expect(app.button("Add ")).toBeUndefined()
+  expect(app.host.textContent).toContain("Set an increase amount")
   const active = await mount({ active: true })
   await active.load()
-  expect(active.button("Increase limit by")).toBeUndefined()
-  expect(active.button("Continue with remaining allowance")).toBeUndefined()
+  expect(active.button("Add ")).toBeUndefined()
+  expect(active.button("Continue with remaining budget")).toBeUndefined()
 })
 
 test("duplicate clicks cannot submit twice while an increase is pending", async () => {
@@ -442,7 +447,7 @@ test("duplicate clicks cannot submit twice while an increase is pending", async 
   await app.load()
   const pause = Promise.withResolvers<void>()
   app.state.pause = pause.promise
-  const button = app.button("Increase limit by")
+  const button = app.button("Add ")
   button.click()
   button.click()
   await ready(() => app.state.writes.length === 1)
@@ -455,21 +460,20 @@ test("session and project changes discard stale allowance responses", async () =
   const app = await mount()
   const pause = Promise.withResolvers<void>()
   app.state.readPause = pause.promise
-  app.button("Load subagent allowance").click()
   await ready(() => app.state.reads.length === 1)
   app.setScope({ sessionID: "other", projectID: "other-project", directory: "/other" })
+  await ready(() => app.state.reads.length === 2)
   pause.resolve()
-  await Bun.sleep(30)
+  await ready(() => app.host.textContent?.includes("No subagents have run") === true)
   expect(app.host.textContent).not.toContain("Review the controls")
-  expect(app.host.textContent).not.toContain("USD 2")
-  expect(app.button("Load subagent allowance").disabled).toBe(false)
+  expect(app.host.textContent).not.toContain("$2.00")
 })
 
 test("a root conversation cannot directly continue a nested subagent", async () => {
   const app = await mount({ parent: "immediate-parent" })
   await app.load()
-  expect(app.button("Increase limit by")).toBeUndefined()
-  expect(app.button("Continue with remaining allowance")).toBeUndefined()
+  expect(app.button("Add ")).toBeUndefined()
+  expect(app.button("Continue with remaining budget")).toBeUndefined()
   expect(app.host.textContent).toContain("immediate-parent")
   expect(app.state.writes).toEqual([])
 })
@@ -479,7 +483,7 @@ test("navigation after approval dispatch cannot continue a child in the new scop
   await app.load()
   const pause = Promise.withResolvers<void>()
   app.state.pause = pause.promise
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.state.writes.length === 1)
   app.setScope({ sessionID: "other", projectID: "other-project", directory: "/other" })
   pause.resolve()
@@ -494,20 +498,20 @@ test("a failed conflict refresh cannot leave stale totals available for another 
   await app.load()
   app.state.stale = true
   app.state.readError = true
-  app.button("Increase limit by").click()
+  app.button("Add ").click()
   await ready(() => app.state.reads.length === 2)
   await ready(() => app.host.querySelector('[role="alert"]') !== null)
   expect(app.host.textContent).toContain("could not be loaded")
   expect(app.host.querySelector("button[disabled]")).toBeNull()
-  expect(app.button("Increase limit by") === undefined).toBe(true)
+  expect(app.button("Add ") === undefined).toBe(true)
   expect(app.state.writes).toHaveLength(1)
 })
 
 test("a cooperative partial handoff can continue with the remaining allowance", async () => {
   const app = await mount({ available: 1000000000, cooperative: true, increments: false })
   await app.load()
-  expect(app.button("Continue with remaining allowance")).toBeDefined()
-  app.button("Continue with remaining allowance").click()
+  expect(app.button("Continue with remaining budget")).toBeDefined()
+  app.button("Continue with remaining budget").click()
   await ready(() => app.state.writes.length === 1)
   expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
 })
@@ -515,8 +519,8 @@ test("a cooperative partial handoff can continue with the remaining allowance", 
 test.each(["usd", "tokens"] as const)("missing %s increase config uses the suggested amount", async (unit) => {
   const app = await mount({ unit, increments: false })
   await app.load()
-  expect(app.button("Increase limit by")).toBeDefined()
-  app.button("Increase limit by").click()
+  expect(app.button("Add ")).toBeDefined()
+  app.button("Add ").click()
   await ready(() => app.state.writes.length === 2)
   expect(app.state.writes[0]!.body.amount).toBe(unit === "usd" ? 1 : 250000)
 })
@@ -526,7 +530,63 @@ test("nested workers with exhausted parent grants do not offer ineffective root 
   app.setScope("sessionID", "middle")
   await app.load()
   expect(app.host.textContent).toContain("Continue the parent task first to allocate allowance to this subagent.")
-  expect(app.button("Continue with remaining allowance")).toBeUndefined()
-  expect(app.button("Increase limit by")).toBeUndefined()
+  expect(app.button("Continue with remaining budget")).toBeUndefined()
+  expect(app.button("Add ")).toBeUndefined()
   expect(app.state.writes).toHaveLength(0)
+})
+
+test("workers are labelled by their task description and only pools in use are shown", async () => {
+  const app = await mount()
+  Object.assign(app.state.pool.workers.child, { description: "Audit the controls" })
+  app.emit("parent")
+  await ready(() => app.host.querySelector(".allowance__objective")?.textContent === "Audit the controls")
+  expect(app.host.textContent).toContain("spent of $2.00")
+  expect(app.host.textContent).not.toContain("spent of 4,000 tokens")
+})
+
+test("workers saved without a description are named by their session title", async () => {
+  const app = await mount()
+  await app.load()
+  await ready(() => app.host.querySelector(".allowance__objective")?.textContent === "Child session title")
+  expect(app.state.titles).toEqual(["/session/child"])
+})
+
+test("a worker that ran out of time can continue with a new deadline", async () => {
+  const app = await mount({ reason: "deadline", available: 500_000_000 })
+  await app.load()
+  expect(app.host.textContent).toContain("Ran out of time")
+  expect(app.host.textContent).toContain("continuing gives it a new deadline")
+  app.button("Continue with a new deadline").click()
+  await ready(() => app.state.writes.length === 1)
+  expect(app.state.writes[0]!.path).toBe("/session/parent/subagents/child/continue")
+})
+
+test("a balance smaller than the worker's largest call is not offered as a continuation", async () => {
+  const app = await mount({ available: 100_000_000 })
+  app.state.pool.workers.child.calls = {
+    first: { amount: 600_000_000, state: "settled", consumed: 600_000_000 },
+  } as never
+  app.emit("parent")
+  await ready(() => app.host.textContent?.includes("less than its last model call") === true)
+  expect(app.host.textContent).toContain("Only $0.10 is left, less than its last model call ($0.60)")
+  expect(app.button("Continue with remaining budget")).toBeUndefined()
+  expect(app.button("Add $1.25 and continue")).toBeDefined()
+})
+
+test("the card mode shows only that worker's explanation and actions", async () => {
+  const app = await mount({ only: "child", available: 500_000_000 })
+  await ready(() => app.button("Continue with remaining budget") !== undefined)
+  expect(app.host.textContent).toContain("$0.50 of the conversation budget is still available")
+  expect(app.host.textContent).not.toContain("spent of")
+  expect(app.host.querySelector("details")).toBeNull()
+  expect(app.host.textContent).not.toContain("Wallet")
+  app.button("Continue with remaining budget").click()
+  await ready(() => app.host.textContent?.includes("Continuation queued") === true)
+})
+
+test("the card mode renders nothing for a worker that is not stopped at a limit", async () => {
+  const app = await mount({ only: "child", active: true })
+  await ready(() => app.state.reads.length === 1)
+  await Bun.sleep(30)
+  expect(app.host.textContent).toBe("")
 })

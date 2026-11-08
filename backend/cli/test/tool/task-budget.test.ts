@@ -4,7 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Identifier } from "../../src/id/id"
-import { TaskTool } from "../../src/tool/task"
+import { TaskLimit, TaskTool } from "../../src/tool/task"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SubagentBudget } from "../../src/session/subagent-budget"
 import { Storage } from "../../src/storage/storage"
@@ -1026,7 +1026,7 @@ test("permission and queue elapsed time can expire Task before any provider call
     const state = (await SubagentBudget.read(childID))!
     expect(state.worker).toMatchObject({ acceptedAt, deadline: acceptedAt + 10000, active: false })
     expect(Object.keys(state.worker.calls)).toHaveLength(0)
-    expect(result.output).toContain("new assignment deadline")
+    expect(result.output).toContain("continue it with a new deadline")
     selection.permission = undefined
     selection.queuedAt = undefined
     expect((await execute(childID)).metadata.outcome).toBe("completed")
@@ -1058,4 +1058,15 @@ test("the hard deadline cancels work without an extra report call", async () => 
     false,
     true,
   )
+})
+
+test("limit stops tell the lead to ask the user instead of redoing the work", () => {
+  for (const reason of ["budget_limit", "token_limit"]) {
+    const text = TaskLimit.guidance(reason)
+    expect(text).toContain("end your turn")
+    expect(text).toContain("add budget and continue it from the worker card")
+    expect(text).toContain("do not redo the remaining work yourself")
+  }
+  expect(TaskLimit.guidance("deadline")).toContain("continue it with a new deadline")
+  expect(TaskLimit.guidance("cancelled")).toContain("only if the stopped work is requested again")
 })

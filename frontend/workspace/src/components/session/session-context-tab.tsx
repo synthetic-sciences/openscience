@@ -19,7 +19,7 @@ import type { AssistantMessage, Message, Part, UserMessage, SessionReceiptsRespo
 import { useLanguage } from "@/context/language"
 import { contextWindow } from "@/pages/session-context"
 import { SessionCallUsage } from "./session-call-usage"
-import { sessionCost, sessionProviderLabel } from "./session-usage"
+import { sessionProviderLabel } from "./session-usage"
 import {
   CONTEXT_BUCKET_COLORS,
   contextComposition,
@@ -87,10 +87,6 @@ export function SessionContextTab(props: SessionContextTabProps) {
       .messages()
       .reduce((total, message) => total + (message.role === "assistant" ? TokenUsage.total(message.tokens) : 0), 0),
   )
-
-  const cost = createMemo(() => {
-    return sessionCost(props.messages(), sync.data.part).total
-  })
 
   const counts = createMemo(() => {
     const all = props.messages()
@@ -350,7 +346,6 @@ export function SessionContextTab(props: SessionContextTabProps) {
             <TaskReceipts
               sessionID={sessionID()}
               onReport={(report) => setSettlement("report", report)}
-              version={`${tokens()}:${cost()}:${counts().all}`}
               load={async () => {
                 const result = await sdk.client.session.receipts({ sessionID: sessionID() })
                 if (!result.data) throw new Error("Receipt lookup failed")
