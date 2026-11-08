@@ -1,10 +1,11 @@
-import { expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Config } from "../../src/config/config"
 import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Identifier } from "../../src/id/id"
 import { TaskLimit, TaskTool } from "../../src/tool/task"
+import { Question } from "../../src/question"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SubagentBudget } from "../../src/session/subagent-budget"
 import { Storage } from "../../src/storage/storage"
@@ -30,6 +31,9 @@ async function fixture(
       queuedAt?: number
       workerModel?: typeof model
       workerModelOverride?: boolean
+      /** How the user answers a limit-stop question: an option label, or "dismiss" (default). */
+      limitAnswer?: string
+      limitQuestions?: Question.Request[]
     }
   }) => Promise<void>,
   deadlineMs = 600000,
@@ -45,6 +49,8 @@ async function fixture(
     queuedAt?: number
     workerModel?: typeof model
     workerModelOverride?: boolean
+    limitAnswer?: string
+    limitQuestions?: Question.Request[]
   } = {}
   const requests: unknown[] = []
   const server = Bun.serve({
@@ -196,7 +202,24 @@ async function fixture(
             },
           )
         }
-        await fn({ parent, execute, requests, selection })
+        // Answer limit-stop questions the way the test asks; by default the user dismisses them.
+        const seen = new Set<string>()
+        const responder = setInterval(async () => {
+          for (const request of await Question.list()) {
+            if (seen.has(request.id)) continue
+            seen.add(request.id)
+            ;(selection.limitQuestions ??= []).push(request)
+            if (selection.limitAnswer === "ignore") continue
+            if (selection.limitAnswer)
+              await Question.reply({ requestID: request.id, answers: [[selection.limitAnswer]] })
+            else await Question.reject(request.id)
+          }
+        }, 5)
+        try {
+          await fn({ parent, execute, requests, selection })
+        } finally {
+          clearInterval(responder)
+        }
       },
     })
   } finally {
@@ -539,6 +562,44 @@ test("user increase and continue resumes the same real Task child once", async (
       expect((await fetch(endpoint, options)).status).toBe(202)
       await Bun.sleep(10)
       expect(requests).toHaveLength(calls)
+    },
+    600000,
+    100,
+  )
+})
+
+test("a limit stop asks the user once; approving raises the budget without continuing the worker", async () => {
+  await fixture(
+    async ({ parent, execute, requests, selection }) => {
+      selection.limitAnswer = "Add 250,000 tokens"
+      const first = await execute()
+      expect(first.metadata.stopReason).toBe("token_limit")
+      expect(selection.limitQuestions).toHaveLength(1)
+      expect(selection.limitQuestions![0].sessionID).toBe(parent.id)
+      expect(selection.limitQuestions![0].questions[0].options.map((option) => option.label)).toEqual([
+        "Add 250,000 tokens",
+        "Finish without it",
+      ])
+      expect(first.output).toContain("The user added 250,000 tokens to the subagent budget")
+      expect(first.output).toContain("Do not start a replacement worker")
+      const pool = (await SubagentBudget.inspect(parent.id))!
+      expect(pool.limits.tokens).toBe(100 + 250_000)
+      const calls = requests.length
+      await Bun.sleep(20)
+      expect(requests).toHaveLength(calls)
+    },
+    600000,
+    100,
+  )
+})
+
+test("choosing to finish without the worker lets the lead finish from the saved result", async () => {
+  await fixture(
+    async ({ execute, selection }) => {
+      selection.limitAnswer = "Finish without it"
+      const finished = await execute()
+      expect(finished.output).toContain("The user chose to finish without this worker")
+      expect(finished.output).toContain("finish the remaining work yourself")
     },
     600000,
     100,
@@ -1069,4 +1130,81 @@ test("limit stops tell the lead to ask the user instead of redoing the work", ()
   }
   expect(TaskLimit.guidance("deadline")).toContain("continue it with a new deadline")
   expect(TaskLimit.guidance("cancelled")).toContain("only if the stopped work is requested again")
+})
+
+describe("TaskLimit.resolve", () => {
+  const run = (choice: TaskLimit.Choice, extra: Partial<Parameters<typeof TaskLimit.resolve>[0]> = {}) => {
+    const calls = { ask: 0, raise: 0 }
+    const result = TaskLimit.resolve({
+      reason: "budget_limit",
+      autonomy: "balanced",
+      attended: true,
+      ask: async () => (calls.ask++, choice),
+      raise: async () => (calls.raise++, "$1.00"),
+      ...extra,
+    })
+    return result.then((text) => ({ text, calls }))
+  }
+
+  test("no answer within the timeout continues without the worker", async () => {
+    const { text, calls } = await run("timeout")
+    expect(calls).toEqual({ ask: 1, raise: 0 })
+    expect(text).toContain("No one answered within 5 minutes")
+    expect(text).toContain("finish the remaining work yourself")
+  })
+
+  test("approval raises the budget once and leaves continuing to the lead", async () => {
+    const { text, calls } = await run("more")
+    expect(calls).toEqual({ ask: 1, raise: 1 })
+    expect(text).toContain("The user added $1.00 to the subagent budget")
+    expect(text).toContain("Continue this worker with this task_id if the remaining work still needs it")
+  })
+
+  test("approval after a deadline grants time without raising the budget", async () => {
+    const { text, calls } = await run("more", { reason: "deadline" })
+    expect(calls).toEqual({ ask: 1, raise: 0 })
+    expect(text).toContain("The user allowed this worker more time")
+  })
+
+  test("a failed increase falls back to asking from the worker card", async () => {
+    const { text } = await run("more", {
+      raise: async () => {
+        throw new Error("revision changed")
+      },
+    })
+    expect(text).toContain("the increase failed: revision changed")
+    expect(text).toContain("end your turn")
+  })
+
+  test("a dismissed question ends the turn and leaves the card actions", async () => {
+    const { text } = await run("dismissed")
+    expect(text).toContain("end your turn")
+  })
+
+  test("autonomous and unattended runs never ask", async () => {
+    for (const extra of [{ autonomy: "autonomous" as const }, { attended: false }]) {
+      const { text, calls } = await run("more", extra)
+      expect(calls).toEqual({ ask: 0, raise: 0 })
+      expect(text).toContain("finish the remaining work yourself")
+    }
+  })
+
+  test("other stop reasons keep their static guidance", async () => {
+    const { text, calls } = await run("more", { reason: "cancelled" })
+    expect(calls.ask).toBe(0)
+    expect(text).toContain("only if the stopped work is requested again")
+  })
+})
+
+test("autonomous limit stops tell the lead to finish the work instead of waiting", () => {
+  for (const reason of ["budget_limit", "token_limit", "deadline"]) {
+    const text = TaskLimit.guidance(reason, "autonomous")
+    expect(text).toContain("finish the remaining work yourself")
+    expect(text).toContain("Do not wait for the user, start a replacement worker or continue this task_id")
+    expect(text).not.toContain("end your turn")
+  }
+  for (const autonomy of ["interactive", "balanced", undefined] as const) {
+    expect(TaskLimit.guidance("budget_limit", autonomy)).toContain("end your turn")
+  }
+  expect(TaskLimit.guidance("cancelled", "autonomous")).toContain("only if the stopped work is requested again")
 })

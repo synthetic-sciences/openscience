@@ -25,6 +25,10 @@ import { SubagentBudget } from "@/session/subagent-budget"
 import { SubagentDispatch } from "@/session/subagent-dispatch"
 import { Provider } from "@/provider/provider"
 import { resolveAccessRoute } from "@/session/access-route"
+import { Question } from "@/question"
+import { headless } from "./question"
+import { Flag } from "@/flag/flag"
+import { formatUsd } from "@synsci/util/money"
 
 const log = Log.create({ service: "tool.task" })
 
@@ -32,17 +36,60 @@ const log = Log.create({ service: "tool.task" })
  * field. Every one of them unambiguously means "start a new child". */
 const CONTINUATION_PLACEHOLDER = /^(?:ses_)?(?:new|none|null|undefined|placeholder|current|parent|fresh)$/i
 
-/** What the lead should do after a runtime limit stop; the user decides whether to fund more work. */
+/** What the lead should do after a runtime limit stop. Under Interactive and
+ * Balanced independence the user decides whether to fund more work: the task
+ * asks once and waits up to `ASK_TIMEOUT_MS`. Under Autonomous, in a headless
+ * run, or when no one answers in time, the lead finishes the remaining work
+ * itself instead of waiting. No path starts a replacement worker, which would
+ * sidestep the worker's limit. */
 export namespace TaskLimit {
+  export const ASK_TIMEOUT_MS = 5 * 60_000
+  export type Choice = "more" | "finish" | "timeout" | "dismissed"
+
   const ask = (action: string) =>
     `If the saved partial result already answers the request, answer from it and say what is missing. Otherwise do not redo the remaining work yourself or start a replacement worker: end your turn and tell the user what the worker finished, what remains and what it used, and that they can ${action} from the worker card. Continue with this task_id only when the user asks.`
-  export function guidance(reason: string) {
+  const proceed = (why: string) =>
+    `${why} Do not wait for the user, start a replacement worker or continue this task_id. Build on the saved partial result, finish the remaining work yourself, and say in your final answer that the worker stopped early and which part you completed instead.`
+  const stopped = (reason: string) => reason === "budget_limit" || reason === "token_limit" || reason === "deadline"
+
+  export function guidance(reason: string, autonomy?: MessageV2.DelegationSettings["autonomy"]) {
+    if (stopped(reason) && autonomy === "autonomous")
+      return proceed("Independence is autonomous, so no one is available to extend this worker.")
     if (reason === "budget_limit" || reason === "token_limit") return ask("add budget and continue it")
     if (reason === "deadline") return ask("continue it with a new deadline")
     if (reason === "deadline_wrapup")
       return "Continue with this task_id under a new assignment deadline if more work is needed."
     if (reason === "cancelled") return "Continue with this task_id only if the stopped work is requested again."
     return "Continue with this task_id only after an allowance is available."
+  }
+
+  /** Ask the user, when someone can answer, and turn the answer into the lead's next step. */
+  export async function resolve(input: {
+    reason: string
+    autonomy?: MessageV2.DelegationSettings["autonomy"]
+    /** Whether anyone can answer: false for headless runs and clients without questions. */
+    attended: boolean
+    ask: () => Promise<Choice>
+    /** Raise the conversation's subagent budget; resolves to the amount added, for the lead. */
+    raise: () => Promise<string>
+  }) {
+    if (!stopped(input.reason) || input.autonomy === "autonomous") return guidance(input.reason, input.autonomy)
+    if (!input.attended) return proceed("No one is available to answer in this run.")
+    const choice = await input.ask()
+    if (choice === "timeout")
+      return proceed(
+        `No one answered within ${ASK_TIMEOUT_MS / 60_000} minutes, so the run continues without this worker.`,
+      )
+    if (choice === "finish") return proceed("The user chose to finish without this worker.")
+    if (choice === "dismissed") return guidance(input.reason, input.autonomy)
+    const next =
+      "Continue this worker with this task_id if the remaining work still needs it; otherwise finish it yourself from the saved partial result. Do not start a replacement worker."
+    if (input.reason === "deadline") return `The user allowed this worker more time. ${next}`
+    return input.raise().then(
+      (amount) => `The user added ${amount} to the subagent budget. ${next}`,
+      (error: unknown) =>
+        `The user approved more budget, but the increase failed: ${error instanceof Error ? error.message : String(error)}. ${ask("add budget and continue it")}`,
+    )
   }
 }
 
@@ -590,6 +637,51 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       await ctx.metadata({ title: params.description, metadata })
 
+      const increaseLabel = (unit: SubagentBudget.Unit) =>
+        unit === "usd"
+          ? formatUsd(userLimits.usdIncrease)
+          : `${userLimits.tokenIncrease.toLocaleString("en-US")} tokens`
+      /** One question to the user at a limit stop, withdrawn after `TaskLimit.ASK_TIMEOUT_MS`. */
+      const askAtLimit = async (input: {
+        limitReason: string
+        budget: NonNullable<Awaited<ReturnType<typeof SubagentBudget.read>>>
+        live: boolean
+        signal: AbortSignal
+      }): Promise<TaskLimit.Choice> => {
+        const deadline = input.limitReason === "deadline"
+        const more = deadline ? "Allow more time" : `Add ${increaseLabel(input.budget.worker.unit)}`
+        const finish = "Finish without it"
+        const minutes = TaskLimit.ASK_TIMEOUT_MS / 60_000
+        const answers = await Question.ask(
+          {
+            sessionID: ctx.sessionID,
+            questions: [
+              {
+                header: deadline ? "Subagent out of time" : "Subagent limit reached",
+                question: `The worker "${params.description}" ${deadline ? "ran out of time" : "reached its limit"} before finishing. ${deadline ? "Let it continue with a new deadline?" : "Add to the subagent budget so it can continue?"} If no one answers within ${minutes} minutes, the main agent finishes from the worker's saved result.`,
+                options: [
+                  {
+                    label: more,
+                    description: deadline
+                      ? "The main agent may continue this worker with a new deadline."
+                      : "Raises the conversation's subagent budget; the main agent decides whether to continue this worker.",
+                  },
+                  { label: finish, description: "The main agent builds on the worker's saved result." },
+                ],
+                custom: false,
+              },
+            ],
+            tool: input.live && ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+            timeoutMs: TaskLimit.ASK_TIMEOUT_MS,
+          },
+          input.signal,
+        ).catch((error: unknown) =>
+          error instanceof Question.TimeoutError ? ("timeout" as const) : ("dismissed" as const),
+        )
+        if (typeof answers === "string") return answers
+        const picked = answers[0]?.[0]
+        return picked === more ? "more" : picked === finish ? "finish" : "dismissed"
+      }
       const run = async (signal: AbortSignal, live: boolean): Promise<TaskAttempt.Result> => {
         await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
         return await attemptLease.during(async () => {
@@ -800,8 +892,33 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 }
               : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
+          const next = limitReason
+            ? await TaskLimit.resolve({
+                reason: limitReason,
+                autonomy: settings.autonomy,
+                attended:
+                  ["app", "cli", "desktop"].includes(Flag.OPENSCIENCE_CLIENT) &&
+                  !(await headless(ctx.sessionID)) &&
+                  budget !== undefined,
+                ask: () => askAtLimit({ limitReason, budget: budget!, live, signal }),
+                raise: async () => {
+                  const w = budget!.worker
+                  const root = budget!.pool.rootSessionID
+                  const current = await SubagentBudget.inspect(root)
+                  if (!current) throw new Error("Subagent allowance not found")
+                  await SubagentBudget.increase(root, {
+                    unit: w.unit,
+                    amount:
+                      w.unit === "usd" ? SubagentBudget.dollars(userLimits.usdIncrease) : userLimits.tokenIncrease,
+                    revision: current.revision,
+                    key: `limit:${identity.callID}`,
+                  })
+                  return increaseLabel(w.unit)
+                },
+              })
+            : undefined
           const note = limitReason
-            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${TaskLimit.guidance(limitReason)}`
+            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${next}`
             : taskOutcome.stopReason === "max_steps"
               ? "The subagent reached its step limit; partial result follows."
               : taskOutcome.stopReason === "tool_failures"
