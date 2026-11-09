@@ -6,6 +6,7 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { Identifier } from "../../src/id/id"
 import { TaskLimit, TaskTool } from "../../src/tool/task"
 import { Question } from "../../src/question"
+import { HarnessState } from "../../src/harness/state"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SubagentBudget } from "../../src/session/subagent-budget"
 import { Storage } from "../../src/storage/storage"
@@ -34,6 +35,7 @@ async function fixture(
       /** How the user answers a limit-stop question: an option label, or "dismiss" (default). */
       limitAnswer?: string
       limitQuestions?: Question.Request[]
+      autonomy?: MessageV2.DelegationSettings["autonomy"]
     }
   }) => Promise<void>,
   deadlineMs = 600000,
@@ -51,6 +53,7 @@ async function fixture(
     workerModelOverride?: boolean
     limitAnswer?: string
     limitQuestions?: Question.Request[]
+    autonomy?: MessageV2.DelegationSettings["autonomy"]
   } = {}
   const requests: unknown[] = []
   const server = Bun.serve({
@@ -197,6 +200,7 @@ async function fixture(
                 delegationSettings: {
                   workerModel: selection.workerModel,
                   workerModelOverride: selection.workerModelOverride,
+                  ...(selection.autonomy ? { autonomy: selection.autonomy } : {}),
                 },
               },
             },
@@ -600,6 +604,56 @@ test("choosing to finish without the worker lets the lead finish from the saved 
       const finished = await execute()
       expect(finished.output).toContain("The user chose to finish without this worker")
       expect(finished.output).toContain("finish the remaining work yourself")
+    },
+    600000,
+    100,
+  )
+})
+
+test("headless and autonomous limit stops finish without asking", async () => {
+  for (const mode of ["headless", "autonomous"] as const) {
+    await fixture(
+      async ({ parent, execute, selection }) => {
+        if (mode === "headless") HarnessState.headless(parent.id, { continueOnDeny: true })
+        else selection.autonomy = "autonomous"
+        const started = Date.now()
+        const result = await execute()
+        expect(result.metadata.stopReason).toBe("token_limit")
+        expect(selection.limitQuestions ?? []).toHaveLength(0)
+        expect(result.output).toContain(
+          mode === "headless"
+            ? "No one is available to answer in this run"
+            : "Independence is autonomous, so no one is available to extend this worker",
+        )
+        expect(result.output).toContain("finish the remaining work yourself")
+        expect(Date.now() - started).toBeLessThan(TaskLimit.ASK_TIMEOUT_MS)
+      },
+      600000,
+      100,
+    )
+  }
+})
+
+test("a background worker's limit question is not tied to the settled call and its answer reaches the lead", async () => {
+  await fixture(
+    async ({ parent, execute, selection }) => {
+      selection.limitAnswer = "ignore"
+      const first = await execute(undefined, true)
+      const childID = first.metadata.sessionId as string
+      const until = Date.now() + 5000
+      while (!selection.limitQuestions?.length && Date.now() < until) await Bun.sleep(10)
+      expect(selection.limitQuestions).toHaveLength(1)
+      const question = selection.limitQuestions![0]
+      expect(question.sessionID).toBe(parent.id)
+      expect(question.tool).toBeUndefined()
+      await Question.reply({ requestID: question.id, answers: [["Finish without it"]] })
+      const reports = async () =>
+        (await Session.messages({ sessionID: parent.id }))
+          .flatMap((message) => message.parts)
+          .filter((part) => part.type === "text" && part.synthetic && part.text.includes(`task_id: ${childID}`))
+      while (!(await reports()).length && Date.now() < until) await Bun.sleep(10)
+      const [report] = await reports()
+      expect(report?.type === "text" ? report.text : "").toContain("The user chose to finish without this worker")
     },
     600000,
     100,
