@@ -2489,44 +2489,46 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                 )
               }}
             </For>
-            <button
-              type="button"
-              data-slot="question-option"
-              data-custom="true"
-              data-picked={customPicked()}
-              role={multi() ? "checkbox" : "radio"}
-              aria-checked={customPicked()}
-              onClick={() => selectOption(options().length)}
-            >
-              <span data-slot="option-mark" aria-hidden="true" />
-              <span data-slot="option-copy">
-                <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
-                <Show when={!store.editing && input()}>
-                  <span data-slot="option-description">{input()}</span>
-                </Show>
-              </span>
-            </button>
-            <Show when={store.editing}>
-              <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
-                <input
-                  ref={(el) => setTimeout(() => el.focus(), 0)}
-                  type="text"
-                  data-slot="custom-input"
-                  placeholder={i18n.t("ui.question.custom.placeholder")}
-                  value={input()}
-                  onInput={(e) => {
-                    const inputs = [...store.custom]
-                    inputs[store.tab] = e.currentTarget.value
-                    setStore("custom", inputs)
-                  }}
-                />
-                <Button type="submit" variant="primary" size="small">
-                  {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
-                </Button>
-                <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
-                  {i18n.t("ui.common.cancel")}
-                </Button>
-              </form>
+            <Show when={question()?.custom !== false}>
+              <button
+                type="button"
+                data-slot="question-option"
+                data-custom="true"
+                data-picked={customPicked()}
+                role={multi() ? "checkbox" : "radio"}
+                aria-checked={customPicked()}
+                onClick={() => selectOption(options().length)}
+              >
+                <span data-slot="option-mark" aria-hidden="true" />
+                <span data-slot="option-copy">
+                  <span data-slot="option-label">{i18n.t("ui.messagePart.option.typeOwnAnswer")}</span>
+                  <Show when={!store.editing && input()}>
+                    <span data-slot="option-description">{input()}</span>
+                  </Show>
+                </span>
+              </button>
+              <Show when={store.editing}>
+                <form data-slot="custom-input-form" onSubmit={handleCustomSubmit}>
+                  <input
+                    ref={(el) => setTimeout(() => el.focus(), 0)}
+                    type="text"
+                    data-slot="custom-input"
+                    placeholder={i18n.t("ui.question.custom.placeholder")}
+                    value={input()}
+                    onInput={(e) => {
+                      const inputs = [...store.custom]
+                      inputs[store.tab] = e.currentTarget.value
+                      setStore("custom", inputs)
+                    }}
+                  />
+                  <Button type="submit" variant="primary" size="small">
+                    {multi() ? i18n.t("ui.common.add") : i18n.t("ui.common.submit")}
+                  </Button>
+                  <Button type="button" variant="ghost" size="small" onClick={() => setStore("editing", false)}>
+                    {i18n.t("ui.common.cancel")}
+                  </Button>
+                </form>
+              </Show>
             </Show>
           </div>
         </div>
