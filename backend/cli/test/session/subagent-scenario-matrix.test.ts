@@ -241,7 +241,11 @@ test("actual Task retains local allowance enforcement and accounting while trace
       directory: tmp.path,
       fn: async () => {
         await trustProject()
-        const parent = await Session.create({ title: "Private matrix" })
+        // No client answers questions here, as in `openscience run` without --auto-approve.
+        const parent = await Session.create({
+          title: "Private matrix",
+          permission: [{ permission: "question", pattern: "*", action: "deny" }],
+        })
         const userID = Identifier.ascending("message")
         await Session.updateMessage({
           id: userID,

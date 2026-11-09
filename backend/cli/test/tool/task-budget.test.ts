@@ -610,18 +610,22 @@ test("choosing to finish without the worker lets the lead finish from the saved 
   )
 })
 
-test("headless and autonomous limit stops finish without asking", async () => {
-  for (const mode of ["headless", "autonomous"] as const) {
+test("headless, question-denied and autonomous limit stops finish without asking", async () => {
+  for (const mode of ["headless", "denied", "autonomous"] as const) {
     await fixture(
       async ({ parent, execute, selection }) => {
         if (mode === "headless") HarnessState.headless(parent.id, { continueOnDeny: true })
+        else if (mode === "denied")
+          await Session.update(parent.id, (draft) => {
+            draft.permission = [{ permission: "question", pattern: "*", action: "deny" }]
+          })
         else selection.autonomy = "autonomous"
         const started = Date.now()
         const result = await execute()
         expect(result.metadata.stopReason).toBe("token_limit")
         expect(selection.limitQuestions ?? []).toHaveLength(0)
         expect(result.output).toContain(
-          mode === "headless"
+          mode !== "autonomous"
             ? "No one is available to answer in this run"
             : "Independence is autonomous, so no one is available to extend this worker",
         )

@@ -32,6 +32,18 @@ import { formatUsd } from "@synsci/util/money"
 
 const log = Log.create({ service: "tool.task" })
 
+/** Whether someone can answer a question in this session: a client that shows
+ * questions, not a headless run that answers them itself, and not a session
+ * that denies the question tool (`openscience run` without --auto-approve). */
+async function answerable(sessionID: string) {
+  if (!["app", "cli", "desktop"].includes(Flag.OPENSCIENCE_CLIENT)) return false
+  if (await headless(sessionID)) return false
+  const permission = await Session.get(sessionID)
+    .then((session) => session.permission)
+    .catch(() => undefined)
+  return !permission || PermissionNext.evaluate("question", "*", permission).action !== "deny"
+}
+
 /** Placeholder session ids models eagerly emit for the optional `task_id`
  * field. Every one of them unambiguously means "start a new child". */
 const CONTINUATION_PLACEHOLDER = /^(?:ses_)?(?:new|none|null|undefined|placeholder|current|parent|fresh)$/i
@@ -896,10 +908,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             ? await TaskLimit.resolve({
                 reason: limitReason,
                 autonomy: settings.autonomy,
-                attended:
-                  ["app", "cli", "desktop"].includes(Flag.OPENSCIENCE_CLIENT) &&
-                  !(await headless(ctx.sessionID)) &&
-                  budget !== undefined,
+                attended: budget !== undefined && (await answerable(ctx.sessionID)),
                 ask: () => askAtLimit({ limitReason, budget: budget!, live, signal }),
                 raise: async () => {
                   const w = budget!.worker
