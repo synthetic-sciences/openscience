@@ -1190,6 +1190,63 @@ test("limit stops tell the lead to ask the user instead of redoing the work", ()
   expect(TaskLimit.guidance("cancelled")).toContain("only if the stopped work is requested again")
 })
 
+test("a worker stopped on its own share continues from the pool without asking while the pool still covers it", async () => {
+  await fixture(
+    async ({ parent, execute, selection }) => {
+      await Config.updateGlobal(
+        { subagents: { enabled: true, tokens: 1000, deadlineMs: 600000, tokenIncrease: 1 } },
+        { preserveInstances: true },
+      )
+      const result = await execute()
+      expect(result.metadata.stopReason).toBe("token_limit")
+      expect(selection.limitQuestions ?? []).toHaveLength(0)
+      expect(result.output).toContain("still has")
+      expect(result.output).toContain("no approval is needed")
+      expect(result.output).toContain("Do not start a replacement worker")
+      expect((await SubagentBudget.inspect(parent.id))!.limits.tokens).toBe(1000)
+    },
+    600000,
+    1000,
+  )
+})
+
+test("a pool already exhausted at admission still asks the user, and approval raises it", async () => {
+  await fixture(
+    async ({ parent, execute, selection }) => {
+      selection.limitAnswer = "Finish without it"
+      await execute()
+      const pool = (await SubagentBudget.inspect(parent.id))!
+      const free = SubagentBudget.available(pool, "tokens")
+      if (free > 0) {
+        const sibling = await Session.create({ parentID: parent.id, title: "Holds the rest" })
+        await SubagentBudget.open({
+          rootSessionID: parent.id,
+          parentSessionID: parent.id,
+          sessionID: sibling.id,
+          assignmentID: `assignment-${sibling.id}`,
+          objective: "Hold the remaining pool",
+          expectedOutput: "Nothing",
+          model: { providerID: "test", modelID: "model" },
+          route: "chatgpt",
+          unit: "tokens",
+          allocation: free,
+          settings: { tokens: 100 },
+        })
+      }
+      selection.limitQuestions = []
+      selection.limitAnswer = "Add 250,000 tokens"
+      const refused = await execute()
+      expect(refused.metadata.stopReason).toBe("token_limit")
+      expect(refused.output).not.toContain("No one is available to answer")
+      expect(selection.limitQuestions).toHaveLength(1)
+      expect(refused.output).toContain("The user added 250,000 tokens to the subagent budget")
+      expect((await SubagentBudget.inspect(parent.id))!.limits.tokens).toBe(100 + 250_000)
+    },
+    600000,
+    100,
+  )
+})
+
 describe("TaskLimit.resolve", () => {
   const run = (choice: TaskLimit.Choice, extra: Partial<Parameters<typeof TaskLimit.resolve>[0]> = {}) => {
     const calls = { ask: 0, raise: 0 }
@@ -1245,6 +1302,17 @@ describe("TaskLimit.resolve", () => {
       expect(calls).toEqual({ ask: 0, raise: 0 })
       expect(text).toContain("finish the remaining work yourself")
     }
+  })
+
+  test("a pool that still covers the worker needs no question, even when autonomous or unattended", async () => {
+    for (const extra of [{}, { autonomy: "autonomous" as const }, { attended: false }]) {
+      const { text, calls } = await run("more", { remaining: "$0.60", ...extra })
+      expect(calls).toEqual({ ask: 0, raise: 0 })
+      expect(text).toContain("still has $0.60 available, so no approval is needed")
+      expect(text).toContain("Continue this worker with this task_id")
+    }
+    const deadline = await run("more", { reason: "deadline", remaining: "$0.60" })
+    expect(deadline.calls.ask).toBe(1)
   })
 
   test("other stop reasons keep their static guidance", async () => {

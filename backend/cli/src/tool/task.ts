@@ -35,6 +35,12 @@ const log = Log.create({ service: "tool.task" })
 /** Whether someone can answer a question in this session: a client that shows
  * questions, not a headless run that answers them itself, and not a session
  * that denies the question tool (`openscience run` without --auto-approve). */
+/** The conversation that owns a session's subagent budget: its top-level ancestor. */
+async function rootSession(id: string): Promise<string> {
+  const info = await Session.get(id)
+  return info.parentID ? rootSession(info.parentID) : id
+}
+
 async function answerable(sessionID: string) {
   if (!["app", "cli", "desktop"].includes(Flag.OPENSCIENCE_CLIENT)) return false
   if (await headless(sessionID)) return false
@@ -81,10 +87,16 @@ export namespace TaskLimit {
     autonomy?: MessageV2.DelegationSettings["autonomy"]
     /** Whether anyone can answer: false for headless runs and clients without questions. */
     attended: boolean
+    /** The amount the pool can still grant this worker without a user increase, formatted, when that covers more work. */
+    remaining?: string
     ask: () => Promise<Choice>
     /** Raise the conversation's subagent budget; resolves to the amount added, for the lead. */
     raise: () => Promise<string>
   }) {
+    const next =
+      "Continue this worker with this task_id if the remaining work still needs it; otherwise finish it yourself from the saved partial result. Do not start a replacement worker."
+    if (input.remaining && (input.reason === "budget_limit" || input.reason === "token_limit"))
+      return `The worker used its own share, but the conversation's subagent budget still has ${input.remaining} available, so no approval is needed. ${next}`
     if (!stopped(input.reason) || input.autonomy === "autonomous") return guidance(input.reason, input.autonomy)
     if (!input.attended) return proceed("No one is available to answer in this run.")
     const choice = await input.ask()
@@ -94,8 +106,6 @@ export namespace TaskLimit {
       )
     if (choice === "finish") return proceed("The user chose to finish without this worker.")
     if (choice === "dismissed") return guidance(input.reason, input.autonomy)
-    const next =
-      "Continue this worker with this task_id if the remaining work still needs it; otherwise finish it yourself from the saved partial result. Do not start a replacement worker."
     if (input.reason === "deadline") return `The user allowed this worker more time. ${next}`
     return input.raise().then(
       (amount) => `The user added ${amount} to the subagent budget. ${next}`,
@@ -656,12 +666,12 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       /** One question to the user at a limit stop, withdrawn after `TaskLimit.ASK_TIMEOUT_MS`. */
       const askAtLimit = async (input: {
         limitReason: string
-        budget: NonNullable<Awaited<ReturnType<typeof SubagentBudget.read>>>
+        unit: SubagentBudget.Unit
         live: boolean
         signal: AbortSignal
       }): Promise<TaskLimit.Choice> => {
         const deadline = input.limitReason === "deadline"
-        const more = deadline ? "Allow more time" : `Add ${increaseLabel(input.budget.worker.unit)}`
+        const more = deadline ? "Allow more time" : `Add ${increaseLabel(input.unit)}`
         const finish = "Finish without it"
         const minutes = TaskLimit.ASK_TIMEOUT_MS / 60_000
         const answers = await Question.ask(
@@ -808,10 +818,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   : undefined
                 try {
                   // Keep progress and cancellation connected until the child settles.
-                  const root = await (async function top(id: string): Promise<string> {
-                    const info = await Session.get(id)
-                    return info.parentID ? top(info.parentID) : id
-                  })(ctx.sessionID)
+                  const root = await rootSession(ctx.sessionID)
                   const bounded = await SubagentBudget.initialize(root, userLimits)
                   if (!bounded)
                     return await SessionPrompt.withCancellation(session.id, () => dispatch(signal), signal).then(
@@ -904,25 +911,41 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 }
               : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
+          // The pool to extend: the worker's own record, or, when the pool was already
+          // exhausted at admission and no record exists for this call, the conversation's.
+          const target = budget
+            ? { root: budget.pool.rootSessionID, unit: budget.worker.unit }
+            : limitReason === "budget_limit" || limitReason === "token_limit"
+              ? {
+                  root: await rootSession(ctx.sessionID),
+                  unit: limitReason === "budget_limit" ? ("usd" as const) : ("tokens" as const),
+                }
+              : undefined
+          const increase = (unit: SubagentBudget.Unit) =>
+            unit === "usd" ? SubagentBudget.dollars(userLimits.usdIncrease) : userLimits.tokenIncrease
+          const headroom = target ? await SubagentBudget.headroom(target.root, target.unit, ctx.sessionID) : 0
           const next = limitReason
             ? await TaskLimit.resolve({
                 reason: limitReason,
                 autonomy: settings.autonomy,
-                attended: budget !== undefined && (await answerable(ctx.sessionID)),
-                ask: () => askAtLimit({ limitReason, budget: budget!, live, signal }),
+                attended: target !== undefined && (await answerable(ctx.sessionID)),
+                remaining:
+                  target && headroom >= increase(target.unit)
+                    ? target.unit === "usd"
+                      ? formatUsd(SubagentBudget.usd(headroom))
+                      : `${headroom.toLocaleString("en-US")} tokens`
+                    : undefined,
+                ask: () => askAtLimit({ limitReason, unit: target!.unit, live, signal }),
                 raise: async () => {
-                  const w = budget!.worker
-                  const root = budget!.pool.rootSessionID
-                  const current = await SubagentBudget.inspect(root)
+                  const current = await SubagentBudget.inspect(target!.root)
                   if (!current) throw new Error("Subagent allowance not found")
-                  await SubagentBudget.increase(root, {
-                    unit: w.unit,
-                    amount:
-                      w.unit === "usd" ? SubagentBudget.dollars(userLimits.usdIncrease) : userLimits.tokenIncrease,
+                  await SubagentBudget.increase(target!.root, {
+                    unit: target!.unit,
+                    amount: increase(target!.unit),
                     revision: current.revision,
                     key: `limit:${identity.callID}`,
                   })
-                  return increaseLabel(w.unit)
+                  return increaseLabel(target!.unit)
                 },
               })
             : undefined

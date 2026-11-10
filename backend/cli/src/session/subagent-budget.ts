@@ -279,6 +279,11 @@ export namespace SubagentBudget {
       ancestorLimited: free === 0 || (!parent.active && prior.ancestorLimited),
     }
   }
+  /** What a stopped direct child of `parentSessionID` could still be granted from the pool without a user increase. */
+  export async function headroom(rootSessionID: string, unit: Unit, parentSessionID: string) {
+    const pool = await inspect(rootSessionID)
+    return pool ? capacity(pool, unit, parentSessionID).available : 0
+  }
   async function root(sessionID: string) {
     const projectID = await Promise.resolve()
       .then(() => Instance.project.id)

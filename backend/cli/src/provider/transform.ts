@@ -1240,18 +1240,24 @@ export namespace ProviderTransform {
   }
 
   /** Output tokens the SDK adds to the wire max_tokens beyond maxOutputTokens (Anthropic thinking). */
-  export function thinkingTokens(npm: string, options: Record<string, any>): number {
+  export function thinkingTokens(npm: string, options: Record<string, unknown>): number {
     if (npm !== "@ai-sdk/anthropic" && npm !== "@ai-sdk/google-vertex/anthropic") return 0
-    const thinking = options?.["thinking"]
-    const budget = typeof thinking?.["budgetTokens"] === "number" ? thinking["budgetTokens"] : 0
-    return thinking?.["type"] === "enabled" && budget > 0 ? budget : 0
+    const thinking = options["thinking"]
+    if (!thinking || typeof thinking !== "object") return 0
+    const config = thinking as Record<string, unknown>
+    const budget = typeof config["budgetTokens"] === "number" ? config["budgetTokens"] : 0
+    return config["type"] === "enabled" && budget > 0 ? budget : 0
   }
 
   /** Returns options with the Anthropic thinking budget lowered to `tokens`; the input is never mutated. */
-  export function fitThinking(npm: string, options: Record<string, any>, tokens: number | undefined) {
+  export function fitThinking<T extends Record<string, unknown>>(
+    npm: string,
+    options: T,
+    tokens: number | undefined,
+  ): T {
     const current = thinkingTokens(npm, options)
     if (tokens === undefined || !current || tokens >= current) return options
-    return { ...options, thinking: { ...options["thinking"], budgetTokens: tokens } }
+    return { ...options, thinking: { ...(options["thinking"] as Record<string, unknown>), budgetTokens: tokens } }
   }
 
   export function maxOutputTokens(
