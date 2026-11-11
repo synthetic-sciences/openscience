@@ -1561,6 +1561,8 @@ export namespace Config {
       mergeDeep(await loadFile(path.join(Global.Path.config, "openscience.jsonc"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "openscience.json"))),
     )
+    const subagents = await readSubagents()
+    if (subagents) result.subagents = subagents
 
     const legacy = path.join(Global.Path.config, "config")
     if (existsSync(legacy)) {
@@ -1920,6 +1922,41 @@ export namespace Config {
   // Both writers pick the plain json file over its jsonc sibling because the
   // loaders merge json last: a save into the jsonc while both exist would be
   // shadowed on the next read. A fresh config is still created as jsonc.
+  /**
+   * Bounded-run settings live in their own file beside the global config.
+   * Released clients validate openscience.json(c) strictly and refuse to start
+   * on a top-level key they do not know, so a key written there by a newer
+   * client would lock older desktop apps and CLIs sharing the folder out.
+   */
+  function subagentsFile() {
+    return path.join(Global.Path.config, "subagents.json")
+  }
+
+  async function readSubagents(): Promise<Info["subagents"]> {
+    const filepath = subagentsFile()
+    const text = await Bun.file(filepath)
+      .text()
+      .catch((err) => {
+        if (err.code === "ENOENT") return undefined
+        throw new JsonError({ path: filepath }, { cause: err })
+      })
+    if (text === undefined) return undefined
+    const parsed = SubagentBudget.Settings.safeParse(parseJsonc(text, [], { allowTrailingComma: true }))
+    if (parsed.success) return parsed.data
+    throw new InvalidError({ path: filepath, issues: parsed.error.issues })
+  }
+
+  async function writeSubagents(value: SubagentBudget.Settings | undefined) {
+    const filepath = subagentsFile()
+    if (value === undefined) return fs.rm(filepath, { force: true })
+    const parsed = SubagentBudget.Settings.safeParse(value)
+    if (!parsed.success) throw new InvalidError({ path: filepath, issues: parsed.error.issues })
+    await fs.mkdir(path.dirname(filepath), { recursive: true })
+    const temp = `${filepath}.${process.pid}.tmp`
+    await Bun.write(temp, JSON.stringify(value, null, 2) + "\n")
+    await fs.rename(temp, filepath)
+  }
+
   function globalConfigFile() {
     const candidates = ["openscience.json", "openscience.jsonc", "config.json"].map((file) =>
       path.join(Global.Path.config, file),
@@ -2223,19 +2260,33 @@ export namespace Config {
     })
   }
 
-  export async function updateGlobal(config: Info, options: { preserveInstances?: boolean } = {}) {
+  export async function updateGlobal(input: Info, options: { preserveInstances?: boolean } = {}) {
     const write = async () => {
       const filepath = globalConfigFile()
-      const before = await Bun.file(filepath)
+      const original = await Bun.file(filepath)
         .text()
         .catch((err) => {
           if (err.code === "ENOENT") return "{}"
           throw new JsonError({ path: filepath }, { cause: err })
         })
 
+      const config: Info = { ...input }
+      delete config.subagents
+      const legacy = (rawConfig(original, filepath) as Info).subagents
+      if (Object.hasOwn(input, "subagents")) await writeSubagents(input.subagents)
+      // Carry a bounded-run block written into the shared file by an earlier
+      // build over to its own file, then drop it so older clients can start.
+      else if (legacy !== undefined && (await readSubagents()) === undefined) await writeSubagents(legacy)
+      const before =
+        legacy === undefined
+          ? original
+          : applyEdits(
+              original,
+              modify(original, ["subagents"], undefined, { formattingOptions: { insertSpaces: true, tabSize: 2 } }),
+            )
+
       const existing = await McpSecretStorage.reveal(rawConfig(before, filepath))
       const merged = mergeDeep(existing, config)
-      if (Object.hasOwn(config, "subagents")) merged.subagents = config.subagents
       assertValid(merged, filepath)
       const next = await (async () => {
         if (!filepath.endsWith(".jsonc")) {
@@ -2266,9 +2317,11 @@ export namespace Config {
         GlobalBus.emit("event", { directory: "global", payload: { type: "skill.updated", properties: {} } })
       }
 
-      return McpSecretStorage.reveal(next)
+      const revealed = await McpSecretStorage.reveal(next)
+      const subagents = await readSubagents()
+      return subagents ? { ...revealed, subagents } : revealed
     }
-    if (config.mcp === undefined) return CredentialLifecycle.serialized(write)
+    if (input.mcp === undefined) return CredentialLifecycle.serialized(write)
     return CredentialLifecycle.mutate("mcp-config.update-global", write)
   }
 
