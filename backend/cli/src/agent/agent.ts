@@ -580,6 +580,7 @@ export namespace Agent {
       route,
       provider: model.providerID,
       model: model.api.id,
+      pricingModel: model,
       binding,
     })
     const requestContext = calls.context

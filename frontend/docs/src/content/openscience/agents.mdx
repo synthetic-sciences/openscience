@@ -58,7 +58,7 @@ The built-in workers are `explore` (a read-only scout for files, data, code and 
 
 You can also hand a job to a worker yourself: type `@` in the composer and pick one (`@explore where is the early-stopping split decided?`). The message becomes that worker's brief, the lead waits for its report, and the worker's session opens from the delegation row. A worker's config can set `hidden: true` to keep it out of the `@` menu while the lead may still dispatch it.
 
-A worker runs on its own configured model when the agent has one, otherwise on the **Worker model** from **Customize → Models**, otherwise on the lead's model. No built-in agent has a model in code; the recommended configuration is documented below. Workers work in the lead's own directory: the files they write there are the deliverables, and the lead reads them directly. The lead writes a self-contained brief with a definition of done, waits for the result (returned once, in a `<task_result>` envelope with a `task_id` that can resume the same worker), and integrates it; checking the lead's own output is never delegated. A worker started in the background returns immediately and wakes the lead with its result when it finishes. Workers cannot dispatch workers unless `subagent_depth` in `openscience.json` allows deeper nesting (default 1).
+In **Settings → General → Subagents**, choose **Same as calling agent** (the default) or one model for delegated tasks. This policy takes precedence over a specialist profile's model. This is the saved model policy for delegated work; **Same as calling agent** also overrides older saved worker-model preferences. The CLI option `openscience run --worker-model provider/model` explicitly overrides that policy for its run. Workers work in the lead's own directory: the files they write there are the deliverables, and the lead reads them directly. The lead writes a self-contained brief with a definition of done, waits for the result (returned once, in a `<task_result>` envelope with a `task_id` that can resume the same worker), and integrates it; checking the lead's own output is never delegated. A worker started in the background returns immediately and wakes the lead with its result when it finishes. Workers cannot dispatch workers unless `subagent_depth` in `openscience.json` allows deeper nesting (default 1).
 
 A delegated task shows as one line (what it is doing, which agent, its state and elapsed time) and streams nothing while it runs; open it for the result, its saved Results and **Open agent**, which shows the worker's own conversation. Stopping the lead also cancels its active delegated work. A stopped task's saved files and recorded tool results remain available.
 
@@ -67,25 +67,50 @@ result; earlier progress text cannot make an unfinished worker look complete. A
 result without a Verification section (the command, its exit code, what it
 proves) is a claim, and the lead is told so.
 
-#### Recommended models
+#### Subagent allowances
 
-Put the models you want each agent to use in `openscience.json`; nothing is hard-coded:
+Bounded runs are **off by default**. Open **Settings → General → Subagents** and switch on **Enable bounded runs** to use budget and deadline controls for new conversations. When off, delegated tasks use their ordinary runtime without these extra limits. Model selection remains available in either mode.
 
-```json
-{
-  "model": "openai/gpt-6-astra",
-  "agent": {
-    "explore": { "model": "google/gemini-3.8-flash" },
-    "ml": { "model": "openai/gpt-6-sol", "variant": "high" },
-    "biology": { "model": "openai/gpt-6-sol" },
-    "physics": { "model": "openai/gpt-6-sol" },
-    "chemistry": { "model": "openai/gpt-6-sol" },
-    "data": { "model": "openai/gpt-6-sol" }
-  }
-}
-```
+The suggested defaults are **USD 5**, **1,000,000 tokens**, and **10 minutes**. The suggested increase amounts are **USD 1** and **250,000 tokens**. Edit these values before saving, or leave a numeric field blank to reset it to its suggested value. Changing the switch does not save until you choose **Save subagent defaults**.
 
-A worker on a different model than the lead uses its own `variant` (reasoning effort); on the lead's model it inherits the lead's. Add your own specialist the same way, with `mode: "subagent"`, `skills: ["<category>", ...]` for its domain index and a `permission` rule per domain tool it may use without a skill.
+A conversation keeps the mode chosen when its first subagent starts. Existing conversations with saved budgets remain bounded, even if you later switch the global default off. A conversation that started with bounded runs off stays off. Start a new conversation to use a changed mode. Within a bounded conversation, USD and token pools are shared by all workers of that root conversation. These limits do not cap the lead's own calls. Project configuration cannot enable or raise the user's global allowance.
+
+With bounded runs on, a task receives an allocation from the approved pool. By default this is at most one quarter of the pool, capped at what remains. The lead can assign another amount within the unspent, unreserved balance. The default deadline is 10 minutes, including queueing and approval waits. Changing defaults affects new pools; it does not raise an existing pool.
+
+USD uses the selected BYOK or Ace model's normal cost calculation. A local or custom proxy with configured prices also uses USD. Tokens include input, cache and output tokens for subscriptions and unpriced local routes; they are not the provider's weekly quota. Internal model calls owned by a worker count too. Search and compute keep their existing approval rules.
+
+Before each call, the runtime estimates input and output separately at the selected speed and context prices. It counts image tokens separately from their encoded file size and includes the offered tool schemas. It reduces the output cap to fit that request inside the remaining allowance. New assignments can use the full work allowance; there is no automatic 75% wrap-up or reserved report call. Existing saved wrap-up contracts retain their final-call restriction until you continue them under a new assignment.
+
+The runtime stops further calls when the allowance cannot cover them, cancels work at the hard deadline, and retains the actual stop reason, partial output and execution evidence. It does not start a separate summarization agent. A model response can end before a limit because of an error, cancellation, missing output or normal completion.
+
+The main agent checks every result against its objective and expected output before using it. A completed worker run is not verified task completion. A limit-stopped worker can also have produced sufficient work. The main agent can proceed, use a partial result, inspect more saved evidence, continue the same child within approved funds, delegate again, stop or ask you for a pool increase. The worker's runtime reason remains unchanged when the main agent assesses the task result.
+
+An allowance stop means another request cannot fit; it does not prove the grant was spent. Check recorded use and pending reservations. A request refused before dispatch adds no model usage. Definite authentication, validation and rate-limit rejections return their reserved allowance. Timeouts, conflicts and server errors remain uncertain, even with an empty body. Worker reports retain bounded excerpts of saved command output, including output captured before interruption. Long or partial output is marked incomplete. These receipts survive context compaction, so the main agent can check small command results even when the worker did not finish its report.
+
+Open the task context panel to inspect the **Subagent budget**: the total for all workers in the conversation, and each worker's own limit within it. It loads when the panel opens and updates as workers start and stop. **Continue with remaining budget** resumes the same child. **Add … and continue** (the increase amount from General settings, or the suggested default) raises the conversation budget once and resumes the child through a new Task call. The same actions appear on the worker's card in the chat when it stops at its limit or deadline. If the conversation budget still has at least one increase amount left, the main agent may continue the worker from it without asking. Otherwise, including when the budget is already used up before a worker starts, the main agent asks you in the chat whether to add to the budget (or, after a deadline, allow more time) or finish without the worker. Approving raises the conversation's subagent budget once; the main agent then decides whether to continue the worker. If no one answers within 5 minutes, or you choose to finish, the main agent finishes the remaining work itself from the worker's saved result and says so in its answer. Dismissing the question ends the turn and leaves the actions on the card. With Independence set to **Independent**, or in a headless run, nothing is asked and the main agent finishes the work itself. It never starts a replacement worker. A worker that ran out of time can **Continue with a new deadline**. A continuation needs enough budget for another call like the worker's largest so far; otherwise add to the budget first. **Stop here** keeps its files and conversation. An increase does not buy Wallet credits or reset a provider quota. A deliberate change of access route requires a new child; historical tokens are never converted into dollars.
+
+The context-panel continuation assigns the available balance to the selected
+worker. Existing sibling grants stay protected; new assignments may need to wait
+until the continued worker returns unused allowance. The lead can instead use
+Task to request a smaller allocation from the approved pool.
+
+A nested worker also needs allowance from its parent. If that allocation is exhausted, continue the parent task first so it can receive and allocate more. Increasing the root pool alone does not renew the parent's allocation. Worker reports include a short accounting receipt for the lead, retained when the report is compacted.
+
+The local server and its clients are trusted. These limits do not isolate
+untrusted code running as your operating-system user. A shell or plugin that
+can reach the control API can submit an allowance increase; code that can write
+the app's state can modify its ledger. Revision checks prevent duplicate or stale
+increases but do not prove human approval. Isolate untrusted execution from both
+the control API and app state. A server bearer token alone does not separate
+clients that already have that token.
+
+Internal model calls owned by a bounded child use its pinned model and route.
+They can therefore cost more than the configured small model. Internal calls
+owned by the main agent keep the ordinary small-model selection.
+
+An active or limit-stopped assignment keeps its model, reasoning variant and route when continued. A completed task can accept a deliberate follow-up with a different model on the same route. Revoked access stops it. Normal completion of the lead's response leaves background workers running; the explicit Stop action cancels its descendants.
+
+Provider usage can arrive only after a call completes. The app bounds output where the provider supports it and admits calls conservatively. An already accepted request can exceed the local estimate, especially on subscription routes that do not accept output caps. The app records the overrun and blocks later calls. An uncertain request keeps its reserved allowance until there is usage evidence. This is a runtime inference allowance, not an exact provider invoice or a settled Wallet receipt.
 
 Handoffs retain command receipt references and failures. A shell exit of zero
 describes the outer process; it does not establish that nested tests passed or
@@ -144,6 +169,8 @@ Explain each concern and suggest a check before the analysis runs.
 
 Save it as `analysis-reviewer.md` in the agent directory. Select it with `--agent analysis-reviewer`, or in the app: once a second primary agent exists, an agent chip appears beside the model control in the composer, and `Tab` in an empty composer cycles through the primary agents. A `primary` agent can lead a session, a `subagent` is for delegated tasks and the `@` menu, and `all` supports both.
 
-Other frontmatter options: `model` (`provider/model-id`; a worker without one uses the lead's model), `temperature` and `top_p`, `steps` (a cap on agentic iterations, after which the agent is asked to summarize and list what remains), `color` (a hex value or a theme color such as `accent`), `disable`, and `permission.task` globs that decide which workers the agent may dispatch. The deprecated `tools:` map still loads; `openscience agent create` writes `permission:` rules.
+Other frontmatter options: `model` (`provider/model-id`; Task workers follow the user subagent policy), `temperature` and `top_p`, `steps` (a cap on agentic iterations, after which the agent is asked to summarize and list what remains), `color` (a hex value or a theme color such as `accent`), `disable`, and `permission.task` globs that decide which workers the agent may dispatch. The deprecated `tools:` map still loads; `openscience agent create` writes `permission:` rules.
 
 Custom definitions change the agent's instructions and permitted actions. Test a new profile on a small task before relying on it.
+
+If only a background worker is cancelled, the lead receives its saved partial result and cancellation reason. Stopping the lead also stops its background workers and does not restart the lead to deliver those reports. Final usage can arrive after a stop; accounting updates preserve the original stop reason.

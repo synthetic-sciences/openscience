@@ -32,6 +32,25 @@ test("legacy session records migrate atomically with IDs and original files pres
   expect(await Bun.file(path.join(tmp.path, "storage", ...records[0]!.key) + ".json").json()).toEqual(records[0]!.data)
 })
 
+for (const method of ["query", "prepare"] as const) {
+  test(`research access closes ${method} statements after exceeding the SQLite cache`, async () => {
+    await using tmp = await tmpdir()
+    const store = ResearchDatabase.create(tmp.path)
+    const statements = await store.query((db) => {
+      const retained = [db[method]<{ value: number }, []>("SELECT 42 AS value")]
+      expect(retained[0]!.get()).toEqual({ value: 42 })
+      for (let index = 0; index < Database.MAX_QUERY_CACHE_SIZE + 5; index++) {
+        const statement = db.query<{ value: number }, []>(`SELECT ${index} AS value`)
+        statement.get()
+        retained.push(statement)
+      }
+      return retained
+    })
+    for (const statement of statements) expect(() => statement.get()).toThrow()
+    expect(await store.list([])).toEqual([])
+  })
+}
+
 test("a corrupt legacy record cannot commit a partial import or erase its source", async () => {
   await using tmp = await tmpdir()
   const store = ResearchDatabase.create(tmp.path)
@@ -258,6 +277,25 @@ test("a failed later rescan imports nothing and retries after the new source is 
   verify.close()
   await Bun.write(invalid, JSON.stringify({ id: "bad" }))
   expect(await store.list([])).toHaveLength(3)
+})
+
+test("added record tables reach version-seven databases without raising the rollback version", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["session", "project", "kept"], { id: "kept" })
+  const previous = new Database(store.filepath)
+  previous.exec("DROP TABLE subagent_budget; DROP TABLE subagent_binding;")
+  expect(previous.query("PRAGMA user_version").get()).toEqual({ user_version: 7 })
+  previous.close()
+  const upgraded = ResearchDatabase.create(tmp.path)
+  await upgraded.write(["subagent_budget", "project", "root"], { spent: 1 })
+  await upgraded.write(["subagent_binding", "project", "child"], { root: "root" })
+  expect(await upgraded.read<unknown>(["subagent_budget", "project", "root"])).toEqual({ spent: 1 })
+  expect(await upgraded.read<unknown>(["session", "project", "kept"])).toEqual({ id: "kept" })
+  // v2.0.153 rejects any user_version above 7, so additive tables must not raise it.
+  const verify = new Database(store.filepath, { readonly: true })
+  expect(verify.query("PRAGMA user_version").get()).toEqual({ user_version: 7 })
+  verify.close()
 })
 
 test("version-six upgrades import Task attempts and preserve completed replay evidence", async () => {

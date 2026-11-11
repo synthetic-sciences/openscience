@@ -308,3 +308,29 @@ test("list - returns empty when no pending", async () => {
     },
   })
 })
+
+test("ask - withdraws the question when no one answers in time", async () => {
+  await using tmp = await tmpdir({ git: true })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const promise = Question.ask({
+        sessionID: "ses_test",
+        questions: [
+          {
+            question: "Continue?",
+            header: "Action",
+            options: [
+              { label: "Yes", description: "Continue" },
+              { label: "No", description: "Stop" },
+            ],
+          },
+        ],
+        timeoutMs: 20,
+      })
+      expect(await Question.list()).toHaveLength(1)
+      await expect(promise).rejects.toBeInstanceOf(Question.TimeoutError)
+      expect(await Question.list()).toHaveLength(0)
+    },
+  })
+})

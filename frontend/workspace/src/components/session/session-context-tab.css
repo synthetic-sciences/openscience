@@ -314,3 +314,30 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* Wallet cost: headline amount, quiet status line, audit trail folded away. */
+.receipts__status {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small, 11px);
+  line-height: 16px;
+}
+
+.receipts__status > span + span::before {
+  content: "·";
+  margin: 0 6px;
+}
+
+.receipts__status [data-tone="warning"] {
+  color: var(--color-warning);
+}
+
+.receipts__models {
+  grid-template-columns: 1fr;
+}
+
+.receipts__models li {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}

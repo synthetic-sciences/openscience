@@ -32,7 +32,7 @@ test("stats evidence uses an isolated data root even when earlier tests leave se
     ])
     expect({ code, output: code === 0 ? undefined : stdout + stderr }).toEqual({ code: 0, output: undefined })
     expect(stderr).toContain("4 pass")
-    expect(await Storage.read(key)).toEqual(record)
+    expect(await Storage.read<typeof record>(key)).toEqual(record)
   } finally {
     if (child.exitCode === null) child.kill("SIGKILL")
     await child.exited

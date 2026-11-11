@@ -21,7 +21,7 @@ type QuestionDecisionMetadata = {
  * headless `run --auto-approve` registers its root session, and its policy
  * takes the first option of every question. The lead and its workers share
  * that root. */
-async function headless(sessionID: string) {
+export async function headless(sessionID: string) {
   // A caller outside a real session (a test's context) is not headless.
   const lookup = (id: string) =>
     Promise.resolve()

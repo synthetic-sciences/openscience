@@ -9,16 +9,18 @@ Open **Customize → Usage** to review model activity. Choose the source first: 
 
 Open a task's **Context** panel to see the **Context window** bar, **Tokens used**
 in the current session and **Cost so far**. **What fills the window** stays below the bar.
-Choose **Check Wallet cost** to see the amount deducted for the task and its workers.
-Until this check completes, costs show **Not checked**. Per-call Wallet costs use
+**Cost so far** checks the amount deducted for the task and its workers when the panel
+opens. Close and reopen the panel to check again. It shows cents (or two significant
+digits below a cent); hover the amount for the exact figure. Per-call Wallet costs use
 matching settled receipts; estimates and provider amounts are not shown in the call table.
 New model calls save an estimated breakdown of system instructions, tool definitions,
 conversation text and other input content. It remains available after a page reload.
 Older calls show **Not reported** for system or tool counts that were not saved.
 These category estimates are separate from the provider-reported token total.
 
-Incomplete charges stay marked. Open **Charge details** for receipts or
-**Technical details** for per-call usage, the estimate method and raw messages.
+Below the total, settled charges for the task and its workers are grouped by model.
+Pending or missing charges stay marked. Open **Technical details** for per-call usage
+with hold and receipt IDs, the estimate method and raw messages.
 
 ## Choose a source
 

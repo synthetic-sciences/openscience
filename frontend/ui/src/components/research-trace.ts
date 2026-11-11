@@ -80,6 +80,13 @@ function lifecycle(part: Part) {
  * saved and a request that is still open. A failure the agent recovered from
  * is part of the story, not a loose end, and reads in the expanded trace.
  */
+/** A worker that stopped at its limit or deadline: its card carries the user's continue actions. */
+export function stoppedAtLimit(part: Part) {
+  if (part.type !== "tool" || part.tool !== "task" || part.state.status !== "completed") return false
+  const budget = part.state.metadata?.budget as { stopReason?: unknown } | undefined
+  return ["budget_limit", "token_limit", "deadline"].includes(String(budget?.stopReason ?? ""))
+}
+
 export function settledCollapsible(
   part: Part,
   pendingRequestCallID?: string,
@@ -87,6 +94,7 @@ export function settledCollapsible(
 ) {
   if (part.type !== "tool") return part.type === "reasoning"
   if (part.callID === pendingRequestCallID) return false
+  if (stoppedAtLimit(part)) return false
   const child = part.tool === "task" && "metadata" in part.state ? part.state.metadata?.sessionId : undefined
   if (typeof child === "string" && pendingChildRequest?.(child)) return false
   if (part.state.status === "completed" && part.state.metadata?.artifact) return false

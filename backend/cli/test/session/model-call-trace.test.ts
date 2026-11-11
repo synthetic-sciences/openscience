@@ -8,6 +8,7 @@ import { Agent } from "../../src/agent/agent"
 import { Instance } from "../../src/project/instance"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { stressProviderConfig } from "../fixture/stress-provider"
+import { SubagentBudget } from "../../src/session/subagent-budget"
 
 function tracker() {
   const sessionID = `ses_attempt_${crypto.randomUUID()}`
@@ -121,6 +122,193 @@ test("HTTP failures and retries retain separate attempt identities", async () =>
   expect(calls[0]!.id).not.toBe(calls[1]!.id)
   expect(calls.every((call) => call.outcome === "failed" && call.httpStatus === 503)).toBe(true)
   await SessionTraceStore.remove(item.sessionID)
+})
+
+test.each([400, 401, 403, 413, 422, 429])(
+  "rejected HTTP %i attempts return their unused reservation",
+  async (status) => {
+    using server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => Response.json({ error: "rejected" }, { status }),
+    })
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${server.url}v1`) })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await Provider.getModel("stress", "fixture-model")
+        const child = `ses_rejected_${crypto.randomUUID()}`
+        await SubagentBudget.open({
+          rootSessionID: "root",
+          parentSessionID: "root",
+          sessionID: child,
+          assignmentID: "rejections",
+          objective: "Read evidence",
+          expectedOutput: "Report",
+          model: { providerID: model.providerID, modelID: model.id },
+          route: "local",
+          unit: "tokens",
+          allocation: 10000,
+          settings: { tokens: 40000 },
+        })
+        const trace = ModelCallTrace.create({
+          context: { sessionID: child, messageID: "msg_rejected", attempt: 1 },
+          route: "local",
+          provider: model.providerID,
+          model: model.id,
+          pricingModel: model,
+          outputBound: 1000,
+        })
+        for (let index = 0; index < 5; index++) {
+          await (await request(trace, server.url.toString())).text()
+          const state = (await SubagentBudget.read(child))!
+          expect(SubagentBudget.spendable(state.pool, child)).toBe(10000)
+          expect(state.worker.spent).toBe(0)
+          expect(state.worker.stopReason).toBeUndefined()
+        }
+        const state = (await SubagentBudget.read(child))!
+        expect(Object.values(state.worker.calls)).toHaveLength(5)
+        expect(Object.values(state.worker.calls).every((call) => call.state === "settled" && call.consumed === 0)).toBe(
+          true,
+        )
+      },
+    })
+  },
+)
+
+test.each([408, 409, 500, 502, 503])("ambiguous HTTP %i responses keep their reservation", async (status) => {
+  using server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(null, { status }) })
+  await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${server.url}v1`) })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = await Provider.getModel("stress", "fixture-model")
+      const child = `ses_unknown_${crypto.randomUUID()}`
+      await SubagentBudget.open({
+        rootSessionID: "root",
+        parentSessionID: "root",
+        sessionID: child,
+        assignmentID: "unknown",
+        objective: "Read evidence",
+        expectedOutput: "Report",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        allocation: 10000,
+        settings: { tokens: 40000 },
+      })
+      const trace = ModelCallTrace.create({
+        context: { sessionID: child, messageID: "msg_unknown", attempt: 1 },
+        route: "local",
+        provider: model.providerID,
+        model: model.id,
+        pricingModel: model,
+        outputBound: 1000,
+      })
+      await (await request(trace, server.url.toString())).text()
+      const state = (await SubagentBudget.read(child))!
+      expect(state.worker.spent).toBe(0)
+      expect(Object.values(state.worker.calls)).toHaveLength(1)
+      expect(Object.values(state.worker.calls)[0]!.state).toBe("pending")
+      expect(SubagentBudget.spendable(state.pool, child)).toBeLessThan(10000)
+    },
+  })
+})
+
+test("repeated paid rate-limit rejections leave the USD grant available", async () => {
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () => Response.json({ error: "rate_limit" }, { status: 429 }),
+  })
+  await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${server.url}v1`) })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const base = await Provider.getModel("stress", "fixture-model")
+      const model = { ...base, cost: { ...base.cost, input: 1, output: 2 } }
+      const child = `ses_paid_rejected_${crypto.randomUUID()}`
+      await SubagentBudget.open({
+        rootSessionID: "root",
+        parentSessionID: "root",
+        sessionID: child,
+        assignmentID: "paid-rejections",
+        objective: "Read evidence",
+        expectedOutput: "Report",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "byok",
+        unit: "usd",
+        allocation: 100000000,
+        settings: { usd: 1 },
+      })
+      const trace = ModelCallTrace.create({
+        context: { sessionID: child, messageID: "msg_paid_rejected", attempt: 1 },
+        route: "byok",
+        provider: model.providerID,
+        model: model.id,
+        pricingModel: model,
+        outputBound: 1000,
+      })
+      for (let index = 0; index < 5; index++) {
+        await (await request(trace, server.url.toString())).text()
+        const state = (await SubagentBudget.read(child))!
+        expect(SubagentBudget.spendable(state.pool, child)).toBe(100000000)
+        expect(state.worker.spent).toBe(0)
+      }
+    },
+  })
+})
+
+test("a known rejection returns its reservation even when the error body is cancelled", async () => {
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("rejected"))
+          },
+        }),
+        { status: 429 },
+      ),
+  })
+  await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${server.url}v1`) })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const model = await Provider.getModel("stress", "fixture-model")
+      const child = `ses_rejected_body_${crypto.randomUUID()}`
+      await SubagentBudget.open({
+        rootSessionID: "root",
+        parentSessionID: "root",
+        sessionID: child,
+        assignmentID: "rejected-body",
+        objective: "Read evidence",
+        expectedOutput: "Report",
+        model: { providerID: model.providerID, modelID: model.id },
+        route: "local",
+        unit: "tokens",
+        allocation: 10000,
+        settings: { tokens: 40000 },
+      })
+      const trace = ModelCallTrace.create({
+        context: { sessionID: child, messageID: "msg_rejected_body", attempt: 1 },
+        route: "local",
+        provider: model.providerID,
+        model: model.id,
+        pricingModel: model,
+        outputBound: 1000,
+      })
+      const response = await request(trace, server.url.toString())
+      const reader = response.body!.getReader()
+      await reader.read()
+      await reader.cancel()
+      const state = (await SubagentBudget.read(child))!
+      expect(state.worker.spent).toBe(0)
+      expect(SubagentBudget.spendable(state.pool, child)).toBe(10000)
+    },
+  })
 })
 
 test.each([true, false])("structured configuration calls use the same trace path, valid output %s", async (valid) => {

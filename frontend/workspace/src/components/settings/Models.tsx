@@ -2,7 +2,6 @@ import { useLanguage } from "@/context/language"
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup } from "solid-js"
 import { Button } from "@synsci/ui/button"
 import { Icon } from "@synsci/ui/icon"
-import { Select } from "@synsci/ui/select"
 import { Switch } from "@synsci/ui/switch"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
@@ -18,7 +17,7 @@ import {
   modelRouteValue,
   modelSummary,
 } from "@/context/model-catalog"
-import { resolveModelAccessRoute, type ModelRouteAccess } from "@/context/model-route-resolution"
+import { type ModelRouteAccess } from "@/context/model-route-resolution"
 import { ModelRateDetails } from "./ModelRateDetails"
 import { CodexConnection } from "./CodexConnection"
 import { SearchConnections } from "./SearchConnections"
@@ -26,12 +25,6 @@ import { ProviderKeys } from "./ProviderKeys"
 import { modelGroup, modelGroupLabel, modelGroupRank } from "../model-groups"
 import { FilterMenu, PanelBody, PanelHeader, PanelScroll, RowCopy, SearchInput, Section, steady } from "./_shared"
 import { settingsApi } from "./api"
-import {
-  type CapabilityPreferences,
-  type DelegationModel,
-  publishCapabilityPreferences,
-  sameDelegationModel,
-} from "../prompt-capabilities"
 import "./models.css"
 import { ProviderLogo } from "./ProviderLogo"
 
@@ -69,14 +62,6 @@ type Option = {
 type Scope = "all" | "reasoning" | "latest" | "long"
 type BillingPreference = { llm: "managed" | "byok" | null }
 type OptionGroup<T> = { id: string; label: string; models: T[] }
-type WorkerOption = {
-  value: string
-  label: string
-  provider?: string
-  providerLogo?: string
-  model?: DelegationModel
-}
-
 function takeModelGroups<T>(groups: OptionGroup<T>[], limit: number): OptionGroup<T>[] {
   let remaining = Math.max(0, limit)
   const result: OptionGroup<T>[] = []
@@ -110,9 +95,6 @@ export default function Models() {
   const [scope, setScope] = createSignal<Scope>("all")
   const [catalogOpen, setCatalogOpen] = createSignal(false)
   const [error, setError] = createSignal<string>()
-  const [preferences, preferenceActions] = steady(
-    createResource(() => settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences")),
-  )
   const [billing, billingActions] = steady(
     createResource(() => settingsApi<BillingPreference>(sdk.url, fetchFn, "/settings/billing")),
   )
@@ -217,80 +199,6 @@ export default function Models() {
   const [notice, setNotice] = createSignal<string>()
   const pinnedCount = createMemo(() => options().filter((model) => model.pinned).length)
   const visibleCount = createMemo(() => options().filter((model) => model.visible).length)
-  const workerOptions = createMemo<WorkerOption[]>(() => {
-    const selected = preferences()?.delegation_worker_model ?? undefined
-    const currentBilling = billing.latest?.llm ?? sync.data.config.billing?.llm
-    const routes = options()
-      .filter(
-        (model) =>
-          model.visible ||
-          model.routes.some(
-            (route) => route.key.providerID === selected?.providerID && route.key.modelID === selected?.modelID,
-          ),
-      )
-      .flatMap((model): WorkerOption[] => {
-        const resolved = resolveModelAccessRoute({
-          routes: model.routes.map((route) => ({ ...route.key, access: route.routeAccess, route })),
-          billing: currentBilling,
-          current: selected,
-        })
-        const route = resolved?.route
-        if (!route) return []
-        return [
-          {
-            value: model.logicalKey,
-            label: model.label,
-            provider: route.access,
-            providerLogo: route.providerLogo,
-            model: route.key,
-          },
-        ]
-      })
-      .toSorted((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
-    const saved =
-      selected &&
-      !routes.some(
-        (option) => option.model?.providerID === selected.providerID && option.model.modelID === selected.modelID,
-      )
-        ? ({
-            value: `saved:${modelRouteValue(selected)}`,
-            label: modelDisplayName(selected.modelID, selected.providerID, selected.modelID),
-            provider: language.t("settings.models.saved", { provider: selected.providerID }),
-            providerLogo: selected.providerID,
-            model: selected,
-          } satisfies WorkerOption)
-        : undefined
-    return [{ value: "inherit", label: language.t("settings.models.inherit") }, ...(saved ? [saved] : []), ...routes]
-  })
-  const workerSelection = createMemo(() => {
-    const selected = preferences()?.delegation_worker_model ?? undefined
-    if (!selected) return workerOptions()[0]
-    return workerOptions().find(
-      (option) => option.model?.providerID === selected.providerID && option.model.modelID === selected.modelID,
-    )
-  })
-  const setWorkerModel = async (option: WorkerOption) => {
-    const previous = preferences()
-    if (!previous) return
-    // Kobalte may echo a controlled selection when unrelated Settings state
-    // refreshes. Only a logical model change is a persistence operation.
-    if (sameDelegationModel(previous.delegation_worker_model, option.model)) return
-    const next = { ...previous, delegation_worker_model: option.model ?? null }
-    preferenceActions.mutate(next)
-    setError(undefined)
-    try {
-      const saved = await settingsApi<CapabilityPreferences>(sdk.url, fetchFn, "/settings/preferences", {
-        method: "PATCH",
-        body: JSON.stringify({ delegation_worker_model: option.model ?? null }),
-      })
-      preferenceActions.mutate(saved)
-      publishCapabilityPreferences(saved)
-    } catch (cause) {
-      preferenceActions.mutate(previous)
-      setError(cause instanceof Error ? cause.message : String(cause))
-    }
-  }
-
   const togglePin = (model: Option) => {
     if (model.pinned) {
       models.pinned.toggle(model.key)
@@ -348,37 +256,8 @@ export default function Models() {
               <div class="settings-row models-preference-row">
                 <RowCopy
                   title={language.t("settings.models.worker")}
-                  description={language.t("settings.models.workerDescription")}
+                  description="Choose the model in Settings → Subagents. The selection applies to new assignments."
                 />
-                <div class="models-worker-control">
-                  <Select
-                    aria-label={language.t("settings.models.worker")}
-                    options={workerOptions()}
-                    current={workerSelection()}
-                    value={(option) => option.value}
-                    label={(option) => option.label}
-                    disabled={!preferences()}
-                    onSelect={(option) => option && void setWorkerModel(option)}
-                    variant="secondary"
-                    size="small"
-                    triggerVariant="settings"
-                  >
-                    {(option) => (
-                      <Show when={option}>
-                        {(entry) => (
-                          <span class="models-default-option">
-                            <span class="min-w-0 truncate">{entry().label}</span>
-                            <Show when={entry().provider}>
-                              {(provider) => (
-                                <span class="shrink-0 text-12-regular text-text-weak">· {provider()}</span>
-                              )}
-                            </Show>
-                          </span>
-                        )}
-                      </Show>
-                    )}
-                  </Select>
-                </div>
               </div>
               <div class="settings-row models-preference-row">
                 <RowCopy

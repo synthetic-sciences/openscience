@@ -300,6 +300,8 @@ import type {
   SessionChildrenResponses,
   SessionCommandErrors,
   SessionCommandResponses,
+  SessionContinueSubagentErrors,
+  SessionContinueSubagentResponses,
   SessionCreateErrors,
   SessionCreateResponses,
   SessionDeleteErrors,
@@ -316,6 +318,8 @@ import type {
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
+  SessionIncreaseSubagentBudgetErrors,
+  SessionIncreaseSubagentBudgetResponses,
   SessionInitErrors,
   SessionInitResponses,
   SessionListResponses,
@@ -335,6 +339,8 @@ import type {
   SessionShellResponses,
   SessionStatusErrors,
   SessionStatusResponses,
+  SessionSubagentBudgetErrors,
+  SessionSubagentBudgetResponses,
   SessionSummarizeErrors,
   SessionSummarizeResponses,
   SessionTodoErrors,
@@ -3918,6 +3924,130 @@ export class Filesystem2 extends HeyApiClient {
 
 export class Session extends HeyApiClient {
   /**
+   * Read scoped subagent allowances
+   */
+  public subagentBudget<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionSubagentBudgetResponses,
+      SessionSubagentBudgetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/subagents/budget",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Continue a stopped subagent
+   */
+  public continueSubagent<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      childID: string
+      directory?: string
+      key: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "childID" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "key" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionContinueSubagentResponses,
+      SessionContinueSubagentErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/subagents/{childID}/continue",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Approve a subagent allowance increase
+   */
+  public increaseSubagentBudget<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      body?:
+        | {
+            unit: "usd"
+            amount: number
+            revision: number
+            key: string
+          }
+        | {
+            unit: "tokens"
+            amount: number
+            revision: number
+            key: string
+          }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { key: "body", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionIncreaseSubagentBudgetResponses,
+      SessionIncreaseSubagentBudgetErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/subagents/budget/increase",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
    * List sessions
    *
    * Get a list of all OpenScience sessions, sorted by most recently updated.
@@ -4477,6 +4607,10 @@ export class Session extends HeyApiClient {
           providerID: string
           modelID: string
         }
+        /**
+         * Explicit user model override for this run
+         */
+        workerModelOverride?: boolean
         autonomy?: "interactive" | "balanced" | "autonomous"
       }
       system?: string
@@ -4584,6 +4718,10 @@ export class Session extends HeyApiClient {
           providerID: string
           modelID: string
         }
+        /**
+         * Explicit user model override for this run
+         */
+        workerModelOverride?: boolean
         autonomy?: "interactive" | "balanced" | "autonomous"
       }
       system?: string
@@ -4654,6 +4792,10 @@ export class Session extends HeyApiClient {
           providerID: string
           modelID: string
         }
+        /**
+         * Explicit user model override for this run
+         */
+        workerModelOverride?: boolean
         autonomy?: "interactive" | "balanced" | "autonomous"
       }
       variant?: string
@@ -5079,6 +5221,10 @@ export class Runtime extends HeyApiClient {
           providerID: string
           modelID: string
         }
+        /**
+         * Explicit user model override for this run
+         */
+        workerModelOverride?: boolean
         autonomy?: "interactive" | "balanced" | "autonomous"
       }
       requestID?: string

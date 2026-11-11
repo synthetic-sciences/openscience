@@ -1,4 +1,5 @@
-import { expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import { Config } from "../../src/config/config"
 import path from "node:path"
 import { createOpenScienceRuntime } from "@synsci/sdk/v2"
 import { Instance } from "../../src/project/instance"
@@ -11,6 +12,18 @@ import { SessionProcessor } from "../../src/session/processor"
 import { CommandRuntime } from "../../src/science/command/registry"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
+
+const savedDefaults: { content?: string } = {}
+beforeEach(async () => {
+  savedDefaults.content = (await Config.getGlobalRaw()).content
+  await Config.updateGlobal(
+    { subagents: { enabled: true, tokens: 1000000, deadlineMs: 600000 } },
+    { preserveInstances: true },
+  )
+})
+afterEach(async () => {
+  if (savedDefaults.content !== undefined) await Config.replaceGlobal(savedDefaults.content)
+})
 
 const model = { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL }
 

@@ -1,0 +1,210 @@
+/* Subagent allowance: one total per unit with a bar, then one compact row per worker. */
+.allowance__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.allowance__sync {
+  color: var(--color-text-faint);
+  font-size: var(--font-size-x-small, 11px);
+}
+
+.allowance__total {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.allowance__bar {
+  height: 6px;
+  display: flex;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+
+.allowance__bar[data-size="small"] {
+  height: 4px;
+}
+
+.allowance__bar > span {
+  flex: none;
+  height: 100%;
+  transition: width 240ms var(--ease-standard, ease);
+}
+
+.allowance__bar > [data-part="used"] {
+  background: var(--color-accent);
+}
+
+.allowance__bar > [data-part="pending"] {
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+.allowance__meta {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.allowance__meta > span + span::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--color-text-faint);
+}
+
+.allowance__workers {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border-weak, var(--color-border));
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.allowance__workers > li + li {
+  border-top: 1px solid var(--color-border-weak, var(--color-border));
+}
+
+.allowance__worker > summary {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: var(--font-size-medium);
+  line-height: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.allowance__worker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.allowance__worker > summary:hover {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+
+.allowance__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-text-faint);
+}
+
+.allowance__worker[data-tone="running"] .allowance__dot {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.allowance__worker[data-tone="complete"] .allowance__dot {
+  background: var(--color-success);
+}
+
+.allowance__worker[data-tone="stopped"] .allowance__dot {
+  background: var(--color-warning);
+}
+
+.allowance__objective {
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.allowance__status {
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  font-size: var(--font-size-x-small, 11px);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.allowance__worker[data-tone="stopped"] .allowance__status {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+}
+
+.allowance__spend {
+  min-width: 88px;
+  color: var(--color-text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.allowance__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 2px 14px 14px 32px;
+}
+
+.allowance__facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 16px;
+  font-size: var(--font-size-small);
+  line-height: 16px;
+}
+
+.allowance__facts dt {
+  color: var(--color-text-faint);
+}
+
+.allowance__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.allowance__handoff {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--color-border-weak, var(--color-border));
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.allowance__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.allowance__error {
+  margin: 0;
+  color: var(--color-error);
+  font-size: var(--font-size-small);
+  line-height: 16px;
+}
+
+/* On a worker's card in the chat: just the explanation and the actions. */
+.allowance--inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.allowance--inline .context-panel__note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  line-height: 18px;
+}

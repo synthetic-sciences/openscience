@@ -52,6 +52,7 @@ Use `/check-data data/samples.csv` in the workspace, or `openscience run --comma
 | `plugin` | Plugin packages or local module URLs. |
 | `permission` | Action rules such as `ask`, `allow`, and `deny`. |
 | `agent.<name>` | Per-agent `model`, `variant`, `skills` (categories for a specialist's domain index), `prompt`, `permission`. A rule that names a tool offers it to that agent without a skill. |
+| `subagents` | User-global worker model, `enabled` (default `false`), `usd` and `tokens` allowances, `deadlineMs` (default `600000`), and optional `usdIncrease` / `tokenIncrease`. Missing amounts use USD `5`, tokens `1000000`, USD increase `1`, and token increase `250000`. Set these in Settings → General → Subagents; project configuration cannot raise them. Existing conversation pools change only through an explicit user increase. |
 | `subagent_depth` | How many levels of workers may nest; default `1` (only the lead dispatches). |
 | `harness` | Switches for the harness units, all on by default: `redirect`, `deliverables`, `acceptance`, `unattended`, `review`, `budget`, `cost` (or `{ "max_usd": n }` for a soft spend ceiling), `headless-policy`, `durable-jobs`, `workers`. |
 | `compaction` | `auto` (default `true`), `prune` (default `true`), `recentImages`, and the experimental `pruneInputs`: when an old tool call is pruned, also shorten its long string arguments (a patch body, a script) to a preview in what the model re-reads; the stored call stays complete (default `false`). |

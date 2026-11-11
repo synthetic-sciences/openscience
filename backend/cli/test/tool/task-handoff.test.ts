@@ -1,3 +1,4 @@
+import { PayloadIntegrity } from "../../src/tool/payload-integrity"
 import { describe, expect, test } from "bun:test"
 import { availableParallelism } from "node:os"
 import path from "node:path"
@@ -7,7 +8,7 @@ import { Instance } from "../../src/project/instance"
 import { Session } from "../../src/session"
 import { SessionFilesystem } from "../../src/session/filesystem"
 import { SystemPrompt } from "../../src/session/system"
-import type { MessageV2 } from "../../src/session/message-v2"
+import { MessageV2 } from "../../src/session/message-v2"
 import { TaskAttempt } from "../../src/tool/task-attempt"
 import { childPermissionRules, renderTaskOutput, TaskTool } from "../../src/tool/task"
 import { Agent } from "../../src/agent/agent"
@@ -113,6 +114,118 @@ async function seeded(input: {
 }
 
 describe("Task tool contract", () => {
+  test("a stopped worker passes command stdout to the parent and into compaction", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const params = { description: "Saved command proof", prompt: "Print a marker.", subagent_type: "explore" }
+        const { child, ctx } = await seeded({
+          parent,
+          params,
+          error: { name: "MessageAbortedError", data: { message: "Stopped" } },
+        })
+        const final = (await Session.messages({ sessionID: child.id })).findLast(
+          (message) => message.info.role === "assistant",
+        )!
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          sessionID: child.id,
+          messageID: final.info.id,
+          type: "tool",
+          tool: "bash",
+          callID: "saved_command_proof",
+          state: {
+            status: "completed",
+            input: { command: "printf TASK_MARKER_46" },
+            title: "Print marker",
+            output: "TASK_MARKER_46",
+            metadata: { exit: 0 },
+            time: { start: 4, end: 5 },
+          },
+        })
+        const task = await TaskTool.init()
+        const result = await task.execute(params, ctx)
+        expect(result.metadata).toMatchObject({ outcome: "partial", stopReason: "cancelled" })
+        expect(result.output).toContain('output excerpt="TASK_MARKER_46"')
+        const compacted = MessageV2.toolSummary("task", {
+          status: "completed",
+          title: result.title,
+          input: {},
+          output: result.output,
+          metadata: result.metadata,
+          time: { start: 0, end: 1 },
+        })
+        expect(compacted).toContain('output excerpt="TASK_MARKER_46"')
+        expect(compacted).toContain("saved_command_proof")
+        expect((await task.execute(params, ctx)).output).toBe(result.output)
+      },
+    })
+  })
+
+  for (const input of [
+    {
+      name: "normal exit",
+      text: "Outcome: Complete\nFindings: fixture report.",
+      outcome: "completed",
+      reason: "completed",
+    },
+    {
+      name: "explicit incomplete",
+      text: "Outcome: Incomplete\nRemaining: fixture checks.",
+      outcome: "partial",
+      reason: "reported_incomplete",
+    },
+    { name: "missing report", text: "", outcome: "error", reason: "empty_handoff" },
+    {
+      name: "provider error",
+      text: "Saved partial evidence.",
+      error: { name: "UnknownError" as const, data: { message: "Fixture disconnected" } },
+      outcome: "partial",
+      reason: "provider_error",
+    },
+    {
+      name: "cancelled",
+      text: "Saved partial evidence.",
+      error: { name: "MessageAbortedError" as const, data: { message: "Fixture stopped" } },
+      outcome: "partial",
+      reason: "cancelled",
+    },
+  ]) {
+    test(`requires main-agent assessment after ${input.name}, including compacted results`, async () => {
+      await using tmp = await tmpdir({ git: true })
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          const parent = await Session.create({})
+          const params = {
+            description: "Assess fixture",
+            prompt: "Return evidence for this objective.",
+            subagent_type: "explore",
+          }
+          const { ctx } = await seeded({ parent, params, text: input.text, error: input.error })
+          const result = await (await TaskTool.init()).execute(params, ctx)
+          expect(result.metadata).toMatchObject({ outcome: input.outcome, stopReason: input.reason })
+          expect(result.output).toContain(`Runtime execution: ${input.outcome}`)
+          expect(result.output).toContain("Task completion: unverified.")
+          expect(result.output).toContain("expected output")
+          const compacted = MessageV2.toolSummary("task", {
+            status: "completed",
+            title: result.title,
+            input: {},
+            output: result.output,
+            metadata: result.metadata,
+            time: { start: 0, end: 1 },
+          })
+          expect(compacted).toContain(`Runtime execution: ${input.outcome}`)
+          expect(compacted).toContain(input.reason)
+          expect(compacted).toContain("Task completion: unverified.")
+        },
+      })
+    })
+  }
+
   test("returns the child's final text inside a <task_result> envelope with a reusable task_id", async () => {
     await using tmp = await tmpdir({ git: true })
     await Instance.provide({
@@ -329,6 +442,62 @@ describe("Task tool contract", () => {
         const results = await Promise.all(runs.map((run) => task.execute(run.params, run.ctx)))
         expect(results).toHaveLength(count)
         for (const [index, result] of results.entries()) expect(result.output).toContain(`branch ${index} done`)
+      },
+    })
+  })
+
+  test("background pre-dispatch failures carry runtime facts and require parent assessment", async () => {
+    await using tmp = await tmpdir({ git: true })
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const parent = await Session.create({})
+        const original = "Preserve this complete historical argument. ".repeat(30)
+        const params = {
+          description: "Guarded background task",
+          prompt: PayloadIntegrity.legacyPreview(original),
+          subagent_type: "explore",
+          background: true,
+        }
+        const { child, ctx } = await seeded({ parent, params, text: "A historical report must not run." })
+        await Session.updatePart({
+          id: Identifier.ascending("part"),
+          sessionID: parent.id,
+          messageID: ctx.messageID,
+          type: "tool",
+          tool: "write",
+          callID: "historical_write",
+          state: {
+            status: "completed",
+            input: { content: original },
+            title: "Saved historical content",
+            output: "Saved",
+            metadata: {},
+            time: { start: 1, end: 2 },
+          },
+        })
+        ctx.messages.push(...(await Session.messages({ sessionID: parent.id })))
+        const before = await Session.messages({ sessionID: child.id })
+        const result = await (await TaskTool.init()).execute(params, ctx)
+        expect(result.output).toContain('state="running"')
+        const deadline = Date.now() + 10000
+        while (Date.now() < deadline) {
+          const messages = await Session.messages({ sessionID: parent.id })
+          const injected = messages
+            .flatMap((message) => message.parts)
+            .find(
+              (part) => part.type === "text" && part.synthetic && part.text.includes("shortened historical argument"),
+            )
+          if (injected?.type === "text") {
+            expect(injected.text).toContain("Runtime execution: error")
+            expect(injected.text).toContain("provider_error")
+            expect(injected.text).toContain("Task completion: unverified.")
+            expect(await Session.messages({ sessionID: child.id })).toEqual(before)
+            return
+          }
+          await Bun.sleep(20)
+        }
+        throw new Error("Background failure did not reach its parent")
       },
     })
   })

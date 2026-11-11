@@ -1,12 +1,8 @@
-Launch a subagent to handle one independent, self-contained piece of work.
-
-Available subagents (pass the name as subagent_type):
+Delegate one independent job; keep simple reads/searches and self-checks yourself.
+Agents (subagent_type):
 {agents}
 
-Not for: reading a known file (read, glob), finding a string (grep), a few files (read), or checking your own output; that is your job. If no agent fits, use the tools directly.
-
-1. A subagent starts fresh unless task_id resumes its earlier session. A fresh brief is self-contained: objective, inputs with full paths (a worker's relative paths resolve in your working folder, not in Project files), constraints, what to produce and where (its own files inside the project, not a report or /tmp), how to verify it, what to return; say whether it may change files.
-2. Launch independent subagents together in one message; never duplicate delegated work.
-3. Subagents work in your project directory; their files are the deliverable. The result returns once in <task_result> with a reusable task_id; the user does not see it, so summarize what matters.
-4. Read the report's Verification (command, exit code, what it proves); without one it is a claim.
-5. background=true returns immediately and notifies you when done; do not sleep or poll. Only for work you do not need before continuing.
+Brief: objective, full paths, constraints, permissions, outputs and checks. Relative paths use your directory. Run independent jobs together; never duplicate.
+background=true sends completion notices: do not poll, sleep or join. NEW calls with task_id continue that child; replay returns the cached result.
+Bounded inference includes helpers: USD for paid routes, tokens otherwise. Default grant: up to 1/4 pool. Never raise pools yourself. Stopped workers keep model/route. Fresh runs may use full allowance; saved wrap-up rules remain.
+Check EVERY result against objective/expected_output. Normal exit is not verified completion. Use saved output, artifacts and command receipts; incomplete excerpts are not full results. Keep runtime reasons. At limit stops follow the runtime note; continue only the same task_id, never a replacement worker. Limit stops do not prove spend: quote recorded use/pending.

@@ -23,7 +23,10 @@ In this guide, `src/...` paths are relative to `backend/cli`; prompt paths such 
 The Research loop is shared across providers. Prompt selection, scientific context,
 model options and API serialization are separate steps. The harness is OpenCode's
 Build path with science in skills, agents, headers and a few switchable units;
-the loop itself knows nothing about science, deliverables or budgets.
+the loop itself does not implement scientific or deliverable policy. Opt-in
+subagent allowances and deadlines are runtime admission/cancellation controls,
+independent of optional harness switches; see
+[ADR 0002](docs/adr/0002-subagent-runtime-admission.md).
 
 ```text
 Agent registry + selected model + current user message
