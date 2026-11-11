@@ -8,8 +8,6 @@ export function SessionCallUsage(props: {
   report?: SessionReceiptsResponses[200]
 }) {
   const number = (value: number | null | undefined) => (value == null ? "Unknown" : value.toLocaleString(props.locale))
-  const receiptOf = (step: StepFinishPart) =>
-    props.report?.calls.find((call) => call.call_id === step.usage?.call && call.state === "settled")?.receipt_id
   const charge = (step: StepFinishPart) => {
     const report = props.report
     if (!report) return "Not checked"
@@ -61,10 +59,6 @@ export function SessionCallUsage(props: {
                         <dd>{step.usage?.call ?? "Unknown"}</dd>
                         <dt>Hold</dt>
                         <dd>{step.usage?.hold ?? "Unknown"}</dd>
-                        <Show when={receiptOf(step)}>
-                          <dt>Receipt</dt>
-                          <dd>{receiptOf(step)}</dd>
-                        </Show>
                       </dl>
                     </details>
                   </td>

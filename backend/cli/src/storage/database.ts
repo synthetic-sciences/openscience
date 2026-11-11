@@ -1,32 +1,9 @@
-import { Database, type SQLQueryBindings } from "bun:sqlite"
+import { Database } from "bun:sqlite"
 import path from "node:path"
 import fs from "node:fs/promises"
 import { randomUUID, createHash } from "node:crypto"
 import { FileLease } from "@/util/file-lease"
 import { DataRootBarrier } from "@/global/data-root-barrier"
-
-// Bun 1.3.14 can keep statements beyond its query cache alive after close; each access must own them.
-class Connection extends Database {
-  private readonly statements = new Set<{ finalize(): void }>()
-
-  override query<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string) {
-    const statement = super.query<T, P>(sql)
-    this.statements.add(statement)
-    return statement
-  }
-
-  override prepare<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string, params?: P) {
-    const statement = super.prepare<T, P>(sql, params)
-    this.statements.add(statement)
-    return statement
-  }
-
-  override close(throwOnError = true) {
-    for (const statement of this.statements) statement.finalize()
-    this.statements.clear()
-    super.close(throwOnError)
-  }
-}
 
 /** Session records share one transaction boundary. Legacy files are retained as
  * backups, but after import the database is authoritative, including deletes. */
@@ -42,8 +19,6 @@ export namespace ResearchDatabase {
     charge: { scope: "account_id", depth: 3 },
     task_receipt: { scope: "account_id", depth: 3 },
     task_attempt: { scope: "project_id", depth: 3 },
-    subagent_budget: { scope: "project_id", depth: 3 },
-    subagent_binding: { scope: "project_id", depth: 3 },
   } as const
   type Kind = keyof typeof tables
 
@@ -82,10 +57,6 @@ export namespace ResearchDatabase {
         throw new Error("Invalid research record key")
       return { kind, scope: table.scope, parent: table.depth === 3 ? key[1]! : "", id: key.at(-1)! }
     }
-    const define = (db: Database, kind: Kind) =>
-      db.exec(`CREATE TABLE IF NOT EXISTS ${kind} (
-        ${tables[kind].scope} TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL CHECK(json_valid(data)),
-        updated_at INTEGER NOT NULL,PRIMARY KEY (${tables[kind].scope},id))`)
     const save = (db: Database, key: string[], value: unknown) => {
       const record = shape(key)
       const data = JSON.stringify(value)
@@ -109,7 +80,7 @@ export namespace ResearchDatabase {
     const access = async <T>(fn: (db: Database) => T): Promise<T> => {
       await using operation = await DataRootBarrier.enter(filepath)
       await fs.mkdir(root, { recursive: true })
-      const db = new Connection(filepath, { create: true, strict: true })
+      const db = new Database(filepath, { create: true, strict: true })
       try {
         await fs.chmod(filepath, 0o600)
         db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
@@ -122,7 +93,11 @@ export namespace ResearchDatabase {
                 kind TEXT NOT NULL, parent TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL CHECK(json_valid(data)),
                 PRIMARY KEY(kind,parent,id));`)
 
-            for (const kind of Object.keys(tables) as Kind[]) define(db, kind)
+            for (const [kind, table] of Object.entries(tables)) {
+              db.exec(`CREATE TABLE IF NOT EXISTS ${kind} (
+              ${table.scope} TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL CHECK(json_valid(data)),
+              updated_at INTEGER NOT NULL,PRIMARY KEY (${table.scope},id))`)
+            }
             db.exec(`CREATE TABLE IF NOT EXISTS trace_settings (
               id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL CHECK(json_valid(data)));
             CREATE TABLE IF NOT EXISTS trace_event (
@@ -163,16 +138,6 @@ export namespace ResearchDatabase {
               data TEXT CHECK(data IS NULL OR json_valid(data)),PRIMARY KEY(kind,parent,id));
             PRAGMA user_version=7;`)
           }).immediate()
-        // Record tables are additive: older releases ignore unknown tables, so adding a kind to
-        // `tables` must not raise user_version, which older releases treat as a refusal to open.
-        const present = new Set(
-          db
-            .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table'")
-            .all()
-            .map((row) => row.name),
-        )
-        const absent = (Object.keys(tables) as Kind[]).filter((kind) => !present.has(kind))
-        if (absent.length) db.transaction(() => absent.forEach((kind) => define(db, kind))).immediate()
         const revision = await fs
           .readFile(path.join(root, revisionFile), "utf8")
           .catch((error: NodeJS.ErrnoException) => {

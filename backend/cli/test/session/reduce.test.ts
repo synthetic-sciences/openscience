@@ -130,7 +130,7 @@ describe("session.message-v2.toolSummary", () => {
           },
         }),
       )
-      expect(summary).toContain("Runtime execution: partial")
+      expect(summary).toContain("Task outcome: partial")
       expect(summary).toContain("empty_handoff")
       expect(summary).toContain("ses_child")
       expect(summary).toContain('artifact_id="artifact-0", version_id="v-0"')

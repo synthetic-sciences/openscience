@@ -1,5 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { Config } from "../../src/config/config"
+import { afterEach, describe, expect, test } from "bun:test"
 import path from "path"
 import { createOpenScienceClient } from "@synsci/sdk/v2"
 import { Instance } from "../../src/project/instance"
@@ -12,15 +11,6 @@ import { RunEvents } from "../../src/cli/run-events"
 import { Log } from "../../src/util/log"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
-
-const savedDefaults: { content?: string } = {}
-beforeEach(async () => {
-  savedDefaults.content = (await Config.getGlobalRaw()).content
-  await Config.updateGlobal(
-    { subagents: { enabled: true, tokens: 1000000, deadlineMs: 600000 } },
-    { preserveInstances: true },
-  )
-})
 
 Log.init({ print: false })
 
@@ -281,7 +271,6 @@ function run(input: Partial<RunInput> & Pick<RunInput, "sdk" | "sessionID" | "me
 const servers: Bun.Server<unknown>[] = []
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => server.stop(true)))
-  if (savedDefaults.content !== undefined) await Config.replaceGlobal(savedDefaults.content)
 })
 
 describe("openscience run policy loop", () => {

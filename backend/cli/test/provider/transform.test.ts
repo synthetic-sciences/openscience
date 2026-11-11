@@ -242,29 +242,6 @@ describe("ProviderTransform.variants - exact catalog efforts", () => {
   })
 })
 
-describe("ProviderTransform.fitThinking", () => {
-  test("rewrites only an enabled Anthropic thinking budget and leaves the caller's options untouched", () => {
-    const options = { thinking: { type: "enabled", budgetTokens: 16000 }, other: 1 }
-    const fitted = ProviderTransform.fitThinking("@ai-sdk/anthropic", options, 4500)
-    expect(fitted).toEqual({ thinking: { type: "enabled", budgetTokens: 4500 }, other: 1 })
-    expect(options.thinking.budgetTokens).toBe(16000)
-    expect(ProviderTransform.fitThinking("@ai-sdk/anthropic", options, 16000)).toBe(options)
-    expect(ProviderTransform.fitThinking("@ai-sdk/openai", options, 4500)).toBe(options)
-    expect(ProviderTransform.fitThinking("@ai-sdk/anthropic", options, undefined)).toBe(options)
-  })
-})
-
-describe("ProviderTransform.thinkingTokens", () => {
-  test("reports the Anthropic thinking budget the SDK adds to max_tokens", () => {
-    const enabled = { thinking: { type: "enabled", budgetTokens: 16000 } }
-    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", enabled)).toBe(16000)
-    expect(ProviderTransform.thinkingTokens("@ai-sdk/google-vertex/anthropic", enabled)).toBe(16000)
-    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", { thinking: { type: "adaptive" } })).toBe(0)
-    expect(ProviderTransform.thinkingTokens("@ai-sdk/anthropic", {})).toBe(0)
-    expect(ProviderTransform.thinkingTokens("@ai-sdk/openai", enabled)).toBe(0)
-  })
-})
-
 describe("ProviderTransform.maxOutputTokens", () => {
   test("returns 32k when modelLimit > 32k", () => {
     const modelLimit = 100000

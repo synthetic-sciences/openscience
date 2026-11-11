@@ -1,4 +1,3 @@
-import { SubagentResult } from "./subagent-result"
 import { BusEvent } from "@/bus/bus-event"
 import z from "zod"
 import { NamedError } from "@synsci/util/error"
@@ -41,7 +40,6 @@ export namespace MessageV2 {
         modelID: z.string(),
       })
       .optional(),
-    workerModelOverride: z.boolean().optional().describe("Explicit user model override for this run"),
     autonomy: DelegationAutonomy.default("balanced"),
   })
   export type DelegationSettings = z.infer<typeof DelegationSettings>
@@ -1399,8 +1397,6 @@ export namespace MessageV2 {
   function taskReceipt(metadata: Record<string, unknown>) {
     const outcome = TaskOutcome.safeParse(metadata.outcome).data
     const reason = z.string().max(120).safeParse(metadata.stopReason).data
-    const accounting = z.string().max(1000).safeParse(metadata.accounting).data
-    const commands = z.string().max(SubagentResult.COMMAND_RECEIPT_CHARS).safeParse(metadata.commandReceipts).data
     const evidence = z.object({ artifacts: z.array(z.unknown()) }).safeParse(metadata.evidence).data
     const handles = (evidence?.artifacts ?? []).slice(0, 8).flatMap((value) => {
       const handle = TaskArtifactHandle.safeParse(value).data
@@ -1409,9 +1405,7 @@ export namespace MessageV2 {
         : []
     })
     return [
-      SubagentResult.describe(outcome, reason),
-      ...(accounting ? [accounting] : []),
-      ...(commands ? [commands] : []),
+      ...(outcome ? [`Task outcome: ${outcome}${reason ? ` (${JSON.stringify(reason)})` : ""}.`] : []),
       ...(handles.length ? ["Saved outputs: use artifact read_file with these exact IDs.", ...handles] : []),
       ...((evidence?.artifacts.length ?? 0) > 8 ? ["More saved outputs are listed in the full child trace."] : []),
     ].join("\n")

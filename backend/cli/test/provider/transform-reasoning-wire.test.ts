@@ -266,26 +266,4 @@ describe("reasoning options serialize onto provider request bodies", () => {
     expect(wire.bodies[0].thinking).toEqual({ type: "adaptive" })
     expect(wire.bodies[0].output_config).toEqual({ effort: "xhigh" })
   })
-
-  test("a subagent's fitted thinking budget reaches Anthropic max_tokens", async () => {
-    const target = model({
-      id: "claude-opus-4-1",
-      providerID: "anthropic",
-      api: { id: "claude-opus-4-1", url: "https://api.anthropic.com/v1", npm: "@ai-sdk/anthropic" },
-    })
-    const options = { thinking: { type: "enabled", budgetTokens: 16000 } }
-    const fitted = ProviderTransform.fitThinking(target.api.npm, options, 4500)
-    const wire = recorder()
-    const sdk = createAnthropic({ apiKey: "test", baseURL: "https://anthropic.test/v1", fetch: wire.fetch })
-
-    await generateText({
-      model: sdk(target.api.id),
-      prompt: "hi",
-      maxOutputTokens: 4500,
-      providerOptions: ProviderTransform.providerOptions(target, fitted),
-    }).catch(() => undefined)
-
-    expect(wire.bodies[0].thinking).toEqual({ type: "enabled", budget_tokens: 4500 })
-    expect(wire.bodies[0].max_tokens).toBe(9000)
-  })
 })

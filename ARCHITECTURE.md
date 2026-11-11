@@ -77,16 +77,6 @@ The backend is a Bun and TypeScript application compiled to a single native bina
 - `src/compute` owns durable local and remote job lifecycles. Modal dispatch is bound to an approved digest, explicit files and secrets, durable ownership, and recoverable output delivery. Its concurrency setting is an admission limit: starts beyond the limit fail visibly rather than entering an autonomous waiting queue.
 - `src/openscience` contains local credential redaction and subprocess-environment boundaries.
 
-### Subagent admission
-
-User-enabled subagent allowances and deadlines are runtime controls, separate
-from optional `harness.budget` guidance. Task persists the assignment, LLM
-prepares its pinned model request, transport admission reserves each retry,
-and tool dispatch rejects stopped work. These controls also cover child-owned
-internal calls and stay active when optional harness units are disabled.
-[ADR 0002](docs/adr/0002-subagent-runtime-admission.md) records the exception,
-pricing choices and local-service trust boundary.
-
 ### Session trace sharing
 
 `src/session/usage-logging.ts` captures model requests, responses, provider-reported usage, and tool lifecycle records. Signed-in installations default to sharing full traces, subject to device and account opt-outs, including user-owned model routes. `trace-payload.ts` redacts known credentials and bounds payloads before a private, atomic local queue is written. The uploader checks account consent before each bounded batch and removes only records acknowledged by the ingest service. Stable event IDs make retries idempotent. Missing usage or cost stays unknown; raw response observations are separate from the receiver's catalog-estimated usage projection and managed billing settlement. The workspace exposes the device preference and delivery status through `/settings/usage-logging`.

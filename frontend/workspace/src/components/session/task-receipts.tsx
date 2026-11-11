@@ -2,7 +2,6 @@ import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from
 import { Button } from "@synsci/ui/button"
 import type { SessionReceiptsResponses } from "@synsci/sdk/v2/client"
 
-import { formatUsd } from "@synsci/util/money"
 import { walletAmount } from "./session-usage"
 
 type Report = SessionReceiptsResponses[200]
@@ -19,15 +18,30 @@ export function TaskReceipts(props: {
   sessionID: string
   load: () => Promise<Report>
   onReport?: (report: Report | undefined) => void
+  version?: string
 }) {
   const [report, setReport] = createSignal<Report>()
   createEffect(() => props.onReport?.(report()))
   const [busy, setBusy] = createSignal(false)
   const [error, setError] = createSignal<string>()
   let revision = 0
+  const reset = () => {
+    revision++
+    setReport(undefined)
+    setError(undefined)
+    setBusy(false)
+  }
+  createEffect(on(() => [props.sessionID, props.version], reset))
+  window.addEventListener("openscience:account-changed", reset)
+  onCleanup(() => {
+    revision++
+    window.removeEventListener("openscience:account-changed", reset)
+  })
   const load = async () => {
-    const current = ++revision
+    if (busy()) return
+    const current = revision
     setBusy(true)
+    setReport(undefined)
     setError(undefined)
     await props
       .load()
@@ -35,27 +49,11 @@ export function TaskReceipts(props: {
         if (current === revision) setReport(value)
       })
       .catch(() => {
-        if (current === revision) setError("Could not check settled charges.")
+        if (current === revision) setError("Could not check settled charges. Please retry.")
       })
       .finally(() => {
         if (current === revision) setBusy(false)
       })
-  }
-  // The Wallet is asked once each time the panel opens (and again for a new conversation or
-  // account), not on every model step, to keep load off the receipt server. Reopen to re-check.
-  const restart = () => {
-    setReport(undefined)
-    void load()
-  }
-  createEffect(on(() => props.sessionID, restart))
-  window.addEventListener("openscience:account-changed", restart)
-  onCleanup(() => {
-    revision++
-    window.removeEventListener("openscience:account-changed", restart)
-  })
-  const checked = () => {
-    const at = report()?.checkedAt
-    return at ? new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : undefined
   }
   const counts = createMemo(() => {
     const calls = report()?.calls ?? []
@@ -73,97 +71,74 @@ export function TaskReceipts(props: {
     return value?.state === "available" && value.receipts.length > 0 ? value.chargedMicrousd : undefined
   })
   const incomplete = () => counts().pending + counts().unknown + counts().inconsistent > 0
-  // Plain-language reasons the total is not final, only for the states that occur.
-  const unsettled = () =>
-    [
-      counts().pending && `${counts().pending} pending`,
-      counts().unknown && `${counts().unknown} missing`,
-      counts().inconsistent && `${counts().inconsistent} inconsistent`,
-    ]
-      .filter(Boolean)
-      .join(", ")
-  // Settled charges for the task and its workers, grouped by model, largest first.
-  const models = createMemo(() => {
-    const value = report()
-    if (value?.state !== "available") return []
-    const totals = new Map<string, { micro: bigint; calls: number }>()
-    for (const receipt of value.receipts) {
-      const item = totals.get(receipt.model) ?? { micro: 0n, calls: 0 }
-      item.micro += BigInt(receipt.charged_microusd)
-      item.calls++
-      totals.set(receipt.model, item)
-    }
-    return [...totals.entries()]
-      .map(([model, item]) => ({ model, ...item }))
-      .sort((a, b) => (b.micro > a.micro ? 1 : b.micro < a.micro ? -1 : a.model.localeCompare(b.model)))
-  })
-  const headline = () => {
-    const value = settled()
-    if (value != null) return formatUsd(Number(value) / 1_000_000)
-    if (report()) return "Unknown"
-    return busy() ? "Checking…" : "Not checked"
-  }
   return (
     <section class="context-panel__section" aria-label="Cost so far">
       <h3 class="context-panel__title">Cost so far</h3>
       <div class="context-panel__tokens">
-        <strong title={settled() != null ? walletAmount(settled()!) : undefined}>{headline()}</strong>
+        <strong>
+          {settled() != null ? walletAmount(settled()!) : busy() ? "Checking…" : report() ? "Unknown" : "Not checked"}
+        </strong>
       </div>
-      <p class="receipts__status">
-        <Show when={settled() != null}>
-          <span>Deducted from Wallet</span>
-        </Show>
-        <Show when={report()?.state === "available" && report()!.sessions > 1}>
-          <span>Includes workers</span>
-        </Show>
-        <Show when={checked()}>{(at) => <span>Checked {at()}</span>}</Show>
-      </p>
+      <Show when={settled() != null}>
+        <p class="context-panel__note">Deducted from Wallet</p>
+      </Show>
       <Show when={report()?.state === "available" && incomplete()}>
-        <p role="status" class="receipts__status">
-          <span data-tone="warning">
-            Some charges are not final ({unsettled()}). The total may rise; unsettled calls are not treated as free.
-          </span>
+        <p role="status" class="context-panel__note">
+          Some charges are not final. This total is incomplete.
         </p>
       </Show>
-      <Show when={models().length > 0}>
-        <ul class="context-panel__legend receipts__models" aria-label="Wallet cost by model">
-          <For each={models()}>
-            {(item) => (
-              <li>
-                <span class="label" title={item.model}>
-                  {item.model}
-                </span>
-                <span class="share">
-                  {item.calls} {item.calls === 1 ? "call" : "calls"}
-                </span>
-                <span class="value" title={walletAmount(item.micro.toString())}>
-                  {formatUsd(Number(item.micro) / 1_000_000)}
-                </span>
-              </li>
-            )}
-          </For>
-        </ul>
+      <Show when={report()?.state === "available" && report()!.sessions > 1}>
+        <p class="context-panel__note">Includes workers</p>
       </Show>
-      <Show when={report()?.state === "available" && report()!.managedCalls === 0}>
-        <p class="context-panel__note">No managed calls are recorded for this task.</p>
-      </Show>
-      <Show when={report()?.state === "available" && report()!.managedCalls > 0 && !report()!.receipts.length}>
-        <p class="context-panel__note">No settled receipts yet.</p>
-      </Show>
+      <Button size="small" variant="secondary" disabled={busy()} onClick={load}>
+        {busy() ? "Checking…" : "Check Wallet cost"}
+      </Button>
       <Show when={error()}>
-        <p role="alert" class="allowance__error">
-          {error()}
-        </p>
-        <div class="allowance__actions">
-          <Button size="small" variant="secondary" disabled={busy()} onClick={() => void load()}>
-            Retry
-          </Button>
-        </div>
+        <p role="alert">{error()}</p>
       </Show>
       <Show when={report()?.state === "unavailable"}>
-        <p role="status" class="context-panel__note">
-          {reasons[report()!.reason ?? "server_unavailable"]}
-        </p>
+        <p role="status">{reasons[report()!.reason ?? "server_unavailable"]}</p>
+      </Show>
+      <Show when={report()?.state === "available"}>
+        <details class="context-panel__details">
+          <summary>Charge details</summary>
+          <Show when={report()}>
+            {(result) => (
+              <div>
+                <p>
+                  Includes {Math.max(0, result().sessions - 1)} worker sessions · checked{" "}
+                  {result().checkedAt ? new Date(result().checkedAt!).toLocaleString() : "Unknown"}
+                </p>
+                <Show when={result().receipts.length > 0} fallback={<p>No settled receipts available.</p>}>
+                  <p>Settled receipts subtotal: {walletAmount(result().chargedMicrousd!)}</p>
+                  <ul>
+                    <For each={result().receipts}>
+                      {(receipt) => (
+                        <li>
+                          {receipt.model} · {walletAmount(receipt.charged_microusd)}
+                          <br />
+                          Receipt {receipt.receipt_id} · Hold {receipt.hold_id}
+                        </li>
+                      )}
+                    </For>
+                  </ul>
+                </Show>
+                <p>
+                  Pending: {counts().pending} · Unknown or missing: {counts().unknown} · Inconsistent:{" "}
+                  {counts().inconsistent} · Released or expired: {counts().released}
+                </p>
+                <Show when={incomplete()}>
+                  <p class="context-panel__note">
+                    This subtotal is incomplete. Pending and unknown calls are not treated as free.
+                  </p>
+                </Show>
+                <Show when={result().managedCalls === 0}>
+                  <p>No managed calls are recorded for this task.</p>
+                </Show>
+              </div>
+            )}
+          </Show>
+        </details>
       </Show>
     </section>
   )

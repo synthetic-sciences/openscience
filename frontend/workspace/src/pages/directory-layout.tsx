@@ -20,7 +20,6 @@ import { FileProvider } from "@/context/file"
 import { PromptProvider } from "@/context/prompt"
 
 import { DataProvider } from "@synsci/ui/context"
-import { SubagentAllowance } from "@/components/session/subagent-allowance"
 import { useDialog } from "@synsci/ui/context/dialog"
 import { DialogSettings } from "@/components/dialog-settings"
 import { MarkdownImages } from "@synsci/ui/markdown"
@@ -338,9 +337,6 @@ export default function Layout(props: ParentProps) {
                     onSaveArtifact={saveArtifact}
                     onOpenCredentials={() => dialog.show(() => <DialogSettings initial="credentials" />)}
                     onResendTurn={resendTurn}
-                    renderTaskActions={(input) => (
-                      <SubagentAllowance sessionID={input.sessionID} only={input.taskSessionID} />
-                    )}
                   >
                     <MarkdownImages
                       resolve={image}

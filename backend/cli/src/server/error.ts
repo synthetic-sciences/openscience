@@ -29,16 +29,8 @@ export const ERRORS = {
       },
     },
   },
-  // Conflict bodies differ between routes, so only the status is documented.
-  409: { description: "Conflict with the current state; refresh and retry" },
 } as const
 
 export function errors(...codes: number[]) {
-  return Object.fromEntries(
-    codes.map((code) => {
-      const entry = ERRORS[code as keyof typeof ERRORS]
-      if (!entry) throw new Error(`No OpenAPI error response is defined for status ${code}`)
-      return [code, entry]
-    }),
-  )
+  return Object.fromEntries(codes.map((code) => [code, ERRORS[code as keyof typeof ERRORS]]))
 }

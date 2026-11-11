@@ -113,8 +113,6 @@ export namespace Question {
       sessionID: string
       questions: Info[]
       tool?: { messageID: string; callID: string }
-      /** Withdraw the question and reject with TimeoutError when no one answers in time. */
-      timeoutMs?: number
     },
     signal?: AbortSignal,
   ): Promise<Answer[]> {
@@ -132,27 +130,21 @@ export namespace Question {
         questions: input.questions,
         tool: input.tool,
       }
-      const withdraw = (error: unknown) => {
+      const abort = () => {
         const pending = s.pending[id]
         if (!pending) return
         delete s.pending[id]
         pending.cleanup()
-        reject(error)
+        reject(signal?.reason ?? new DOMException("Question cancelled", "AbortError"))
         Bus.publish(Event.Cancelled, { sessionID: info.sessionID, requestID: id }).catch((error) =>
           log.error("failed to publish question cancellation", { id, error }),
         )
       }
-      const abort = () => withdraw(signal?.reason ?? new DOMException("Question cancelled", "AbortError"))
-      const timer =
-        input.timeoutMs === undefined ? undefined : setTimeout(() => withdraw(new TimeoutError()), input.timeoutMs)
       s.pending[id] = {
         info,
         resolve,
         reject,
-        cleanup: () => {
-          clearTimeout(timer)
-          signal?.removeEventListener("abort", abort)
-        },
+        cleanup: () => signal?.removeEventListener("abort", abort),
       }
       signal?.addEventListener("abort", abort, { once: true })
       Bus.publish(Event.Asked, info).catch((error) => log.error("failed to publish question request", { id, error }))
@@ -199,12 +191,6 @@ export namespace Question {
   export class InstanceDisposedError extends Error {
     constructor() {
       super("The question ended because the project runtime was closed.")
-    }
-  }
-
-  export class TimeoutError extends Error {
-    constructor() {
-      super("No one answered this question in time")
     }
   }
 

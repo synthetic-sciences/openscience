@@ -1,4 +1,3 @@
-import { SubagentResult } from "../session/subagent-result"
 import { Tool } from "./tool"
 import DESCRIPTION from "./task.txt"
 import z from "zod"
@@ -19,101 +18,13 @@ import { TaskEvidence } from "./task-evidence"
 import { PayloadIntegrity } from "./payload-integrity"
 import { CredentialRevocation } from "@/credentials/revocation"
 import { Log } from "@/util/log"
-import { FileLease } from "@/util/file-lease"
 import { SessionWake } from "@/session/wake"
-import { SubagentBudget } from "@/session/subagent-budget"
-import { SubagentDispatch } from "@/session/subagent-dispatch"
-import { Provider } from "@/provider/provider"
-import { resolveAccessRoute } from "@/session/access-route"
-import { Question } from "@/question"
-import { headless } from "./question"
-import { Flag } from "@/flag/flag"
-import { formatUsd } from "@synsci/util/money"
 
 const log = Log.create({ service: "tool.task" })
-
-/** Whether someone can answer a question in this session: a client that shows
- * questions, not a headless run that answers them itself, and not a session
- * that denies the question tool (`openscience run` without --auto-approve). */
-/** The conversation that owns a session's subagent budget: its top-level ancestor. */
-async function rootSession(id: string): Promise<string> {
-  const info = await Session.get(id)
-  return info.parentID ? rootSession(info.parentID) : id
-}
-
-async function answerable(sessionID: string) {
-  if (!["app", "cli", "desktop"].includes(Flag.OPENSCIENCE_CLIENT)) return false
-  if (await headless(sessionID)) return false
-  const permission = await Session.get(sessionID)
-    .then((session) => session.permission)
-    .catch(() => undefined)
-  return !permission || PermissionNext.evaluate("question", "*", permission).action !== "deny"
-}
 
 /** Placeholder session ids models eagerly emit for the optional `task_id`
  * field. Every one of them unambiguously means "start a new child". */
 const CONTINUATION_PLACEHOLDER = /^(?:ses_)?(?:new|none|null|undefined|placeholder|current|parent|fresh)$/i
-
-/** What the lead should do after a runtime limit stop. Under Interactive and
- * Balanced independence the user decides whether to fund more work: the task
- * asks once and waits up to `ASK_TIMEOUT_MS`. Under Autonomous, in a headless
- * run, or when no one answers in time, the lead finishes the remaining work
- * itself instead of waiting. No path starts a replacement worker, which would
- * sidestep the worker's limit. */
-export namespace TaskLimit {
-  export const ASK_TIMEOUT_MS = 5 * 60_000
-  export type Choice = "more" | "finish" | "timeout" | "dismissed"
-
-  const ask = (action: string) =>
-    `If the saved partial result already answers the request, answer from it and say what is missing. Otherwise do not redo the remaining work yourself or start a replacement worker: end your turn and tell the user what the worker finished, what remains and what it used, and that they can ${action} from the worker card. Continue with this task_id only when the user asks.`
-  const proceed = (why: string) =>
-    `${why} Do not wait for the user, start a replacement worker or continue this task_id. Build on the saved partial result, finish the remaining work yourself, and say in your final answer that the worker stopped early and which part you completed instead.`
-  const stopped = (reason: string) => reason === "budget_limit" || reason === "token_limit" || reason === "deadline"
-
-  export function guidance(reason: string, autonomy?: MessageV2.DelegationSettings["autonomy"]) {
-    if (stopped(reason) && autonomy === "autonomous")
-      return proceed("Independence is autonomous, so no one is available to extend this worker.")
-    if (reason === "budget_limit" || reason === "token_limit") return ask("add budget and continue it")
-    if (reason === "deadline") return ask("continue it with a new deadline")
-    if (reason === "deadline_wrapup")
-      return "Continue with this task_id under a new assignment deadline if more work is needed."
-    if (reason === "cancelled") return "Continue with this task_id only if the stopped work is requested again."
-    return "Continue with this task_id only after an allowance is available."
-  }
-
-  /** Ask the user, when someone can answer, and turn the answer into the lead's next step. */
-  export async function resolve(input: {
-    reason: string
-    autonomy?: MessageV2.DelegationSettings["autonomy"]
-    /** Whether anyone can answer: false for headless runs and clients without questions. */
-    attended: boolean
-    /** The amount the pool can still grant this worker without a user increase, formatted, when that covers more work. */
-    remaining?: string
-    ask: () => Promise<Choice>
-    /** Raise the conversation's subagent budget; resolves to the amount added, for the lead. */
-    raise: () => Promise<string>
-  }) {
-    const next =
-      "Continue this worker with this task_id if the remaining work still needs it; otherwise finish it yourself from the saved partial result. Do not start a replacement worker."
-    if (input.remaining && (input.reason === "budget_limit" || input.reason === "token_limit"))
-      return `The worker used its own share, but the conversation's subagent budget still has ${input.remaining} available, so no approval is needed. ${next}`
-    if (!stopped(input.reason) || input.autonomy === "autonomous") return guidance(input.reason, input.autonomy)
-    if (!input.attended) return proceed("No one is available to answer in this run.")
-    const choice = await input.ask()
-    if (choice === "timeout")
-      return proceed(
-        `No one answered within ${ASK_TIMEOUT_MS / 60_000} minutes, so the run continues without this worker.`,
-      )
-    if (choice === "finish") return proceed("The user chose to finish without this worker.")
-    if (choice === "dismissed") return guidance(input.reason, input.autonomy)
-    if (input.reason === "deadline") return `The user allowed this worker more time. ${next}`
-    return input.raise().then(
-      (amount) => `The user added ${amount} to the subagent budget. ${next}`,
-      (error: unknown) =>
-        `The user approved more budget, but the increase failed: ${error instanceof Error ? error.message : String(error)}. ${ask("add budget and continue it")}`,
-    )
-  }
-}
 
 export type TaskContinuation = { kind: "new" } | { kind: "continue"; sessionID: string }
 
@@ -186,7 +97,11 @@ export async function resolveTaskContinuation(input: {
 }
 
 const parameters = z.object({
-  description: z.string().describe("A short title for the worker session"),
+  description: z
+    .string()
+    .describe(
+      "A one- to three-word title for the job, e.g. 'Split audit'; it names the worker's session, so a label, not a sentence.",
+    ),
   prompt: z.string().describe("The task for the agent to perform"),
   subagent_type: z.string().describe("The name of the subagent to use for this task"),
   task_id: z
@@ -194,14 +109,16 @@ const parameters = z.object({
     .trim()
     .nullish()
     .overwrite((value) => value || undefined)
-    .describe("Reuse a returned task_id to continue the same child with its saved messages."),
+    .describe(
+      "Set only to resume a previous task: the task_id returned by an earlier call continues the same subagent session with its previous messages instead of starting fresh.",
+    ),
   command: z.string().describe("The command that triggered this task").optional(),
-  expected_output: z.string().min(1).optional().describe("Expected artifacts, findings and checks"),
-  allocation: z
-    .object({ usd: z.number().positive().optional(), tokens: z.number().int().positive().optional() })
+  background: z
+    .boolean()
     .optional()
-    .describe("Allocation from the approved shared pool; cannot raise its total"),
-  background: z.boolean().optional().describe("Return immediately; completion notifies you. Do not poll or sleep."),
+    .describe(
+      "Run the agent in the background and return immediately. You will be notified when it completes; do not sleep, poll, or check on its progress.",
+    ),
 })
 
 /** Canonicalize model-supplied continuation placeholders before a Task attempt
@@ -324,15 +241,7 @@ export function taskText(messages: MessageV2.WithParts[], previous: Set<string>)
 export type TaskOutcome = {
   outcome: "completed" | "partial" | "error"
   stopReason:
-    | "completed"
-    | "max_steps"
-    | "tool_failures"
-    | "tool_partial"
-    | "provider_error"
-    | "cancelled"
-    | "empty_handoff"
-    | SubagentBudget.Reason
-    | "reported_incomplete"
+    "completed" | "max_steps" | "tool_failures" | "tool_partial" | "provider_error" | "cancelled" | "empty_handoff"
 }
 
 /**
@@ -417,25 +326,10 @@ const BACKGROUND_STARTED = [
 
 /** Background children in flight, by child session id, so a completion can
  * wake the parent exactly once and a second call can find the first. `result`
- * never rejects; `delivered` records a successful wait, so a cancelled waiter
- * cannot suppress the completion wake-up. */
-type Background = {
-  parentID: string
-  controller: AbortController
-  result: Promise<TaskAttempt.Result>
-  delivered: boolean
-  parentStopped: boolean
-}
+ * never rejects; `joined` records that a later call is already waiting for the
+ * report, so the completion must not deliver it a second time as a wake-up. */
+type Background = { result: Promise<TaskAttempt.Result>; joined: boolean }
 const background = new Map<string, Background>()
-
-export function cancelBackgroundTasks(parentID: string) {
-  for (const [childID, entry] of background) {
-    if (entry.parentID !== parentID) continue
-    entry.parentStopped = true
-    entry.controller.abort(new SubagentBudget.LimitError("cancelled"))
-    cancelBackgroundTasks(childID)
-  }
-}
 
 export function backgroundTasks() {
   return background.size
@@ -446,22 +340,12 @@ const JOINED =
 
 /** Wait for a running background child, or stop when the caller's turn does. */
 function join(entry: Background, abort: AbortSignal) {
+  entry.joined = true
   return new Promise<TaskAttempt.Result>((resolve, reject) => {
-    const waiting = { active: true }
-    const cancel = () => {
-      waiting.active = false
-      abort.removeEventListener("abort", cancel)
-      reject(new Error("Waiting for the background worker was cancelled with the turn."))
-    }
+    const cancel = () => reject(new Error("Waiting for the background worker was cancelled with the turn."))
     if (abort.aborted) return cancel()
     abort.addEventListener("abort", cancel, { once: true })
-    entry.result.then((result) => {
-      if (!waiting.active) return
-      waiting.active = false
-      abort.removeEventListener("abort", cancel)
-      entry.delivered = true
-      resolve(result)
-    }, reject)
+    entry.result.then(resolve, reject).finally(() => abort.removeEventListener("abort", cancel))
   })
 }
 
@@ -492,7 +376,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       return { ...rest, task_id: rest.task_id ?? session_id }
     },
     async execute(params: z.infer<typeof parameters>, ctx) {
-      const entered = Date.now()
       if (publishingBrief(`${params.description}\n${params.prompt}`)) {
         throw new Error(
           "Publishing stays with the lead: pushes, releases and uploads use this session's approvals and credentials. Delegate preparation or verification if useful, then push or upload from here.",
@@ -526,18 +409,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       if (running) {
         const result = await join(running, ctx.abort)
         return { ...result, output: `${JOINED}\n${result.output}` }
-      }
-      // A foreground run (or a user continuation) of this child is still going: say so, rather than
-      // starting a second run whose refusal would be reported as a provider error.
-      if (continuation) {
-        try {
-          SessionPrompt.assertNotBusy(continuation.id)
-        } catch (error) {
-          if (!(error instanceof Session.BusyError)) throw error
-          throw new Error(
-            `Subagent ${continuation.id} is still running; wait for its report, or omit task_id to start a new task.`,
-          )
-        }
       }
 
       // Skip permission check when user explicitly invoked via @ or command subtask
@@ -574,46 +445,24 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       const effort = MessageV2.resolveResearchEffort(ctx.extra?.effort)
       const settings = MessageV2.resolveDelegationSettings(ctx.extra?.delegationSettings, { effort })
       const leadModel = { modelID: assistant.modelID, providerID: assistant.providerID }
-      const userLimits = SubagentBudget.settings((await Config.getGlobal()).subagents)
+      // The subagent's configured model wins; the composer's worker model is
+      // the user's override for agents without one; otherwise the lead's model.
+      const model = agent.model ?? settings.workerModel ?? leadModel
+      // A worker on the lead's model thinks as hard as the lead. On its own
+      // model it uses its own configured variant, or the model's default.
+      const variant =
+        model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
+          ? typeof ctx.extra?.variant === "string"
+            ? ctx.extra.variant
+            : undefined
+          : agent.variant
+
       const reserved = await TaskAttempt.reserve({
         ...identity,
         fingerprint: TaskAttempt.fingerprint(attachments.length ? { ...attemptInput, attachments } : attemptInput),
         childSessionID: continuation?.id,
       })
-      const part = (await MessageV2.parts(ctx.messageID)).find(
-        (part) => part.type === "tool" && part.callID === ctx.callID,
-      )
-      // The running tool part predates permission and queue waits and survives recovery.
-      const started = Math.min(
-        reserved.createdAt,
-        part?.type === "tool" && part.state.status !== "pending" ? part.state.time.start : entered,
-      )
-      const pinned = await SubagentBudget.read(reserved.childSessionID)
-      const contract =
-        pinned &&
-        (pinned.worker.stopReason ||
-          pinned.worker.reportReason === "budget_wrapup" ||
-          pinned.worker.reportReason === "deadline_wrapup" ||
-          pinned.worker.assignmentID === identity.callID)
-          ? pinned.worker
-          : undefined
-      const model =
-        contract?.model ??
-        (settings.workerModelOverride && settings.workerModel
-          ? settings.workerModel
-          : userLimits.model
-            ? Provider.parseModel(userLimits.model)
-            : leadModel)
-      const variant = contract
-        ? (contract.variant ??
-          (await Session.messages({ sessionID: reserved.childSessionID }))
-            .map((message) => message.info)
-            .findLast((message): message is MessageV2.User => message.role === "user")?.variant)
-        : model.providerID === leadModel.providerID && model.modelID === leadModel.modelID
-          ? typeof ctx.extra?.variant === "string"
-            ? ctx.extra.variant
-            : undefined
-          : agent.variant
+      const started = reserved.createdAt
 
       const existing =
         continuation ??
@@ -633,14 +482,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             title: params.description,
             permission: childPermissionRules(agent, config.experimental?.primary_tools, parentRules),
           })
-      if (existing)
-        await Session.update(
-          session.id,
-          (info) => {
-            info.permission = childPermissionRules(agent, config.experimental?.primary_tools, parentRules)
-          },
-          { touch: false },
-        )
       // The child keeps its own scratch for staged inputs and side outputs but
       // works in the parent's directory: the files it writes there are the
       // parent's deliverables.
@@ -659,54 +500,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
       }
       await ctx.metadata({ title: params.description, metadata })
 
-      const increaseLabel = (unit: SubagentBudget.Unit) =>
-        unit === "usd"
-          ? formatUsd(userLimits.usdIncrease)
-          : `${userLimits.tokenIncrease.toLocaleString("en-US")} tokens`
-      /** One question to the user at a limit stop, withdrawn after `TaskLimit.ASK_TIMEOUT_MS`. */
-      const askAtLimit = async (input: {
-        limitReason: string
-        unit: SubagentBudget.Unit
-        live: boolean
-        signal: AbortSignal
-      }): Promise<TaskLimit.Choice> => {
-        const deadline = input.limitReason === "deadline"
-        const more = deadline ? "Allow more time" : `Add ${increaseLabel(input.unit)}`
-        const finish = "Finish without it"
-        const minutes = TaskLimit.ASK_TIMEOUT_MS / 60_000
-        const answers = await Question.ask(
-          {
-            sessionID: ctx.sessionID,
-            questions: [
-              {
-                header: deadline ? "Subagent out of time" : "Subagent limit reached",
-                question: `The worker "${params.description}" ${deadline ? "ran out of time" : "reached its limit"} before finishing. ${deadline ? "Let it continue with a new deadline?" : "Add to the subagent budget so it can continue?"} If no one answers within ${minutes} minutes, the main agent finishes from the worker's saved result.`,
-                options: [
-                  {
-                    label: more,
-                    description: deadline
-                      ? "The main agent may continue this worker with a new deadline."
-                      : "Raises the conversation's subagent budget; the main agent decides whether to continue this worker.",
-                  },
-                  { label: finish, description: "The main agent builds on the worker's saved result." },
-                ],
-                custom: false,
-              },
-            ],
-            tool: input.live && ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
-            timeoutMs: TaskLimit.ASK_TIMEOUT_MS,
-          },
-          input.signal,
-        ).catch((error: unknown) =>
-          error instanceof Question.TimeoutError ? ("timeout" as const) : ("dismissed" as const),
-        )
-        if (typeof answers === "string") return answers
-        const picked = answers[0]?.[0]
-        return picked === more ? "more" : picked === finish ? "finish" : "dismissed"
-      }
       const run = async (signal: AbortSignal, live: boolean): Promise<TaskAttempt.Result> => {
         await using attemptLease = await TaskAttempt.acquire(identity, Number.POSITIVE_INFINITY, signal)
-        return await attemptLease.during(async () => {
+        return attemptLease.during(async () => {
           const current = await TaskAttempt.read(identity)
           if (!current) throw new Error(`Durable Task attempt ${ctx.callID} disappeared after reservation`)
           if (current.status === "completed" && current.result) return current.result
@@ -731,16 +527,6 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               return !MessageV2.isContinuingTurn(message.info.finish, hasTool)
             })
 
-          if (terminal) {
-            await using recovery = await FileLease.acquire(
-              SessionPrompt.loopLeasePath(Instance.project.id, session.id),
-              10000,
-              signal,
-            )
-            SessionPrompt.assertNotBusy(session.id)
-            await SubagentBudget.release(session.id, identity.callID)
-          }
-
           // A prior process may have died mid-turn; close its interval at its
           // last heartbeat before this process opens its own. Time between
           // reservation and activation is queueing, not child work.
@@ -763,7 +549,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                 const exists = initial.some(
                   (message) => message.info.role === "user" && message.info.id === reserved.childMessageID,
                 )
-                const dispatch = async (childSignal: AbortSignal) => {
+                const dispatch = async () => {
                   if (exists) return SessionPrompt.loop(session.id)
                   return SessionPrompt.prompt({
                     messageID: reserved.childMessageID,
@@ -774,10 +560,8 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                     effort,
                     delegationSettings: settings,
                     parts: [
-                      ...(await SessionPrompt.resolvePromptParts(
-                        `${params.prompt}\n\nExpected output: ${params.expected_output ?? "Return findings, artifact references, checks performed, remaining work and limitations."} Start the final report with Outcome: Complete or Outcome: Incomplete.`,
-                      )),
-                      ...(await SubtaskAttachments.materialize(attachments, session.id, childSignal)),
+                      ...(await SessionPrompt.resolvePromptParts(params.prompt)),
+                      ...(await SubtaskAttachments.materialize(attachments, session.id, signal)),
                     ],
                   })
                 }
@@ -818,53 +602,10 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                   : undefined
                 try {
                   // Keep progress and cancellation connected until the child settles.
-                  const root = await rootSession(ctx.sessionID)
-                  const bounded = await SubagentBudget.initialize(root, userLimits)
-                  if (!bounded)
-                    return await SessionPrompt.withCancellation(session.id, () => dispatch(signal), signal).then(
-                      (result) => ({ result, error: undefined }),
-                      (error: unknown) => ({ result: undefined, error }),
-                    )
-                  const route = await resolveAccessRoute(model.providerID, model.modelID)
-                  const unit = SubagentDispatch.unit(await Provider.getModel(model.providerID, model.modelID), route)
-                  const stored = await SubagentBudget.read(session.id)
-                  const contract = await SubagentBudget.open({
-                    rootSessionID: root,
-                    parentSessionID: ctx.sessionID,
-                    sessionID: session.id,
-                    assignmentID: identity.callID,
-                    objective: params.prompt,
-                    description: params.description,
-                    agent: agent.name,
-                    expectedOutput: params.expected_output ?? "Return findings, artifacts, checks and limitations.",
-                    model,
-                    variant,
-                    route,
-                    unit,
-                    settings: userLimits,
-                    allocation:
-                      unit === "usd"
-                        ? params.allocation?.usd === undefined
-                          ? undefined
-                          : SubagentBudget.dollars(params.allocation.usd)
-                        : params.allocation?.tokens,
-                    acceptedAt: started,
-                    deadline:
-                      stored?.worker.assignmentID === identity.callID
-                        ? stored.worker.deadline
-                        : started + (userLimits.deadlineMs ?? 600000),
-                  })
-                  await using allowance = await SubagentBudget.watch(contract, signal)
-                  return await SessionPrompt.withCancellation(
-                    session.id,
-                    () => dispatch(allowance.signal),
-                    allowance.signal,
-                  ).then(
+                  return await SessionPrompt.withCancellation(session.id, dispatch, signal).then(
                     (result) => ({ result, error: undefined }),
                     (error: unknown) => ({ result: undefined, error }),
                   )
-                } catch (error) {
-                  return { result: undefined, error }
                 } finally {
                   clearInterval(pulse)
                   unsubscribe?.()
@@ -886,9 +627,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
           const child = execution.result?.info.role === "assistant" ? execution.result.info : terminal?.info
           const failedToolCalls = summary.filter((part) => part.state.status === "error").length
           const partialToolCalls = summary.filter((part) => part.state.status === "partial").length
-          const budgetState = await SubagentBudget.read(session.id)
-          const budget = budgetState?.worker.assignmentID === identity.callID ? budgetState : undefined
-          const observed = classifyTaskOutcome({
+          const taskOutcome = classifyTaskOutcome({
             finish: child?.finish,
             error: execution.error ?? child?.error,
             hasText: text.trim().length > 0,
@@ -896,62 +635,9 @@ export const TaskTool = Tool.define("task", async (ctx) => {
             failedToolCalls,
             partialToolCalls,
           })
-          const reportedIncomplete = /^\s*(?:\*\*)?Outcome:\s*(?:\*\*)?\s*Incomplete\b/im.test(text)
-          const limitReason =
-            budget?.worker.stopReason ??
-            (execution.error instanceof SubagentBudget.LimitError ? execution.error.reason : undefined)
-          const taskOutcome: TaskOutcome = limitReason
-            ? { outcome: "partial", stopReason: limitReason }
-            : reportedIncomplete
-              ? {
-                  outcome: "partial",
-                  stopReason: budget?.worker.wrapup
-                    ? (budget.worker.wrapupReason ?? "budget_wrapup")
-                    : "reported_incomplete",
-                }
-              : observed
           const state: TaskState = taskOutcome.outcome === "error" ? "error" : "completed"
-          // The pool to extend: the worker's own record, or, when the pool was already
-          // exhausted at admission and no record exists for this call, the conversation's.
-          const target = budget
-            ? { root: budget.pool.rootSessionID, unit: budget.worker.unit }
-            : limitReason === "budget_limit" || limitReason === "token_limit"
-              ? {
-                  root: await rootSession(ctx.sessionID),
-                  unit: limitReason === "budget_limit" ? ("usd" as const) : ("tokens" as const),
-                }
-              : undefined
-          const increase = (unit: SubagentBudget.Unit) =>
-            unit === "usd" ? SubagentBudget.dollars(userLimits.usdIncrease) : userLimits.tokenIncrease
-          const headroom = target ? await SubagentBudget.headroom(target.root, target.unit, ctx.sessionID) : 0
-          const next = limitReason
-            ? await TaskLimit.resolve({
-                reason: limitReason,
-                autonomy: settings.autonomy,
-                attended: target !== undefined && (await answerable(ctx.sessionID)),
-                remaining:
-                  target && headroom >= increase(target.unit)
-                    ? target.unit === "usd"
-                      ? formatUsd(SubagentBudget.usd(headroom))
-                      : `${headroom.toLocaleString("en-US")} tokens`
-                    : undefined,
-                ask: () => askAtLimit({ limitReason, unit: target!.unit, live, signal }),
-                raise: async () => {
-                  const current = await SubagentBudget.inspect(target!.root)
-                  if (!current) throw new Error("Subagent allowance not found")
-                  await SubagentBudget.increase(target!.root, {
-                    unit: target!.unit,
-                    amount: increase(target!.unit),
-                    revision: current.revision,
-                    key: `limit:${identity.callID}`,
-                  })
-                  return increaseLabel(target!.unit)
-                },
-              })
-            : undefined
-          const note = limitReason
-            ? `Runtime: subagent incomplete — ${limitReason.replaceAll("_", " ")}. ${execution.error instanceof SubagentBudget.LimitError ? execution.error.message : "Saved partial results follow."} ${next}`
-            : taskOutcome.stopReason === "max_steps"
+          const note =
+            taskOutcome.stopReason === "max_steps"
               ? "The subagent reached its step limit; partial result follows."
               : taskOutcome.stopReason === "tool_failures"
                 ? "Every subagent tool call failed; treat this as a blocked partial result."
@@ -966,18 +652,7 @@ export const TaskTool = Tool.define("task", async (ctx) => {
                         : failedToolCalls > 0
                           ? `${failedToolCalls} of ${summary.length} tool calls failed along the way; the report is the worker's own account.`
                           : undefined
-          const accounting = budget
-            ? (() => {
-                const w = budget.worker
-                const details = SubagentBudget.summary(budget.pool, w)
-                const format = (value: number) =>
-                  w.unit === "usd" ? `USD ${SubagentBudget.usd(value)}` : `${value} tokens`
-                return `Runtime accounting: model=${w.model.providerID}/${w.model.modelID}; route=${w.route}; grant=${format(w.limit)}; ${format(w.spent)} used; ${format(details.remaining)} assignment remaining; ${format(details.pending)} pending; ${format(SubagentBudget.available(budget.pool, w.unit))} shared pool available. ${w.unit === "usd" ? "Calculated allowance use, not a settled Wallet charge." : "Provider token use, not account quota."}`
-              })()
-            : undefined
           const body = [
-            SubagentResult.describe(taskOutcome.outcome, taskOutcome.stopReason),
-            accounting,
             text || `(no text; ${summary.length} tool calls in this turn)`,
             TaskEvidence.describe(evidence),
             `task_id: ${session.id}`,
@@ -996,22 +671,13 @@ export const TaskTool = Tool.define("task", async (ctx) => {
               failedToolCalls,
               partialToolCalls,
               usage,
-              ...(accounting ? { accounting } : {}),
-              ...(budget ? { budget: SubagentBudget.summary(budget.pool, budget.worker) } : {}),
               outcome: taskOutcome.outcome,
               stopReason: taskOutcome.stopReason,
               handoff: text,
               evidence,
-              commandReceipts: TaskEvidence.describeCommands(evidence.commands),
             },
             output: renderTaskOutput({ sessionID: session.id, state, summary: note, text: body }),
           })
-          if (budget)
-            await SubagentBudget.report(session.id, {
-              handoff: text,
-              outcome: taskOutcome.outcome,
-              reason: taskOutcome.stopReason,
-            })
           await TaskAttempt.complete({ ...identity, result })
           return result
         })
@@ -1049,43 +715,25 @@ export const TaskTool = Tool.define("task", async (ctx) => {
         // Detached from the dispatching turn's admission context: the child
         // and the wake-up run after that turn has finished. A failure becomes
         // an error result so a caller waiting on the entry always gets one.
-        const controller = new AbortController()
-        const outcome = SessionPrompt.detached(() => run(controller.signal, false)).catch((error: unknown) => {
-          const observed =
-            error instanceof SubagentBudget.LimitError
-              ? { outcome: "partial" as const, stopReason: error.reason }
-              : classifyTaskOutcome({ error })
-          return TaskAttempt.Result.parse({
+        const outcome = SessionPrompt.detached(() => run(new AbortController().signal, false)).catch((error: unknown) =>
+          TaskAttempt.Result.parse({
             title: params.description,
-            metadata: {
-              ...metadata,
-              ...observed,
-            },
+            metadata: { ...metadata, outcome: "error", stopReason: "provider_error" },
             output: renderTaskOutput({
               sessionID: session.id,
               state: "error",
               summary: `Background task failed: ${params.description}`,
-              text: [
-                SubagentResult.describe(observed.outcome, observed.stopReason),
-                error instanceof Error ? error.message : String(error),
-              ].join("\n\n"),
+              text: error instanceof Error ? error.message : String(error),
             }),
-          })
-        })
-        const entry: Background = {
-          parentID: ctx.sessionID,
-          controller,
-          result: outcome,
-          delivered: false,
-          parentStopped: false,
-        }
+          }),
+        )
+        const entry: Background = { result: outcome, joined: false }
         background.set(session.id, entry)
         outcome.then(async (result) => {
           background.delete(session.id)
           await settle(result).catch((error) => log.warn("background task outcome was not recorded", { error }))
           // A call that joined the worker has already taken the report.
-          if (entry.delivered) return
-          if (entry.parentStopped) return
+          if (entry.joined) return
           await SessionPrompt.detached(() => wake(result.output)).catch((error) =>
             log.error("background task completion could not wake the parent", { error }),
           )

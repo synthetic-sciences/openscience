@@ -402,13 +402,6 @@ describe("ProviderTransform.variants — Gemini-3 nests under thinkingConfig", (
 })
 
 describe("ProviderTransform.smallOptions — OpenRouter", () => {
-  test.each(["anthropic/claude-opus-5.5", "anthropic/claude-opus-5-5", "anthropic/claude-fable-5.1"])(
-    "%s keeps always-on thinking at low effort for internal calls",
-    (id) => {
-      expect(ProviderTransform.smallOptions(orModel(id, id))).toEqual({ reasoning: { effort: "low" } })
-    },
-  )
-
   test("small OR calls disable reasoning via the unified shape", () => {
     const result = ProviderTransform.smallOptions(orModel("openrouter/openai/gpt-5-nano", "openai/gpt-5-nano"))
     expect(result).toEqual({ reasoning: { enabled: false } })

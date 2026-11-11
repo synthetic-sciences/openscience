@@ -15,6 +15,7 @@ const vite = await createTestServer({
   ssr: { noExternal: true, resolve: { conditions: ["browser", "production"] } },
 })
 const web = (await vite.ssrLoadModule("solid-js/web")) as typeof import("solid-js/web")
+const solidjs = (await vite.ssrLoadModule("solid-js")) as typeof import("solid-js")
 const subject = (await vite.ssrLoadModule(
   "/src/components/session/task-receipts.tsx",
 )) as typeof import("./task-receipts")
@@ -42,7 +43,7 @@ const report = (): SessionReceiptsResponses[200] => ({
     },
   ],
 })
-function mount(load: () => Promise<SessionReceiptsResponses[200]>) {
+function mount(load: () => Promise<SessionReceiptsResponses[200]>, version?: () => string) {
   const host = document.createElement("div")
   document.body.append(host)
   cleanups.push(
@@ -51,54 +52,60 @@ function mount(load: () => Promise<SessionReceiptsResponses[200]>) {
         subject.TaskReceipts({
           sessionID: "session",
           load,
+          get version() {
+            return version?.()
+          },
         }),
       host,
     ),
   )
   return host
 }
-const settle = () => Bun.sleep(30)
+async function click(host: HTMLElement) {
+  host.querySelector("button")!.click()
+  await Bun.sleep(30)
+}
 afterAll(() => vite.close())
 afterEach(() => {
   cleanups.splice(0).forEach((dispose) => dispose())
   document.body.replaceChildren()
 })
 
-test("settled receipts load on open and preserve sub-cent amounts alongside pending workers", async () => {
+test("settled receipts are checked explicitly and preserve sub-cent amounts alongside pending workers", async () => {
   let checks = 0
   const host = mount(async () => {
     checks++
     return report()
   })
-  await settle()
+  expect(checks).toBe(0)
+  await click(host)
   expect(checks).toBe(1)
-  expect(host.querySelector("strong")!.textContent).toBe("$0.000001")
-  expect(host.textContent).toContain("Includes workers")
+  expect(host.textContent).toContain("Includes 2 worker sessions")
+  expect(host.textContent).toContain("Settled receipts subtotal: USD 0.000001")
   expect(host.textContent).toContain("worker-model")
-  expect(host.textContent).toContain("Some charges are not final (1 pending)")
+  expect(host.textContent).toContain("Receipt receipt · Hold hold")
+  expect(host.textContent).toContain("Pending: 1")
+  expect(host.textContent).toContain("This subtotal is incomplete")
 })
 
 test("no receipts and unknown calls are never displayed as a free task", async () => {
   const host = mount(async () => ({ ...report(), chargedMicrousd: "0", receipts: [], missingCallIDs: 1, calls: [] }))
-  await settle()
-  expect(host.textContent).toContain("No settled receipts yet")
-  expect(host.textContent).toContain("(1 missing)")
-  expect(host.textContent).not.toContain("$0.00")
-  expect(host.querySelector("strong")!.textContent).toBe("Unknown")
+  await click(host)
+  expect(host.textContent).toContain("No settled receipts available")
+  expect(host.textContent).toContain("Unknown or missing: 1")
+  expect(host.textContent).not.toContain("subtotal: USD 0")
 })
 
 test("account changes clear receipts and discard a late response from the previous account", async () => {
   const pending = Promise.withResolvers<SessionReceiptsResponses[200]>()
-  let checks = 0
-  const host = mount(() => (++checks === 1 ? pending.promise : new Promise(() => {})))
-  await settle()
+  const host = mount(() => pending.promise)
+  host.querySelector("button")!.click()
   window.dispatchEvent(new Event("openscience:account-changed"))
   pending.resolve(report())
-  await settle()
-  expect(checks).toBe(2)
-  expect(host.textContent).not.toContain("$0.000001")
+  await Bun.sleep(30)
+  expect(host.textContent).not.toContain("USD 0.000001")
   expect(host.textContent).not.toContain("worker-model")
-  expect(host.querySelector("strong")!.textContent).toBe("Checking…")
+  expect(host.querySelector("button")!.disabled).toBe(false)
 })
 
 test("an older receipt server remains explicitly unavailable", async () => {
@@ -109,9 +116,9 @@ test("an older receipt server remains explicitly unavailable", async () => {
     receipts: [],
     calls: [],
   }))
-  await settle()
+  await click(host)
   expect(host.textContent).toContain("does not support per-call receipts yet")
-  expect(host.querySelector('[aria-label="Wallet cost by model"]')).toBeNull()
+  expect(host.textContent).not.toContain("subtotal")
 })
 
 test("an explicit settled zero is shown as evidence rather than a missing amount", async () => {
@@ -123,86 +130,51 @@ test("an explicit settled zero is shown as evidence rather than a missing amount
     calls: [fixture.calls[0]!],
     receipts: [{ ...fixture.receipts[0]!, charged_microusd: "0" }],
   }))
-  await settle()
-  expect(host.querySelector("strong")!.textContent).toBe("$0.00")
-  expect(host.textContent).not.toContain("No settled receipts yet")
-  expect(host.textContent).not.toContain("Some charges are not final")
+  await click(host)
+  expect(host.textContent).toContain("Settled receipts subtotal: USD 0.000000")
+  expect(host.textContent).not.toContain("No settled receipts available")
+  expect(host.textContent).not.toContain("This subtotal is incomplete")
 })
 
-test("the cost summary shows a readable Wallet total with the exact amount on hover", async () => {
-  const host = mount(async () => ({ ...report(), chargedMicrousd: "238208" }))
+test("the cost summary shows only checked Wallet charges", async () => {
+  const host = mount(async () => report())
   const summary = () => host.querySelector('[aria-label="Cost so far"]')!
-  expect(summary().textContent).toContain("Checking…")
-  await settle()
-  const total = host.querySelector("strong")!
-  expect(total.textContent).toBe("$0.24")
-  expect(total.getAttribute("title")).toBe("USD 0.238208")
+  expect(summary().textContent).toContain("Not checked")
   expect(summary().textContent).not.toContain("Estimated")
-  expect(summary().textContent).toContain("Deducted from Wallet")
+  await click(host)
+  expect(summary().textContent).toContain("USD 0.000001")
+  expect(summary().textContent).not.toContain("$0.000432")
   expect(summary().textContent).toContain("Some charges are not final")
 })
 
-test("a failed check offers a retry that loads the total", async () => {
+test("receipt identities are available in collapsed details while incomplete costs stay visible", async () => {
+  const host = mount(async () => report())
+  await click(host)
+  const receipt = [...host.querySelectorAll("li")].find((item) => item.textContent?.includes("Receipt receipt"))!
+  const details = receipt.closest("details")!
+  expect(details).not.toBeNull()
+  expect(details.open).toBe(false)
+  const warning = [...host.querySelectorAll('[role="status"]')].find((item) =>
+    item.textContent?.includes("Some charges are not final"),
+  )!
+  expect(warning).toBeDefined()
+  expect(warning.closest("details")).toBeNull()
+  details.querySelector("summary")!.click()
+  expect(details.open).toBe(true)
+})
+
+test("new session activity clears a checked cost and rejects an earlier in-flight total", async () => {
+  const [version, setVersion] = solidjs.createSignal("1")
+  const pending = Promise.withResolvers<SessionReceiptsResponses[200]>()
   let checks = 0
-  const host = mount(async () => {
-    if (++checks === 1) throw new Error("offline")
-    return report()
-  })
-  await settle()
-  expect(host.querySelector('[role="alert"]')!.textContent).toContain("Could not check settled charges")
+  const host = mount(() => (++checks === 1 ? Promise.resolve(report()) : pending.promise), version)
+  await click(host)
+  expect(host.querySelector("strong")!.textContent).toBe("USD 0.000001")
+  setVersion("2")
+  expect(host.querySelector("strong")!.textContent).toBe("Not checked")
   host.querySelector("button")!.click()
-  await settle()
-  expect(host.querySelector('[role="alert"]')).toBeNull()
-  expect(host.querySelector("strong")!.textContent).toBe("$0.000001")
-})
-
-test("settled charges for the task and its workers are grouped by model, largest first", async () => {
-  const fixture = report()
-  const receipt = (id: string, model: string, micro: string) => ({
-    ...fixture.receipts[0]!,
-    receipt_id: id,
-    model,
-    charged_microusd: micro,
-  })
-  const host = mount(async () => ({
-    ...fixture,
-    chargedMicrousd: "238208",
-    calls: [fixture.calls[0]!],
-    receipts: [
-      receipt("a", "anthropic/claude-haiku-4.5", "657"),
-      receipt("b", "anthropic/claude-opus-5.5", "200000"),
-      receipt("c", "anthropic/claude-haiku-4.5", "644"),
-      receipt("d", "anthropic/claude-opus-5.5", "36907"),
-    ],
-  }))
-  await settle()
-  const rows = [...host.querySelectorAll('[aria-label="Wallet cost by model"] li')].map((row) => row.textContent)
-  expect(rows).toEqual(["anthropic/claude-opus-5.52 calls$0.24", "anthropic/claude-haiku-4.52 calls$0.0013"])
-  expect(host.querySelector("details")).toBeNull()
-  expect(host.textContent).not.toContain("Some charges are not final")
-})
-
-test("the Wallet is asked once per open and shows when it was checked", async () => {
-  let checks = 0
-  const host = mount(async () => {
-    checks++
-    return report()
-  })
-  await settle()
-  await settle()
-  expect(checks).toBe(1)
-  expect(host.textContent).toContain("Checked ")
-})
-
-test("closing and reopening the panel checks again", async () => {
-  let checks = 0
-  const load = async () => ({ ...report(), chargedMicrousd: String(++checks * 10000) })
-  mount(load)
-  await settle()
-  cleanups.splice(0).forEach((dispose) => dispose())
-  document.body.replaceChildren()
-  const host = mount(load)
-  await settle()
-  expect(checks).toBe(2)
-  expect(host.querySelector("strong")!.textContent).toBe("$0.02")
+  setVersion("3")
+  pending.resolve(report())
+  await Bun.sleep(30)
+  expect(host.querySelector("strong")!.textContent).toBe("Not checked")
 })

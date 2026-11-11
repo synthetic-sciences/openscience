@@ -856,39 +856,6 @@
     color: var(--delegation-status);
   }
 
-  [data-slot="delegation-report"] {
-    padding: 2px 8px 8px 0;
-    color: var(--text-weak);
-    font-size: var(--font-size-small);
-    line-height: 18px;
-    overflow-wrap: anywhere;
-
-    p {
-      margin: 2px 0;
-    }
-  }
-
-  [data-slot="delegation-budget"] {
-    font-variant-numeric: tabular-nums;
-  }
-
-  [data-slot="delegation-stop-reason"] {
-    color: var(--text-base);
-  }
-
-  [data-slot="delegation-report-details"] {
-    margin-top: 4px;
-    summary {
-      cursor: pointer;
-    }
-  }
-
-  [data-slot="delegation-report-text"] {
-    max-height: 24rem;
-    overflow: auto;
-    white-space: pre-wrap;
-  }
-
   /* The body hangs from a rail aligned under the mark. */
   [data-slot="delegation-body"] {
     margin: 2px 0 6px 7px;

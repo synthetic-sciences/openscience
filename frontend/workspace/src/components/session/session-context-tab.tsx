@@ -4,7 +4,6 @@ import { useParams } from "@solidjs/router"
 import { DateTime } from "luxon"
 import { useSDK } from "@/context/sdk"
 import { TaskReceipts } from "./task-receipts"
-import { SubagentAllowance } from "./subagent-allowance"
 import { useSync } from "@/context/sync"
 import { useLayout } from "@/context/layout"
 import { checksum } from "@synsci/util/encode"
@@ -19,7 +18,7 @@ import type { AssistantMessage, Message, Part, UserMessage, SessionReceiptsRespo
 import { useLanguage } from "@/context/language"
 import { contextWindow } from "@/pages/session-context"
 import { SessionCallUsage } from "./session-call-usage"
-import { sessionProviderLabel } from "./session-usage"
+import { sessionCost, sessionProviderLabel } from "./session-usage"
 import {
   CONTEXT_BUCKET_COLORS,
   contextComposition,
@@ -87,6 +86,10 @@ export function SessionContextTab(props: SessionContextTabProps) {
       .messages()
       .reduce((total, message) => total + (message.role === "assistant" ? TokenUsage.total(message.tokens) : 0), 0),
   )
+
+  const cost = createMemo(() => {
+    return sessionCost(props.messages(), sync.data.part).total
+  })
 
   const counts = createMemo(() => {
     const all = props.messages()
@@ -341,18 +344,16 @@ export function SessionContextTab(props: SessionContextTabProps) {
 
       <Show when={params.id}>
         {(sessionID) => (
-          <>
-            <SubagentAllowance sessionID={sessionID()} />
-            <TaskReceipts
-              sessionID={sessionID()}
-              onReport={(report) => setSettlement("report", report)}
-              load={async () => {
-                const result = await sdk.client.session.receipts({ sessionID: sessionID() })
-                if (!result.data) throw new Error("Receipt lookup failed")
-                return result.data
-              }}
-            />
-          </>
+          <TaskReceipts
+            sessionID={sessionID()}
+            onReport={(report) => setSettlement("report", report)}
+            version={`${tokens()}:${cost()}:${counts().all}`}
+            load={async () => {
+              const result = await sdk.client.session.receipts({ sessionID: sessionID() })
+              if (!result.data) throw new Error("Receipt lookup failed")
+              return result.data
+            }}
+          />
         )}
       </Show>
 

@@ -1,6 +1,5 @@
 import { AppearanceSections } from "../settings-general"
 import { PanelBody, PanelHeader, PanelScroll } from "./_shared"
-import { Subagents } from "./subagents"
 import "./preference-panels.css"
 
 /**
@@ -15,7 +14,6 @@ export default function General() {
         <PanelHeader title="General" description="How OpenScience looks and behaves on this device." />
         <PanelBody>
           <AppearanceSections />
-          <Subagents />
         </PanelBody>
       </div>
     </PanelScroll>

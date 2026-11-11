@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   collapsibleTracePart,
-  settledCollapsible,
   elapsedLabel,
   formatTaskDuration,
   parseTaskHandoff,
@@ -384,27 +383,4 @@ describe("parseTaskHandoff", () => {
     expect(pluralize(3, "op")).toBe("3 ops")
     expect(pluralize(2, "source", "sources")).toBe("2 sources")
   })
-})
-
-test("a worker stopped at its limit or deadline stays visible in a folded, answered turn", () => {
-  const task = (stopReason?: string) =>
-    ({
-      id: "part",
-      sessionID: "session",
-      messageID: "message",
-      type: "tool",
-      tool: "task",
-      callID: "call",
-      state: {
-        status: "completed",
-        input: {},
-        output: "",
-        title: "",
-        time: { start: 1, end: 2 },
-        metadata: { sessionId: "child", outcome: "partial", budget: { stopReason } },
-      },
-    }) as never
-  for (const reason of ["budget_limit", "token_limit", "deadline"]) expect(settledCollapsible(task(reason))).toBe(false)
-  expect(settledCollapsible(task("cancelled"))).toBe(true)
-  expect(settledCollapsible(task())).toBe(true)
 })

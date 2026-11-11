@@ -33,9 +33,6 @@ import { UsageLogging } from "./usage-logging"
 import { ModelCallTrace } from "./model-call-trace"
 
 import { ManagedPricing } from "@/provider/managed-pricing"
-import { SubagentBudget } from "./subagent-budget"
-import { SubagentDispatch } from "./subagent-dispatch"
-import { SubagentInput } from "./subagent-input"
 import { CallLink } from "@/provider/call-link"
 
 export namespace LLM {
@@ -106,28 +103,11 @@ export namespace LLM {
   }
 
   export async function stream(input: StreamInput) {
-    const bounded = await SubagentBudget.read(input.sessionID)
-    if (bounded)
-      input = {
-        ...input,
-        model: await Provider.getModel(bounded.worker.model.providerID, bounded.worker.model.modelID),
-      }
     const requested = input.small
       ? { model: undefined, options: {}, headers: {} }
       : ProviderTransform.tier(input.model, input.user.tier)
     const selected = requested.model ? await Provider.getModel(input.model.providerID, requested.model) : input.model
-    const traceRoute = SessionTraceStore.ModelCall.shape.route
-      .catch("custom")
-      .parse(input.route ?? (await resolveAccessRoute(selected.providerID, selected.id)))
-    if (bounded)
-      input = {
-        ...input,
-        abort: AbortSignal.any([input.abort, AbortSignal.timeout(Math.max(0, bounded.worker.deadline - Date.now()))]),
-      }
-    if (bounded && (await resolveAccessRoute(selected.providerID, selected.id)) !== bounded.worker.route) {
-      await SubagentBudget.stop(input.sessionID, "route_changed")
-      throw new SubagentBudget.LimitError("route_changed")
-    }
+    const traceRoute = input.route ?? (await resolveAccessRoute(selected.providerID, selected.id))
     const routed =
       traceRoute === "managed"
         ? await ManagedPricing.forRequest(selected, input.small ? undefined : input.user.tier)
@@ -242,7 +222,7 @@ export namespace LLM {
 
     await input.onReasoningEffortResolved?.(resolvedReasoningEffort(params.options))
 
-    const requestedOutputTokens = isCodex
+    const maxOutputTokens = isCodex
       ? undefined
       : ProviderTransform.maxOutputTokens(
           input.model.api.npm,
@@ -274,7 +254,7 @@ export namespace LLM {
     }
 
     const trace = input.trace
-    const configuredTools = Toolset.active(tools)
+    const activeTools = Toolset.active(tools)
     // A change in the offered tools is announced by the loop as a durable
     // message in the transcript, never as a system line for one request: a
     // line that appears on the step of the change and vanishes on the next
@@ -330,22 +310,6 @@ export namespace LLM {
         }
       : undefined
     if (binding) await UsageLogging.bind(binding)
-    const allowance = bounded
-      ? await SubagentDispatch.prepare({
-          sessionID: input.sessionID,
-          model: input.model,
-          route: traceRoute,
-          inputTokens: await SubagentInput.prompt({ system, messages: providerMessages, tools }),
-          tier: input.small ? undefined : input.user.tier,
-          maxOutputTokens: requestedOutputTokens,
-          thinkingTokens: isCodex ? 0 : ProviderTransform.thinkingTokens(input.model.api.npm, params.options),
-          internal: input.small,
-        })
-      : undefined
-    if (allowance?.notice && !input.small)
-      providerMessages.push({ role: "user", content: `<system-reminder>${allowance.notice}</system-reminder>` })
-    const maxOutputTokens = isCodex ? undefined : (allowance?.maxOutputTokens ?? requestedOutputTokens)
-    const activeTools = allowance?.wrapup ? [] : configuredTools
     const calls = ModelCallTrace.create({
       context: {
         ...parent,
@@ -357,10 +321,6 @@ export namespace LLM {
       route: SessionTraceStore.ModelCall.shape.route.catch("custom").parse(traceRoute),
       provider: routed.providerID,
       model: routed.api.id,
-      pricingModel: input.model,
-      outputBound: allowance?.maxOutputTokens ?? requestedOutputTokens,
-      tier: input.small ? undefined : input.user.tier,
-      internal: input.small,
       binding,
     })
     const partial = { text: "", reasoning: "", truncated: false }
@@ -422,17 +382,10 @@ export namespace LLM {
       temperature: params.temperature,
       topP: params.topP,
       topK: params.topK,
-      providerOptions: ProviderTransform.providerOptions(
-        input.model,
-        ProviderTransform.fitThinking(input.model.api.npm, params.options, allowance?.thinkingTokens),
-      ),
+      providerOptions: ProviderTransform.providerOptions(input.model, params.options),
       activeTools,
       tools,
-      ...(allowance?.wrapup
-        ? { toolChoice: "none" as const }
-        : input.toolChoice
-          ? { toolChoice: input.toolChoice }
-          : {}),
+      ...(input.toolChoice ? { toolChoice: input.toolChoice } : {}),
       maxOutputTokens,
       abortSignal: input.abort,
       headers: {

@@ -23,13 +23,11 @@ import { TaskReceipts } from "@/session/task-receipts"
 import { SessionTrace } from "../../session/trace"
 import { RuntimeEvents } from "../../runtime/events"
 import { SessionLoopState } from "../../session/loop-state"
-import { SubagentRoutes } from "./subagents"
 
 const log = Log.create({ service: "server" })
 
 export const SessionRoutes = lazy(() =>
   new Hono()
-    .route("/:sessionID/subagents", SubagentRoutes())
     .get(
       "/",
       describeRoute({
