@@ -443,7 +443,7 @@ export namespace SubagentBudget {
     if (!limit)
       throw new LimitError(
         "setup_required",
-        `This conversation has no ${input.unit === "usd" ? "USD" : "token"} budget for subagents. Set a ${input.unit === "usd" ? "USD" : "token"} limit under Settings → General → Bounded runs, then start the worker again.`,
+        `This conversation has no ${input.unit === "usd" ? "USD" : "token"} budget for subagents. Set a ${input.unit === "usd" ? "USD" : "token"} limit under Settings → General → Subagents, then start the worker again.`,
       )
     return mutate(input.rootSessionID, (current) => {
       const pool = current ?? create(input.rootSessionID, settings, true)
