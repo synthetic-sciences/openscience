@@ -8,31 +8,11 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
-- Save Bounded runs settings to `subagents.json` beside the global config instead of inside it, so an older OpenScience desktop app or CLI sharing the config folder no longer refuses to start with “Unrecognized key: subagents”. A block already written into the global config moves there on the next settings save.
-
-- When a subagent stops at its limit or deadline, the main agent continues it from the conversation budget if enough is left; otherwise it asks you in the chat whether to add budget or finish without the worker, and finishes from the worker's saved result if no one answers within 5 minutes (with Independence set to Independent, or in a headless run, it finishes without asking), and the worker's card in the chat offers **Continue with remaining budget**, **Add … and continue** or **Continue with a new deadline**. A continuation is refused, with the reason, when the remaining budget cannot cover another call like the worker's largest. The Context window's **Subagent budget** and **Cost so far** load on open, show readable amounts with exact values on hover, and group settled Wallet charges by model; Charge details is folded into Cost so far and Technical details. Workers are labelled by their task description.
-- Keep the research database at schema version 7 so earlier releases can still open it; the subagent allowance tables are added on open. Fit Anthropic thinking budgets inside subagent allowances and shrink them near the limit instead of stopping early. A finished subagent is no longer marked as limit-reached when its session-title call cannot fit beside its own request. Retried continuations return the running call, unknown subagents return 404, and conflicts are documented as 409. The allowance panel refreshes as workers start and stop and keeps each subagent's original task as its label.
-- Return subagent reservations after definite request rejections, estimate images separately from encoded bytes, and preserve deadline reasons when a stream timeout or late reservation finishes first. Document the trusted local API boundary for allowance increases.
-
+- Add opt-in bounded subagent runs (off by default). Turn on **Enable bounded runs** in Settings → General → Subagents to give subagents a shared USD or token budget, a deadline and a model; the suggested limits are USD 5, 1,000,000 tokens and 10 minutes, with increases of USD 1 or 250,000 tokens. A worker stops at its limit or deadline and keeps its partial results. The main agent then continues it from the remaining budget, or asks you in the chat whether to add budget or finish without it, and finishes from the worker's saved result if no one answers within 5 minutes; with Independence set to Independent, or in a headless run, it never asks. The worker's card and the Context window's **Subagent budget** show what each worker found and spent, and offer **Continue with remaining budget**, **Add … and continue** or **Continue with a new deadline**.
+- Save subagent settings to `subagents.json` beside the global config, so an older OpenScience desktop app or CLI sharing the config folder still starts.
+- The Context window's **Cost so far** loads on open, shows readable amounts with exact values on hover, and groups settled Wallet charges by model.
 - Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
-
-- Preserve cancellation and deadline reasons when usage arrives late. Report individually cancelled background workers to the lead, and use one subagent model setting so caller inheritance is explicit.
-
-- Explain refused subagent requests without implying unused allowances were spent. Keep bounded command output, including interrupted output, in worker reports and compacted receipts.
-
-- Let subagents use their full approved work allowance until completion or a runtime limit. Return execution evidence for main-agent assessment on every exit, including normal completion, without an automatic early handoff or separate summarizer.
-
-- Preserve stopped workers' model and reasoning variant and deliver background completion notices after cancelled waits. Retain bounded command and test-output receipts when a worker cannot finish its report.
-
 - Use supported low reasoning effort for Claude Opus 5.5 internal summaries.
-
-- Correct premature subagent budget stops by pricing input and output at the selected speed and context tier, showing each worker's grant in its accounting receipt.
-
-- Apply USD allowances to priced local model proxies, preserve worker accounting in handoffs, and check ancestor allocations before nested workers continue.
-
-- Make bounded subagent runs opt-in, off by default. Suggest USD 5, 1,000,000 tokens and a 10-minute deadline, with user-approved increases of USD 1 or 250,000 tokens. Existing conversations keep their saved mode and limits.
-
-- Give Task subagents shared user-approved USD or token allowances, a deadline and a selected model. Stop further calls at the limit, keep partial results, and let users increase the allowance and continue the same child. Recognize environment and configuration API keys as paid access.
 
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.

@@ -403,7 +403,7 @@ test("a conversation without a budget explains where to set one", async () => {
     fn: async () => {
       await expect(
         SubagentBudget.open({ ...input("a", 10), unit: "usd", route: "byok" as const, settings: { tokens: 200 } }),
-      ).rejects.toThrow(/Settings → General → Bounded runs/)
+      ).rejects.toThrow(/Settings → General → Subagents/)
     },
   })
 })
