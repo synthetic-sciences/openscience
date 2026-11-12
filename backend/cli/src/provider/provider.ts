@@ -108,7 +108,13 @@ export namespace Provider {
     onRequest?: () => void
     /** Durable attempt recording, installed by the session trace path. */
     callTrace?: {
-      start: (timing: Omit<RequestTiming, "completedAt" | "outcome">, body: unknown) => Promise<void>
+      /** Runs before dispatch. May return bookkeeping that is not needed
+       * before the request is sent: it starts right after dispatch and is
+       * awaited before the response (or a failure) is reported. */
+      start: (
+        timing: Omit<RequestTiming, "completedAt" | "outcome">,
+        body: unknown,
+      ) => Promise<void | (() => Promise<void>)>
       finish: (
         timing: RequestTiming,
         response: { status?: number; hold?: string; providerRequest?: string },
@@ -531,8 +537,14 @@ export namespace Provider {
     }
 
     let response: Response
+    let late: (() => Promise<void>) | undefined
+    let afterDispatch: Promise<void> | undefined
+    const settled = () =>
+      (afterDispatch ?? Promise.resolve()).catch((error) =>
+        log.warn("request bookkeeping failed", { requestID: timing.requestID, error }),
+      )
     try {
-      await context.callTrace?.start(timing, init?.body)
+      late = (await context.callTrace?.start(timing, init?.body)) || undefined
       response = await waitForActivity({
         run: () => {
           const fetchInit = {
@@ -553,7 +565,9 @@ export namespace Provider {
           } catch {
             log.debug("request dispatch callback failed")
           }
-          return fetchFn(fetchInput, fetchInit)
+          const sent = fetchFn(fetchInput, fetchInit)
+          if (late && !afterDispatch) afterDispatch = Promise.resolve().then(late)
+          return sent
         },
         phase: "connect",
         idleTimeoutMs: connectTimeoutMs,
@@ -561,6 +575,7 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
+      await settled()
       evidence.status = response.status
       evidence.hold = options.managed ? CallLink.hold(response.headers) : undefined
       evidence.providerRequest = CallLink.providerRequest(response.headers)
@@ -578,6 +593,7 @@ export namespace Provider {
         gatewayTiming: timing.gatewayTiming,
       })
     } catch (error) {
+      await settled()
       await emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
       throw connectFailure(error, signal)
     }

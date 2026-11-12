@@ -55,19 +55,26 @@ export namespace ModelCallTrace {
               internal: input.internal,
             })
           if (!input.binding) return
-          const request: unknown =
-            typeof body === "string"
-              ? await Promise.resolve()
-                  .then(() => JSON.parse(body))
-                  .catch(() => body)
-              : undefined
-          await UsageLogging.bind({ ...input.binding, operationID: timing.requestID })
-          await UsageLogging.event({ ...input.binding, operationID: timing.requestID }, "model.request", {
-            phase: "dispatch",
-            http_call_id: timing.requestID,
-            attempt: timing.attempt,
-            ...(request === undefined ? {} : { request }),
-          })
+          const binding = { ...input.binding, operationID: timing.requestID }
+          // Only the write-ahead above must precede dispatch. Parsing and
+          // redacting the request body and queueing the usage event run once
+          // the request is on its way; the transport awaits them before it
+          // reports the response, so model.request still precedes it.
+          return async () => {
+            const request: unknown =
+              typeof body === "string"
+                ? await Promise.resolve()
+                    .then(() => JSON.parse(body))
+                    .catch(() => body)
+                : undefined
+            await UsageLogging.bind(binding)
+            await UsageLogging.event(binding, "model.request", {
+              phase: "dispatch",
+              http_call_id: timing.requestID,
+              attempt: timing.attempt,
+              ...(request === undefined ? {} : { request }),
+            })
+          }
         },
         async finish(timing, response) {
           const current = calls.get(timing.requestID)
