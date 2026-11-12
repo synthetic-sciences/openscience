@@ -271,7 +271,12 @@ export namespace Server {
             c.req.path === "/log" ||
             c.req.path === "/runtime/events" ||
             c.req.header("upgrade") === "websocket"
-          if (switching || streaming) return next()
+          // Health reads nothing under the data root. Keeping it out of the
+          // barrier spares it the per-request marker (fsync and rename, slow
+          // under Windows Defender) and any relocation wait, so a live server
+          // never looks unreachable to the workspace's health check (#1042).
+          const health = c.req.path === "/global/health"
+          if (switching || streaming || health) return next()
           await DataRootBarrier.during(Global.Path.data, next, 120_000)
         })
         .route("/global", GlobalRoutes())
