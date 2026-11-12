@@ -401,6 +401,21 @@ export namespace DataRootBarrier {
     }
   }
 
+  /** The barrier configuration a long-lived holder was opened under. */
+  export function generation(): unknown {
+    return configuration
+  }
+
+  /** Whether a holder opened under `opened` must let go: the barrier was
+   * reconfigured, or a relocation has published its intent and is waiting
+   * for live operation markers to clear. One lstat; never throws. */
+  export async function superseded(filepath: string, opened: unknown): Promise<boolean> {
+    if (configuration !== opened) return true
+    const current = configured(filepath)
+    if (!current) return false
+    return !!(await fs.lstat(paths(current.config).intent).catch(() => undefined))
+  }
+
   /** Mark one durable operation. Paths outside the managed root are no-ops.
    * Each relevant call owns a physical marker. A live async-local ancestor may
    * admit the child past a newly-published relocation intent, but retains its
