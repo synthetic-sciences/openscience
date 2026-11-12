@@ -101,6 +101,18 @@ export namespace SessionProcessor {
     })
   }
 
+  /** Start the managed balance read as soon as a turn is submitted, so the
+   * pre-dispatch balance check joins it (getBalance deduplicates in-flight
+   * reads) instead of waiting a round trip after prompt assembly. Only
+   * managed routes read the balance; never throws. */
+  export function warmFunding(model: { providerID: string; modelID: string }): void {
+    void resolveCredentialSource(model.providerID, model.modelID)
+      .then((source) => {
+        if (requiresWalletBalance(source)) OpenScience.warmBalance()
+      })
+      .catch(() => undefined)
+  }
+
   /** The funding choice for one managed turn. A scoped session needs no
    * account read here; the balance check and the gateway's funding echo prove
    * authorization before anything is charged. */

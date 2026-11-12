@@ -416,6 +416,7 @@ export namespace SessionPrompt {
       throw e
     })
     assertPreparing(input.sessionID)
+    if (message.info.role === "user") SessionProcessor.warmFunding(message.info.model)
     // Recency for the session list; not needed before the model call.
     void Session.touch(input.sessionID).catch((error) => log.warn("failed to touch session", { error }))
 
