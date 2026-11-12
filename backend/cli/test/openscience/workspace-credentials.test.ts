@@ -566,6 +566,24 @@ describe("workspace credential sync", () => {
     expect(await OpenScience.getSession()).toEqual(session)
   })
 
+  test("a managed request without a caller snapshot reads no account status for a scoped session", async () => {
+    // A scoped workspace session is resolved from the local session file, as
+    // getRequestSnapshot documents; an Ace status read here sat in front of
+    // every model call.
+    await OpenScience.saveSession(session)
+    const selected = await OpenScience.managedRequestSnapshot(session.api_key)
+    expect(selected).toMatchObject(session)
+    expect(authReads).toBe(0)
+  })
+
+  test("a legacy unscoped session without a caller snapshot still reconciles before dispatch", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({ api_key: "thk_fixture_pre_sync", user_id: "" })
+    const selected = await OpenScience.managedRequestSnapshot("thk_fixture_pre_sync")
+    expect(selected).toMatchObject({ api_key: "thk_fixture_pre_sync", user_id: "user_a", organization_id: "org_a" })
+    expect(authReads).toBeGreaterThan(0)
+  })
+
   test("unsaved legacy and workspace keys both fail before managed dispatch", async () => {
     await OpenScience.clearSession()
     for (const key of ["thk_fixture_unsaved", "osk_fixture_unsaved"]) {

@@ -161,7 +161,12 @@ const cli = yargs(hideBin(process.argv))
       if (!capabilityCanary) {
         UsageLogging.start()
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
-        void import("./openscience").then((m) => m.OpenScience.startCredentialSync())
+        void import("./openscience").then((m) => {
+          m.OpenScience.startCredentialSync()
+          // A signed-in device's first managed turn would otherwise wait on a
+          // cold balance read before its model call.
+          m.OpenScience.warmBalance()
+        })
       }
 
       // First authenticated startup quietly provisions the app-owned Python

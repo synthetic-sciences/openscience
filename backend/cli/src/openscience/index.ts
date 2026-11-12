@@ -601,6 +601,7 @@ export namespace OpenScience {
         loginWarning =
           "Signed in, but the previous device could not be revoked remotely. You can remove it from account settings."
       }
+      warmBalance()
       return current
     })
   }
@@ -731,7 +732,12 @@ export namespace OpenScience {
   ): Promise<FundingSnapshot> {
     if (!apiKey || !isAtlasManagedKey(apiKey)) throw new FundingContextError("Expected an Atlas managed API key.")
     const selected = await (async () => {
-      if (!snapshot) return (await getReconciledFundingState())?.snapshot
+      // Without a caller snapshot, resolve it the way getRequestSnapshot does:
+      // a scoped session comes from the local session file, and only a legacy
+      // unscoped one needs the status read. Reconciling every managed request
+      // put an Ace round trip in front of each model call for no added check;
+      // the gateway still proves the funding context on the response.
+      if (!snapshot) return (await getRequestSnapshot()) ?? undefined
       if (!isLegacyUnscoped(snapshot)) return snapshot
       const state = await getReconciledFundingState()
       if (state?.snapshot.api_key !== snapshot.api_key) return
@@ -1776,6 +1782,16 @@ export namespace OpenScience {
 
   export function invalidateBalanceCache(): void {
     invalidateBalance()
+  }
+
+  /** Start a balance read in the background so the next managed turn finds it
+   * cached instead of waiting on an Ace round trip before the model call. The
+   * usual cache rules apply afterwards (30 s fresh, positive values served
+   * stale for up to 5 minutes while a refresh runs). Never throws. */
+  export function warmBalance(): void {
+    void getRequestSnapshot()
+      .then((snapshot) => (snapshot ? getBalance(snapshot) : null))
+      .catch(() => undefined)
   }
 
   export async function getBalance(snapshot?: FundingSnapshot): Promise<number | null> {
