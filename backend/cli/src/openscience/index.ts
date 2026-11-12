@@ -1244,20 +1244,32 @@ export namespace OpenScience {
   export async function loginWithKey(rawKey: string): Promise<OpenScienceSession> {
     const key = rawKey.trim()
     if (!isAccountKey(key)) throw new Error("Expected an OpenScience API key starting with `thk_` or `osk_`.")
-    const probe = await atlasFetch(`${apiBase()}/api/cli/balance`, {
-      headers: { Authorization: `Bearer ${key}`, [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL },
-    })
-    if (probe.status === 401 || probe.status === 403)
+    // Both reads need only the key, so they run together: one round trip to
+    // Ace instead of two. The probe's verdict is still checked first, so a
+    // rejected key reports as rejected whatever the status read returned.
+    const [probe, response] = await Promise.all([
+      atlasFetch(`${apiBase()}/api/cli/balance`, {
+        headers: { Authorization: `Bearer ${key}`, [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL },
+      }),
+      atlasFetch(`${apiBase()}/api/v1/auth/status`, {
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
+        },
+      }).catch(() => undefined),
+    ])
+    const discard = () => response?.body?.cancel().catch(() => undefined)
+    await probe.body?.cancel().catch(() => undefined)
+    if (probe.status === 401 || probe.status === 403) {
+      await discard()
       throw new Error("That key was rejected. Double-check it and try again.")
-    if (!probe.ok) throw new Error(`Could not validate key: HTTP ${probe.status}`)
+    }
+    if (!probe.ok) {
+      await discard()
+      throw new Error(`Could not validate key: HTTP ${probe.status}`)
+    }
 
-    const response = await atlasFetch(`${apiBase()}/api/v1/auth/status`, {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        Accept: "application/json",
-        [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
-      },
-    }).catch(() => undefined)
     // The status read is what tells this client which workspace the key is
     // billed to; a session written without it would carry no user and never
     // verify, so the login fails here instead of half-succeeding.

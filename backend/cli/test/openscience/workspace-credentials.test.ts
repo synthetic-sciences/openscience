@@ -51,6 +51,8 @@ let authOrg: string | undefined = "org_a"
 let authUser = "user_a"
 let authStatus = 200
 let authReads = 0
+/** When set, the balance probe answers only after an auth status read arrives. */
+let balanceWaitsForStatus: PromiseWithResolvers<void> | undefined
 let browser: { state: string; redirect_uri: string } | undefined
 let redeemed = session
 let revokes: string[] = []
@@ -97,8 +99,13 @@ const server = Bun.serve({
         return new Response(null, { status: 400 })
       return Response.json(redeemed)
     }
+    if (new URL(input.url).pathname === "/api/cli/balance" && balanceWaitsForStatus) {
+      await balanceWaitsForStatus.promise
+      return Response.json({ balance_usd: 10 })
+    }
     if (new URL(input.url).pathname === "/api/v1/auth/status") {
       authReads++
+      balanceWaitsForStatus?.resolve()
       return Response.json(
         {
           user: { user_id: authUser },
@@ -192,6 +199,7 @@ beforeEach(async () => {
   authUser = "user_a"
   authStatus = 200
   authReads = 0
+  balanceWaitsForStatus = undefined
   browser = undefined
   redeemed = session
   revokes = []
@@ -429,6 +437,21 @@ describe("workspace credential sync", () => {
     expect(revokes).toEqual([`Bearer ${session.api_key}`])
     expect(revokes).not.toContain(`Bearer ${loser}`)
     expect(revokes).not.toContain(`Bearer ${final}`)
+  })
+
+  test("key sign-in sends the balance probe and the status read together", async () => {
+    // The fixture holds the probe until the status read arrives: sequential
+    // reads would never finish, concurrent ones cost one round trip.
+    balanceWaitsForStatus = Promise.withResolvers<void>()
+    const key = "osk_fixture_concurrent_login"
+    const result = await Promise.race([
+      OpenScience.loginWithKey(key),
+      Bun.sleep(5_000).then(() => {
+        throw new Error("the probe waited for the status read")
+      }),
+    ])
+    expect(result.api_key).toBe(key)
+    expect(authReads).toBeGreaterThan(0)
   })
 
   test("an old server without self-revoke keeps the replacement active and exposes a warning", async () => {
