@@ -416,8 +416,8 @@ export namespace SessionPrompt {
       throw e
     })
     assertPreparing(input.sessionID)
-    await Session.touch(input.sessionID)
-    assertPreparing(input.sessionID)
+    // Recency for the session list; not needed before the model call.
+    void Session.touch(input.sessionID).catch((error) => log.warn("failed to touch session", { error }))
 
     // this is backwards compatibility for allowing `tools` to be specified when
     // prompting
@@ -1652,7 +1652,12 @@ export namespace SessionPrompt {
       })
       msgs = reminders.messages
 
+      // Step-1 side work (title, summary) waits until the main request is
+      // sent so it does not compete with it for the database and network.
+      let dispatched!: () => void
+      const sent = new Promise<void>((resolve) => (dispatched = resolve))
       const processor = SessionProcessor.create({
+        onDispatch: () => dispatched(),
         assistantMessage: {
           id: await MessageV2.nextMessageID(sessionID),
           parentID: lastUser.id,
@@ -1953,16 +1958,20 @@ export namespace SessionPrompt {
       if (step === 1) {
         // Both are fire-and-forget; ensureTitle is single-flight per session,
         // so repeated step-1 iterations never start a second title request.
-        ensureTitle({
-          session,
-          modelID: lastUser.model.modelID,
-          providerID: lastUser.model.providerID,
-          history: msgs,
-        }).catch((error) => log.error("failed to generate session title", { error }))
-        SessionSummary.summarize({
-          sessionID,
-          messageID: lastUser.id,
-        }).catch((error) => log.error("failed to summarize session", { error }))
+        // They start once the main request is sent (or the step ends without
+        // one), never ahead of it.
+        void sent.then(() => {
+          ensureTitle({
+            session,
+            modelID: lastUser.model.modelID,
+            providerID: lastUser.model.providerID,
+            history: msgs,
+          }).catch((error) => log.error("failed to generate session title", { error }))
+          SessionSummary.summarize({
+            sessionID,
+            messageID: lastUser.id,
+          }).catch((error) => log.error("failed to summarize session", { error }))
+        })
       }
 
       // P0.1 telemetry: record what the working context is made of, by content type,
@@ -2013,7 +2022,7 @@ export namespace SessionPrompt {
         ],
         tools,
         model,
-      })
+      }).finally(() => dispatched())
       // The final budgeted child turn is a structured partial outcome, not a
       // normal completion. Persist that fact instead of relying on the model
       // to repeat the MAX_STEPS prose correctly.

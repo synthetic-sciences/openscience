@@ -818,6 +818,8 @@ export namespace SessionProcessor {
     // Status published while this processor is streaming. Compaction turns pass
     // "compacting" so the UI can show a distinct loader.
     busyStatus?: "busy" | "compacting"
+    // Called each time a model request is handed to the transport.
+    onDispatch?: () => void
   }) {
     let snapshot: string | undefined
     let blocked = false
@@ -1035,6 +1037,7 @@ export namespace SessionProcessor {
               onRequest: () => {
                 output?.start()
                 progress("connecting")
+                input.onDispatch?.()
               },
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
