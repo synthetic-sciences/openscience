@@ -57,6 +57,7 @@ import { ProviderTransform } from "./transform"
 import { LocalProvider } from "./local"
 import { fetchWithFreshConnection } from "../util/fetch"
 import { ManagedH2 } from "./managed-h2"
+import { ManagedGzip } from "./managed-gzip"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -487,6 +488,36 @@ export namespace Provider {
   /** Bound the wait for response headers, then observe the response until it
    * finishes or is cancelled. Optional body-idle and total deadlines remain
    * available, but a quiet established response is not an error by default. */
+  /**
+   * Send a managed gateway call, gzip-compressing a large string body once the
+   * gateway has advertised it reads gzip (see ManagedGzip). A 415 makes the
+   * gateway forgotten and the plain body is sent once more.
+   */
+  async function sendManaged(
+    fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
+    fetchInput: any,
+    init: BunFetchRequestInit,
+  ): Promise<Response> {
+    const endpoint = fetchInput instanceof Request ? fetchInput.url : String(fetchInput)
+    const packed = typeof init.body === "string" ? ManagedGzip.encode(endpoint, init.body) : undefined
+    if (!packed) {
+      const response = await fetchFn(fetchInput, init)
+      ManagedGzip.learn(endpoint, response.headers)
+      return response
+    }
+    const headers = new Headers(init.headers as HeadersInit | undefined)
+    headers.set("content-encoding", "gzip")
+    headers.delete("content-length")
+    const response = await fetchFn(fetchInput, { ...init, body: packed, headers })
+    if (response.status !== 415) {
+      ManagedGzip.learn(endpoint, response.headers)
+      return response
+    }
+    ManagedGzip.forget(endpoint)
+    await response.body?.cancel().catch(() => undefined)
+    return fetchFn(fetchInput, init)
+  }
+
   export async function fetchWithIdleWatchdog(
     fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
     fetchInput: any,
@@ -566,7 +597,7 @@ export namespace Provider {
           } catch {
             log.debug("request dispatch callback failed")
           }
-          const sent = fetchFn(fetchInput, fetchInit)
+          const sent = options.managed ? sendManaged(fetchFn, fetchInput, fetchInit) : fetchFn(fetchInput, fetchInit)
           if (late && !afterDispatch) afterDispatch = Promise.resolve().then(late)
           return sent
         },
