@@ -207,24 +207,24 @@ export default function Privacy() {
 
             <h2 id="website">This website</h2>
             <p>
-              We store your cookie preference for up to 180 days. Optional website analytics starts when you allow
-              Analytics in Cookie preferences. We use Google Analytics through Google Tag Manager to measure page
-              visits, installer-link clicks and successful copies of installation commands. These events include the
-              page, platform and action, and do not include the command text, email addresses or research content. An
-              installer-link click records that click; it does not establish that the application was installed.
+              We store your cookie choice for up to 180 days. Optional website analytics starts when you accept the
+              cookie notice. We use Google Analytics through Google Tag Manager to measure page visits, installer-link
+              clicks and successful copies of installation commands. These events include the page, platform and action,
+              and do not include the command text, email addresses or research content. An installer-link click records
+              that click; it does not establish that the application was installed.
             </p>
 
             <p>
-              Cookie preferences lists the optional services available on this website. Where Personalized advertising
-              is offered, opting in allows Google advertising measurement and audiences. Where Business visitor
-              identification is offered, the named provider may associate eligible visits with a company or a
-              professional profile. These choices are separate from Analytics and can be changed from the footer. A
-              Global Privacy Control signal disables advertising and visitor identification.
+              You can change your choice at any time through Cookies in the footer. If we add personalized advertising
+              or business visitor identification, the cookie notice will name it and ask again before it starts.
+              Accepting would then allow Google advertising measurement and audiences, or let the provider named in the
+              notice associate eligible visits with a company or a professional profile. A Global Privacy Control signal
+              disables advertising and visitor identification.
             </p>
             <p>
               Withdrawing a choice stops future collection by the relevant website tags and clears the matching
               first-party cookies we control. It does not automatically delete records already held by a provider.
-              Contact us for deletion requests. Each Synthetic Sciences website stores its own preferences.
+              Contact us for deletion requests. Each Synthetic Sciences website stores its own choice.
             </p>
             <p>
               The main landing pages serve fonts from this domain. Documentation pages also request a font from Google

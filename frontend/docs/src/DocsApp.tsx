@@ -881,7 +881,7 @@ export function DocumentationPage({ initialPath }: { initialPath?: string } = {}
               </a>
               <a href={import.meta.env.BASE_URL + "llms.txt"}>Documentation index</a>
               <button type="button" data-cookie-preferences="">
-                Cookie preferences
+                Cookies
               </button>
             </div>
           ) : null}

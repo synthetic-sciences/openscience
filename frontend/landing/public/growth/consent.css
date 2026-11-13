@@ -1,81 +1,149 @@
-@import url("./vendor/cookieconsent-3.3.0.css");
+/* The cookie notice: one quiet line in the corner, in the site's own type and colours.
+   The defaults suit a light page such as the OpenScience documentation; each site sets its own below. */
+#growth-consent {
+  --gc-bg: rgb(255 255 255 / 0.94);
+  --gc-text: rgb(88 91 98);
+  --gc-strong: rgb(30 32 36);
+  --gc-chip: rgb(30 32 36 / 0.06);
+  --gc-chip-hover: rgb(30 32 36 / 0.11);
+  --gc-chip-on: rgb(30 32 36 / 0.16);
+  --gc-shadow: 0 1px 2px rgb(30 32 36 / 0.05), 0 6px 22px rgb(30 32 36 / 0.08);
+  --gc-radius: 10px;
+  --gc-chip-radius: 6px;
 
-#cc-main {
-  --cc-font-family: inherit;
-  --cc-bg: #faf9f6;
-  --cc-footer-bg: #f0eee8;
-  --cc-footer-color: #55534e;
-  --cc-primary-color: #242424;
-  --cc-secondary-color: #55534e;
-  --cc-btn-primary-bg: #242424;
-  --cc-btn-primary-color: #faf9f6;
-  --cc-btn-primary-border-color: #242424;
-  --cc-btn-primary-hover-bg: #45443f;
-  --cc-btn-primary-hover-color: #fff;
-  --cc-btn-primary-hover-border-color: #45443f;
-  --cc-btn-secondary-bg: #f0eee8;
-  --cc-btn-secondary-color: #242424;
-  --cc-btn-secondary-border-color: #dedbd3;
-  --cc-btn-secondary-hover-bg: #e6e3db;
-  --cc-btn-secondary-hover-color: #242424;
-  --cc-btn-secondary-hover-border-color: #d6d1c6;
-  --cc-separator-border-color: #dedbd3;
-  --cc-cookie-category-block-bg: #f0eee8;
-  --cc-cookie-category-block-hover-bg: #e9e6df;
-  --cc-toggle-on-bg: #242424;
-  --cc-toggle-off-bg: #817e76;
-  --cc-toggle-readonly-bg: #bbb8b0;
-  --cc-modal-border-radius: 6px;
-  --cc-btn-border-radius: 3px;
-  --cc-modal-transition-duration: 0.15s;
-  --cc-modal-margin: 18px;
-  --cc-z-index: 2147483640;
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483640;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--gc-radius);
+  background: var(--gc-bg);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--gc-shadow);
+  color: var(--gc-text);
   font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: normal;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
-#cc-main .cm__title,
-#cc-main .pm__title {
-  font-weight: 600;
+#growth-consent.is-open {
+  opacity: 1;
+  transform: none;
 }
-#cc-main .cm__desc,
-#cc-main .pm__section-desc {
-  font-size: 14px;
-  line-height: 1.55;
+#growth-consent p {
+  min-width: 0;
+  margin: 0;
+}
+#growth-consent a {
+  color: var(--gc-strong);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+}
+#growth-consent a:hover {
+  text-decoration-color: currentColor;
+}
+#growth-consent div {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+#growth-consent button {
+  margin: 0;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: var(--gc-chip-radius);
+  background: var(--gc-chip);
+  color: var(--gc-strong);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+#growth-consent button:hover {
+  background: var(--gc-chip-hover);
+}
+#growth-consent button[aria-pressed="true"] {
+  background: var(--gc-chip-on);
+}
+#growth-consent button:focus-visible,
+#growth-consent a:focus-visible {
+  outline: 2px solid var(--gc-strong);
+  outline-offset: 2px;
 }
 [data-cookie-preferences] {
   font: inherit;
   color: inherit;
   cursor: pointer;
 }
-@media (prefers-reduced-motion: reduce) {
-  #cc-main {
-    --cc-modal-transition-duration: 0s;
-  }
+
+/* Synthetic Sciences: the paper page. */
+html[data-growth-site="syntheticsciences"] #growth-consent {
+  --gc-bg: rgb(247 245 240 / 0.94);
+  --gc-text: rgb(76 72 65);
+  --gc-strong: rgb(22 21 19);
+  --gc-chip: rgb(22 21 19 / 0.06);
+  --gc-chip-hover: rgb(22 21 19 / 0.11);
+  --gc-chip-on: rgb(22 21 19 / 0.16);
+  --gc-radius: 10px;
+  --gc-chip-radius: 6px;
 }
 
-html[data-growth-site="openscience"][data-growth-section="landing"] #cc-main,
-html[data-growth-site="openscience"].dark #cc-main,
-html[data-theme="dark"] #cc-main {
+/* OpenScience: the dark landing page, and the documentation in dark mode. */
+html[data-growth-site="openscience"][data-growth-section="landing"] #growth-consent,
+html[data-growth-site="openscience"].dark #growth-consent {
   color-scheme: dark;
-  --cc-bg: #191919;
-  --cc-primary-color: #eeeae3;
-  --cc-secondary-color: #bcb7af;
-  --cc-footer-bg: #202020;
-  --cc-footer-color: #bcb7af;
-  --cc-btn-primary-bg: #eeeae3;
-  --cc-btn-primary-color: #191919;
-  --cc-btn-primary-border-color: #eeeae3;
-  --cc-btn-primary-hover-bg: #d9d3c9;
-  --cc-btn-primary-hover-color: #191919;
-  --cc-btn-primary-hover-border-color: #d9d3c9;
-  --cc-btn-secondary-bg: #282828;
-  --cc-btn-secondary-color: #eeeae3;
-  --cc-btn-secondary-border-color: #45413b;
-  --cc-btn-secondary-hover-bg: #35332f;
-  --cc-btn-secondary-hover-color: #eeeae3;
-  --cc-btn-secondary-hover-border-color: #5a554d;
-  --cc-separator-border-color: #45413b;
-  --cc-cookie-category-block-bg: #242424;
-  --cc-cookie-category-block-hover-bg: #2c2b28;
-  --cc-toggle-on-bg: #eeeae3;
-  --cc-toggle-off-bg: #6d6860;
+  --gc-bg: hsl(0 6% 10% / 0.94);
+  --gc-text: hsl(0 2% 58%);
+  --gc-strong: hsl(0 15% 94%);
+  --gc-chip: hsl(0 15% 94% / 0.07);
+  --gc-chip-hover: hsl(0 15% 94% / 0.12);
+  --gc-chip-on: hsl(0 15% 94% / 0.18);
+  --gc-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  --gc-radius: 8px;
+  --gc-chip-radius: 4px;
+}
+
+/* Ascent: the site's own tokens, so both of its themes follow; pill shapes like its buttons. */
+html[data-growth-site="ascent"] #growth-consent {
+  --gc-bg: color-mix(in srgb, var(--card, #1b1913) 94%, transparent);
+  --gc-text: var(--muted, #999896);
+  --gc-strong: var(--ink, #edecec);
+  --gc-chip: color-mix(in srgb, var(--ink, #edecec) 7%, transparent);
+  --gc-chip-hover: color-mix(in srgb, var(--ink, #edecec) 12%, transparent);
+  --gc-chip-on: color-mix(in srgb, var(--ink, #edecec) 18%, transparent);
+  --gc-shadow: 0 8px 28px rgb(0 0 0 / 0.4);
+  --gc-radius: 22px;
+  --gc-chip-radius: 999px;
+  padding-left: 16px;
+}
+html[data-growth-site="ascent"][data-theme="light"] #growth-consent {
+  --gc-shadow: 0 1px 2px rgb(26 25 21 / 0.05), 0 6px 22px rgb(26 25 21 / 0.09);
+}
+
+@media (max-width: 520px) {
+  #growth-consent {
+    right: 12px;
+    left: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    max-width: none;
+    justify-content: space-between;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #growth-consent {
+    transform: none;
+    transition: none;
+  }
 }

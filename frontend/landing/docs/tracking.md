@@ -1,10 +1,10 @@
 # Website measurement
 
-The public `growth/` module loads CookieConsent from a pinned, self-hosted distribution. Production hostnames and public service IDs are in `public/growth/config.js`. Update `consentRevision` when a new optional purpose or provider needs a fresh choice. Provider keys belong in the provider's account or server secrets.
+The public `growth/` module loads CookieConsent from a pinned, self-hosted distribution. Production hostnames and public service IDs are in `public/growth/config.js`. Update `consentRevision` when a new optional purpose or provider needs a fresh choice. Provider keys belong in the provider's account or server secrets. The site draws its own notice, one line with Decline and Accept styled by `consent.css`; CookieConsent only stores the choice and never shows its dialogs. The footer's Cookies link reopens the notice.
 
 Google Tag Manager loads only after analytics or advertising consent. Tags in the container must honor the corresponding Google consent state and the `growth_analytics` / `growth_advertising` event flags. The container receives only the `growth_*` events defined in `policy.js`. Configure the GA4 tag with automatic page views and enhanced measurement disabled, then use the supplied page event once. Production tags are disabled on previews by the hostname allowlist.
 
-Visitor identification is disabled until an approved provider script is supplied. Its separate preference gates loading. Global Privacy Control overrides advertising and identification choices. Withdrawal saves the new choice, clears the matching first-party cookies, and reloads the page to terminate previously loaded scripts.
+Visitor identification is disabled until an approved provider script is supplied. Accept enables every configured optional category, so before enabling identification, name it in the notice's sentence in `site.js` and raise `consentRevision`. Global Privacy Control overrides advertising and identification choices. Withdrawal saves the new choice, clears the matching first-party cookies, and reloads the page to terminate previously loaded scripts.
 
 A successful clipboard operation emits `install_command_copy`. An installer link emits `download_click`. Contact/email actions represent a click or draft, not a delivered lead. Product activation requires its own product event and attribution integration.
 
