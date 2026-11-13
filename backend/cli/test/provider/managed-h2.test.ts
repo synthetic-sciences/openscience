@@ -215,7 +215,7 @@ test("an origin that cannot be reached falls back to the fresh connection and is
   }
 })
 
-test("a gateway with a small upload window is not used", async () => {
+test("a gateway with a small upload window stops taking calls once its settings arrive", async () => {
   const small = http2.createServer()
   small.on("stream", (stream) => {
     stream.respond({ ":status": 200 })
@@ -225,12 +225,23 @@ test("a gateway with a small upload window is not used", async () => {
   const fresh = spyOn(FetchUtil, "fetchWithFreshConnection").mockImplementation(async () => new Response("fresh"))
   try {
     const url = `http://127.0.0.1:${(small.address() as net.AddressInfo).port}/v1/chat/completions`
+    // The first call does not wait for the server's SETTINGS.
+    expect(["h2", "fresh"]).toContain(await (await ManagedH2.fetch(url, { method: "POST", body: "{}" })).text())
+    await Bun.sleep(50)
     expect(await (await ManagedH2.fetch(url, { method: "POST", body: "{}" })).text()).toBe("fresh")
     expect(ManagedH2.stats.fallbacks).toBe(1)
   } finally {
     fresh.mockRestore()
     small.close()
   }
+})
+
+test("a new connection sends its first request without waiting for the server's settings", async () => {
+  const started = performance.now()
+  const response = await post("first")
+  expect(response.status).toBe(200)
+  await response.text()
+  expect(performance.now() - started).toBeLessThan(400)
 })
 
 test("warming opens the connection with a request at once, and the model call reuses it", async () => {

@@ -177,20 +177,25 @@ export namespace ManagedH2 {
       session.once("connect", () => {
         if (session.alpnProtocol && session.alpnProtocol !== "h2" && session.alpnProtocol !== "h2c")
           return fail(new Unsuitable(`gateway negotiated ${session.alpnProtocol}`))
-        const ready = () => {
-          if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve(held)
+        // The server's SETTINGS (with its upload window) arrive one round trip
+        // after the handshake. Requests do not wait for them: until then the
+        // protocol's default 64 KiB window applies. A gateway that turns out
+        // to advertise a small window stops taking new calls.
+        const check = () => {
           const window = session.remoteSettings?.initialWindowSize ?? 0
-          if (window < options.minWindow) return fail(new Unsuitable(`gateway upload window ${window} is too small`))
-          settled = true
-          clearTimeout(timer)
-          resolve(held)
+          if (window >= options.minWindow || held.dead) return
+          log.info("gateway upload window too small for connection reuse", { origin, window })
+          unsuitable.set(origin, Date.now() + options.unsuitableMs)
+          stats.fallbacks++
+          held.draining = true
+          if (sessions.get(origin) === pending) sessions.delete(origin)
+          if (held.streams === 0) kill(held, "upload window too small", origin, pending)
         }
-        // The server's SETTINGS (with its upload window) follow the handshake.
-        if (session.remoteSettings && session.remoteSettings.initialWindowSize !== 65_535) ready()
-        else {
-          session.once("remoteSettings", ready)
-          setTimeout(ready, 500).unref?.()
-        }
+        if (session.remoteSettings?.initialWindowSize !== undefined && session.remoteSettings.initialWindowSize !== 65_535) check()
+        else session.once("remoteSettings", check)
       })
     })
     sessions.set(origin, pending)
