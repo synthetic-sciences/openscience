@@ -490,8 +490,10 @@ export namespace Provider {
    * available, but a quiet established response is not an error by default. */
   /**
    * Send a managed gateway call, gzip-compressing a large string body once the
-   * gateway has advertised it reads gzip (see ManagedGzip). A 415 makes the
-   * gateway forgotten and the plain body is sent once more.
+   * gateway has advertised it reads gzip (see ManagedGzip). A gateway that
+   * cannot read the gzip body (415, or a 400 for an unreadable body from a
+   * gateway that predates gzip) gets the plain body once more and plain bodies
+   * for a while.
    */
   async function sendManaged(
     fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
@@ -509,7 +511,7 @@ export namespace Provider {
     headers.set("content-encoding", "gzip")
     headers.delete("content-length")
     const response = await fetchFn(fetchInput, { ...init, body: packed, headers })
-    if (response.status !== 415) {
+    if (!(await ManagedGzip.refused(response))) {
       ManagedGzip.learn(endpoint, response.headers)
       return response
     }
