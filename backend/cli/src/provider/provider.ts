@@ -3168,6 +3168,8 @@ export namespace Provider {
       delete options["idleTimeout"]
       delete options["connectTimeout"]
       delete options["outputIdleTimeout"]
+      // OpenScience-only: read by the session processor, never sent to the SDK.
+      delete options["requireStreamCompletion"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, then add an activity watchdog.

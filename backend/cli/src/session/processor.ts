@@ -379,6 +379,46 @@ export namespace SessionProcessor {
     return { ...state, attempt: state.attempt + 1, transientRetries: state.transientRetries + 1 }
   }
 
+  /** Raised when a model stream ends without the provider's final event. */
+  export class StreamIncompleteError extends Error {
+    constructor() {
+      super("The model's reply ended before the provider finished it")
+      this.name = "StreamIncompleteError"
+    }
+  }
+
+  /** A step that ended without the provider's final event (checked for
+   * Ace-managed calls and providers with requireStreamCompletion): no finish reason
+   * (the SDK reports "unknown" or, for OpenRouter, "other" until one arrives)
+   * and no usage. Every compliant provider stream ends with a finish reason
+   * in its last event, so this means the reply was cut off, whatever the
+   * transport (HTTP/1.1, HTTP/2) or runtime reported. */
+  export function incompleteStep(step: {
+    finishReason: string
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+  }) {
+    if (step.finishReason !== "unknown" && step.finishReason !== "other") return false
+    const usage = step.usage
+    const counted = [usage?.inputTokens, usage?.outputTokens, usage?.totalTokens].some(
+      (value) => typeof value === "number" && Number.isFinite(value) && value > 0,
+    )
+    return !counted
+  }
+
+  export function incompleteError(error: unknown) {
+    if (!(error instanceof StreamIncompleteError)) return
+    return new MessageV2.APIError({
+      message:
+        "The model's reply ended before the provider finished it (the connection was probably lost). Partial output and completed tool results are kept; resubmitting starts a new request.",
+      isRetryable: false,
+      metadata: {
+        code: "provider_stream_incomplete",
+        openscience_state: "stopped",
+        action: "resubmit",
+      },
+    }).toObject()
+  }
+
   export function timeoutError(error: unknown) {
     const timeout = Provider.requestTimeout(error)
     if (!timeout) return
@@ -1036,6 +1076,11 @@ export namespace SessionProcessor {
             }
 
             const provider = await Provider.getProvider(input.model.providerID)
+            // Ace-managed streams always end with a finish reason and usage;
+            // other providers opt in (some local OpenAI-compatible servers
+            // end complete replies without either).
+            const requireCompletion =
+              requiresWalletBalance(credentialSource) || provider?.options?.["requireStreamCompletion"] === true
             const deadline = Provider.resolveOutputIdleTimeout(provider.options.outputIdleTimeout)
             output = outputWatchdog({
               timeout: deadline,
@@ -1253,6 +1298,9 @@ export namespace SessionProcessor {
                 }
 
                 case "finish-step":
+                  // A reply cut off before the provider's final event must not
+                  // pass as a complete answer.
+                  if (requireCompletion && incompleteStep(value)) throw new StreamIncompleteError()
                   // The call and hold travel on this step's own response: in
                   // a multi-step tool stream the SDK may already be fetching
                   // the next step, so shared request state would name it.
@@ -1461,7 +1509,10 @@ export namespace SessionProcessor {
               ...(cause !== e ? { thrown: e } : {}),
               stack: JSON.stringify(e.stack),
             })
-            const error = timeoutError(cause) ?? MessageV2.fromError(cause, { providerID: input.model.providerID })
+            const error =
+              timeoutError(cause) ??
+              incompleteError(cause) ??
+              MessageV2.fromError(cause, { providerID: input.model.providerID })
             // A context-window overflow is deterministic — retrying the same
             // oversized input can only fail again. Signal the outer loop (via the
             // "overflow" return below) to compact + resume instead of burning
