@@ -82,62 +82,69 @@ function applyConsent() {
   controller.update(effectiveConsent(accepted, privacySignal))
 }
 
-const sections = [
-  {
-    title: "Your preferences",
-    description:
-      "Choose which optional services this website can use. You can change these choices at any time from the footer.",
-  },
-  {
-    title: "Essential",
-    description: "Stores your cookie preferences and supports the site's settings. This category is always enabled.",
-    linkedCategory: "necessary",
-  },
-  {
-    title: "Analytics",
-    description:
-      "Helps us understand page visits, downloads and which links are useful. Optional analytics starts after you allow it.",
-    linkedCategory: "analytics",
-  },
-  ...(categories.advertising
-    ? [
-        {
-          title: "Personalized advertising",
-          description:
-            "Allows Google advertising measurement and audiences so we can show relevant OpenScience ads after your visit.",
-          linkedCategory: "advertising",
-        },
-      ]
-    : []),
-  ...(categories.identification
-    ? [
-        {
-          title: "Business visitor identification",
-          description:
-            "Allows " +
-            config.identificationName +
-            " to match eligible visits to businesses and, where supported, professional profiles. We use these matches to understand potential customers and investors.",
-          linkedCategory: "identification",
-        },
-      ]
-    : []),
-  ...(privacySignal
-    ? [
-        {
-          title: "Global Privacy Control",
-          description:
-            "Your browser's privacy signal disables personalized advertising and business visitor identification on this site.",
-        },
-      ]
-    : []),
-  {
-    title: "More information",
-    description:
-      'Read our <a href="' +
-      config.privacyUrl +
-      '">privacy policy</a> or contact <a href="mailto:team@syntheticsciences.ai">team@syntheticsciences.ai</a>.',
-  },
+// The notice: one quiet line in the corner, styled by consent.css with each site's own type and colours.
+// CookieConsent stores the choice; its own dialogs are never drawn. Accept enables every optional category
+// above, so the sentence names each one: a new category needs words here and a consent revision.
+const uses = [
+  "measure visits",
+  ...(categories.advertising ? ["measure our ads"] : []),
+  ...(categories.identification ? ["let " + config.identificationName + " identify visiting companies"] : []),
 ]
+const usesText = uses.length < 2 ? uses.join("") : uses.slice(0, -1).join(", ") + " and " + uses[uses.length - 1]
+const automated = navigator.webdriver === true || /bot|crawl|spider|slurp|teoma/i.test(navigator.userAgent)
+const quickMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches
+let notice = null
+
+function closeNotice() {
+  if (!notice) return
+  const element = notice
+  notice = null
+  element.classList.remove("is-open")
+  window.setTimeout(() => element.remove(), quickMotion() ? 0 : 200)
+}
+
+function choose(all) {
+  closeNotice()
+  CookieConsent.acceptCategory(all ? "all" : [])
+}
+
+function openNotice(focus) {
+  if (notice) {
+    if (focus) notice.querySelector("button")?.focus()
+    return
+  }
+  const decided = CookieConsent.validConsent()
+  const accepted = CookieConsent.acceptedCategory("analytics")
+  notice = document.createElement("div")
+  notice.id = "growth-consent"
+  notice.setAttribute("role", "region")
+  notice.setAttribute("aria-label", "Cookies")
+  const text = document.createElement("p")
+  const link = document.createElement("a")
+  link.href = config.privacyUrl
+  link.textContent = "cookies"
+  text.append("We use ", link, " to " + usesText + ".")
+  const actions = document.createElement("div")
+  for (const [label, all] of [
+    ["Decline", false],
+    ["Accept", true],
+  ]) {
+    const button = document.createElement("button")
+    button.type = "button"
+    button.textContent = label
+    if (decided) button.setAttribute("aria-pressed", String(all === accepted))
+    button.addEventListener("click", () => choose(all))
+    actions.append(button)
+  }
+  notice.append(text, actions)
+  document.body.append(notice)
+  window.requestAnimationFrame(() => window.requestAnimationFrame(() => notice?.classList.add("is-open")))
+  if (focus) actions.querySelector("button").focus()
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && notice && CookieConsent.validConsent()) closeNotice()
+})
 
 document.addEventListener(
   "click",
@@ -145,7 +152,7 @@ document.addEventListener(
     const element = event.target instanceof Element ? event.target : null
     if (element?.closest("[data-cookie-preferences]")) {
       event.preventDefault()
-      CookieConsent.showPreferences()
+      openNotice(true)
       return
     }
     const link = element?.closest("a[href]")
@@ -197,43 +204,16 @@ await CookieConsent.run({
     expiresAfterDays: 180,
   },
   hideFromBots: true,
+  autoShow: false,
   manageScriptTags: false,
   autoClearCookies: false,
-  guiOptions: {
-    consentModal: { layout: "box", position: "bottom left", equalWeightButtons: true, flipButtons: false },
-    preferencesModal: { layout: "box", equalWeightButtons: true, flipButtons: false },
-  },
   categories,
   onConsent: applyConsent,
   onChange: applyConsent,
   language: {
     default: "en",
-    translations: {
-      en: {
-        consentModal: {
-          title: "Your privacy choices",
-          description:
-            "We use essential storage for site preferences. With your permission, we also measure visits and downloads" +
-            (categories.advertising || categories.identification
-              ? " and use the optional services described in preferences"
-              : "") +
-            ".",
-          acceptAllBtn: "Accept all",
-          acceptNecessaryBtn: "Reject optional",
-          showPreferencesBtn: "Preferences",
-          footer: '<a href="' + config.privacyUrl + '">Privacy policy</a>',
-        },
-        preferencesModal: {
-          title: "Cookie preferences",
-          acceptAllBtn: "Accept all",
-          acceptNecessaryBtn: "Reject optional",
-          savePreferencesBtn: "Save preferences",
-          closeIconLabel: "Close preferences",
-          serviceCounterLabel: "Service|Services",
-          sections,
-        },
-      },
-    },
+    translations: { en: { consentModal: { title: "Cookies", description: "We use cookies to " + usesText + "." } } },
   },
 })
 applyConsent()
+if (!CookieConsent.validConsent() && !automated) openNotice(false)
