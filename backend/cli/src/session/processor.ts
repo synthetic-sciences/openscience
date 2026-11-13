@@ -19,6 +19,7 @@ import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { accessRoute, resolveCredentialSource } from "./access-route"
 import { requiresWalletBalance } from "./access-route"
+import { ManagedH2 } from "@/provider/managed-h2"
 import type { CredentialSource } from "./access-route"
 import { OpenScience } from "@/openscience"
 import { BILLING_URL } from "@/endpoints"
@@ -107,8 +108,13 @@ export namespace SessionProcessor {
    * managed routes read the balance; never throws. */
   export function warmFunding(model: { providerID: string; modelID: string }): void {
     void resolveCredentialSource(model.providerID, model.modelID)
-      .then((source) => {
-        if (requiresWalletBalance(source)) OpenScience.warmBalance()
+      .then(async (source) => {
+        if (!requiresWalletBalance(source)) return
+        OpenScience.warmBalance()
+        // Open the gateway connection while the prompt is assembled, so the
+        // model call finds it ready (a no-op unless ManagedH2 is switched on).
+        const base = (await Provider.getProvider(model.providerID))?.options?.["baseURL"]
+        if (Provider.isAtlasProxyBaseURL(base)) ManagedH2.warm(base)
       })
       .catch(() => undefined)
   }

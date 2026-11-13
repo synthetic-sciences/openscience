@@ -56,6 +56,7 @@ import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { LocalProvider } from "./local"
 import { fetchWithFreshConnection } from "../util/fetch"
+import { ManagedH2 } from "./managed-h2"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -3266,8 +3267,12 @@ export namespace Provider {
           )
         }
 
+        // Managed gateway calls may ride a reused, liveness-checked HTTP/2
+        // connection (ManagedH2, behind OPENSCIENCE_MANAGED_H2); it falls back
+        // to the fresh connection whenever it cannot carry the call.
+        const transport = managed && !customFetch ? ManagedH2.fetch : fetchFn
         const request = () =>
-          fetchWithIdleWatchdog(fetchFn, input, opts, {
+          fetchWithIdleWatchdog(transport, input, opts, {
             providerID: model.providerID,
             modelID: model.id,
             idleTimeout: scaleIdleTimeout(idleTimeout, opts.body, managed),
