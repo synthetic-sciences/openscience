@@ -102,6 +102,8 @@ let currentPage = pageLocation(window.location.href)
 controller.pageview(currentPage)
 window.addEventListener("popstate", () => {
   currentPage = pageLocation(window.location.href)
+  visibleSeconds = 0
+  articleRead = false
   controller.pageview(currentPage)
 })
 // These marketing sites use document navigation or popstate. A page can explicitly announce a SPA route.

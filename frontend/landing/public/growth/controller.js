@@ -5,10 +5,13 @@ export function createController(config, transport) {
   let googleLoaded = false
   let identityLoaded = false
   let stopped = false
+  let initialized = false
   let page = null
 
   function update(next) {
     if (stopped) return
+    if (initialized && Object.keys(consent).every((key) => consent[key] === next[key])) return
+    initialized = true
     const revoked = Object.keys(consent).filter((key) => consent[key] && !next[key])
     consent = { ...next }
     transport.notify(consent)
