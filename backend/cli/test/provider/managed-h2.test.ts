@@ -369,3 +369,31 @@ test("keep-warm accepts an asynchronous gateway lookup (the saved Ace session)",
     restore()
   }
 })
+
+test("activity re-opens a dropped connection at once instead of at the next check", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 30_000, keepWarmPendingMs: 50, keepaliveMs: 60_000, keepWarmIdleStopMs: 60_000 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    expect(await until(() => sessionsOpened.length === 1 && health() === 1)).toBe(true)
+    drop() // e.g. the network changed while the app sat idle
+    await Bun.sleep(1_100) // past the one-check-per-second guard
+    ManagedH2.activity() // the UI reconnected / a session opened
+    expect(await until(() => sessionsOpened.length === 2, 1_000)).toBe(true)
+  } finally {
+    restore()
+  }
+})
+
+test("a check that fires far later than due (the machine slept) replaces the idle connection", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 100, keepaliveMs: 60_000, keepWarmIdleStopMs: 60_000, keepWarmWakeMs: 300 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    expect(await until(() => sessionsOpened.length === 1 && health() === 1)).toBe(true)
+    // Block the event loop: timers fire late, as after a suspend.
+    const until_ = Date.now() + 700
+    while (Date.now() < until_) {}
+    expect(await until(() => sessionsOpened.length === 2, 2_000)).toBe(true)
+  } finally {
+    restore()
+  }
+})

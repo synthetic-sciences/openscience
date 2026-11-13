@@ -47,6 +47,7 @@ export namespace ManagedH2 {
     keepWarmIdleStopMs: number
     keepWarmPendingMs: number
     keepWarmPendingForMs: number
+    keepWarmWakeMs: number
   }
 
   const defaults: Options = {
@@ -70,6 +71,9 @@ export namespace ManagedH2 {
     // a second of sync instead of at the next 30 s check.
     keepWarmPendingMs: 1_000,
     keepWarmPendingForMs: 2 * 60_000,
+    // A check that fires this much later than due means the machine slept:
+    // the idle connection is replaced rather than trusted.
+    keepWarmWakeMs: 15_000,
   }
   let options: Options = { ...defaults }
 
@@ -485,12 +489,19 @@ export namespace ManagedH2 {
         timer?: ReturnType<typeof setTimeout>
         until: number
         started: number
+        due?: number
+        lastCheck?: number
+        tick?: () => Promise<void>
       }
     | undefined
 
   /** Extend the keep-warm window (a UI connected, a session opened, a call). */
   export function activity() {
-    if (keeper) keeper.until = Date.now() + options.keepWarmIdleStopMs
+    if (!keeper) return
+    keeper.until = Date.now() + options.keepWarmIdleStopMs
+    // A UI reconnecting (e.g. after a laptop wakes) or a session opening is
+    // the moment to make sure the connection is live, not the next check.
+    if (keeper.tick && Date.now() - (keeper.lastCheck ?? 0) >= 1_000) void keeper.tick()
   }
 
   /** Keep a gateway connection warm while the app is in use. `resolve` returns
@@ -509,11 +520,16 @@ export namespace ManagedH2 {
     const schedule = (known: boolean) => {
       if (keeper !== current) return
       const pending = !known && Date.now() - current.started < options.keepWarmPendingForMs
-      current.timer = setTimeout(() => void tick(), pending ? options.keepWarmPendingMs : options.keepWarmCheckMs)
+      const delay = pending ? options.keepWarmPendingMs : options.keepWarmCheckMs
+      if (current.timer) clearTimeout(current.timer)
+      current.due = Date.now() + delay
+      current.timer = setTimeout(() => void tick(), delay)
       current.timer.unref?.()
     }
     const tick = async () => {
       if (keeper !== current) return
+      const woke = current.due !== undefined && Date.now() - current.due > options.keepWarmWakeMs
+      current.lastCheck = Date.now()
       const base =
         enabled() && Date.now() <= current.until ? await Promise.resolve(current.resolve()).catch(() => undefined) : undefined
       const url = base ? target(base) : undefined
@@ -522,6 +538,10 @@ export namespace ManagedH2 {
       void (async () => {
         const existing = sessions.get(url.origin)
         const held = existing ? await existing.catch(() => undefined) : undefined
+        // After a suspend the connection is probably dead even if its clock
+        // says otherwise; replace it unless a call is still on it (the PING
+        // liveness check covers that one).
+        if (woke && held && !held.dead && held.streams === 0) kill(held, "machine resumed", url.origin, existing)
         const live = held && !held.dead && !held.draining && Date.now() - held.lastActive < options.idleCloseMs
         if (!live) return warmNow(base!)
         if (held.streams > 0 || Date.now() - held.lastRequest < options.keepaliveMs) return
@@ -529,6 +549,7 @@ export namespace ManagedH2 {
         await response.body?.cancel().catch(() => undefined)
       })().catch(() => undefined)
     }
+    current.tick = tick
     void tick()
   }
 
