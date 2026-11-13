@@ -3,6 +3,7 @@ import http2 from "node:http2"
 import net from "node:net"
 import * as FetchUtil from "../../src/util/fetch"
 import { ManagedH2 } from "../../src/provider/managed-h2"
+import { ManagedGzip } from "../../src/provider/managed-gzip"
 
 // A local h2c "gateway" behind a TCP proxy that can silently drop traffic in
 // both directions: the half-open connection (#584) the transport must detect.
@@ -19,7 +20,7 @@ server.on("stream", (stream, headers) => {
   stream.on("end", async () => {
     seen.push({ path: String(headers[":path"]), key: headers["idempotency-key"] as string | undefined, body })
     if (headers[":path"] === "/api/health") {
-      stream.respond({ ":status": 200 })
+      stream.respond({ ":status": 200, "x-openscience-request-encoding": "gzip" })
       return stream.end("ok")
     }
     if (behaviour === "slow-headers") await Bun.sleep(5_000)
@@ -254,6 +255,23 @@ test("warming opens the connection with a request at once, and the model call re
   await response.text()
   expect(sessionsOpened).toHaveLength(1)
   expect(ManagedH2.stats).toMatchObject({ connects: 1, reused: 1 })
+})
+
+test("warming learns that the gateway reads gzip bodies, so the first model call can be compressed", async () => {
+  const previous = process.env["OPENSCIENCE_MANAGED_GZIP"]
+  process.env["OPENSCIENCE_MANAGED_GZIP"] = "1"
+  ManagedGzip.reset()
+  try {
+    const endpoint = `${origin}/api/llm/proxy/openrouter/v1/chat/completions`
+    const body = JSON.stringify({ content: "x".repeat(20_000) })
+    expect(ManagedGzip.encode(endpoint, body)).toBeUndefined()
+    ManagedH2.warm(origin)
+    expect(await until(() => ManagedGzip.encode(endpoint, body) !== undefined)).toBe(true)
+  } finally {
+    if (previous === undefined) delete process.env["OPENSCIENCE_MANAGED_GZIP"]
+    else process.env["OPENSCIENCE_MANAGED_GZIP"] = previous
+    ManagedGzip.reset()
+  }
 })
 
 // Keep-warm: open at app start, keep usable until the first message.

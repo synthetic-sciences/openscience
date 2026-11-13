@@ -1,6 +1,7 @@
 import http2 from "node:http2"
 import { fetchWithFreshConnection } from "@/util/fetch"
 import { Log } from "@/util/log"
+import { ManagedGzip } from "./managed-gzip"
 
 /**
  * Reused HTTP/2 connection for managed model calls to the Ace gateway.
@@ -472,6 +473,7 @@ export namespace ManagedH2 {
       const acquired = await acquire(url.origin)
       if (acquired.reused) return
       const response = await once(new URL(options.warmPath, url.origin), { method: "GET" }, acquired.held, false)
+      ManagedGzip.learn(url.href, response.headers)
       await response.body?.cancel().catch(() => undefined)
     })().catch((error) => {
       if (error instanceof Unsuitable) {
@@ -546,6 +548,7 @@ export namespace ManagedH2 {
         if (!live) return warmNow(base!)
         if (held.streams > 0 || Date.now() - held.lastRequest < options.keepaliveMs) return
         const response = await once(new URL(options.warmPath, url.origin), { method: "GET" }, held, true)
+        ManagedGzip.learn(url.href, response.headers)
         await response.body?.cancel().catch(() => undefined)
       })().catch(() => undefined)
     }
