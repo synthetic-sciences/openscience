@@ -480,7 +480,12 @@ export namespace ManagedH2 {
   // Keep-warm: open the gateway connection when the app starts and keep it
   // usable until the first message, which may come minutes later.
   let keeper:
-    | { resolve: () => string | undefined; timer?: ReturnType<typeof setTimeout>; until: number; started: number }
+    | {
+        resolve: () => string | undefined | Promise<string | undefined>
+        timer?: ReturnType<typeof setTimeout>
+        until: number
+        started: number
+      }
     | undefined
 
   /** Extend the keep-warm window (a UI connected, a session opened, a call). */
@@ -495,7 +500,7 @@ export namespace ManagedH2 {
    * connection has carried none for `keepaliveMs`; checks stop
    * `keepWarmIdleStopMs` after the last activity and resume with the next
    * one. A no-op while the switch is off. */
-  export function keepWarm(resolve: () => string | undefined) {
+  export function keepWarm(resolve: () => string | undefined | Promise<string | undefined>) {
     stopKeepWarm()
     const current = { resolve, until: Date.now() + options.keepWarmIdleStopMs, started: Date.now() } as NonNullable<
       typeof keeper
@@ -504,12 +509,13 @@ export namespace ManagedH2 {
     const schedule = (known: boolean) => {
       if (keeper !== current) return
       const pending = !known && Date.now() - current.started < options.keepWarmPendingForMs
-      current.timer = setTimeout(tick, pending ? options.keepWarmPendingMs : options.keepWarmCheckMs)
+      current.timer = setTimeout(() => void tick(), pending ? options.keepWarmPendingMs : options.keepWarmCheckMs)
       current.timer.unref?.()
     }
-    const tick = () => {
+    const tick = async () => {
       if (keeper !== current) return
-      const base = enabled() && Date.now() <= current.until ? current.resolve() : undefined
+      const base =
+        enabled() && Date.now() <= current.until ? await Promise.resolve(current.resolve()).catch(() => undefined) : undefined
       const url = base ? target(base) : undefined
       schedule(!!url)
       if (!url || skip(url.origin)) return
@@ -523,7 +529,7 @@ export namespace ManagedH2 {
         await response.body?.cancel().catch(() => undefined)
       })().catch(() => undefined)
     }
-    tick()
+    void tick()
   }
 
   export function stopKeepWarm() {

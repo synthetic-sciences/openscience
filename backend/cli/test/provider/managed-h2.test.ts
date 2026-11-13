@@ -356,3 +356,16 @@ test("keep-warm opens the connection within about a second of the gateway becomi
     restore()
   }
 })
+
+test("keep-warm accepts an asynchronous gateway lookup (the saved Ace session)", async () => {
+  const restore = ManagedH2.configure({ keepWarmPendingMs: 50, keepaliveMs: 10_000, keepWarmIdleStopMs: 60_000 })
+  try {
+    ManagedH2.keepWarm(async () => {
+      await Bun.sleep(20)
+      return origin
+    })
+    expect(await until(() => sessionsOpened.length === 1 && health() === 1)).toBe(true)
+  } finally {
+    restore()
+  }
+})
