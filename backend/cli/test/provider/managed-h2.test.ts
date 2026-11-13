@@ -342,3 +342,17 @@ test("keep-warm does nothing with the switch off or before the gateway is known"
     restore()
   }
 })
+
+test("keep-warm opens the connection within about a second of the gateway becoming known", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 30_000, keepWarmPendingMs: 50, keepaliveMs: 10_000, keepWarmIdleStopMs: 60_000 })
+  try {
+    let base: string | undefined
+    ManagedH2.keepWarm(() => base)
+    await Bun.sleep(150)
+    expect(sessionsOpened).toHaveLength(0)
+    base = origin // credential sync finished
+    expect(await until(() => sessionsOpened.length === 1 && health() === 1, 500)).toBe(true)
+  } finally {
+    restore()
+  }
+})

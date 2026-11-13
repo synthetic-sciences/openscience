@@ -45,6 +45,8 @@ export namespace ManagedH2 {
     keepaliveMs: number
     keepWarmCheckMs: number
     keepWarmIdleStopMs: number
+    keepWarmPendingMs: number
+    keepWarmPendingForMs: number
   }
 
   const defaults: Options = {
@@ -63,6 +65,11 @@ export namespace ManagedH2 {
     keepWarmCheckMs: 30_000,
     // Stop keeping warm this long after the last activity.
     keepWarmIdleStopMs: 30 * 60_000,
+    // Until credential sync names the gateway, check this often (for up to
+    // keepWarmPendingForMs after start), so the connection opens within about
+    // a second of sync instead of at the next 30 s check.
+    keepWarmPendingMs: 1_000,
+    keepWarmPendingForMs: 2 * 60_000,
   }
   let options: Options = { ...defaults }
 
@@ -473,7 +480,7 @@ export namespace ManagedH2 {
   // Keep-warm: open the gateway connection when the app starts and keep it
   // usable until the first message, which may come minutes later.
   let keeper:
-    | { resolve: () => string | undefined; timer: ReturnType<typeof setInterval>; until: number }
+    | { resolve: () => string | undefined; timer?: ReturnType<typeof setTimeout>; until: number; started: number }
     | undefined
 
   /** Extend the keep-warm window (a UI connected, a session opened, a call). */
@@ -490,11 +497,21 @@ export namespace ManagedH2 {
    * one. A no-op while the switch is off. */
   export function keepWarm(resolve: () => string | undefined) {
     stopKeepWarm()
+    const current = { resolve, until: Date.now() + options.keepWarmIdleStopMs, started: Date.now() } as NonNullable<
+      typeof keeper
+    >
+    keeper = current
+    const schedule = (known: boolean) => {
+      if (keeper !== current) return
+      const pending = !known && Date.now() - current.started < options.keepWarmPendingForMs
+      current.timer = setTimeout(tick, pending ? options.keepWarmPendingMs : options.keepWarmCheckMs)
+      current.timer.unref?.()
+    }
     const tick = () => {
-      if (!keeper || !enabled()) return
-      if (Date.now() > keeper.until) return
-      const base = keeper.resolve()
+      if (keeper !== current) return
+      const base = enabled() && Date.now() <= current.until ? current.resolve() : undefined
       const url = base ? target(base) : undefined
+      schedule(!!url)
       if (!url || skip(url.origin)) return
       void (async () => {
         const existing = sessions.get(url.origin)
@@ -506,14 +523,11 @@ export namespace ManagedH2 {
         await response.body?.cancel().catch(() => undefined)
       })().catch(() => undefined)
     }
-    const timer = setInterval(tick, options.keepWarmCheckMs)
-    timer.unref?.()
-    keeper = { resolve, timer, until: Date.now() + options.keepWarmIdleStopMs }
     tick()
   }
 
   export function stopKeepWarm() {
-    if (keeper) clearInterval(keeper.timer)
+    if (keeper?.timer) clearTimeout(keeper.timer)
     keeper = undefined
   }
 }
