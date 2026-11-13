@@ -40,8 +40,13 @@ export function eventForLink(href, currentUrl, placement = "page") {
   }
   const properties = { placement: ["header", "footer", "page"].includes(placement) ? placement : "page" }
   if (url.protocol === "mailto:") return { name: "contact_click", properties: { ...properties, method: "email" } }
-  if (url.hostname === "github.com" && /^\/synthetic-sciences\/openscience\/releases\/(latest\/download|download\/)/i.test(url.pathname)) {
-    const platform = url.pathname.match(/OpenScience-(mac-arm64|mac-x64|windows-x64|linux-x64|linux-arm64)\./i)?.[1]?.toLowerCase()
+  if (
+    url.hostname === "github.com" &&
+    /^\/synthetic-sciences\/openscience\/releases\/(latest\/download|download\/)/i.test(url.pathname)
+  ) {
+    const platform = url.pathname
+      .match(/OpenScience-(mac-arm64|mac-x64|windows-x64|linux-x64|linux-arm64)\./i)?.[1]
+      ?.toLowerCase()
     return platform ? { name: "download_click", properties: { ...properties, platform } } : null
   }
   if (url.hostname === "github.com" && /^\/synthetic-sciences(\/|$)/i.test(url.pathname)) {
@@ -75,6 +80,7 @@ const EVENTS = {
 
 export function cleanEvent(name, properties = {}) {
   if (!Object.hasOwn(EVENTS, name)) return null
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return null
   const clean = {}
   if (["header", "footer", "page"].includes(properties.placement)) clean.placement = properties.placement
   for (const [field, allowed] of Object.entries(EVENTS[name])) {

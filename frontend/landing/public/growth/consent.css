@@ -3,6 +3,8 @@
 #cc-main {
   --cc-font-family: inherit;
   --cc-bg: #faf9f6;
+  --cc-footer-bg: #f0eee8;
+  --cc-footer-color: #55534e;
   --cc-primary-color: #242424;
   --cc-secondary-color: #55534e;
   --cc-btn-primary-bg: #242424;
@@ -30,7 +32,22 @@
   --cc-z-index: 2147483640;
   font-family: inherit;
 }
-#cc-main .cm__title, #cc-main .pm__title { font-weight: 600; }
-#cc-main .cm__desc, #cc-main .pm__section-desc { font-size: 14px; line-height: 1.55; }
-[data-cookie-preferences] { font: inherit; color: inherit; cursor: pointer; }
-@media (prefers-reduced-motion: reduce) { #cc-main { --cc-modal-transition-duration: 0s; } }
+#cc-main .cm__title,
+#cc-main .pm__title {
+  font-weight: 600;
+}
+#cc-main .cm__desc,
+#cc-main .pm__section-desc {
+  font-size: 14px;
+  line-height: 1.55;
+}
+[data-cookie-preferences] {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  #cc-main {
+    --cc-modal-transition-duration: 0s;
+  }
+}

@@ -7,9 +7,11 @@ export function useCopy(text: string, method?: string) {
     void navigator.clipboard.writeText(text).then(
       () => {
         if (method) {
-          window.dispatchEvent(new CustomEvent("growth:event", {
-            detail: { name: "install_command_copy", properties: { method } },
-          }))
+          window.dispatchEvent(
+            new CustomEvent("growth:event", {
+              detail: { name: "install_command_copy", properties: { method } },
+            }),
+          )
         }
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1600)

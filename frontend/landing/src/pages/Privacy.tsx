@@ -210,16 +210,16 @@ export default function Privacy() {
               We store your cookie preference for up to 180 days. Optional website analytics starts when you allow
               Analytics in Cookie preferences. We use Google Analytics through Google Tag Manager to measure page
               visits, installer-link clicks and successful copies of installation commands. These events include the
-              page, platform and action, and do not include the command text, email addresses or research content.
-              An installer-link click records that click; it does not establish that the application was installed.
+              page, platform and action, and do not include the command text, email addresses or research content. An
+              installer-link click records that click; it does not establish that the application was installed.
             </p>
 
             <p>
               Cookie preferences lists the optional services available on this website. Where Personalized advertising
               is offered, opting in allows Google advertising measurement and audiences. Where Business visitor
               identification is offered, the named provider may associate eligible visits with a company or a
-              professional profile. These choices are separate from Analytics and can be changed from the footer.
-              A Global Privacy Control signal disables advertising and visitor identification.
+              professional profile. These choices are separate from Analytics and can be changed from the footer. A
+              Global Privacy Control signal disables advertising and visitor identification.
             </p>
             <p>
               Withdrawing a choice stops future collection by the relevant website tags and clears the matching
@@ -227,9 +227,9 @@ export default function Privacy() {
               Contact us for deletion requests. Each Synthetic Sciences website stores its own preferences.
             </p>
             <p>
-              The main landing pages serve fonts from this domain. Documentation pages also request a font from
-              Google Fonts, and the footer requests the repository's star count from GitHub's public API. Vercel
-              hosts the site and receives connection information in its request logs.
+              The main landing pages serve fonts from this domain. Documentation pages also request a font from Google
+              Fonts, and the footer requests the repository's star count from GitHub's public API. Vercel hosts the site
+              and receives connection information in its request logs.
             </p>
 
             <h2 id="security">Security</h2>

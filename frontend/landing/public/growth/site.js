@@ -15,7 +15,9 @@ const categories = {
 }
 
 window.dataLayer = window.dataLayer || []
-const google = function () { window.dataLayer.push(arguments) }
+const google = function () {
+  window.dataLayer.push(arguments)
+}
 const insertScript = (src, id) => {
   if (document.getElementById(id)) return
   const script = document.createElement("script")
@@ -45,24 +47,27 @@ function clearCookies(revoked) {
   }
 }
 
-const controller = createController({ ...config, production, googleTagManagerId: tags ? config.googleTagManagerId : "" }, {
-  googleDefaults: (value) => google("consent", "default", value),
-  googleConsent: (value) => google("consent", "update", value),
-  loadGoogle: (id) => {
-    google("set", "ads_data_redaction", true)
-    google("set", "url_passthrough", false)
-    window.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" })
-    insertScript("https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(id), "growth-google")
+const controller = createController(
+  { ...config, production, googleTagManagerId: tags ? config.googleTagManagerId : "" },
+  {
+    googleDefaults: (value) => google("consent", "default", value),
+    googleConsent: (value) => google("consent", "update", value),
+    loadGoogle: (id) => {
+      google("set", "ads_data_redaction", true)
+      google("set", "url_passthrough", false)
+      window.dataLayer.push({ "gtm.start": Date.now(), event: "gtm.js" })
+      insertScript("https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(id), "growth-google")
+    },
+    loadIdentification: (src) => insertScript(src, "growth-identification"),
+    event: (value) => window.dataLayer.push(value),
+    clearCookies,
+    reload: () => window.location.reload(),
+    notify: (value) => {
+      window.__growthConsent = { ...value, production }
+      window.dispatchEvent(new CustomEvent("growth:consent", { detail: window.__growthConsent }))
+    },
   },
-  loadIdentification: (src) => insertScript(src, "growth-identification"),
-  event: (value) => window.dataLayer.push(value),
-  clearCookies,
-  reload: () => window.location.reload(),
-  notify: (value) => {
-    window.__growthConsent = { ...value, production }
-    window.dispatchEvent(new CustomEvent("growth:consent", { detail: window.__growthConsent }))
-  },
-})
+)
 
 function applyConsent() {
   const accepted = Object.keys(categories).filter((category) => CookieConsent.acceptedCategory(category))
@@ -70,28 +75,79 @@ function applyConsent() {
 }
 
 const sections = [
-  { title: "Your preferences", description: "Choose which optional services this website can use. You can change these choices at any time from the footer." },
-  { title: "Essential", description: "Stores your cookie preferences and supports the site's settings. This category is always enabled.", linkedCategory: "necessary" },
-  { title: "Analytics", description: "Helps us understand page visits, downloads and which links are useful. Optional analytics starts after you allow it.", linkedCategory: "analytics" },
-  ...(categories.advertising ? [{ title: "Personalized advertising", description: "Allows Google advertising measurement and audiences so we can show relevant OpenScience ads after your visit.", linkedCategory: "advertising" }] : []),
-  ...(categories.identification ? [{ title: "Business visitor identification", description: "Allows " + config.identificationName + " to match eligible visits to businesses and, where supported, professional profiles. We use these matches to understand potential customers and investors.", linkedCategory: "identification" }] : []),
-  ...(privacySignal ? [{ title: "Global Privacy Control", description: "Your browser's privacy signal disables personalized advertising and business visitor identification on this site." }] : []),
-  { title: "More information", description: 'Read our <a href="' + config.privacyUrl + '">privacy policy</a> or contact <a href="mailto:team@syntheticsciences.ai">team@syntheticsciences.ai</a>.' },
+  {
+    title: "Your preferences",
+    description:
+      "Choose which optional services this website can use. You can change these choices at any time from the footer.",
+  },
+  {
+    title: "Essential",
+    description: "Stores your cookie preferences and supports the site's settings. This category is always enabled.",
+    linkedCategory: "necessary",
+  },
+  {
+    title: "Analytics",
+    description:
+      "Helps us understand page visits, downloads and which links are useful. Optional analytics starts after you allow it.",
+    linkedCategory: "analytics",
+  },
+  ...(categories.advertising
+    ? [
+        {
+          title: "Personalized advertising",
+          description:
+            "Allows Google advertising measurement and audiences so we can show relevant OpenScience ads after your visit.",
+          linkedCategory: "advertising",
+        },
+      ]
+    : []),
+  ...(categories.identification
+    ? [
+        {
+          title: "Business visitor identification",
+          description:
+            "Allows " +
+            config.identificationName +
+            " to match eligible visits to businesses and, where supported, professional profiles. We use these matches to understand potential customers and investors.",
+          linkedCategory: "identification",
+        },
+      ]
+    : []),
+  ...(privacySignal
+    ? [
+        {
+          title: "Global Privacy Control",
+          description:
+            "Your browser's privacy signal disables personalized advertising and business visitor identification on this site.",
+        },
+      ]
+    : []),
+  {
+    title: "More information",
+    description:
+      'Read our <a href="' +
+      config.privacyUrl +
+      '">privacy policy</a> or contact <a href="mailto:team@syntheticsciences.ai">team@syntheticsciences.ai</a>.',
+  },
 ]
 
-document.addEventListener("click", (event) => {
-  const element = event.target instanceof Element ? event.target : null
-  if (element?.closest("[data-cookie-preferences]")) {
-    event.preventDefault()
-    CookieConsent.showPreferences()
-    return
-  }
-  const link = element?.closest("a[href]")
-  if (!link) return
-  const placement = link.closest("footer") ? "footer" : link.closest("header, nav") ? "header" : "page"
-  const item = eventForLink(link.getAttribute("href"), window.location.href, placement)
-  if (item) controller.track(item.name, item.properties)
-}, { capture: true })
+document.addEventListener(
+  "click",
+  (event) => {
+    const element = event.target instanceof Element ? event.target : null
+    if (element?.closest("[data-cookie-preferences]")) {
+      event.preventDefault()
+      CookieConsent.showPreferences()
+      return
+    }
+    const link = element?.closest("a[href]")
+    if (!link) return
+    const placement = link.closest("footer") ? "footer" : link.closest("header, nav") ? "header" : "page"
+    const item = eventForLink(link.getAttribute("href"), window.location.href, placement)
+    if (item) controller.track(item.name, item.properties)
+  },
+  { capture: true },
+)
 
 window.addEventListener("growth:event", (event) => {
   if (!event.detail || typeof event.detail.name !== "string") return
@@ -125,7 +181,13 @@ const reading = window.setInterval(() => {
 await CookieConsent.run({
   mode: "opt-in",
   revision: config.consentRevision,
-  cookie: { name: "synsci_consent", domain: window.location.hostname, path: "/", sameSite: "Lax", expiresAfterDays: 180 },
+  cookie: {
+    name: "synsci_consent",
+    domain: window.location.hostname,
+    path: "/",
+    sameSite: "Lax",
+    expiresAfterDays: 180,
+  },
   hideFromBots: true,
   manageScriptTags: false,
   autoClearCookies: false,
@@ -142,7 +204,12 @@ await CookieConsent.run({
       en: {
         consentModal: {
           title: "Your privacy choices",
-          description: "We use essential storage for site preferences. With your permission, we also measure visits and downloads" + (categories.advertising || categories.identification ? " and use the optional services described in preferences" : "") + ".",
+          description:
+            "We use essential storage for site preferences. With your permission, we also measure visits and downloads" +
+            (categories.advertising || categories.identification
+              ? " and use the optional services described in preferences"
+              : "") +
+            ".",
           acceptAllBtn: "Accept all",
           acceptNecessaryBtn: "Reject optional",
           showPreferencesBtn: "Preferences",

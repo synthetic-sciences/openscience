@@ -880,7 +880,9 @@ export function DocumentationPage({ initialPath }: { initialPath?: string } = {}
                 Edit this page <ArrowUpRight size={12} />
               </a>
               <a href={import.meta.env.BASE_URL + "llms.txt"}>Documentation index</a>
-              <button type="button" data-cookie-preferences="">Cookie preferences</button>
+              <button type="button" data-cookie-preferences="">
+                Cookie preferences
+              </button>
             </div>
           ) : null}
 
