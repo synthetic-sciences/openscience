@@ -601,7 +601,6 @@ export namespace OpenScience {
         loginWarning =
           "Signed in, but the previous device could not be revoked remotely. You can remove it from account settings."
       }
-      warmBalance()
       return current
     })
   }
@@ -2228,9 +2227,6 @@ export namespace OpenScience {
     await refreshAccount(session, { signal: accountDeadline() }).catch((error) => {
       announceAccount({ refreshed_at: Date.now(), error: refreshFailure(error) })
     })
-    // Refresh the turn-gating balance too: a Wallet the last turn drained is
-    // then known before the next message rather than refused by Ace.
-    void getBalance(session).catch(() => undefined)
   }
 
   /** The one bound on account reads the UI waits for. It replaces the old

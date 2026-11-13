@@ -21,8 +21,7 @@ import { accessRoute, resolveCredentialSource } from "./access-route"
 import { requiresWalletBalance } from "./access-route"
 import { ManagedH2 } from "@/provider/managed-h2"
 import type { CredentialSource } from "./access-route"
-import { OpenScience } from "@/openscience"
-import { BILLING_URL } from "@/endpoints"
+import { OpenScience, type FundingSnapshot } from "@/openscience"
 import { ManagedPricing } from "@/provider/managed-pricing"
 import { CallLink } from "@/provider/call-link"
 import { UsageLogging } from "./usage-logging"
@@ -102,21 +101,35 @@ export namespace SessionProcessor {
     })
   }
 
-  /** Start the managed balance read as soon as a turn is submitted, so the
-   * pre-dispatch balance check joins it (getBalance deduplicates in-flight
-   * reads) instead of waiting a round trip after prompt assembly. Only
-   * managed routes read the balance; never throws. */
+  /** Get the managed route ready as soon as a turn is submitted. The turn no
+   * longer reads the client's balance (Ace decides every call against the
+   * real Wallet), so this only warms the gateway connection. Never throws. */
   export function warmFunding(model: { providerID: string; modelID: string }): void {
     void resolveCredentialSource(model.providerID, model.modelID)
       .then(async (source) => {
         if (!requiresWalletBalance(source)) return
-        OpenScience.warmBalance()
         // Open the gateway connection while the prompt is assembled, so the
         // model call finds it ready (a no-op unless ManagedH2 is switched on).
         const base = (await Provider.getProvider(model.providerID))?.options?.["baseURL"]
         if (Provider.isAtlasProxyBaseURL(base)) ManagedH2.warm(base)
       })
       .catch(() => undefined)
+  }
+
+  /** What a managed turn checks on the client before dispatch: only that a
+   * funding snapshot exists (otherwise the device needs to sign in again).
+   * Funds are not checked here. The client's balance copy can disagree with
+   * the Wallet (a top-up seconds ago, funds held by this account's own
+   * requests in flight, auto reload that would refill it, a failed balance
+   * read while the gateway works); Ace reserves a hold against the real
+   * Wallet before every call and answers with the precise contract: 402 with
+   * add-funds, wait-for-in-flight or reload recovery, monthly limits, or 409
+   * for funding that is no longer active. */
+  export function managedPreflight(funding: FundingSnapshot | undefined): asserts funding is FundingSnapshot {
+    if (!funding)
+      throw managedPauseError(
+        "Ace is paused because OpenScience could not snapshot the connected funding account. Sign in again or switch to a direct provider or local model.",
+      )
   }
 
   /** The funding choice for one managed turn. A scoped session needs no
@@ -1054,26 +1067,7 @@ export namespace SessionProcessor {
             progress("preparing")
             traceRoute = accessRoute(credentialSource, input.model)
 
-            if (requiresWalletBalance(credentialSource)) {
-              if (!funding) {
-                throw managedPauseError(
-                  "Ace is paused because OpenScience could not snapshot the connected funding account. Sign in again or switch to a direct provider or local model.",
-                )
-              }
-              const balance = await OpenScience.getBalance(funding)
-              if (balance === null) {
-                throw managedPauseError(
-                  "Ace is paused because OpenScience could not verify the current balance. Retry when the connection returns or switch to a direct provider or local model.",
-                  SessionRetry.BALANCE_UNVERIFIED,
-                )
-              }
-              if (balance <= 0) {
-                OpenScience.invalidateBalance()
-                throw new Error(
-                  `Your Wallet has no available balance (purchased balance less holds for turns in flight). Add funds at ${BILLING_URL} or switch model access to Keys & subscriptions.`,
-                )
-              }
-            }
+            if (requiresWalletBalance(credentialSource)) managedPreflight(funding)
 
             const provider = await Provider.getProvider(input.model.providerID)
             // Ace-managed streams always end with a finish reason and usage;

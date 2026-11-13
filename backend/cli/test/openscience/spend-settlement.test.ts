@@ -111,7 +111,6 @@ test("a managed spend announces the stale summary at once and the settled one af
 
   fixture.wallet = 1000
   fixture.available = 900
-  const balanceReads = count("/api/cli/balance")
   OpenScience.noteManagedSpend()
   OpenScience.noteManagedSpend()
   // Both steps announce the stale summary; the stored values stay on screen
@@ -124,8 +123,6 @@ test("a managed spend announces the stale summary at once and the settled one af
 
   await until(() => updates.length === 4, "the settlement refresh")
   expect(updates[3].error).toBeUndefined()
-  // Settlement also re-reads the turn-gating balance, with no check asking for it.
-  await until(() => count("/api/cli/balance") > balanceReads, "the settlement balance refresh")
   expect(count("/api/v1/wallet")).toBe(2)
   const settled = await OpenScience.getAccountSummary()
   expect(settled).toMatchObject({ refreshing: false })

@@ -163,9 +163,6 @@ const cli = yargs(hideBin(process.argv))
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
         void import("./openscience").then((m) => {
           m.OpenScience.startCredentialSync()
-          // A signed-in device's first managed turn would otherwise wait on a
-          // cold balance read before its model call.
-          m.OpenScience.warmBalance()
         })
         // Open the managed gateway connection now and keep it usable until the
         // first message (a no-op unless OPENSCIENCE_MANAGED_H2 is switched on).
