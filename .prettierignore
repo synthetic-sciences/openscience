@@ -33,3 +33,6 @@ tooling/harbor/.venv/
 evals/science-harness/datasets/
 evals/science-harness/jobs/
 evals/science-harness/workspaces/
+
+# Upstream distribution files retain their published bytes.
+frontend/landing/public/growth/vendor/

@@ -1,11 +1,16 @@
 import { useState } from "react"
 
-export function useCopy(text: string) {
+export function useCopy(text: string, method?: string) {
   const [copied, setCopied] = useState(false)
   const copy = () => {
     if (!navigator.clipboard) return
     void navigator.clipboard.writeText(text).then(
       () => {
+        if (method) {
+          window.dispatchEvent(new CustomEvent("growth:event", {
+            detail: { name: "install_command_copy", properties: { method } },
+          }))
+        }
         setCopied(true)
         window.setTimeout(() => setCopied(false), 1600)
       },

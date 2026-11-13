@@ -154,3 +154,8 @@ Computer Modern Unicode (CMU Concrete; frontend/landing/public/fonts,
 frontend/workspace/public/fonts/cmc, frontend/docs/public/fonts/cmc) and Inter
 (frontend/landing/public/fonts) are bundled under the SIL Open Font License 1.1;
 the OFL text sits next to each font.
+
+--------------------------------------------------------------------------------
+CookieConsent 3.3.0 by Orest Bida (website only)
+https://github.com/orestbida/cookieconsent
+MIT License. The full license is in frontend/landing/public/growth/vendor/LICENSE-cookieconsent.

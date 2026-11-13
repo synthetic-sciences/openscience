@@ -1,0 +1,36 @@
+@import url("./vendor/cookieconsent-3.3.0.css");
+
+#cc-main {
+  --cc-font-family: inherit;
+  --cc-bg: #faf9f6;
+  --cc-primary-color: #242424;
+  --cc-secondary-color: #55534e;
+  --cc-btn-primary-bg: #242424;
+  --cc-btn-primary-color: #faf9f6;
+  --cc-btn-primary-border-color: #242424;
+  --cc-btn-primary-hover-bg: #45443f;
+  --cc-btn-primary-hover-color: #fff;
+  --cc-btn-primary-hover-border-color: #45443f;
+  --cc-btn-secondary-bg: #f0eee8;
+  --cc-btn-secondary-color: #242424;
+  --cc-btn-secondary-border-color: #dedbd3;
+  --cc-btn-secondary-hover-bg: #e6e3db;
+  --cc-btn-secondary-hover-color: #242424;
+  --cc-btn-secondary-hover-border-color: #d6d1c6;
+  --cc-separator-border-color: #dedbd3;
+  --cc-cookie-category-block-bg: #f0eee8;
+  --cc-cookie-category-block-hover-bg: #e9e6df;
+  --cc-toggle-on-bg: #242424;
+  --cc-toggle-off-bg: #817e76;
+  --cc-toggle-readonly-bg: #bbb8b0;
+  --cc-modal-border-radius: 6px;
+  --cc-btn-border-radius: 3px;
+  --cc-modal-transition-duration: 0.15s;
+  --cc-modal-margin: 18px;
+  --cc-z-index: 2147483640;
+  font-family: inherit;
+}
+#cc-main .cm__title, #cc-main .pm__title { font-weight: 600; }
+#cc-main .cm__desc, #cc-main .pm__section-desc { font-size: 14px; line-height: 1.55; }
+[data-cookie-preferences] { font: inherit; color: inherit; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { #cc-main { --cc-modal-transition-duration: 0s; } }
