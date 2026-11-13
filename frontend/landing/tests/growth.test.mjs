@@ -176,3 +176,77 @@ test("campaign attribution keeps controlled campaign fields and gates advertisin
     {},
   )
 })
+
+test("the imported container uses the configured site, hostname, and analytics consent", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const config = (await import("../public/growth/config.js")).default
+  const container = JSON.parse(
+    await readFile(new URL("../docs/gtm-container.json", import.meta.url), "utf8"),
+  ).containerVersion
+  assert.equal(container.container.publicId, config.googleTagManagerId)
+  assert.equal(container.tag.length, 1)
+  assert.equal(container.tag[0].consentSettings.consentStatus, "NEEDED")
+  const filters = container.trigger[0].filter
+  assert.ok(
+    filters.some((filter) => filter.parameter.some((parameter) => parameter.value === "{{DLV - growth_analytics}}")),
+  )
+  assert.ok(filters.some((filter) => filter.parameter.some((parameter) => parameter.value === config.site)))
+  for (const settings of container.gtagConfig) {
+    for (const parameter of settings.parameter) {
+      if (parameter.type === "BOOLEAN") assert.equal(parameter.value, "false")
+    }
+  }
+})
+
+test("the actual container tag gates collection and omits raw referrer data", async () => {
+  const { readFile } = await import("node:fs/promises")
+  const vm = await import("node:vm")
+  const config = (await import("../public/growth/config.js")).default
+  const container = JSON.parse(
+    await readFile(new URL("../docs/gtm-container.json", import.meta.url), "utf8"),
+  ).containerVersion
+  const html = container.tag[0].parameter.find((parameter) => parameter.key === "html").value
+  const scripts = []
+  const window = { dataLayer: [] }
+  const sandbox = {
+    window,
+    URL,
+    document: {
+      referrer: "https://example.org/private?email=private@example.org",
+      createElement: () => ({}),
+      head: { appendChild: (script) => scripts.push(script) },
+    },
+  }
+  function execute(analytics, advertising) {
+    const values = {
+      "DLV - growth_analytics": analytics,
+      "DLV - growth_advertising": advertising,
+      "DLV - growth_event": "download_click",
+      "DLV - growth_page_location": "https://www.openscience.sh/download",
+      "DLV - growth_page_path": "/download",
+      "DLV - growth_site": config.site,
+      "DLV - growth_platform": "linux-x64",
+    }
+    const source = html
+      .replace(/^<script>\s*|\s*<\/script>$/g, "")
+      .replace(/{{([^}]+)}}/g, (_, key) => JSON.stringify(values[key.trim()] ?? ""))
+    vm.runInNewContext(source, sandbox)
+  }
+  execute(false, false)
+  assert.equal(scripts.length, 0)
+  assert.equal(window.dataLayer.length, 0)
+  execute(true, false)
+  assert.equal(scripts.length, 1)
+  const calls = window.dataLayer.map((args) => Array.from(args))
+  const setup = calls.find((args) => args[0] === "config")
+  assert.equal(setup[1], config.googleAnalyticsId)
+  assert.equal(setup[2].send_page_view, false)
+  assert.equal(setup[2].allow_google_signals, false)
+  const sent = calls.find((args) => args[0] === "event")
+  assert.equal(sent[1], "download_click")
+  assert.equal(sent[2].page_referrer, "https://example.org")
+  assert.equal(sent[2].platform, "linux-x64")
+  execute(true, true)
+  assert.equal(scripts.length, 1)
+  assert.equal(Array.from(window.dataLayer[window.dataLayer.length - 2])[2].allow_google_signals, true)
+})

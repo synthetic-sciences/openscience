@@ -11,3 +11,11 @@ A successful clipboard operation emits `install_command_copy`. An installer link
 Run `node --test tests/growth.test.mjs` in this site's directory for consent and event behavior. The `Landing tracking` GitHub workflow runs these checks and builds the site remotely. Verify first visit, reject, accept, withdrawal, return visit and Global Privacy Control in the preview before publishing.
 
 The `growth/vendor/` license and provenance file apply to CookieConsent 3.3.0. These distribution files are kept byte-for-byte.
+
+## Container configuration
+
+`docs/gtm-container.json` is the reviewed import for this site's existing container. It sends the explicit `growth_*` events to the shared `G-2BF4QBMLXN` property. The tag requires analytics consent, a matching production hostname and the site's event label. It disables automatic page views, automatic event discovery and automatic collection of user-provided contact fields.
+
+Import into the matching container's default workspace, review the changes and publish a named version. The initial imports replace only draft items created during this setup. A later import must preserve any separately added tags or settings. Keep the published export with the source release so that tag configuration can be reviewed and rolled back.
+
+The Analytics account is `416229689`, property `564214334`, stream `16334840759`. The website setup measures downloads and command copies. Product activation and the optional identification provider remain separate integrations.
