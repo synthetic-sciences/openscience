@@ -73,6 +73,9 @@ export function Footer() {
             </a>
             )
           </span>
+          <button type="button" data-cookie-preferences="">
+            Cookie preferences
+          </button>
           <a href="#top" data-slot="back-to-top">
             Back to top <ArrowUpIcon size={16} aria-hidden="true" />
           </a>

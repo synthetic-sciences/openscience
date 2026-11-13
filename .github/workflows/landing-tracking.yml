@@ -1,0 +1,42 @@
+name: Landing tracking
+
+on:
+  pull_request:
+    paths:
+      - "frontend/landing/**"
+      - "frontend/docs/**"
+      - ".github/workflows/landing-tracking.yml"
+  push:
+    branches: ["codex/consent-and-growth-tracking"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tracking:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Consent and event behavior
+        working-directory: frontend/landing
+        run: node --test tests/growth.test.mjs
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - name: Install documentation dependencies
+        run: bun install --frozen-lockfile --ignore-scripts --filter '@synsci/docs'
+      - name: Install landing dependencies
+        working-directory: frontend/landing
+        run: bun install --frozen-lockfile
+      - name: Build landing and documentation
+        working-directory: frontend/landing
+        run: bun run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: landing-preview
+          path: frontend/landing/dist

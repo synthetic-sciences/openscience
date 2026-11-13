@@ -56,7 +56,7 @@ function detect(): Target {
 }
 
 function CliRow({ label, command }: { label: string; command: string }) {
-  const { copied, copy } = useCopy(command)
+  const { copied, copy } = useCopy(command, label)
   return (
     <div data-component="cli-install">
       <span data-slot="method">{label}</span>

@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Add website cookie preferences and consent-gated marketing events for downloads and installation-command copies.
+
 - Answer the local server's health check without waiting on data-folder bookkeeping, so a busy Windows server is no longer reported as unreachable while it is still running.
 - Add opt-in bounded subagent runs (off by default). Turn on **Enable bounded runs** in Settings → General → Subagents to give subagents a shared USD or token budget, a deadline and a model; the suggested limits are USD 5, 1,000,000 tokens and 10 minutes, with increases of USD 1 or 250,000 tokens. A worker stops at its limit or deadline and keeps its partial results. The main agent then continues it from the remaining budget, or asks you in the chat whether to add budget or finish without it, and finishes from the worker's saved result if no one answers within 5 minutes; with Independence set to Independent, or in a headless run, it never asks. The worker's card and the Context window's **Subagent budget** show what each worker found and spent, and offer **Continue with remaining budget**, **Add … and continue** or **Continue with a new deadline**.
 - Save subagent settings to `subagents.json` beside the global config, so an older OpenScience desktop app or CLI sharing the config folder still starts.

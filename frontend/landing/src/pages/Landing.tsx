@@ -20,7 +20,7 @@ const INSTALL = [
 
 function Command({ item }: { item: (typeof INSTALL)[number] }) {
   const command = `${item.before}${"protocol" in item ? item.protocol : ""}${item.highlight}${"after" in item ? item.after : ""}`
-  const { copied, copy } = useCopy(command)
+  const { copied, copy } = useCopy(command, item.key)
   return (
     <button
       type="button"

@@ -132,7 +132,7 @@ const INSTALL = [
 ]
 
 function Install() {
-  const { copied, copy } = useCopy(INSTALL.filter((line) => line && !line.startsWith("#")).join("\n"))
+  const { copied, copy } = useCopy(INSTALL.filter((line) => line && !line.startsWith("#")).join("\n"), "cli")
   return (
     <pre data-slot="code">
       <button

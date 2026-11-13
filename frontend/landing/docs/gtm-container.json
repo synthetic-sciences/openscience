@@ -1,0 +1,384 @@
+{
+  "exportFormatVersion": 2,
+  "containerVersion": {
+    "accountId": "6404829854",
+    "containerId": "286728334",
+    "containerVersionId": "0",
+    "container": {
+      "accountId": "6404829854",
+      "containerId": "286728334",
+      "name": "www.openscience.sh",
+      "publicId": "GTM-NK384N8V",
+      "usageContext": ["WEB"]
+    },
+    "variable": [
+      {
+        "name": "DLV - growth_event",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_event"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_site",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_site"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_page_location",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_page_location"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_page_path",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_page_path"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_analytics",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_analytics"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_advertising",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_advertising"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_platform",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_platform"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_method",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_method"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_placement",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_placement"
+          }
+        ]
+      },
+      {
+        "name": "DLV - growth_destination_site",
+        "type": "v",
+        "parameter": [
+          {
+            "type": "INTEGER",
+            "key": "dataLayerVersion",
+            "value": "2"
+          },
+          {
+            "type": "TEMPLATE",
+            "key": "name",
+            "value": "growth_destination_site"
+          }
+        ]
+      }
+    ],
+    "builtInVariable": [
+      {
+        "type": "EVENT",
+        "name": "Event"
+      },
+      {
+        "type": "PAGE_HOSTNAME",
+        "name": "Page Hostname"
+      }
+    ],
+    "trigger": [
+      {
+        "triggerId": "10",
+        "name": "Consented website events",
+        "type": "CUSTOM_EVENT",
+        "customEventFilter": [
+          {
+            "type": "MATCH_REGEX",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{_event}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": "^growth_(page_view|download_click|install_command_copy|account_click|github_click|research_read|contact_click|access_request_email|site_link_click)$"
+              }
+            ]
+          }
+        ],
+        "filter": [
+          {
+            "type": "EQUALS",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{DLV - growth_analytics}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": "true"
+              }
+            ]
+          },
+          {
+            "type": "EQUALS",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{DLV - growth_site}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": "openscience"
+              }
+            ]
+          },
+          {
+            "type": "MATCH_REGEX",
+            "parameter": [
+              {
+                "type": "TEMPLATE",
+                "key": "arg0",
+                "value": "{{Page Hostname}}"
+              },
+              {
+                "type": "TEMPLATE",
+                "key": "arg1",
+                "value": "^(www\\.)?openscience\\.sh$"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "tag": [
+      {
+        "tagId": "3",
+        "name": "GA4 - Consented website events",
+        "type": "html",
+        "parameter": [
+          {
+            "type": "TEMPLATE",
+            "key": "html",
+            "value": "<script>\n(function () {\n  if ({{DLV - growth_analytics}} !== true) return;\n  var id = 'G-2BF4QBMLXN';\n  var eventName = {{DLV - growth_event}};\n  var location = {{DLV - growth_page_location}};\n  var ads = {{DLV - growth_advertising}} === true;\n  var parameters = {\n    send_to: id,\n    page_location: location,\n    page_path: {{DLV - growth_page_path}},\n    site: {{DLV - growth_site}}\n  };\n  var fields = {\n    platform: {{DLV - growth_platform}},\n    method: {{DLV - growth_method}},\n    placement: {{DLV - growth_placement}},\n    destination_site: {{DLV - growth_destination_site}}\n  };\n  Object.keys(fields).forEach(function (key) {\n    if (fields[key]) parameters[key] = fields[key];\n  });\n  var referrer = '';\n  if (document.referrer) {\n    try { referrer = new URL(document.referrer).origin; } catch (error) {}\n  }\n  parameters.page_referrer = referrer;\n  window.dataLayer = window.dataLayer || [];\n  window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };\n  if (!window.__synsciGoogleTagLoaded) {\n    window.__synsciGoogleTagLoaded = true;\n    window.gtag('js', new Date());\n    var script = document.createElement('script');\n    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + id;\n    script.async = true;\n    document.head.appendChild(script);\n  }\n  window.gtag('config', id, {\n    send_page_view: false,\n    allow_google_signals: ads,\n    allow_ad_personalization_signals: ads,\n    page_location: location,\n    page_referrer: referrer\n  });\n  window.gtag('event', eventName, parameters);\n})();\n</script>"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "supportDocumentWrite",
+            "value": "false"
+          }
+        ],
+        "firingTriggerId": ["10"],
+        "tagFiringOption": "ONCE_PER_EVENT",
+        "consentSettings": {
+          "consentStatus": "NEEDED",
+          "consentType": {
+            "type": "LIST",
+            "list": [
+              {
+                "type": "TEMPLATE",
+                "value": "analytics_storage"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "gtagConfig": [
+      {
+        "accountId": "6404829854",
+        "containerId": "286728334",
+        "gtagConfigId": "5",
+        "type": "ogt_auto_events",
+        "parameter": [
+          {
+            "type": "BOOLEAN",
+            "key": "enableOutboundClick",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "enableScroll",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "enableDownload",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "enableHistoryEvents",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "enableForm",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "enableVideo",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "accountId": "6404829854",
+        "containerId": "286728334",
+        "gtagConfigId": "6",
+        "type": "ogt_1p_data_v2",
+        "parameter": [
+          {
+            "type": "BOOLEAN",
+            "key": "isAutoEnabled",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "isManualEnabled",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "autoPhoneEnabled",
+            "value": "false"
+          },
+          {
+            "type": "LIST",
+            "key": "autoCollectExclusionSelectors",
+            "list": [
+              {
+                "type": "MAP",
+                "map": [
+                  {
+                    "type": "TEMPLATE",
+                    "key": "exclusionSelector"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "isEnabled",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "autoAddressEnabled",
+            "value": "false"
+          },
+          {
+            "type": "BOOLEAN",
+            "key": "autoEmailEnabled",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  }
+}

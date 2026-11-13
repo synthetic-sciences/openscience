@@ -593,6 +593,7 @@ export function DocumentationPage({ initialPath }: { initialPath?: string } = {}
   const navigate = useCallback((next: Route) => {
     const href = pageHref(next.section, next.path, next.anchor)
     if (window.location.pathname + window.location.hash !== href) window.history.pushState(null, "", href)
+    window.dispatchEvent(new Event("growth:navigation"))
     setRouteState(next)
     setMenuOpen(false)
     setSearchOpen(false)
@@ -879,6 +880,9 @@ export function DocumentationPage({ initialPath }: { initialPath?: string } = {}
                 Edit this page <ArrowUpRight size={12} />
               </a>
               <a href={import.meta.env.BASE_URL + "llms.txt"}>Documentation index</a>
+              <button type="button" data-cookie-preferences="">
+                Cookie preferences
+              </button>
             </div>
           ) : null}
 
