@@ -1768,8 +1768,12 @@ export namespace OpenScience {
   const BALANCE_CACHE_TTL_MS = 30_000
   // A positive balance past the TTL is still served while a refresh runs in
   // the background, up to this age. A missing, non-positive or older value
-  // blocks on the fetch so an empty wallet is noticed promptly.
-  const BALANCE_STALE_MAX_MS = 5 * 60_000
+  // blocks on the fetch so an empty wallet is noticed promptly. The client
+  // check is a fast fail, not the guard: Ace reserves a hold against the real
+  // Wallet before every managed call and answers 402 when it cannot fund it
+  // (then forgetBalance drops this value). An hour keeps the first message
+  // after a pause from waiting on a balance round trip.
+  const BALANCE_STALE_MAX_MS = 60 * 60_000
 
   /** Expire the cached balance after a spend or credential change. A positive
    * value is kept past its TTL so the next check serves it while a refresh runs
@@ -1796,10 +1800,18 @@ export namespace OpenScience {
     invalidateBalance()
   }
 
+  /** Drop the cached balance outright: Ace refused a managed request for its
+   * funding, so the next check must read the balance fresh rather than serve
+   * the stale positive value again. */
+  export function forgetBalance(): void {
+    invalidateBalance()
+    cachedBalance = null
+  }
+
   /** Start a balance read in the background so the next managed turn finds it
    * cached instead of waiting on an Ace round trip before the model call. The
    * usual cache rules apply afterwards (30 s fresh, positive values served
-   * stale for up to 5 minutes while a refresh runs). Never throws. */
+   * stale for up to an hour while a refresh runs). Never throws. */
   export function warmBalance(): void {
     void getRequestSnapshot()
       .then((snapshot) => (snapshot ? getBalance(snapshot) : null))
@@ -2216,6 +2228,9 @@ export namespace OpenScience {
     await refreshAccount(session, { signal: accountDeadline() }).catch((error) => {
       announceAccount({ refreshed_at: Date.now(), error: refreshFailure(error) })
     })
+    // Refresh the turn-gating balance too: a Wallet the last turn drained is
+    // then known before the next message rather than refused by Ace.
+    void getBalance(session).catch(() => undefined)
   }
 
   /** The one bound on account reads the UI waits for. It replaces the old

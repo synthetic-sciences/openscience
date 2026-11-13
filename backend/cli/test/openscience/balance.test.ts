@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, expect, test } from "bun:test"
+import { afterAll, beforeEach, expect, setSystemTime, test } from "bun:test"
 
 // The balance cache is module state keyed by funding context, so every test
 // uses its own snapshot and nothing leaks between them.
@@ -108,4 +108,51 @@ test("a balance read respects the account deadline and leaves its amount unknown
     if (previous === undefined) delete process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS
     else process.env.OPENSCIENCE_ACCOUNT_DEADLINE_MS = previous
   }
+})
+
+test("a positive balance read ten minutes ago is still served while a refresh runs", async () => {
+  const snapshot = funding("ten-minutes")
+  fixture.balance = 9
+  try {
+    expect(await OpenScience.getBalance(snapshot)).toBe(9)
+    setSystemTime(new Date(Date.now() + 10 * 60_000))
+    fixture.balance = 4
+    const release = hold()
+    // Past the old five-minute bound: the stalled refresh must not block the turn.
+    expect(await OpenScience.getBalance(snapshot)).toBe(9)
+    release()
+    await until(async () => (await OpenScience.getBalance(snapshot)) === 4, "the refreshed balance")
+  } finally {
+    setSystemTime()
+  }
+})
+
+test("a positive balance older than an hour blocks on a fresh read", async () => {
+  const snapshot = funding("hour-old")
+  fixture.balance = 9
+  try {
+    expect(await OpenScience.getBalance(snapshot)).toBe(9)
+    setSystemTime(new Date(Date.now() + 61 * 60_000))
+    fixture.balance = 2
+    const release = hold()
+    const pending = OpenScience.getBalance(snapshot)
+    expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
+    release()
+    expect(await pending).toBe(2)
+  } finally {
+    setSystemTime()
+  }
+})
+
+test("a refused managed request forgets the balance, so the next check reads it fresh", async () => {
+  const snapshot = funding("refused")
+  fixture.balance = 6
+  expect(await OpenScience.getBalance(snapshot)).toBe(6)
+  OpenScience.forgetBalance()
+  fixture.balance = 0
+  const release = hold()
+  const pending = OpenScience.getBalance(snapshot)
+  expect(await Promise.race([pending, sleep(50).then(() => "pending")])).toBe("pending")
+  release()
+  expect(await pending).toBe(0)
 })

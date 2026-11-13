@@ -1369,8 +1369,13 @@ export namespace ProviderTransform {
         return undefined
       }
     })
-    if (!body || typeof body.error !== "string") return
-    return body
+    if (!body) return
+    if (typeof body.error === "string") return body
+    // FastAPI HTTPException envelope: {"detail": {"error": "ace_required", ...}}.
+    const detail = body.detail
+    if (detail && typeof detail === "object" && typeof (detail as Record<string, unknown>).error === "string")
+      return detail as Record<string, unknown>
+    return
   }
 
   /** The SDK treats every 402 as final. The managed gateway's says whether
@@ -1411,6 +1416,8 @@ export namespace ProviderTransform {
       const spent = dollars(body.spent_cents)
       return `Ace is paused: this workspace reached its monthly usage limit${limit ? ` of ${limit}` : ""}${spent ? ` (${spent} spent)` : ""}. Raise the limit under Billing at ${BILLING_URL}, or switch model access to Keys & subscriptions.`
     }
+    if (body.error === "ace_required")
+      return `Ace is paused: your Wallet has no available balance and auto reload is not on. Add funds or turn on auto reload at ${BILLING_URL}, or switch model access to Keys & subscriptions.`
     if (body.error !== "insufficient_balance") return
     const detail = balance ? ` ${balance}.` : ""
     // The reload's own state, when the gateway knows it: on its way, blocked

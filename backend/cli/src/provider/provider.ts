@@ -3306,7 +3306,12 @@ export namespace Provider {
         // the balance is gone, so the cached one is dropped here. A served
         // request is charged only after its stream ends; the processor
         // announces that settlement, and a read at the headers would predate it.
-        if (managed && !resolved.ok) OpenScience.invalidateBalance()
+        // A funding refusal (402, or 409 funding unavailable) means the cached
+        // positive balance is wrong: drop it so the next check reads it fresh.
+        if (managed && !resolved.ok) {
+          if (resolved.status === 402 || resolved.status === 409) OpenScience.forgetBalance()
+          else OpenScience.invalidateBalance()
+        }
         return funding ? OpenScience.validateFundingResponse(resolved, funding) : resolved
       }
 

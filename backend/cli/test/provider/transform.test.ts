@@ -2724,6 +2724,25 @@ describe("ProviderTransform.error for the managed gateway's payment-required con
     expect(text).not.toContain("insufficient_balance")
   })
 
+  test("an empty Wallet without Ace (FastAPI detail envelope, ace_required) says to add funds", () => {
+    // Ace answers this 402 as HTTPException detail: {"detail": {"error": "ace_required", ...}}.
+    const text = ProviderTransform.error(
+      "openrouter",
+      managed({
+        detail: {
+          error: "ace_required",
+          message: "Add Wallet funds or turn on Ace to use managed models.",
+          billing_url: "https://app.syntheticsciences.ai/billing",
+        },
+      }),
+    )
+    expect(text).toContain("Ace is paused")
+    expect(text).toContain("no available balance")
+    expect(text).toContain("/billing")
+    expect(text).not.toContain("ace_required")
+    expect(text).not.toContain("detail")
+  })
+
   test("a shared Wallet points at the billing manager; a pending reload says to retry", () => {
     expect(
       ProviderTransform.error(
