@@ -26,19 +26,25 @@ test("docs assets honor the production base path", async () => {
     expect(urls.every((url) => url.startsWith(base))).toBe(true)
 
     const favicon = html.match(/<link[^>]+rel="icon"[^>]+href="([^"]+)"/)?.[1]
-    const stylesheet = html.match(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/)?.[1]
-    if (!favicon || !stylesheet) throw new Error("Production HTML is missing its favicon or stylesheet")
+    const stylesheets = Array.from(
+      html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g),
+      (match) => match[1],
+    ).filter((url) => !/^(?:https?:)?\/\//.test(url))
+    if (!favicon || !stylesheets.length) throw new Error("Production HTML is missing its favicon or stylesheet")
     expect(await Bun.file(path.join(output, favicon.slice(base.length))).exists()).toBe(true)
-    expect(await Bun.file(path.join(output, stylesheet.slice(base.length))).exists()).toBe(true)
 
-    const css = await Bun.file(path.join(output, stylesheet.slice(base.length))).text()
-    const fonts = Array.from(css.matchAll(/url\((?:"|')?([^)"']+\.woff2)(?:"|')?\)/g), (match) => match[1])
-    expect(fonts).toHaveLength(2)
-    for (const font of fonts) {
-      const pathname = new URL(font, `https://openscience.sh${stylesheet}`).pathname
-      expect(pathname.startsWith(base)).toBe(true)
-      expect(await Bun.file(path.join(output, pathname.slice(base.length))).exists()).toBe(true)
+    const fonts = new Set<string>()
+    for (const stylesheet of stylesheets) {
+      expect(await Bun.file(path.join(output, stylesheet.slice(base.length))).exists()).toBe(true)
+      const css = await Bun.file(path.join(output, stylesheet.slice(base.length))).text()
+      for (const match of css.matchAll(/url\((?:"|')?([^)"']+\.woff2)(?:"|')?\)/g)) {
+        const pathname = new URL(match[1], `https://openscience.sh${stylesheet}`).pathname
+        fonts.add(pathname)
+        expect(pathname.startsWith(base)).toBe(true)
+        expect(await Bun.file(path.join(output, pathname.slice(base.length))).exists()).toBe(true)
+      }
     }
+    expect(fonts.size).toBe(2)
   } finally {
     await fs.rm(output, { recursive: true, force: true })
   }

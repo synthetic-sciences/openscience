@@ -88,3 +88,19 @@ export function cleanEvent(name, properties = {}) {
   }
   return { name, properties: clean }
 }
+
+export function campaignAttribution(href, advertising = false) {
+  const url = new URL(href)
+  const result = {}
+  for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_id", "utm_content", "utm_term"]) {
+    const value = url.searchParams.get(key)
+    if (value && /^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,99}$/.test(value)) result[key] = value
+  }
+  if (advertising) {
+    for (const key of ["gclid", "dclid", "gbraid", "wbraid"]) {
+      const value = url.searchParams.get(key)
+      if (value && /^[a-zA-Z0-9_-]{1,512}$/.test(value)) result[key] = value
+    }
+  }
+  return result
+}

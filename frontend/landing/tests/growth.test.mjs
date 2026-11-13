@@ -1,7 +1,13 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { createController } from "../public/growth/controller.js"
-import { effectiveConsent, cleanEvent, eventForLink, pageLocation } from "../public/growth/policy.js"
+import {
+  effectiveConsent,
+  cleanEvent,
+  eventForLink,
+  pageLocation,
+  campaignAttribution,
+} from "../public/growth/policy.js"
 
 function fixture(overrides = {}) {
   const calls = []
@@ -153,4 +159,20 @@ test("installer clicks are distinct from repository and contact clicks", () => {
   })
   assert.equal(eventForLink("#top", url), null)
   assert.equal(eventForLink("https://unknown.example.org/download", url), null)
+})
+
+test("campaign attribution keeps controlled campaign fields and gates advertising click IDs", () => {
+  const href =
+    "https://www.openscience.sh/?utm_source=google&utm_medium=cpc&utm_campaign=launch&gclid=Ad-123&email=private@example.org&token=secret"
+  assert.deepEqual(campaignAttribution(href), { utm_source: "google", utm_medium: "cpc", utm_campaign: "launch" })
+  assert.deepEqual(campaignAttribution(href, true), {
+    utm_source: "google",
+    utm_medium: "cpc",
+    utm_campaign: "launch",
+    gclid: "Ad-123",
+  })
+  assert.deepEqual(
+    campaignAttribution("https://www.openscience.sh/?utm_campaign=private%40example.org&gclid=bad%20id", true),
+    {},
+  )
 })

@@ -51,3 +51,31 @@
     --cc-modal-transition-duration: 0s;
   }
 }
+
+html[data-growth-site="openscience"][data-growth-section="landing"] #cc-main,
+html[data-growth-site="openscience"].dark #cc-main,
+html[data-theme="dark"] #cc-main {
+  color-scheme: dark;
+  --cc-bg: #191919;
+  --cc-primary-color: #eeeae3;
+  --cc-secondary-color: #bcb7af;
+  --cc-footer-bg: #202020;
+  --cc-footer-color: #bcb7af;
+  --cc-btn-primary-bg: #eeeae3;
+  --cc-btn-primary-color: #191919;
+  --cc-btn-primary-border-color: #eeeae3;
+  --cc-btn-primary-hover-bg: #d9d3c9;
+  --cc-btn-primary-hover-color: #191919;
+  --cc-btn-primary-hover-border-color: #d9d3c9;
+  --cc-btn-secondary-bg: #282828;
+  --cc-btn-secondary-color: #eeeae3;
+  --cc-btn-secondary-border-color: #45413b;
+  --cc-btn-secondary-hover-bg: #35332f;
+  --cc-btn-secondary-hover-color: #eeeae3;
+  --cc-btn-secondary-hover-border-color: #5a554d;
+  --cc-separator-border-color: #45413b;
+  --cc-cookie-category-block-bg: #242424;
+  --cc-cookie-category-block-hover-bg: #2c2b28;
+  --cc-toggle-on-bg: #eeeae3;
+  --cc-toggle-off-bg: #6d6860;
+}

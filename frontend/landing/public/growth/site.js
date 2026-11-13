@@ -1,7 +1,10 @@
 import * as CookieConsent from "./vendor/cookieconsent-3.3.0.js"
 import config from "./config.js"
-import { effectiveConsent, eventForLink, pageLocation } from "./policy.js"
+import { effectiveConsent, eventForLink, pageLocation, campaignAttribution } from "./policy.js"
 import { createController } from "./controller.js"
+
+document.documentElement.dataset.growthSite = config.site
+document.documentElement.dataset.growthSection = window.location.pathname.startsWith("/docs") ? "docs" : "landing"
 
 const production = config.hostnames.includes(window.location.hostname)
 const privacySignal = navigator.globalPrivacyControl === true
@@ -59,7 +62,12 @@ const controller = createController(
       insertScript("https://www.googletagmanager.com/gtm.js?id=" + encodeURIComponent(id), "growth-google")
     },
     loadIdentification: (src) => insertScript(src, "growth-identification"),
-    event: (value) => window.dataLayer.push(value),
+    event: (value) => {
+      const attribution = campaignAttribution(window.location.href, value.growth_advertising)
+      const location = new URL(value.growth_page_location)
+      for (const [key, item] of Object.entries(attribution)) location.searchParams.set(key, item)
+      window.dataLayer.push({ ...value, growth_page_location: location.href })
+    },
     clearCookies,
     reload: () => window.location.reload(),
     notify: (value) => {
