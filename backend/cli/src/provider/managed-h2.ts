@@ -42,16 +42,27 @@ export namespace ManagedH2 {
     minWindow: number
     unsuitableMs: number
     warmPath: string
+    keepaliveMs: number
+    keepWarmCheckMs: number
+    keepWarmIdleStopMs: number
   }
 
   const defaults: Options = {
     connectTimeoutMs: 3_000,
     pingIntervalMs: 10_000,
     pingTimeoutMs: 5_000,
-    idleCloseMs: 110_000,
+    // Just under Fly's edge, which closes an HTTP/2 connection 300 s after
+    // its last request (PINGs do not count).
+    idleCloseMs: 290_000,
     minWindow: 1 << 20,
     unsuitableMs: 5 * 60_000,
     warmPath: "/api/health",
+    // Keep-warm: a request on a connection that carried none for this long
+    // resets Fly's idle timer. /api/health answers from memory (no database).
+    keepaliveMs: 240_000,
+    keepWarmCheckMs: 30_000,
+    // Stop keeping warm this long after the last activity.
+    keepWarmIdleStopMs: 30 * 60_000,
   }
   let options: Options = { ...defaults }
 
@@ -80,6 +91,7 @@ export namespace ManagedH2 {
     pingTimer?: ReturnType<typeof setInterval>
     idleTimer?: ReturnType<typeof setTimeout>
     lastActive: number
+    lastRequest: number
     // Open requests fail through these when the session dies: Bun does not
     // reliably emit stream events for a session it was told to destroy.
     open: Set<(error: DeadConnection) => void>
@@ -107,6 +119,7 @@ export namespace ManagedH2 {
   }
 
   export async function reset() {
+    stopKeepWarm()
     const open = [...sessions.values()]
     sessions.clear()
     unsuitable.clear()
@@ -156,7 +169,7 @@ export namespace ManagedH2 {
     const pending: Promise<Session> = new Promise<Session>((resolve, reject) => {
       let settled = false
       const session = http2.connect(origin)
-      const held: Session = { session, streams: 0, lastActive: Date.now(), open: new Set() }
+      const held: Session = { session, streams: 0, lastActive: Date.now(), lastRequest: Date.now(), open: new Set() }
       const fail = (error: Error) => {
         if (settled) return
         settled = true
@@ -226,6 +239,7 @@ export namespace ManagedH2 {
     if (held.idleTimer) clearTimeout(held.idleTimer)
     held.idleTimer = undefined
     held.lastActive = Date.now()
+    held.lastRequest = held.lastActive
     if (held.streams++ === 0) {
       held.pingTimer = setInterval(() => ping(origin, held), options.pingIntervalMs)
       held.pingTimer.unref?.()
@@ -401,6 +415,7 @@ export namespace ManagedH2 {
   /** Fetch-compatible: managed gateway calls ride the reused HTTP/2 session
    * when possible, and otherwise the fresh connection exactly as before. */
   export async function fetch(input: string | URL | Request, init?: BunFetchRequestInit): Promise<Response> {
+    activity()
     const url = target(input)
     if (!enabled() || !url || !carriable(init) || skip(url.origin)) return fetchWithFreshConnection(input, init)
     const request = init ?? {}
@@ -434,6 +449,12 @@ export namespace ManagedH2 {
    * request goes out at once: Fly's edge drops a connection that carries no
    * request within ~5 s. Never throws. */
   export function warm(base: string) {
+    activity()
+    warmNow(base)
+  }
+
+  // Keep-warm's own warming is not user activity: it must not extend the window.
+  function warmNow(base: string) {
     const url = target(base)
     if (!enabled() || !url || skip(url.origin)) return
     void (async () => {
@@ -447,5 +468,52 @@ export namespace ManagedH2 {
         stats.fallbacks++
       }
     })
+  }
+
+  // Keep-warm: open the gateway connection when the app starts and keep it
+  // usable until the first message, which may come minutes later.
+  let keeper:
+    | { resolve: () => string | undefined; timer: ReturnType<typeof setInterval>; until: number }
+    | undefined
+
+  /** Extend the keep-warm window (a UI connected, a session opened, a call). */
+  export function activity() {
+    if (keeper) keeper.until = Date.now() + options.keepWarmIdleStopMs
+  }
+
+  /** Keep a gateway connection warm while the app is in use. `resolve` returns
+   * the managed gateway base URL, or undefined while it is not known (before
+   * credential sync, or for a session without Ace). Each check opens the
+   * connection when there is none, and sends one small request when the open
+   * connection has carried none for `keepaliveMs`; checks stop
+   * `keepWarmIdleStopMs` after the last activity and resume with the next
+   * one. A no-op while the switch is off. */
+  export function keepWarm(resolve: () => string | undefined) {
+    stopKeepWarm()
+    const tick = () => {
+      if (!keeper || !enabled()) return
+      if (Date.now() > keeper.until) return
+      const base = keeper.resolve()
+      const url = base ? target(base) : undefined
+      if (!url || skip(url.origin)) return
+      void (async () => {
+        const existing = sessions.get(url.origin)
+        const held = existing ? await existing.catch(() => undefined) : undefined
+        const live = held && !held.dead && !held.draining && Date.now() - held.lastActive < options.idleCloseMs
+        if (!live) return warmNow(base!)
+        if (held.streams > 0 || Date.now() - held.lastRequest < options.keepaliveMs) return
+        const response = await once(new URL(options.warmPath, url.origin), { method: "GET" }, held, true)
+        await response.body?.cancel().catch(() => undefined)
+      })().catch(() => undefined)
+    }
+    const timer = setInterval(tick, options.keepWarmCheckMs)
+    timer.unref?.()
+    keeper = { resolve, timer, until: Date.now() + options.keepWarmIdleStopMs }
+    tick()
+  }
+
+  export function stopKeepWarm() {
+    if (keeper) clearInterval(keeper.timer)
+    keeper = undefined
   }
 }

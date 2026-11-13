@@ -255,3 +255,90 @@ test("warming opens the connection with a request at once, and the model call re
   expect(sessionsOpened).toHaveLength(1)
   expect(ManagedH2.stats).toMatchObject({ connects: 1, reused: 1 })
 })
+
+// Keep-warm: open at app start, keep usable until the first message.
+const health = () => seen.filter((item) => item.path === "/api/health").length
+const until = async (check: () => boolean, ms = 3_000) => {
+  const deadline = Date.now() + ms
+  while (!check() && Date.now() < deadline) await Bun.sleep(10)
+  return check()
+}
+
+test("keep-warm opens the connection at start and sends a keepalive only after an idle period", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 50, keepaliveMs: 300, keepWarmIdleStopMs: 10_000 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    expect(await until(() => health() === 1)).toBe(true) // warmed with one request at once
+    await Bun.sleep(150)
+    expect(health()).toBe(1) // not idle long enough yet
+    expect(await until(() => health() === 2, 1_000)).toBe(true) // keepalive after ~300 ms idle
+    expect(sessionsOpened).toHaveLength(1) // the same connection throughout
+    const response = await post("first-message")
+    await response.text()
+    expect(ManagedH2.stats.reused).toBeGreaterThanOrEqual(1)
+    expect(sessionsOpened).toHaveLength(1)
+  } finally {
+    restore()
+  }
+})
+
+test("keep-warm sends no keepalive while calls keep the connection busy", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 50, keepaliveMs: 300, keepWarmIdleStopMs: 10_000 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    await until(() => health() === 1)
+    for (let i = 0; i < 8; i++) {
+      await (await post(`busy-${i}`)).text()
+      await Bun.sleep(100)
+    }
+    expect(health()).toBe(1)
+  } finally {
+    restore()
+  }
+})
+
+test("keep-warm stops after the activity window and resumes with new activity", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 50, keepaliveMs: 100, keepWarmIdleStopMs: 400 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    await until(() => health() >= 1)
+    await Bun.sleep(700) // window over: checks stop
+    const stopped = health()
+    await Bun.sleep(400)
+    expect(health()).toBe(stopped)
+    ManagedH2.activity() // a UI connected again
+    expect(await until(() => health() > stopped, 1_000)).toBe(true)
+  } finally {
+    restore()
+  }
+})
+
+test("keep-warm reopens the connection after it was dropped", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 50, keepaliveMs: 10_000, keepWarmIdleStopMs: 10_000 })
+  try {
+    ManagedH2.keepWarm(() => origin)
+    await until(() => sessionsOpened.length === 1 && health() === 1)
+    drop()
+    expect(await until(() => sessionsOpened.length === 2 && health() === 2, 2_000)).toBe(true)
+  } finally {
+    restore()
+  }
+})
+
+test("keep-warm does nothing with the switch off or before the gateway is known", async () => {
+  const restore = ManagedH2.configure({ keepWarmCheckMs: 50, keepaliveMs: 100, keepWarmIdleStopMs: 10_000 })
+  try {
+    let base: string | undefined
+    ManagedH2.keepWarm(() => base)
+    await Bun.sleep(200)
+    expect(sessionsOpened).toHaveLength(0)
+    delete process.env["OPENSCIENCE_MANAGED_H2"]
+    base = origin
+    await Bun.sleep(200)
+    expect(sessionsOpened).toHaveLength(0)
+    process.env["OPENSCIENCE_MANAGED_H2"] = "1"
+    expect(await until(() => sessionsOpened.length === 1)).toBe(true) // sync finished: warms
+  } finally {
+    restore()
+  }
+})

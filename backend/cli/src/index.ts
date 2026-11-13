@@ -167,6 +167,16 @@ const cli = yargs(hideBin(process.argv))
           // cold balance read before its model call.
           m.OpenScience.warmBalance()
         })
+        // Open the managed gateway connection now and keep it usable until the
+        // first message (a no-op unless OPENSCIENCE_MANAGED_H2 is switched on).
+        // The gateway URL comes from credential sync, so it is read per check.
+        void Promise.all([import("./provider/managed-h2"), import("./openscience/synced-env-policy")]).then(
+          ([{ ManagedH2 }, policy]) =>
+            ManagedH2.keepWarm(() => {
+              const base = process.env["OPENROUTER_BASE_URL"]
+              return policy.isAtlasProxyURL(base) ? base : undefined
+            }),
+        )
       }
 
       // First authenticated startup quietly provisions the app-owned Python

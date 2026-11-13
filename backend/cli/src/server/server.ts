@@ -1,4 +1,5 @@
 import { BusEvent } from "@/bus/bus-event"
+import { ManagedH2 } from "../provider/managed-h2"
 import { Bus } from "@/bus"
 import { Log } from "../util/log"
 import { describeRoute, generateSpecs, validator, resolver, openAPIRouteHandler } from "hono-openapi"
@@ -792,6 +793,8 @@ export namespace Server {
           }),
           async (c) => {
             log.info("event connected")
+            // A UI is in use: keep the managed gateway connection warm.
+            ManagedH2.activity()
             return streamSSE(c, async (stream) => {
               stream.writeSSE({
                 data: JSON.stringify({
