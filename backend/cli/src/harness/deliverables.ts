@@ -6,6 +6,7 @@ import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { Filesystem } from "@/util/filesystem"
 import { HarnessState } from "./state"
+import { firstRequest } from "./first-request"
 
 /**
  * When the request names its outputs, hold the model to them: detect the
@@ -641,6 +642,21 @@ export namespace Deliverables {
   }
 }
 
+/** The session's state with its deliverables read: a process that restarted
+ * after the first request was taken reads them from the stored transcript,
+ * since its message hook will not see that request again. */
+async function seed(sessionID: string) {
+  const state = HarnessState.get(sessionID)
+  if (state.deliverablesSeeded) return state
+  state.deliverablesSeeded = true
+  const text = await firstRequest(sessionID)
+  if (text && !state.deliverables.length) {
+    state.deliverables = Deliverables.detect(text)
+    state.deliverableHeaders = Deliverables.headers(text, state.deliverables)
+  }
+  return state
+}
+
 export const DeliverablesUnit: Plugin = async () => {
   const hooks: Hooks = {
     async "chat.message"(input, output) {
@@ -673,14 +689,15 @@ export const DeliverablesUnit: Plugin = async () => {
       const text = spoken.map((part) => part.text).join("\n")
       state.deliverables = Deliverables.detect(text)
       state.deliverableHeaders = Deliverables.headers(text, state.deliverables)
+      state.deliverablesSeeded = true
     },
     async "env.lines"(input, output) {
-      const named = HarnessState.get(input.sessionID).deliverables
+      const named = (await seed(input.sessionID)).deliverables
       output.lines.push(...Deliverables.envLine(named))
       output.rules.push(...Deliverables.rules(named))
     },
     async "loop.before_finish"(input, output) {
-      const state = HarnessState.get(input.sessionID)
+      const state = await seed(input.sessionID)
       if (!state.deliverables.length) return
       // A relative output may sit in the tool directory or in the project's
       // files: the environment names both, and an isolated session's agent

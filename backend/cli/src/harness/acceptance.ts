@@ -10,6 +10,7 @@ import { PermissionNext } from "@/permission/next"
 import { ProjectAccess } from "@/project/access"
 import { BashTool } from "@/tool/bash"
 import { HarnessState } from "./state"
+import { firstRequest } from "./first-request"
 import { Deliverables } from "./deliverables"
 import { iife } from "@synsci/util/iife"
 
@@ -553,6 +554,19 @@ export namespace Acceptance {
   export const TIMEOUT_MS = 15 * 60_000
 }
 
+/** The session's state with its contract read: a process that restarted after
+ * the first request was taken reads the contract from the stored transcript,
+ * since its message hook will not see that request again. */
+async function seed(sessionID: string) {
+  const state = HarnessState.get(sessionID)
+  if (state.acceptanceSeeded) return state
+  state.acceptanceSeeded = true
+  const text = await firstRequest(sessionID)
+  if (text && !state.acceptance.commands.length && !state.acceptance.banned.length)
+    state.acceptance = Acceptance.detect(text)
+  return state
+}
+
 export const AcceptanceUnit: Plugin = async () => {
   const hooks: Hooks = {
     async "chat.message"(input, output) {
@@ -573,14 +587,15 @@ export const AcceptanceUnit: Plugin = async () => {
       )
       if (earlier.length) return
       state.acceptance = Acceptance.detect(spoken.map((part) => part.text).join("\n"))
+      state.acceptanceSeeded = true
     },
     async "env.lines"(input, output) {
-      const contract = HarnessState.get(input.sessionID).acceptance
+      const contract = (await seed(input.sessionID)).acceptance
       output.lines.push(...Acceptance.envLine(contract))
       output.rules.push(...Acceptance.rules(contract))
     },
     async "loop.before_finish"(input, output) {
-      const state = HarnessState.get(input.sessionID)
+      const state = await seed(input.sessionID)
       const contract = state.acceptance
       if (!contract.commands.length && !contract.banned.length) return
       const root = Instance.directory

@@ -247,6 +247,38 @@ test("a folder connected later is told once as a durable message; the first mess
   }
 })
 
+test("after a restart the first request's deliverables are read again, so their rule and the session details stay put", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const session = await Session.create({ workspace: "project" })
+        const ask = (text: string) =>
+          SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text }],
+          })
+        await ask(SPEC)
+        // A restarted process starts with no harness state for the session.
+        HarnessState.clear(session.id)
+        await ask("Continue.")
+        const last = main(fixture.requests).at(-1)!
+        const system = JSON.stringify(last.messages.filter((message) => message.role === "system"))
+        expect(system).toContain("The Named outputs in the session details are checked")
+        expect(JSON.stringify(last.messages)).toContain("Named outputs: results/alpha.csv")
+        expect(JSON.stringify(last.messages)).not.toContain("Session details changed")
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
 test("a status change is appended once as a durable harness message, and stays put on the next step", async () => {
   const fixture = toolThenText()
   const started = Date.now()
