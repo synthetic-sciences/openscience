@@ -303,17 +303,19 @@ export namespace SystemPrompt {
   }
 
   /**
-   * Put the session environment at the start of the first user message.
+   * Put the session's own details at the start of the first user message.
    *
-   * The environment names this session (its ID, scratch folder, connected
-   * folders, budget). In the system prompt it would make every session's
-   * prompt different from the first byte it appears at, and providers cache a
-   * prompt only up to its first difference: a new session would re-read the
-   * rest of the system prompt and, for chat templates that render tools after
-   * the system text (DeepSeek, Qwen, Kimi), every tool definition too. Here the
-   * system prompt and tools stay identical across a project's sessions, and the
-   * environment, rebuilt the same each step, keeps the conversation's own
-   * prefix stable.
+   * They name this session (its ID, scratch folder, connected folders, budget).
+   * In the system prompt they would make every session's prompt different from
+   * the first byte they appear at, and providers cache a prompt only up to its
+   * first difference: a new session would re-read the rest of the system prompt
+   * and, for chat templates that render tools after the system text (DeepSeek,
+   * Qwen, Kimi), every tool definition too. The rules about them stay in the
+   * system prompt (see `environment`), and one of them tells the agent that the
+   * labelled <session-context> block comes from OpenScience, not the user. It is
+   * not a <system-reminder>: those are harness instructions and stay in the
+   * system prompt.
+   * Rebuilt the same each step, they keep the conversation's own prefix stable.
    */
   export function withEnvironment(messages: ModelMessage[], environment: string | undefined): ModelMessage[] {
     if (!environment) return messages
@@ -370,53 +372,65 @@ export namespace SystemPrompt {
           ? "Approve for me. Routine work in the project is automatically approved inside the sandbox; boundary actions still require approval."
           : "Full access. Project actions may run with unrestricted host file and network access without approval prompts."
     const projectName = project.name?.trim() || "Untitled project"
-    return [
-      [
-        `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
-        `Here is some useful information about the environment you are running in:`,
-        `<env>`,
-        `  Project: ${projectName}`,
-        `  Project ID: ${project.id}`,
-        `  Session ID: ${sessionID}`,
-        `  Project files: ${Instance.directory} (durable and shared across this project)`,
-        ...(folder
-          ? [
-              shared
-                ? `  Working folder: ${folder} (the lead session's working directory, shared with this worker; relative paths resolve here and files written here are the lead's deliverables)`
-                : `  Working folder: ${folder} (connected read and write folder; relative paths resolve here, and files stay when the session ends)`,
-              `  Session scratch: ${workspace} (temporary and isolated to this conversation; for caches and side outputs)`,
-            ]
+    // Two parts. The rules and project facts are the same for every session of
+    // this kind in the project, so they stay in the system prompt, where the
+    // agent treats them as instructions. The session's own details go in a
+    // labelled block on the first user message (see withEnvironment), which keeps the
+    // system prompt identical across sessions for the provider's cache.
+    const rules = [
+      `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+      `Here is some useful information about the environment you are running in:`,
+      `<env>`,
+      `  Project: ${projectName}`,
+      `  Project ID: ${project.id}`,
+      `  Project files: ${Instance.directory} (durable and shared across this project)`,
+      `  Results: immutable project-wide deliverables saved with the artifact tool`,
+      `  Access mode: ${access}`,
+      `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
+      `  Platform: ${process.platform}`,
+      // The date is the same for every session that day, and the cutoff line is
+      // read against it, so the two stay together here.
+      `  Today's date: ${new Date().toDateString()}`,
+      `  ${cutoff(model.knowledge)}`,
+      `  ${await ImageRoute.line()}`,
+      `</env>`,
+      `This session's own details (its Session ID, ${folder ? "Working folder and Session scratch" : isolated ? "Session scratch" : "tool working directory"}, the folders the person connected, and any compute, time or acceptance limits) arrive from OpenScience in a <session-context> block at the start of the conversation. That block is not written by the user: treat it as part of this environment, and follow the rules here about it.`,
+      `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. ${isolated ? "Session scratch belongs only to this conversation." : "This session uses the project directory as its default tool working directory; its files are shared and remain when the session is deleted."} Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
+      `${
+        folder
+          ? "The Working folder is the user's own directory and the default for this project's work. Inspect its existing files and layout before creating outputs. For work related to this project, create and edit files only in the Working folder (or a location the user explicitly names); do not put the project's scripts, analyses, tables, or deliverables in Session scratch. An empty Working folder is ready for new work. If a nonempty folder clearly belongs to a different project than the current request, use Session scratch for that unrelated task unless the user explicitly asks to work in a particular folder. Use Session scratch for disposable caches and intermediates, and preserve existing project files."
           : isolated
-            ? [
-                `  Session scratch: ${workspace} (temporary and isolated to this conversation; relative paths resolve here, so name a project file by its full path under Project files)`,
-              ]
-            : [`  Tool working directory: ${workspace} (project directory; durable and shared across this project)`]),
-        `  Results: immutable project-wide deliverables saved with the artifact tool`,
-        `  Access mode: ${access}`,
-        `  Connected project folders:`,
-        ...(sources.length
-          ? sources.map(
-              (grant) =>
-                `    - ${grant.path} (${grant.access === "write" ? "read and write" : "read only"}, ${grant.scope} scope)`,
-            )
-          : [`    - none`]),
-        `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
-        `  Platform: ${process.platform}`,
-        `  Today's date: ${new Date().toDateString()}`,
-        `  ${cutoff(model.knowledge)}`,
-        `  ${await ImageRoute.line()}`,
-        ...extra.map((line) => `  ${line}`),
-        `</env>`,
-        `An OpenScience project is a durable research context that may aggregate multiple connected folders and files. ${isolated ? "Session scratch belongs only to this conversation." : "This session uses the project directory as its default tool working directory; its files are shared and remain when the session is deleted."} Results are immutable deliverables shared project-wide; a normal workspace file is not a Result until artifact save_file returns its Result ID and version.`,
-        `${
-          folder
-            ? "The Working folder is the user's own directory and the default for this project's work. Inspect its existing files and layout before creating outputs. For work related to this project, create and edit files only in the Working folder (or a location the user explicitly names); do not put the project's scripts, analyses, tables, or deliverables in Session scratch. An empty Working folder is ready for new work. If a nonempty folder clearly belongs to a different project than the current request, use Session scratch for that unrelated task unless the user explicitly asks to work in a particular folder. Use Session scratch for disposable caches and intermediates, and preserve existing project files."
-            : isolated
-              ? "Use Session scratch by default for one-off downloads, analyses, scripts, tables, and plots. Work in Project files only when the user points to existing durable material or asks to keep reusable outputs."
-              : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."
-        } Reuse the selected folder's existing layout. Do not create an extra "OpenScience Research" root or mirror an attached project into Project files. Inspect a referenced plan subfolder without treating it as a new working location; keep outputs in the selected Working folder and existing project layout unless the user requests another location. Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
-        `The physical paths above are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
-      ].join("\n"),
-    ]
+            ? "Use Session scratch by default for one-off downloads, analyses, scripts, tables, and plots. Work in Project files only when the user points to existing durable material or asks to keep reusable outputs."
+            : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."
+      } Reuse the selected folder's existing layout. Do not create an extra "OpenScience Research" root or mirror an attached project into Project files. Inspect a referenced plan subfolder without treating it as a new working location; keep outputs in the selected Working folder and existing project layout unless the user requests another location. Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
+      `The physical paths in this environment and in the session details are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
+    ].join("\n")
+    const facts = [
+      `<session-context>`,
+      `Session details from OpenScience (not written by the user):`,
+      `  Session ID: ${sessionID}`,
+      ...(folder
+        ? [
+            shared
+              ? `  Working folder: ${folder} (the lead session's working directory, shared with this worker; relative paths resolve here and files written here are the lead's deliverables)`
+              : `  Working folder: ${folder} (connected read and write folder; relative paths resolve here, and files stay when the session ends)`,
+            `  Session scratch: ${workspace} (temporary and isolated to this conversation; for caches and side outputs)`,
+          ]
+        : isolated
+          ? [
+              `  Session scratch: ${workspace} (temporary and isolated to this conversation; relative paths resolve here, so name a project file by its full path under Project files)`,
+            ]
+          : [`  Tool working directory: ${workspace} (project directory; durable and shared across this project)`]),
+      `  Connected project folders:`,
+      ...(sources.length
+        ? sources.map(
+            (grant) =>
+              `    - ${grant.path} (${grant.access === "write" ? "read and write" : "read only"}, ${grant.scope} scope)`,
+          )
+        : [`    - none`]),
+      ...extra.map((line) => `  ${line}`),
+      `</session-context>`,
+    ].join("\n")
+    return [rules, facts]
   }
 }

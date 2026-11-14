@@ -129,15 +129,20 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
           request.messages.filter((message) => message.role === "system")
         const firstUser = (request: { messages: Array<{ role: string; content: unknown }> }) =>
           request.messages.find((message) => message.role === "user")
-        // The session environment rides the first user message, so the system
-        // prompt names no session and stays identical across sessions.
+        // The environment's rules stay in the system prompt; the session's own
+        // details ride the first user message as a labelled block, so the
+        // system prompt names no session and stays identical across sessions.
         const head = JSON.stringify(system(steps[0]))
-        expect(head).not.toContain("<env>")
+        expect(head).toContain("Access mode: ")
+        expect(head).toMatch(/Knowledge cutoff: /)
+        expect(head).toContain("That block is not written by the user")
         expect(head).not.toContain(session.id)
         const env = JSON.stringify(firstUser(steps[0]))
+        expect(env).toContain("<session-context>")
+        expect(env).not.toContain("<system-reminder>")
         expect(env).toContain(`Session ID: ${session.id}`)
         expect(env).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
-        expect(env).toMatch(/Knowledge cutoff: /)
+        expect(env).not.toContain("Access mode")
         // The budget's total is fixed for the session and may sit in <env>;
         // the elapsed figure may not.
         expect(env).toContain("Time budget: 2h")

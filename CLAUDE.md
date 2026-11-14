@@ -31,8 +31,8 @@ independent of optional harness switches; see
 ```text
 Agent registry + selected model + current user message
     -> agent prompt, otherwise the model-family header with the science block
-    -> project instructions, core-skills index, posture reminder (system)
-    -> session environment (+ harness env lines) at the start of the first user message
+    -> environment rules and project facts, project instructions, core-skills index, posture reminder (system)
+    -> this session's details (+ harness env lines) in a <session-context> block on the first user message
     -> system-transform plugin, then parameter/header hooks
     -> provider message/tool normalization and inference options
     -> provider API
@@ -62,16 +62,21 @@ beneath the family header.
 
 ### Context and reminders
 
-`src/session/prompt.ts` assembles the system context (project instructions,
-the `<core-skills>` index for the lead or the full catalog on an explicit
-`/skill` invocation, and the system reminders) before invoking `LLM.stream`.
-The session environment (`SystemPrompt.environment`, including lines the
-harness units add through the `env.lines` hook: compute, time budget, spend)
-names the session, so it is not in the system prompt:
-`SystemPrompt.withEnvironment` joins it to the start of the first user message.
-The system prompt and tools then stay byte-identical across a project's
-sessions, which providers need to reuse a cached prompt; keep anything that
-names a session, a time or a per-turn figure out of the system context. The one standing reminder is the
+`src/session/prompt.ts` assembles the system context before invoking
+`LLM.stream`: the environment's rules and project facts (`SystemPrompt.environment`
+part one: model, project, access mode, platform, date and cutoff, and the rules
+about folders, Results and paths), project instructions, the `<core-skills>`
+index for the lead (or the full catalog on an explicit `/skill` invocation), and
+the system reminders. This session's own details (part two: Session ID, working
+folder or scratch, connected folders, and the lines harness units add through
+the `env.lines` hook: compute, time budget, spend) are facts, not rules:
+`SystemPrompt.withEnvironment` joins them to the start of the first user message
+in a `<session-context>` block that the system prompt names as coming from
+OpenScience. Rules stay in the system prompt; `<system-reminder>` blocks are
+harness instructions and stay there too. The system prompt and tools then stay
+byte-identical across a project's sessions, which providers need to reuse a
+cached prompt; keep anything that names a session or a per-turn figure out of
+the system context. The one standing reminder is the
 posture line from `researchEffortReminder` (effort, delegation level,
 independence); Plan receives `session/prompt/plan.txt` instead. There is no
 keyword-based tool selection and no quick/direct/inspection routing.

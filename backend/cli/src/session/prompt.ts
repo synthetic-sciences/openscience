@@ -1803,11 +1803,13 @@ export namespace SessionPrompt {
       }
       const slash = SystemPrompt.slashInvocation(route.text)
       const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
-      // The session environment rides the first user message, not the system
-      // prompt, so the system prompt and tools stay identical across sessions
-      // (see SystemPrompt.withEnvironment).
-      const environment = (await SystemPrompt.environment(model, sessionID, envLines)).join("\n")
+      // The environment's rules stay in the system prompt; this session's own
+      // details ride the first user message as a labelled block, so the system
+      // prompt and tools stay identical across sessions (see
+      // SystemPrompt.withEnvironment).
+      const [envRules, environment] = await SystemPrompt.environment(model, sessionID, envLines)
       const system = [
+        envRules,
         ...(await InstructionPrompt.system()),
         // The lead carries the curated core index; the full catalog appears
         // only for an explicit /skill invocation. Workers with a prompt of
