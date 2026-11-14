@@ -62,9 +62,9 @@ describe("session working root", () => {
         expect(authority.scratch).toBe(scratch)
 
         // The model is told which is which.
-        const environment = (await SystemPrompt.environment({ api: { id: "m" }, providerID: "p" }, session.id)).join(
-          "\n",
-        )
+        const environment = Object.values(
+          await SystemPrompt.environment({ api: { id: "m" }, providerID: "p" }, session.id),
+        ).join("\n")
         expect(environment).toContain(`Working folder: ${folder.path}`)
         expect(environment).toContain(`Session scratch: ${scratch}`)
 

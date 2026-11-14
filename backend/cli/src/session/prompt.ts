@@ -1755,8 +1755,9 @@ export namespace SessionPrompt {
       // (measured: cache reads stuck at the system prompt with the tail, and
       // growing step by step without it).
       const envLines: string[] = []
+      const envRules: string[] = []
       const status: string[] = []
-      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines, status })
+      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines, status, rules: envRules })
       const study = await studyReminder(sessionID)
       // Each component is appended when its own key changes. The units'
       // reminders are one-shot (their key is their text); the study's key
@@ -1806,10 +1807,11 @@ export namespace SessionPrompt {
       // The environment's rules stay in the system prompt; this session's own
       // details ride the first user message as a labelled block, so the system
       // prompt and tools stay identical across sessions (see
-      // SystemPrompt.withEnvironment).
-      const [envRules, environment] = await SystemPrompt.environment(model, sessionID, envLines)
+      // SystemPrompt.withSessionContext).
+      const environment = await SystemPrompt.environment(model, sessionID, { lines: envLines, rules: envRules })
+      const sessionContext = environment.session
       const system = [
-        envRules,
+        environment.rules,
         ...(await InstructionPrompt.system()),
         // The lead carries the curated core index; the full catalog appears
         // only for an explicit /skill invocation. Workers with a prompt of
@@ -1843,7 +1845,7 @@ export namespace SessionPrompt {
         ...header.system,
         ...system,
         // Counted with the system text: it is sent with every request too.
-        environment,
+        sessionContext,
         ...(lastUser.system ? [lastUser.system] : []),
         ...(header.instructions ? [header.instructions] : []),
       ]
@@ -1991,7 +1993,7 @@ export namespace SessionPrompt {
       // A later summary of this conversation can ride this request's prefix.
       SessionCompaction.remember(sessionID, {
         system,
-        environment,
+        sessionContext,
         tools,
         agent,
         model: { providerID: model.providerID, id: model.id },
@@ -2005,13 +2007,13 @@ export namespace SessionPrompt {
         messages: [
           // Keep only the most-recent images in full; older figures/screenshots become
           // text placeholders so re-shipping media every turn can't bloat the window.
-          ...SystemPrompt.withEnvironment(
+          ...SystemPrompt.withSessionContext(
             MessageV2.toModelMessages(sessionMessages, model, {
               keepRecentImages: SessionCompaction.recentImages(config),
               imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
               reduceInputs: config.compaction?.pruneInputs === true,
             }),
-            environment,
+            sessionContext,
           ),
           ...(isLastStep
             ? [

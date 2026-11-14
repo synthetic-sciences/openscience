@@ -337,11 +337,12 @@ describe("Deliverables.check", () => {
     expect(results["good.json"]).toEqual([])
   })
 
-  test("the env line names what will be checked, and truncates a long list", () => {
+  test("the env line names what will be checked, truncates a long list, and its rule says how", () => {
     expect(Deliverables.envLine([])).toEqual([])
     const [one] = Deliverables.envLine(["/app/rules.json", "/app/ordering.txt"])
     expect(one).toContain("/app/rules.json, /app/ordering.txt")
-    expect(one).toContain("before this turn ends")
+    expect(Deliverables.rules([])).toEqual([])
+    expect(Deliverables.rules(["/app/rules.json"])[0]).toContain("before this turn ends")
     const many = Array.from({ length: 11 }, (_, index) => `/app/out${index}.csv`)
     const [capped] = Deliverables.envLine(many)
     expect(capped).toContain("(+3 more)")

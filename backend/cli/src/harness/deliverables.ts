@@ -621,9 +621,14 @@ export namespace Deliverables {
     if (!deliverables.length) return []
     const shown = deliverables.slice(0, limit)
     const rest = deliverables.length - shown.length
+    return [`Named outputs: ${shown.join(", ")}${rest > 0 ? ` (+${rest} more)` : ""}`]
+  }
+
+  /** The instruction that goes with named outputs, for the system prompt. */
+  export function rules(deliverables: string[]) {
+    if (!deliverables.length) return []
     return [
-      `Named outputs: ${shown.join(", ")}${rest > 0 ? ` (+${rest} more)` : ""}` +
-        ` — checked for existence, format and placeholder values before this turn ends; produce anything else the request asks for as well.`,
+      "The Named outputs in the session details are checked for existence, format and placeholder values before this turn ends; produce anything else the request asks for as well.",
     ]
   }
 
@@ -670,7 +675,9 @@ export const DeliverablesUnit: Plugin = async () => {
       state.deliverableHeaders = Deliverables.headers(text, state.deliverables)
     },
     async "env.lines"(input, output) {
-      output.lines.push(...Deliverables.envLine(HarnessState.get(input.sessionID).deliverables))
+      const named = HarnessState.get(input.sessionID).deliverables
+      output.lines.push(...Deliverables.envLine(named))
+      output.rules.push(...Deliverables.rules(named))
     },
     async "loop.before_finish"(input, output) {
       const state = HarnessState.get(input.sessionID)

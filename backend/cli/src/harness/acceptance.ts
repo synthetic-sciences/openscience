@@ -290,12 +290,20 @@ export namespace Acceptance {
 
   export function envLine(contract: Contract) {
     const parts = [
-      ...contract.commands.map((entry) => `\`${entry.command}\`${entry.cwd ? ` (from ${entry.cwd})` : ""} must pass`),
+      ...contract.commands.map((entry) => `\`${entry.command}\`${entry.cwd ? ` (from ${entry.cwd})` : ""}`),
       ...contract.banned.map(
         (entry) => `no ${entry.tokens.map((token) => `\`${token}\``).join(", ")} under ${entry.scope}`,
       ),
     ]
-    return parts.length ? [`Acceptance (checked before the run ends): ${parts.join("; ")}`] : []
+    return parts.length ? [`Acceptance checks: ${parts.join("; ")}`] : []
+  }
+
+  /** The instruction that goes with a contract, for the system prompt. */
+  export function rules(contract: Contract) {
+    if (!contract.commands.length && !contract.banned.length) return []
+    return [
+      "The Acceptance checks in the session details are run before the run ends, as the grader will run them, and must pass: each command must succeed, and no listed token may appear under its path.",
+    ]
   }
 
   export type Failure = { what: string; detail: string }
@@ -567,7 +575,9 @@ export const AcceptanceUnit: Plugin = async () => {
       state.acceptance = Acceptance.detect(spoken.map((part) => part.text).join("\n"))
     },
     async "env.lines"(input, output) {
-      output.lines.push(...Acceptance.envLine(HarnessState.get(input.sessionID).acceptance))
+      const contract = HarnessState.get(input.sessionID).acceptance
+      output.lines.push(...Acceptance.envLine(contract))
+      output.rules.push(...Acceptance.rules(contract))
     },
     async "loop.before_finish"(input, output) {
       const state = HarnessState.get(input.sessionID)

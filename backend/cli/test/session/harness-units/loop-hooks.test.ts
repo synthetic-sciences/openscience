@@ -107,7 +107,7 @@ test("switching the deliverables unit off removes the continuation", async () =>
   }
 })
 
-test("compute stays in <env>; nothing ephemeral rides at the tail, so every step's request is a prefix of the next", async () => {
+test("compute and the budget sit in the session details, the budget's rule in the system prompt; nothing ephemeral rides at the tail, so every step's request is a prefix of the next", async () => {
   const fixture = toolThenText()
   try {
     await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
@@ -143,9 +143,11 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
         expect(env).toContain(`Session ID: ${session.id}`)
         expect(env).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
         expect(env).not.toContain("Access mode")
-        // The budget's total is fixed for the session and may sit in <env>;
-        // the elapsed figure may not.
+        // The budget's total is fixed for the session and sits in the session
+        // details, its rule in the system prompt; the elapsed figure may not.
         expect(env).toContain("Time budget: 2h")
+        expect(head).toContain("A Time budget in the session details means the work ends when you end your turn")
+        expect(env).not.toContain("keep improving it")
         expect(env).not.toContain("elapsed")
         expect(env).not.toContain("Spent so far")
         // The provider caches the prefix; a second step whose system prompt or

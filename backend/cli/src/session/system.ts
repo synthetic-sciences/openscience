@@ -317,8 +317,8 @@ export namespace SystemPrompt {
    * system prompt.
    * Rebuilt the same each step, they keep the conversation's own prefix stable.
    */
-  export function withEnvironment(messages: ModelMessage[], environment: string | undefined): ModelMessage[] {
-    if (!environment) return messages
+  export function withSessionContext(messages: ModelMessage[], session: string | undefined): ModelMessage[] {
+    if (!session) return messages
     const index = messages.findIndex((message) => message.role === "user")
     if (index === -1) return messages
     const first = messages[index] as Extract<ModelMessage, { role: "user" }>
@@ -327,23 +327,30 @@ export namespace SystemPrompt {
     // one-text message keeps its shape (providers send it as a plain string;
     // some relays refuse a content array where they expect one).
     if (typeof first.content === "string") {
-      out[index] = { ...first, content: `${environment}\n\n${first.content}` }
+      out[index] = { ...first, content: `${session}\n\n${first.content}` }
       return out
     }
     const [head, ...rest] = first.content
     out[index] =
       head?.type === "text"
-        ? { ...first, content: [{ ...head, text: `${environment}\n\n${head.text}` }, ...rest] }
-        : { ...first, content: [{ type: "text", text: environment }, ...first.content] }
+        ? { ...first, content: [{ ...head, text: `${session}\n\n${head.text}` }, ...rest] }
+        : { ...first, content: [{ type: "text", text: session }, ...first.content] }
     return out
   }
+
+  /** The environment in its two places: `rules` (with the project's facts) for
+   * the system prompt, `session` (this session's facts) for the first user
+   * message, via `withSessionContext`. */
+  export type Environment = { rules: string; session: string }
 
   export async function environment(
     model: { api: { id: string }; providerID: string; knowledge?: string },
     sessionID: string,
-    /** Lines the harness units add inside <env>: compute, time budget, spend. */
-    extra: string[] = [],
-  ) {
+    /** What the harness units add (the `env.lines` hook): `lines` are this
+     * session's facts (compute, a budget's length, the checks named), `rules`
+     * the instructions about them. */
+    units: { lines?: string[]; rules?: string[] } = {},
+  ): Promise<Environment> {
     const project = Instance.project
     const context = await Promise.all([SessionFilesystem.snapshot(sessionID), ProjectAccess.status(project)])
     const filesystem = context[0]
@@ -375,7 +382,7 @@ export namespace SystemPrompt {
     // Two parts. The rules and project facts are the same for every session of
     // this kind in the project, so they stay in the system prompt, where the
     // agent treats them as instructions. The session's own details go in a
-    // labelled block on the first user message (see withEnvironment), which keeps the
+    // labelled block on the first user message (see withSessionContext), which keeps the
     // system prompt identical across sessions for the provider's cache.
     const rules = [
       `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
@@ -404,6 +411,7 @@ export namespace SystemPrompt {
             : "Use the project directory by default for local work. Preserve existing files and treat changes as durable project changes."
       } Reuse the selected folder's existing layout. Do not create an extra "OpenScience Research" root or mirror an attached project into Project files. Inspect a referenced plan subfolder without treating it as a new working location; keep outputs in the selected Working folder and existing project layout unless the user requests another location. Do not create a new project subfolder for an ordinary answer. Promote a file to Results only when the user requests a durable deliverable or a Result-only contract requires it.`,
       `The physical paths in this environment and in the session details are routing information. Use the human project name in conversation, not UUID directory components. Do not expose scratch, managed-project, or connected-folder paths in a generic greeting. Mention a path only when the user asks about location or when it is needed to complete their request.`,
+      ...(units.rules ?? []),
     ].join("\n")
     const facts = [
       `<session-context>`,
@@ -428,9 +436,9 @@ export namespace SystemPrompt {
               `    - ${grant.path} (${grant.access === "write" ? "read and write" : "read only"}, ${grant.scope} scope)`,
           )
         : [`    - none`]),
-      ...extra.map((line) => `  ${line}`),
+      ...(units.lines ?? []).map((line) => `  ${line}`),
       `</session-context>`,
     ].join("\n")
-    return [rules, facts]
+    return { rules, session: facts }
   }
 }

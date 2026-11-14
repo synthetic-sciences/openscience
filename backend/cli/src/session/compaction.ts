@@ -708,8 +708,8 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
    * at the cache rate instead of paying the full rate for its own prompt. */
   type Assembly = {
     system: string[]
-    /** The session environment, sent at the start of the first user message. */
-    environment?: string
+    /** This session's facts, sent at the start of the first user message. */
+    sessionContext?: string
     tools: Record<string, AITool>
     agent: Agent.Info
     model: { providerID: string; id: string }
@@ -944,7 +944,7 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
           // message would replay its reasoning, missing the cache and paying
           // for thinking the summarizer never needed. The standalone call
           // strips media the summarizer never needs.
-          ...SystemPrompt.withEnvironment(
+          ...SystemPrompt.withSessionContext(
             MessageV2.toModelMessages(
               head,
               model,
@@ -960,8 +960,8 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
                     ...(reduced ? { toolOutputMaxChars: REDUCED_TOOL_OUTPUT_CHARS } : {}),
                   },
             ),
-            // The shared summary keeps the turn's exact prefix, environment included.
-            shared?.environment,
+            // The shared summary keeps the turn's exact prefix, session facts included.
+            shared?.sessionContext,
           ),
           {
             role: "user",

@@ -30,7 +30,7 @@ test("spend accumulates from finished steps and stays out of <env> and out of th
     fn: async () => {
       const unit = await CostUnit({} as PluginInput)
       const render = async () => {
-        const output = { lines: [] as string[], status: [] as string[] }
+        const output = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
         await unit["env.lines"]!({ sessionID: "ses_cost", model: {} as never }, output)
         // A figure that changes every step would discard the cached prefix in
         // <env>, and appended every step it would be a new message every step.
@@ -57,13 +57,13 @@ test("the soft ceiling adds a wrap-up reminder once and never stops the loop", a
     fn: async () => {
       const unit = await CostUnit({} as PluginInput)
       await unit.event!({ event: step("ses_cap", 1.5, 100) as never })
-      const first = { lines: [] as string[], status: [] as string[] }
+      const first = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: "ses_cap", model: {} as never }, first)
       expect(first.status).toHaveLength(1)
       expect(first.status[0]).toContain("soft ceiling of $1.00")
       // The reminder is the one place the model reads the figures.
       expect(first.status[0]).toContain("Spent so far: $1.50 on this session's model calls (100 tokens)")
-      const second = { lines: [] as string[], status: [] as string[] }
+      const second = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: "ses_cap", model: {} as never }, second)
       expect(second.status).toHaveLength(0)
     },
@@ -94,7 +94,7 @@ test("a process that restarts mid-session picks the count up from the transcript
       await assistant("msg_a1", 1.5, 40_000)
       await assistant("msg_a2", 2.25, 60_000)
       const unit = await CostUnit({} as PluginInput)
-      const output = { lines: [] as string[], status: [] as string[] }
+      const output = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: session.id, model: {} as never }, output)
       const spend = HarnessState.get(session.id).spend
       expect(Cost.line(spend)).toStartWith("Spent so far: $3.75 on this session's model calls (100,200 tokens)")
@@ -130,7 +130,7 @@ test("reasoning is counted once, since the provider already includes it in outpu
         time: { created: 1, completed: 2 },
       })
       const unit = await CostUnit({} as PluginInput)
-      const output = { lines: [] as string[], status: [] as string[] }
+      const output = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: session.id, model: {} as never }, output)
       expect(HarnessState.get(session.id).spend.tokens).toBe(3_000)
     },
@@ -166,7 +166,7 @@ test("a worker's steps bill the lead that delegated to it, live and from the tra
       const unit = await CostUnit({} as PluginInput)
       // Seeding from the transcripts: the lead's own dollar, its worker's two
       // and the worker's worker's half.
-      const seeded = { lines: [] as string[], status: [] as string[] }
+      const seeded = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: lead.id, model: {} as never }, seeded)
       expect(Cost.line(HarnessState.get(lead.id).spend)).toBe(
         "Spent so far: $1.00 on this session's model calls (1,100 tokens) and $2.50 on its workers; compute jobs are counted separately.",
@@ -174,7 +174,7 @@ test("a worker's steps bill the lead that delegated to it, live and from the tra
       expect(seeded.status).toEqual([])
       // A live worker step lands on the lead's worker figure, not its own.
       await unit.event!({ event: step(worker.id, 2, 10_000) as never })
-      const live = { lines: [] as string[], status: [] as string[] }
+      const live = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
       await unit["env.lines"]!({ sessionID: lead.id, model: {} as never }, live)
       // The ceiling counts the workers: $1 + $4.50 passes $5, and the reminder
       // names both figures.

@@ -68,9 +68,10 @@ part one: model, project, access mode, platform, date and cutoff, and the rules
 about folders, Results and paths), project instructions, the `<core-skills>`
 index for the lead (or the full catalog on an explicit `/skill` invocation), and
 the system reminders. This session's own details (part two: Session ID, working
-folder or scratch, connected folders, and the lines harness units add through
-the `env.lines` hook: compute, time budget, spend) are facts, not rules:
-`SystemPrompt.withEnvironment` joins them to the start of the first user message
+folder or scratch, connected folders, and the `lines` harness units add through
+the `env.lines` hook: compute, a budget's length, the checks and outputs named)
+are facts, not rules; the units' `rules` about them (what a budget means, that
+the checks must pass) join part one. `SystemPrompt.withSessionContext` joins the facts to the start of the first user message
 in a `<session-context>` block that the system prompt names as coming from
 OpenScience. Rules stay in the system prompt; `<system-reminder>` blocks are
 harness instructions and stay there too. The system prompt and tools then stay
