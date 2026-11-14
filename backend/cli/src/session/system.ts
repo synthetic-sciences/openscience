@@ -1,3 +1,4 @@
+import type { ModelMessage } from "ai"
 import { Instance } from "../project/instance"
 import { SessionFilesystem } from "./filesystem"
 
@@ -299,6 +300,40 @@ export namespace SystemPrompt {
       ? `Knowledge cutoff: ${knowledge} (per the model catalog)${gap}.`
       : "Knowledge cutoff: not listed for this model; assume it is months before today."
     return `${head} Models, libraries, methods and results released since are not in your training: look up the current generation before pinning a model, version, baseline or protocol, and read "latest" in a dated source as of its date.`
+  }
+
+  /**
+   * Put the session environment at the start of the first user message.
+   *
+   * The environment names this session (its ID, scratch folder, connected
+   * folders, budget). In the system prompt it would make every session's
+   * prompt different from the first byte it appears at, and providers cache a
+   * prompt only up to its first difference: a new session would re-read the
+   * rest of the system prompt and, for chat templates that render tools after
+   * the system text (DeepSeek, Qwen, Kimi), every tool definition too. Here the
+   * system prompt and tools stay identical across a project's sessions, and the
+   * environment, rebuilt the same each step, keeps the conversation's own
+   * prefix stable.
+   */
+  export function withEnvironment(messages: ModelMessage[], environment: string | undefined): ModelMessage[] {
+    if (!environment) return messages
+    const index = messages.findIndex((message) => message.role === "user")
+    if (index === -1) return messages
+    const first = messages[index] as Extract<ModelMessage, { role: "user" }>
+    const out = [...messages]
+    // Joined into the leading text rather than added as a part of its own, so a
+    // one-text message keeps its shape (providers send it as a plain string;
+    // some relays refuse a content array where they expect one).
+    if (typeof first.content === "string") {
+      out[index] = { ...first, content: `${environment}\n\n${first.content}` }
+      return out
+    }
+    const [head, ...rest] = first.content
+    out[index] =
+      head?.type === "text"
+        ? { ...first, content: [{ ...head, text: `${environment}\n\n${head.text}` }, ...rest] }
+        : { ...first, content: [{ type: "text", text: environment }, ...first.content] }
+    return out
   }
 
   export async function environment(

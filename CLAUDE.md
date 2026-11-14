@@ -31,7 +31,8 @@ independent of optional harness switches; see
 ```text
 Agent registry + selected model + current user message
     -> agent prompt, otherwise the model-family header with the science block
-    -> environment (+ harness env lines), project instructions, core-skills index, posture reminder
+    -> project instructions, core-skills index, posture reminder (system)
+    -> session environment (+ harness env lines) at the start of the first user message
     -> system-transform plugin, then parameter/header hooks
     -> provider message/tool normalization and inference options
     -> provider API
@@ -61,11 +62,16 @@ beneath the family header.
 
 ### Context and reminders
 
-`src/session/prompt.ts` assembles the environment (`SystemPrompt.environment`,
-including lines the harness units add through the `env.lines` hook: compute,
-time budget, spend), project instructions, the `<core-skills>` index for the
-lead (or the full catalog on an explicit `/skill` invocation), and the system
-reminders before invoking `LLM.stream`. The one standing reminder is the
+`src/session/prompt.ts` assembles the system context (project instructions,
+the `<core-skills>` index for the lead or the full catalog on an explicit
+`/skill` invocation, and the system reminders) before invoking `LLM.stream`.
+The session environment (`SystemPrompt.environment`, including lines the
+harness units add through the `env.lines` hook: compute, time budget, spend)
+names the session, so it is not in the system prompt:
+`SystemPrompt.withEnvironment` joins it to the start of the first user message.
+The system prompt and tools then stay byte-identical across a project's
+sessions, which providers need to reuse a cached prompt; keep anything that
+names a session, a time or a per-turn figure out of the system context. The one standing reminder is the
 posture line from `researchEffortReminder` (effort, delegation level,
 independence); Plan receives `session/prompt/plan.txt` instead. There is no
 keyword-based tool selection and no quick/direct/inspection routing.

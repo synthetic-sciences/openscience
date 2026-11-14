@@ -1803,8 +1803,11 @@ export namespace SessionPrompt {
       }
       const slash = SystemPrompt.slashInvocation(route.text)
       const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
+      // The session environment rides the first user message, not the system
+      // prompt, so the system prompt and tools stay identical across sessions
+      // (see SystemPrompt.withEnvironment).
+      const environment = (await SystemPrompt.environment(model, sessionID, envLines)).join("\n")
       const system = [
-        ...(await SystemPrompt.environment(model, sessionID, envLines)),
         ...(await InstructionPrompt.system()),
         // The lead carries the curated core index; the full catalog appears
         // only for an explicit /skill invocation. Workers with a prompt of
@@ -1837,6 +1840,8 @@ export namespace SessionPrompt {
       const providerSystem = [
         ...header.system,
         ...system,
+        // Counted with the system text: it is sent with every request too.
+        environment,
         ...(lastUser.system ? [lastUser.system] : []),
         ...(header.instructions ? [header.instructions] : []),
       ]
@@ -1984,6 +1989,7 @@ export namespace SessionPrompt {
       // A later summary of this conversation can ride this request's prefix.
       SessionCompaction.remember(sessionID, {
         system,
+        environment,
         tools,
         agent,
         model: { providerID: model.providerID, id: model.id },
@@ -1997,11 +2003,14 @@ export namespace SessionPrompt {
         messages: [
           // Keep only the most-recent images in full; older figures/screenshots become
           // text placeholders so re-shipping media every turn can't bloat the window.
-          ...MessageV2.toModelMessages(sessionMessages, model, {
-            keepRecentImages: SessionCompaction.recentImages(config),
-            imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
-            reduceInputs: config.compaction?.pruneInputs === true,
-          }),
+          ...SystemPrompt.withEnvironment(
+            MessageV2.toModelMessages(sessionMessages, model, {
+              keepRecentImages: SessionCompaction.recentImages(config),
+              imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
+              reduceInputs: config.compaction?.pruneInputs === true,
+            }),
+            environment,
+          ),
           ...(isLastStep
             ? [
                 {

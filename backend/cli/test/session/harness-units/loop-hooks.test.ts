@@ -127,17 +127,26 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
         expect(steps).toHaveLength(2)
         const system = (request: { messages: Array<{ role: string; content: unknown }> }) =>
           request.messages.filter((message) => message.role === "system")
+        const firstUser = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          request.messages.find((message) => message.role === "user")
+        // The session environment rides the first user message, so the system
+        // prompt names no session and stays identical across sessions.
         const head = JSON.stringify(system(steps[0]))
-        expect(head).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
-        expect(head).toMatch(/Knowledge cutoff: /)
+        expect(head).not.toContain("<env>")
+        expect(head).not.toContain(session.id)
+        const env = JSON.stringify(firstUser(steps[0]))
+        expect(env).toContain(`Session ID: ${session.id}`)
+        expect(env).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
+        expect(env).toMatch(/Knowledge cutoff: /)
         // The budget's total is fixed for the session and may sit in <env>;
         // the elapsed figure may not.
-        expect(head).toContain("Time budget: 2h")
-        expect(head).not.toContain("elapsed")
-        expect(head).not.toContain("Spent so far")
-        // The provider caches the prefix; a second step whose system prompt
-        // differs by one spend figure pays for the whole context again.
+        expect(env).toContain("Time budget: 2h")
+        expect(env).not.toContain("elapsed")
+        expect(env).not.toContain("Spent so far")
+        // The provider caches the prefix; a second step whose system prompt or
+        // environment differs by one spend figure pays for the whole context again.
         expect(JSON.stringify(system(steps[1]))).toBe(head)
+        expect(JSON.stringify(firstUser(steps[1]))).toBe(env)
         // No per-step status message: the first request ends with the user's
         // words, and the whole first request is a prefix of the second. OpenAI
         // reuses a cached prefix only at the end of a message that is still
@@ -149,6 +158,39 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
         expect(second).not.toContain('<system-reminder kind="status">')
         const messages = await Session.messages({ sessionID: session.id })
         expect(messages.filter((message) => message.info.role === "user")).toHaveLength(1)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
+test("two sessions in one project send the same system prompt; only the first user message names the session", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const sessions = [await Session.create({}), await Session.create({})]
+        for (const session of sessions)
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text: "Say hello." }],
+          })
+        const [first, second] = main(fixture.requests)
+        const system = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.filter((message) => message.role === "system"))
+        // Providers cache a prompt up to its first difference: an identical system
+        // prompt lets a new session reuse it (and, after it, the tool definitions).
+        expect(system(second!)).toBe(system(first!))
+        const user = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.find((message) => message.role === "user"))
+        expect(user(first!)).toContain(`Session ID: ${sessions[0]!.id}`)
+        expect(user(second!)).toContain(`Session ID: ${sessions[1]!.id}`)
       },
     })
   } finally {

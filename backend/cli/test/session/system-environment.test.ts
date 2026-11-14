@@ -169,3 +169,37 @@ describe("knowledge cutoff line", () => {
     })
   })
 })
+
+describe("withEnvironment", () => {
+  const env = "<env>\n  Session ID: ses_fixture\n</env>"
+
+  test("joins the environment in front of the first user message's text, keeping its shape", () => {
+    const out = SystemPrompt.withEnvironment(
+      [
+        { role: "assistant", content: "earlier" },
+        { role: "user", content: "first" },
+        { role: "user", content: [{ type: "text", text: "second" }] },
+      ],
+      env,
+    )
+    expect(out[1]).toEqual({ role: "user", content: `${env}\n\nfirst` })
+    expect(out[2]).toEqual({ role: "user", content: [{ type: "text", text: "second" }] })
+    const parts = SystemPrompt.withEnvironment([{ role: "user", content: [{ type: "text", text: "only" }] }], env)
+    expect(parts[0]!.content).toEqual([{ type: "text", text: `${env}\n\nonly` }])
+  })
+
+  test("keeps the other parts, and leads with its own part when the message starts with media", () => {
+    const image = { type: "image" as const, image: "data:image/png;base64,AA==" }
+    const out = SystemPrompt.withEnvironment([{ role: "user", content: [{ type: "text", text: "look" }, image] }], env)
+    expect(out[0]!.content).toEqual([{ type: "text", text: `${env}\n\nlook` }, image])
+    const media = SystemPrompt.withEnvironment([{ role: "user", content: [image] }], env)
+    expect(media[0]!.content).toEqual([{ type: "text", text: env }, image])
+  })
+
+  test("leaves the messages alone without an environment or a user message", () => {
+    const messages = [{ role: "assistant" as const, content: "only" }]
+    expect(SystemPrompt.withEnvironment(messages, env)).toBe(messages)
+    const users = [{ role: "user" as const, content: "hi" }]
+    expect(SystemPrompt.withEnvironment(users, undefined)).toBe(users)
+  })
+})

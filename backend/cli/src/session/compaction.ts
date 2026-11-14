@@ -5,6 +5,7 @@ import { Identifier } from "../id/id"
 import { Instance } from "../project/instance"
 import { Provider } from "../provider/provider"
 import { MessageV2 } from "./message-v2"
+import { SystemPrompt } from "./system"
 import z from "zod"
 import { SessionPrompt } from "./prompt"
 import { Token } from "../util/token"
@@ -707,6 +708,8 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
    * at the cache rate instead of paying the full rate for its own prompt. */
   type Assembly = {
     system: string[]
+    /** The session environment, sent at the start of the first user message. */
+    environment?: string
     tools: Record<string, AITool>
     agent: Agent.Info
     model: { providerID: string; id: string }
@@ -941,20 +944,24 @@ Output exactly this Markdown structure, keeping every section (write "(none)" wh
           // message would replay its reasoning, missing the cache and paying
           // for thinking the summarizer never needed. The standalone call
           // strips media the summarizer never needs.
-          ...MessageV2.toModelMessages(
-            head,
-            model,
-            shared
-              ? {
-                  keepRecentImages: recentImages(config),
-                  imageBytes: imageBytes(route),
-                  conversation: input.messages,
-                }
-              : {
-                  stripMedia: true,
-                  conversation: input.messages,
-                  ...(reduced ? { toolOutputMaxChars: REDUCED_TOOL_OUTPUT_CHARS } : {}),
-                },
+          ...SystemPrompt.withEnvironment(
+            MessageV2.toModelMessages(
+              head,
+              model,
+              shared
+                ? {
+                    keepRecentImages: recentImages(config),
+                    imageBytes: imageBytes(route),
+                    conversation: input.messages,
+                  }
+                : {
+                    stripMedia: true,
+                    conversation: input.messages,
+                    ...(reduced ? { toolOutputMaxChars: REDUCED_TOOL_OUTPUT_CHARS } : {}),
+                  },
+            ),
+            // The shared summary keeps the turn's exact prefix, environment included.
+            shared?.environment,
           ),
           {
             role: "user",
