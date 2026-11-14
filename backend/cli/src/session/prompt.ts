@@ -1809,7 +1809,27 @@ export namespace SessionPrompt {
       // prompt and tools stay identical across sessions (see
       // SystemPrompt.withSessionContext).
       const environment = await SystemPrompt.environment(model, sessionID, { lines: envLines, rules: envRules })
-      const sessionContext = environment.session
+      // The session details go on the first user message as first sent, so the
+      // conversation's cached prefix never changes under the agent. A later
+      // change (a folder connected, a new deadline) is told once, durably, as
+      // a harness message, the way a change in the offered tools is.
+      const told = (await SessionTraceStore.read(sessionID).catch(() => undefined))?.sessionContext
+      if (!told) {
+        await SessionTraceStore.recordSessionContext(sessionID, {
+          sent: environment.session,
+          latest: environment.session,
+        })
+      } else if (told.latest !== environment.session) {
+        await SessionTraceStore.recordSessionContext(sessionID, { sent: told.sent, latest: environment.session })
+        await enqueue({
+          user: lastUser,
+          kind: "harness",
+          epoch: turn,
+          text: SystemPrompt.sessionContextChanged(environment.session),
+        })
+        continue
+      }
+      const sessionContext = told?.sent ?? environment.session
       const system = [
         environment.rules,
         ...(await InstructionPrompt.system()),

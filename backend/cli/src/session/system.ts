@@ -338,6 +338,12 @@ export namespace SystemPrompt {
     return out
   }
 
+  /** The durable notice for session details that changed after they were
+   * first sent; its first line is the transcript's row label. */
+  export function sessionContextChanged(session: string) {
+    return ["Session details changed. These replace the ones at the start of the conversation:", session].join("\n")
+  }
+
   /** The environment in its two places: `rules` (with the project's facts) for
    * the system prompt, `session` (this session's facts) for the first user
    * message, via `withSessionContext`. */

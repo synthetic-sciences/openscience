@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import { HarnessState } from "../../../src/harness/state"
 import { Instance } from "../../../src/project/instance"
 import { Session } from "../../../src/session"
+import { SessionFilesystem } from "../../../src/session/filesystem"
 import { SessionPrompt } from "../../../src/session/prompt"
 import { tmpdir, trustProject } from "../../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../../fixture/stress-provider"
@@ -198,6 +199,47 @@ test("two sessions in one project send the same system prompt; only the first us
           JSON.stringify(request.messages.find((message) => message.role === "user"))
         expect(user(first!)).toContain(`Session ID: ${sessions[0]!.id}`)
         expect(user(second!)).toContain(`Session ID: ${sessions[1]!.id}`)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
+test("a folder connected later is told once as a durable message; the first message keeps the details first sent", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await using source = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const session = await Session.create({})
+        const ask = (text: string) =>
+          SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text }],
+          })
+        await ask("Say hello.")
+        await SessionFilesystem.grant({ sessionID: session.id, path: source.path, access: "read", scope: "project" })
+        await ask("And again.")
+        await ask("Once more.")
+        const [first, second, third] = main(fixture.requests)
+        const user = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.find((message) => message.role === "user"))
+        // The cached prefix never changes: the first message carries the details first sent.
+        expect(user(second!)).toBe(user(first!))
+        expect(user(third!)).toBe(user(first!))
+        expect(user(first!)).not.toContain(source.path)
+        // The change is told once, as a durable message, and not again on the next turn.
+        const notices = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          request.messages.filter((message) => JSON.stringify(message).includes("Session details changed")).length
+        expect(notices(second!)).toBe(1)
+        expect(notices(third!)).toBe(1)
+        expect(JSON.stringify(second!.messages)).toContain(source.path)
       },
     })
   } finally {
