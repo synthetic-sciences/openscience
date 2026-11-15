@@ -55,19 +55,23 @@ export namespace Budget {
   /** The facts that hold for the whole session and so may sit in the cached
    * system prompt: the machine, and the time budget's total when there is
    * one (its deadline is fixed when the turn that set it begins). */
+  /** The session's facts: the machine and, with a deadline, the budget's length. */
   export function lines(machine: { cpus: number; gib: number }, state?: HarnessState.Session) {
-    // What a budget means to someone working alone: the work ends when the
-    // turn ends, and time left over is not kept for later. Without this, a
-    // lead whose own checks still fail writes a hand-off ("the target is not
-    // yet verified") as if someone would pick it up, and stops with most of
-    // the budget unused.
     const budget =
-      state?.deadline && state.startedAt
-        ? [
-            `Time budget: ${duration(state.deadline - state.startedAt)}. The work ends when you end your turn and unused time is not kept: while your own checks show the result falls short of what was asked and time remains, keep improving it; end the turn when it meets its checks or the remaining time cannot change it.`,
-          ]
-        : []
+      state?.deadline && state.startedAt ? [`Time budget: ${duration(state.deadline - state.startedAt)}`] : []
     return [`Compute: ${machine.cpus} CPUs, ${machine.gib} GiB`, ...budget]
+  }
+
+  /** The instruction that goes with a budget, for the system prompt. What a
+   * budget means to someone working alone: the work ends when the turn ends,
+   * and time left over is not kept for later. Without this, a lead whose own
+   * checks still fail writes a hand-off ("the target is not yet verified") as
+   * if someone would pick it up, and stops with most of the budget unused. */
+  export function rules(state?: HarnessState.Session) {
+    if (!state?.deadline || !state.startedAt) return []
+    return [
+      "A Time budget in the session details means the work ends when you end your turn and unused time is not kept: while your own checks show the result falls short of what was asked and time remains, keep improving it; end the turn when it meets its checks or the remaining time cannot change it.",
+    ]
   }
 
   /** The one-shot reminders, each carrying the figures it is about. There is
@@ -115,6 +119,7 @@ export const BudgetUnit: Plugin = async () => {
     async "env.lines"(input, output) {
       const state = HarnessState.get(input.sessionID)
       output.lines.push(...Budget.lines(await Budget.compute(), state))
+      output.rules.push(...Budget.rules(state))
       output.status.push(...Budget.status(state, HarnessState.clock.now()))
     },
     async "loop.before_finish"(input, output) {

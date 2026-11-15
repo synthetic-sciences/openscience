@@ -42,7 +42,7 @@ test("compute is a stable env line; the 50%/85% reminders fire once each and car
     },
   )
   const render = async () => {
-    const output = { lines: [] as string[], status: [] as string[] }
+    const output = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
     await unit["env.lines"]!({ sessionID: "ses_b", model: {} as never }, output)
     return output
   }
@@ -52,7 +52,9 @@ test("compute is a stable env line; the 50%/85% reminders fire once each and car
   // a status line is appended to the transcript only when it changes, so a
   // running "elapsed" figure would be a new message every step.
   expect(first.lines[0]).toBe("Compute: 4 CPUs, 16 GiB")
-  expect(first.lines[1]).toStartWith("Time budget: 1h. The work ends when you end your turn")
+  // The figure is a session fact; what it means is a rule for the system prompt.
+  expect(first.lines[1]).toBe("Time budget: 1h")
+  expect(first.rules[0]).toStartWith("A Time budget in the session details means the work ends when you end your turn")
   expect(first.status).toEqual([])
   now += 31 * 60_000
   const half = await render()
@@ -143,7 +145,7 @@ test("each timed external prompt gets fresh reminders and a fresh nudge", async 
       },
     )
   const remind = async () => {
-    const output = { lines: [] as string[], status: [] as string[] }
+    const output = { lines: [] as string[], status: [] as string[], rules: [] as string[] }
     await unit["env.lines"]!({ sessionID: "ses_repeat", model: {} as never }, output)
     return output.status
   }

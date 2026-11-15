@@ -1761,8 +1761,9 @@ export namespace SessionPrompt {
       // (measured: cache reads stuck at the system prompt with the tail, and
       // growing step by step without it).
       const envLines: string[] = []
+      const envRules: string[] = []
       const status: string[] = []
-      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines, status })
+      await Plugin.trigger("env.lines", { sessionID, model }, { lines: envLines, status, rules: envRules })
       const study = await studyReminder(sessionID)
       // Each component is appended when its own key changes. The units'
       // reminders are one-shot (their key is their text); the study's key
@@ -1809,8 +1810,44 @@ export namespace SessionPrompt {
       }
       const slash = SystemPrompt.slashInvocation(route.text)
       const skillTool = !PermissionNext.disabled(["skill"], agent.permission).has("skill")
+      // The environment's rules stay in the system prompt; this session's own
+      // details ride the first user message as a labelled block, so the system
+      // prompt and tools stay identical across sessions (see
+      // SystemPrompt.withSessionContext).
+      const environment = await SystemPrompt.environment(model, sessionID, { lines: envLines, rules: envRules })
+      // The session details go on the first user message as first sent, so the
+      // conversation's cached prefix never changes under the agent. A later
+      // change (a folder connected, a new deadline) is told once, durably, as
+      // a harness message, the way a change in the offered tools is.
+      // Compaction replaces the head the details rode, and with it any change
+      // notice it summarized away; the next request starts a new prefix anyway,
+      // so it carries the current details.
+      const head = sessionMessages.find((message) => message.info.role === "user")?.info.id
+      const told = (await SessionTraceStore.read(sessionID).catch(() => undefined))?.sessionContext
+      const kept = told?.head === head ? told : undefined
+      if (!kept) {
+        await SessionTraceStore.recordSessionContext(sessionID, {
+          sent: environment.session,
+          latest: environment.session,
+          head,
+        })
+      } else if (kept.latest !== environment.session) {
+        await SessionTraceStore.recordSessionContext(sessionID, {
+          sent: kept.sent,
+          latest: environment.session,
+          head,
+        })
+        await enqueue({
+          user: lastUser,
+          kind: "harness",
+          epoch: turn,
+          text: SystemPrompt.sessionContextChanged(environment.session),
+        })
+        continue
+      }
+      const sessionContext = kept?.sent ?? environment.session
       const system = [
-        ...(await SystemPrompt.environment(model, sessionID, envLines)),
+        environment.rules,
         ...(await InstructionPrompt.system()),
         // The lead carries the curated core index; the full catalog appears
         // only for an explicit /skill invocation. Workers with a prompt of
@@ -1843,6 +1880,8 @@ export namespace SessionPrompt {
       const providerSystem = [
         ...header.system,
         ...system,
+        // Counted with the system text: it is sent with every request too.
+        sessionContext,
         ...(lastUser.system ? [lastUser.system] : []),
         ...(header.instructions ? [header.instructions] : []),
       ]
@@ -1994,6 +2033,7 @@ export namespace SessionPrompt {
       // A later summary of this conversation can ride this request's prefix.
       SessionCompaction.remember(sessionID, {
         system,
+        sessionContext,
         tools,
         agent,
         model: { providerID: model.providerID, id: model.id },
@@ -2008,11 +2048,14 @@ export namespace SessionPrompt {
           messages: [
             // Keep only the most-recent images in full; older figures/screenshots become
             // text placeholders so re-shipping media every turn can't bloat the window.
-            ...MessageV2.toModelMessages(sessionMessages, model, {
-              keepRecentImages: SessionCompaction.recentImages(config),
-              imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
-              reduceInputs: config.compaction?.pruneInputs === true,
-            }),
+            ...SystemPrompt.withSessionContext(
+              MessageV2.toModelMessages(sessionMessages, model, {
+                keepRecentImages: SessionCompaction.recentImages(config),
+                imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
+                reduceInputs: config.compaction?.pruneInputs === true,
+              }),
+              sessionContext,
+            ),
             ...(isLastStep
               ? [
                   {

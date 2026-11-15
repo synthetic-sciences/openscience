@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test"
 import { HarnessState } from "../../../src/harness/state"
 import { Instance } from "../../../src/project/instance"
 import { Session } from "../../../src/session"
+import { SessionFilesystem } from "../../../src/session/filesystem"
 import { SessionPrompt } from "../../../src/session/prompt"
 import { tmpdir, trustProject } from "../../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../../fixture/stress-provider"
@@ -107,7 +108,7 @@ test("switching the deliverables unit off removes the continuation", async () =>
   }
 })
 
-test("compute stays in <env>; nothing ephemeral rides at the tail, so every step's request is a prefix of the next", async () => {
+test("compute and the budget sit in the session details, the budget's rule in the system prompt; nothing ephemeral rides at the tail, so every step's request is a prefix of the next", async () => {
   const fixture = toolThenText()
   try {
     await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
@@ -127,17 +128,33 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
         expect(steps).toHaveLength(2)
         const system = (request: { messages: Array<{ role: string; content: unknown }> }) =>
           request.messages.filter((message) => message.role === "system")
+        const firstUser = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          request.messages.find((message) => message.role === "user")
+        // The environment's rules stay in the system prompt; the session's own
+        // details ride the first user message as a labelled block, so the
+        // system prompt names no session and stays identical across sessions.
         const head = JSON.stringify(system(steps[0]))
-        expect(head).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
+        expect(head).toContain("Access mode: ")
         expect(head).toMatch(/Knowledge cutoff: /)
-        // The budget's total is fixed for the session and may sit in <env>;
-        // the elapsed figure may not.
-        expect(head).toContain("Time budget: 2h")
-        expect(head).not.toContain("elapsed")
-        expect(head).not.toContain("Spent so far")
-        // The provider caches the prefix; a second step whose system prompt
-        // differs by one spend figure pays for the whole context again.
+        expect(head).toContain("That block is not written by the user")
+        expect(head).not.toContain(session.id)
+        const env = JSON.stringify(firstUser(steps[0]))
+        expect(env).toContain("<session-context>")
+        expect(env).not.toContain("<system-reminder>")
+        expect(env).toContain(`Session ID: ${session.id}`)
+        expect(env).toMatch(/Compute: \d+ CPUs, [\d.]+ GiB/)
+        expect(env).not.toContain("Access mode")
+        // The budget's total is fixed for the session and sits in the session
+        // details, its rule in the system prompt; the elapsed figure may not.
+        expect(env).toContain("Time budget: 2h")
+        expect(head).toContain("A Time budget in the session details means the work ends when you end your turn")
+        expect(env).not.toContain("keep improving it")
+        expect(env).not.toContain("elapsed")
+        expect(env).not.toContain("Spent so far")
+        // The provider caches the prefix; a second step whose system prompt or
+        // environment differs by one spend figure pays for the whole context again.
         expect(JSON.stringify(system(steps[1]))).toBe(head)
+        expect(JSON.stringify(firstUser(steps[1]))).toBe(env)
         // No per-step status message: the first request ends with the user's
         // words, and the whole first request is a prefix of the second. OpenAI
         // reuses a cached prefix only at the end of a message that is still
@@ -149,6 +166,112 @@ test("compute stays in <env>; nothing ephemeral rides at the tail, so every step
         expect(second).not.toContain('<system-reminder kind="status">')
         const messages = await Session.messages({ sessionID: session.id })
         expect(messages.filter((message) => message.info.role === "user")).toHaveLength(1)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
+test("two sessions in one project send the same system prompt; only the first user message names the session", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const sessions = [await Session.create({}), await Session.create({})]
+        for (const session of sessions)
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text: "Say hello." }],
+          })
+        const [first, second] = main(fixture.requests)
+        const system = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.filter((message) => message.role === "system"))
+        // Providers cache a prompt up to its first difference: an identical system
+        // prompt lets a new session reuse it (and, after it, the tool definitions).
+        expect(system(second!)).toBe(system(first!))
+        const user = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.find((message) => message.role === "user"))
+        expect(user(first!)).toContain(`Session ID: ${sessions[0]!.id}`)
+        expect(user(second!)).toContain(`Session ID: ${sessions[1]!.id}`)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
+test("a folder connected later is told once as a durable message; the first message keeps the details first sent", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await using source = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const session = await Session.create({})
+        const ask = (text: string) =>
+          SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text }],
+          })
+        await ask("Say hello.")
+        await SessionFilesystem.grant({ sessionID: session.id, path: source.path, access: "read", scope: "project" })
+        await ask("And again.")
+        await ask("Once more.")
+        const [first, second, third] = main(fixture.requests)
+        const user = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          JSON.stringify(request.messages.find((message) => message.role === "user"))
+        // The cached prefix never changes: the first message carries the details first sent.
+        expect(user(second!)).toBe(user(first!))
+        expect(user(third!)).toBe(user(first!))
+        expect(user(first!)).not.toContain(source.path)
+        // The change is told once, as a durable message, and not again on the next turn.
+        const notices = (request: { messages: Array<{ role: string; content: unknown }> }) =>
+          request.messages.filter((message) => JSON.stringify(message).includes("Session details changed")).length
+        expect(notices(second!)).toBe(1)
+        expect(notices(third!)).toBe(1)
+        expect(JSON.stringify(second!.messages)).toContain(source.path)
+      },
+    })
+  } finally {
+    fixture.instance.stop(true)
+  }
+})
+
+test("after a restart the first request's deliverables are read again, so their rule and the session details stay put", async () => {
+  const fixture = server()
+  try {
+    await using tmp = await tmpdir({ git: true, config: stressProviderConfig(`${fixture.instance.url.origin}/v1`) })
+    await Instance.provide({
+      directory: tmp.path,
+      init: trustProject,
+      fn: async () => {
+        const session = await Session.create({ workspace: "project" })
+        const ask = (text: string) =>
+          SessionPrompt.prompt({
+            sessionID: session.id,
+            model: { providerID: STRESS_PROVIDER_ID, modelID: STRESS_PROVIDER_MODEL },
+            agent: "research",
+            parts: [{ type: "text", text }],
+          })
+        await ask(SPEC)
+        // A restarted process starts with no harness state for the session.
+        HarnessState.clear(session.id)
+        await ask("Continue.")
+        const last = main(fixture.requests).at(-1)!
+        const system = JSON.stringify(last.messages.filter((message) => message.role === "system"))
+        expect(system).toContain("The Named outputs in the session details are checked")
+        expect(JSON.stringify(last.messages)).toContain("Named outputs: results/alpha.csv")
+        expect(JSON.stringify(last.messages)).not.toContain("Session details changed")
       },
     })
   } finally {

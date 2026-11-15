@@ -175,11 +175,12 @@ test("a stated check that fails continues the turn with the grader's output, and
         expect(parts.some((part) => part.type === "text" && part.text.includes("the check passes now"))).toBe(true)
         expect(state.acceptanceFailing).toBe(false)
         expect(state.acceptanceRounds).toBe(1)
-        // The <env> names the contract, once, in the cached system prompt.
+        // The session details name the checks; the system prompt carries the rule.
         const main = fixture.requests
           .map((request) => JSON.stringify(request.messages))
           .filter((text) => text.includes("Methods and deliverables"))
-        expect(main[0]).toContain("Acceptance (checked before the run ends): `sh check.sh`")
+        expect(main[0]).toContain("Acceptance checks: `sh check.sh`")
+        expect(main[0]).toContain("are run before the run ends, as the grader will run them, and must pass")
         // Two runs of the check (the failing one, the passing one), each
         // asked for as the bash permission it is, with the command named.
         const shell = asked.filter((request) => request.permission === "bash")

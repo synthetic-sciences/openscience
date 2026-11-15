@@ -386,7 +386,7 @@ describe("Task tool contract", () => {
         ).rejects.toBeInstanceOf(SessionFilesystem.DeniedError)
         // The worker is told whose directory it works in.
         const env = await SystemPrompt.environment({ api: { id: "fixture" }, providerID: "fixture" }, child.id)
-        expect(env.join("\n")).toContain(`Working folder: ${lead} (the lead session's working directory`)
+        expect(Object.values(env).join("\n")).toContain(`Working folder: ${lead} (the lead session's working directory`)
       },
     })
   })

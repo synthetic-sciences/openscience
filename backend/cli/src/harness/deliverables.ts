@@ -6,6 +6,7 @@ import { Instance } from "@/project/instance"
 import { Session } from "@/session"
 import { Filesystem } from "@/util/filesystem"
 import { HarnessState } from "./state"
+import { firstRequest } from "./first-request"
 
 /**
  * When the request names its outputs, hold the model to them: detect the
@@ -621,9 +622,14 @@ export namespace Deliverables {
     if (!deliverables.length) return []
     const shown = deliverables.slice(0, limit)
     const rest = deliverables.length - shown.length
+    return [`Named outputs: ${shown.join(", ")}${rest > 0 ? ` (+${rest} more)` : ""}`]
+  }
+
+  /** The instruction that goes with named outputs, for the system prompt. */
+  export function rules(deliverables: string[]) {
+    if (!deliverables.length) return []
     return [
-      `Named outputs: ${shown.join(", ")}${rest > 0 ? ` (+${rest} more)` : ""}` +
-        ` — checked for existence, format and placeholder values before this turn ends; produce anything else the request asks for as well.`,
+      "The Named outputs in the session details are checked for existence, format and placeholder values before this turn ends; produce anything else the request asks for as well.",
     ]
   }
 
@@ -634,6 +640,21 @@ export namespace Deliverables {
       "Produce the real file for each, or state precisely why it cannot be produced; do not write placeholder values. A graded output that does not exist is a zero whatever the others contain: write a complete valid version of every named output first, then improve it in place.",
     ].join("\n")
   }
+}
+
+/** The session's state with its deliverables read: a process that restarted
+ * after the first request was taken reads them from the stored transcript,
+ * since its message hook will not see that request again. */
+async function seed(sessionID: string) {
+  const state = HarnessState.get(sessionID)
+  if (state.deliverablesSeeded) return state
+  state.deliverablesSeeded = true
+  const text = await firstRequest(sessionID)
+  if (text && !state.deliverables.length) {
+    state.deliverables = Deliverables.detect(text)
+    state.deliverableHeaders = Deliverables.headers(text, state.deliverables)
+  }
+  return state
 }
 
 export const DeliverablesUnit: Plugin = async () => {
@@ -668,12 +689,15 @@ export const DeliverablesUnit: Plugin = async () => {
       const text = spoken.map((part) => part.text).join("\n")
       state.deliverables = Deliverables.detect(text)
       state.deliverableHeaders = Deliverables.headers(text, state.deliverables)
+      state.deliverablesSeeded = true
     },
     async "env.lines"(input, output) {
-      output.lines.push(...Deliverables.envLine(HarnessState.get(input.sessionID).deliverables))
+      const named = (await seed(input.sessionID)).deliverables
+      output.lines.push(...Deliverables.envLine(named))
+      output.rules.push(...Deliverables.rules(named))
     },
     async "loop.before_finish"(input, output) {
-      const state = HarnessState.get(input.sessionID)
+      const state = await seed(input.sessionID)
       if (!state.deliverables.length) return
       // A relative output may sit in the tool directory or in the project's
       // files: the environment names both, and an isolated session's agent

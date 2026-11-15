@@ -67,7 +67,9 @@ about science, deliverables or budgets; the units do, through two hook points.
    `loop.before_finish` (final answer with no tool calls; a unit may return a
    message to inject, bounded per turn) and `loop.guard` (a repetition guard
    tripped; a unit may return a redirect, otherwise the loop stops as today).
-   Units contribute `<env>` lines through an `env.lines` hook.
+   Units contribute through an `env.lines` hook: `lines` are session facts for
+   the `<session-context>` block on the first user message, `rules` the
+   instructions about them for the system prompt.
 
 ## Order
 

@@ -42,12 +42,17 @@ export namespace HarnessState {
     /** The header the request states for a CSV/TSV deliverable, by path. */
     deliverableHeaders?: Record<string, string>
     deliverableRounds: number
+    /** The deliverables were read from the first request, by its own message
+     * hook or, after a restart, from the stored transcript. */
+    deliverablesSeeded?: boolean
     /** The last mechanical check still found problems. */
     deliverablesFailing: boolean
     /** The verification contract the first request states: commands that
      * must pass, tokens banned under a path. */
     acceptance: { commands: { command: string; cwd?: string }[]; banned: { tokens: string[]; scope: string }[] }
     acceptanceRounds: number
+    /** The acceptance contract was read from the first request, as above. */
+    acceptanceSeeded?: boolean
     acceptanceFailing: boolean
     /** Times the unattended-run continuation has answered a final question. */
     unattendedRounds: number
