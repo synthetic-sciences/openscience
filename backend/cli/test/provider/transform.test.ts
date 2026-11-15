@@ -2893,3 +2893,42 @@ describe("ProviderTransform.error for the managed gateway's payment-required con
     expect(ProviderTransform.error("openrouter", direct)).toBe("Payment Required")
   })
 })
+
+describe("ProviderTransform.error when Ace has no upstream for the model's provider", () => {
+  const unavailable = (detail: Record<string, unknown>, url = `${managedOpenRouterBaseURL()}/chat/completions`) =>
+    new APICallError({
+      message: "Service Unavailable",
+      url,
+      requestBodyValues: {},
+      statusCode: 503,
+      responseBody: JSON.stringify({ detail }),
+      isRetryable: true,
+    })
+
+  test("a missing provider key reads as that provider being down, with another model or BYOK as the way on", () => {
+    const text = ProviderTransform.error("openrouter", unavailable({ error: "anthropic_not_configured" }))
+    expect(text).toContain("Anthropic (Claude models) is unavailable on Ace right now")
+    expect(text).toContain("another provider")
+    expect(text).toContain("Keys & subscriptions")
+    expect(text).not.toContain("not_configured")
+    expect(text).not.toContain("detail")
+    expect(ProviderTransform.error("openrouter", unavailable({ error: "gemini_not_configured" }))).toContain(
+      "Google (Gemini models) is unavailable",
+    )
+    expect(ProviderTransform.error("openrouter", unavailable({ error: "invalid_ace_openai_upstream" }))).toContain(
+      "OpenAI (GPT models) is unavailable",
+    )
+    expect(
+      ProviderTransform.error("openrouter", unavailable({ error: "managed_not_configured", provider: "openrouter" })),
+    ).toStartWith("This model's provider is unavailable on Ace right now")
+  })
+
+  test("only Ace's own codes are rewritten; other 503s keep their message", () => {
+    expect(ProviderTransform.managedProviderUnavailable(unavailable({ error: "overloaded" }))).toBeUndefined()
+    expect(
+      ProviderTransform.managedProviderUnavailable(
+        unavailable({ error: "anthropic_not_configured" }, "https://openrouter.ai/api/v1/chat/completions"),
+      ),
+    ).toBeUndefined()
+  })
+})

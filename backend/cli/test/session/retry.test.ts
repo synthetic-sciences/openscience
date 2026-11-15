@@ -343,6 +343,31 @@ describe("SessionProcessor.providerFailureAction", () => {
     expect(SessionRetry.walletWait(apiError({ "retry-after": "1" }))).toBe(false)
   })
 
+  test("Ace without an upstream for the provider fails at once instead of retrying", () => {
+    const missing = new APICallError({
+      message: "Service Unavailable",
+      url: `${managedOpenRouterBaseURL()}/chat/completions`,
+      requestBodyValues: {},
+      statusCode: 503,
+      responseBody: JSON.stringify({ detail: { error: "gemini_not_configured" } }),
+      isRetryable: true,
+    })
+    const error = MessageV2.fromError(missing, { providerID: "openrouter" })
+    expect(MessageV2.APIError.isInstance(error) && error.data.isRetryable).toBe(false)
+    expect(MessageV2.APIError.isInstance(error) && error.data.metadata?.code).toBe("managed_provider_unavailable")
+    expect(SessionRetry.retryable(error)).toBeUndefined()
+    // An ordinary 503 from Ace is still retried.
+    const busy = new APICallError({
+      message: "Service Unavailable",
+      url: `${managedOpenRouterBaseURL()}/chat/completions`,
+      requestBodyValues: {},
+      statusCode: 503,
+      responseBody: JSON.stringify({ detail: { error: "upstream_unavailable" } }),
+      isRetryable: true,
+    })
+    expect(SessionRetry.retryable(MessageV2.fromError(busy, { providerID: "openrouter" }))).toBeDefined()
+  })
+
   test("a balance check that cannot reach the Wallet waits for the connection instead of pausing the turn", () => {
     const unverified = MessageV2.fromError(
       SessionProcessor.managedPauseError("could not verify the balance", SessionRetry.BALANCE_UNVERIFIED),
