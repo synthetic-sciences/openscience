@@ -1813,14 +1813,24 @@ export namespace SessionPrompt {
       // conversation's cached prefix never changes under the agent. A later
       // change (a folder connected, a new deadline) is told once, durably, as
       // a harness message, the way a change in the offered tools is.
+      // Compaction replaces the head the details rode, and with it any change
+      // notice it summarized away; the next request starts a new prefix anyway,
+      // so it carries the current details.
+      const head = sessionMessages.find((message) => message.info.role === "user")?.info.id
       const told = (await SessionTraceStore.read(sessionID).catch(() => undefined))?.sessionContext
-      if (!told) {
+      const kept = told?.head === head ? told : undefined
+      if (!kept) {
         await SessionTraceStore.recordSessionContext(sessionID, {
           sent: environment.session,
           latest: environment.session,
+          head,
         })
-      } else if (told.latest !== environment.session) {
-        await SessionTraceStore.recordSessionContext(sessionID, { sent: told.sent, latest: environment.session })
+      } else if (kept.latest !== environment.session) {
+        await SessionTraceStore.recordSessionContext(sessionID, {
+          sent: kept.sent,
+          latest: environment.session,
+          head,
+        })
         await enqueue({
           user: lastUser,
           kind: "harness",
@@ -1829,7 +1839,7 @@ export namespace SessionPrompt {
         })
         continue
       }
-      const sessionContext = told?.sent ?? environment.session
+      const sessionContext = kept?.sent ?? environment.session
       const system = [
         environment.rules,
         ...(await InstructionPrompt.system()),

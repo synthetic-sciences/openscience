@@ -75,7 +75,8 @@ the checks must pass) join part one. `SystemPrompt.withSessionContext` joins the
 in a `<session-context>` block that the system prompt names as coming from
 OpenScience. The block is sent as first built for the whole session (kept in
 `SessionTraceStore`); a later change is told once as a durable harness message,
-as a change in the offered tools is. Rules stay in the system prompt; `<system-reminder>` blocks are
+as a change in the offered tools is. After compaction replaces the message
+it rides, the next request carries the current details. Rules stay in the system prompt; `<system-reminder>` blocks are
 harness instructions and stay there too. The system prompt and tools then stay
 byte-identical across a project's sessions, which providers need to reuse a
 cached prompt; keep anything that names a session or a per-turn figure out of

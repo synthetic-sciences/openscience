@@ -59,9 +59,10 @@ export namespace SessionTraceStore {
   export type ModelCall = z.infer<typeof ModelCall>
 
   /** This session's details as first sent on the first user message (`sent`,
-   * kept so the conversation's cached prefix never changes) and as last told
-   * to the agent (`latest`); see SystemPrompt.withSessionContext. */
-  export const SessionContext = z.object({ sent: z.string(), latest: z.string() })
+   * kept so the conversation's cached prefix never changes), the message they
+   * ride (`head`), and as last told to the agent (`latest`); see
+   * SystemPrompt.withSessionContext. */
+  export const SessionContext = z.object({ sent: z.string(), latest: z.string(), head: z.string().optional() })
 
   const State = z.object({
     approvals: z.record(z.string(), Approval).default({}),

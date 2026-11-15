@@ -4,6 +4,7 @@ import { Instance } from "../../src/project/instance"
 import { Provider } from "../../src/provider/provider"
 import { Session } from "../../src/session"
 import { SessionCompaction } from "../../src/session/compaction"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { SessionPrompt } from "../../src/session/prompt"
 import { tmpdir, trustProject } from "../fixture/fixture"
 
@@ -141,6 +142,70 @@ test("a summary rides the conversation's own prefix: same header, system, tools 
         expect(JSON.stringify(last.content)).toContain("<newest-request>\\nQUESTION:second\\n</newest-request>")
         // No compaction-agent header replaced the research header.
         expect(system(summary)).not.toContain("context summarization agent")
+      },
+    })
+  } finally {
+    provider.server.stop(true)
+  }
+})
+
+test("after a summary, the next request carries the current session details, not the ones first sent", async () => {
+  const provider = startProvider()
+  try {
+    await using tmp = await tmpdir({
+      git: true,
+      config: {
+        model: `${PROVIDER}/${MODEL}`,
+        small_model: `${PROVIDER}/${MODEL}`,
+        default_agent: "research",
+        enabled_providers: [PROVIDER],
+        billing: { llm: "byok" as const },
+        compaction: { tailTurns: 1 },
+        provider: {
+          [PROVIDER]: {
+            name: "Prefix fixture",
+            npm: "@ai-sdk/openai-compatible",
+            env: [],
+            options: { apiKey: "local-only", baseURL: `http://127.0.0.1:${provider.server.port}/v1` },
+            models: { [MODEL]: { name: MODEL, tool_call: true, limit: { context: 128_000, output: 4_096 } } },
+          },
+        },
+      },
+    })
+    await using source = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: async () => {
+        await trustProject()
+        await Provider.invalidate()
+      },
+      fn: async () => {
+        const session = await Session.create({ title: "Details after a summary" })
+        const model = { providerID: PROVIDER, modelID: MODEL }
+        const ask = (text: string) =>
+          SessionPrompt.prompt({ sessionID: session.id, model, agent: "research", parts: [{ type: "text", text }] })
+        await ask("QUESTION:first")
+        await SessionFilesystem.grant({ sessionID: session.id, path: source.path, access: "read", scope: "project" })
+        await ask("QUESTION:second")
+        await SessionCompaction.create({
+          sessionID: session.id,
+          agent: "research",
+          model,
+          auto: false,
+          trigger: "manual",
+        })
+        await SessionPrompt.loop(session.id)
+        await ask("QUESTION:third")
+        const firstUser = (body: Body) => JSON.stringify(body.messages.find((message) => message.role === "user"))
+        const before = bodies(provider).find((body) => JSON.stringify(body.messages).includes("QUESTION:second"))!
+        const after = bodies(provider).at(-1)!
+        // Before the summary the first message keeps the details first sent;
+        // the change was told separately.
+        expect(firstUser(before)).not.toContain(source.path)
+        // The summary replaced that head, and possibly the notice: the next
+        // request's first message carries the current details.
+        expect(JSON.stringify(after.messages)).toContain("QUESTION:third")
+        expect(firstUser(after)).toContain(source.path)
       },
     })
   } finally {
