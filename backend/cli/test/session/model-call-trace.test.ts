@@ -386,3 +386,70 @@ test.each([true, false])("structured configuration calls use the same trace path
   })
   await SessionTraceStore.remove(id)
 })
+
+test("trace bookkeeping after the write-ahead runs once the request is sent, and before the response is used", async () => {
+  const order: string[] = []
+  let seen!: () => void
+  const requested = new Promise<void>((resolve) => (seen = resolve))
+  using server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      order.push("server")
+      seen()
+      return new Response("ok")
+    },
+  })
+  const context: Provider.RequestContext = {
+    sessionID: "ses_late",
+    messageID: "msg_late",
+    attempt: 1,
+    callTrace: {
+      async start() {
+        order.push("write-ahead")
+        // Waits for the request to reach the server: awaiting this before
+        // dispatch would deadlock the call.
+        return async () => {
+          await requested
+          order.push("late")
+        }
+      },
+      async finish() {
+        order.push("finish")
+      },
+    },
+  }
+  const response = await Provider.withRequestContext(context, () =>
+    Provider.fetchWithIdleWatchdog(
+      fetch,
+      server.url.toString(),
+      { method: "POST", body: "{}" },
+      { providerID: "openai", modelID: "fixture", connectTimeout: 2000, idleTimeout: false },
+    ),
+  )
+  order.push("response")
+  await response.text()
+  expect(order.slice(0, 4)).toEqual(["write-ahead", "server", "late", "response"])
+})
+
+test("model.request is recorded after dispatch without the caller awaiting the body parse", async () => {
+  const late = await ModelCallTrace.create({
+    context: { sessionID: `ses_${crypto.randomUUID()}`, messageID: "msg", attempt: 1 },
+    route: "byok",
+    provider: "openai",
+    model: "fixture",
+  }).context.callTrace!.start(
+    {
+      requestID: "call_late",
+      sessionID: "ses",
+      messageID: "msg",
+      providerID: "openai",
+      modelID: "fixture",
+      startedAt: Date.now(),
+      attempt: 1,
+    } as never,
+    "{}",
+  )
+  // Without a usage binding there is nothing to defer.
+  expect(late).toBeUndefined()
+})

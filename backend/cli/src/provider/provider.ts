@@ -56,6 +56,8 @@ import { createGitLab } from "@gitlab/gitlab-ai-provider"
 import { ProviderTransform } from "./transform"
 import { LocalProvider } from "./local"
 import { fetchWithFreshConnection } from "../util/fetch"
+import { ManagedH2 } from "./managed-h2"
+import { ManagedGzip } from "./managed-gzip"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -108,7 +110,13 @@ export namespace Provider {
     onRequest?: () => void
     /** Durable attempt recording, installed by the session trace path. */
     callTrace?: {
-      start: (timing: Omit<RequestTiming, "completedAt" | "outcome">, body: unknown) => Promise<void>
+      /** Runs before dispatch. May return bookkeeping that is not needed
+       * before the request is sent: it starts right after dispatch and is
+       * awaited before the response (or a failure) is reported. */
+      start: (
+        timing: Omit<RequestTiming, "completedAt" | "outcome">,
+        body: unknown,
+      ) => Promise<void | (() => Promise<void>)>
       finish: (
         timing: RequestTiming,
         response: { status?: number; hold?: string; providerRequest?: string },
@@ -480,6 +488,38 @@ export namespace Provider {
   /** Bound the wait for response headers, then observe the response until it
    * finishes or is cancelled. Optional body-idle and total deadlines remain
    * available, but a quiet established response is not an error by default. */
+  /**
+   * Send a managed gateway call, gzip-compressing a large string body once the
+   * gateway has advertised it reads gzip (see ManagedGzip). A gateway that
+   * cannot read the gzip body (415, or a 400 for an unreadable body from a
+   * gateway that predates gzip) gets the plain body once more and plain bodies
+   * for a while.
+   */
+  async function sendManaged(
+    fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
+    fetchInput: any,
+    init: BunFetchRequestInit,
+  ): Promise<Response> {
+    const endpoint = fetchInput instanceof Request ? fetchInput.url : String(fetchInput)
+    const packed = typeof init.body === "string" ? ManagedGzip.encode(endpoint, init.body) : undefined
+    if (!packed) {
+      const response = await fetchFn(fetchInput, init)
+      ManagedGzip.learn(endpoint, response.headers)
+      return response
+    }
+    const headers = new Headers(init.headers as HeadersInit | undefined)
+    headers.set("content-encoding", "gzip")
+    headers.delete("content-length")
+    const response = await fetchFn(fetchInput, { ...init, body: packed, headers })
+    if (!(await ManagedGzip.refused(response))) {
+      ManagedGzip.learn(endpoint, response.headers)
+      return response
+    }
+    ManagedGzip.forget(endpoint)
+    await response.body?.cancel().catch(() => undefined)
+    return fetchFn(fetchInput, init)
+  }
+
   export async function fetchWithIdleWatchdog(
     fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
     fetchInput: any,
@@ -531,8 +571,14 @@ export namespace Provider {
     }
 
     let response: Response
+    let late: (() => Promise<void>) | undefined
+    let afterDispatch: Promise<void> | undefined
+    const settled = () =>
+      (afterDispatch ?? Promise.resolve()).catch((error) =>
+        log.warn("request bookkeeping failed", { requestID: timing.requestID, error }),
+      )
     try {
-      await context.callTrace?.start(timing, init?.body)
+      late = (await context.callTrace?.start(timing, init?.body)) || undefined
       response = await waitForActivity({
         run: () => {
           const fetchInit = {
@@ -553,7 +599,9 @@ export namespace Provider {
           } catch {
             log.debug("request dispatch callback failed")
           }
-          return fetchFn(fetchInput, fetchInit)
+          const sent = options.managed ? sendManaged(fetchFn, fetchInput, fetchInit) : fetchFn(fetchInput, fetchInit)
+          if (late && !afterDispatch) afterDispatch = Promise.resolve().then(late)
+          return sent
         },
         phase: "connect",
         idleTimeoutMs: connectTimeoutMs,
@@ -561,6 +609,7 @@ export namespace Provider {
         signal,
       })
       timing.responseStartedAt = Date.now()
+      await settled()
       evidence.status = response.status
       evidence.hold = options.managed ? CallLink.hold(response.headers) : undefined
       evidence.providerRequest = CallLink.providerRequest(response.headers)
@@ -578,6 +627,7 @@ export namespace Provider {
         gatewayTiming: timing.gatewayTiming,
       })
     } catch (error) {
+      await settled()
       await emit(timingOutcome(error, signal), error, requestTimeout(error)?.phase)
       throw connectFailure(error, signal)
     }
@@ -3151,6 +3201,8 @@ export namespace Provider {
       delete options["idleTimeout"]
       delete options["connectTimeout"]
       delete options["outputIdleTimeout"]
+      // OpenScience-only: read by the session processor, never sent to the SDK.
+      delete options["requireStreamCompletion"]
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, then add an activity watchdog.
@@ -3250,8 +3302,12 @@ export namespace Provider {
           )
         }
 
+        // Managed gateway calls may ride a reused, liveness-checked HTTP/2
+        // connection (ManagedH2, behind OPENSCIENCE_MANAGED_H2); it falls back
+        // to the fresh connection whenever it cannot carry the call.
+        const transport = managed && !customFetch ? ManagedH2.fetch : fetchFn
         const request = () =>
-          fetchWithIdleWatchdog(fetchFn, input, opts, {
+          fetchWithIdleWatchdog(transport, input, opts, {
             providerID: model.providerID,
             modelID: model.id,
             idleTimeout: scaleIdleTimeout(idleTimeout, opts.body, managed),
@@ -3283,7 +3339,12 @@ export namespace Provider {
         // the balance is gone, so the cached one is dropped here. A served
         // request is charged only after its stream ends; the processor
         // announces that settlement, and a read at the headers would predate it.
-        if (managed && !resolved.ok) OpenScience.invalidateBalance()
+        // A funding refusal (402, or 409 funding unavailable) means the cached
+        // positive balance is wrong: drop it so the next check reads it fresh.
+        if (managed && !resolved.ok) {
+          if (resolved.status === 402 || resolved.status === 409) OpenScience.forgetBalance()
+          else OpenScience.invalidateBalance()
+        }
         return funding ? OpenScience.validateFundingResponse(resolved, funding) : resolved
       }
 

@@ -1361,7 +1361,14 @@ export namespace ProviderTransform {
   }
 
   function managedPaymentBody(error: APICallError) {
-    if (error.statusCode !== 402 || !isAtlasProxyURL(error.url)) return
+    if (error.statusCode !== 402) return
+    return managedErrorBody(error)
+  }
+
+  /** The managed gateway's error object: a bare `{"error": "code"}` or the
+   * FastAPI envelope `{"detail": {"error": "code", ...}}`. */
+  function managedErrorBody(error: APICallError) {
+    if (!isAtlasProxyURL(error.url)) return
     const body = iife(() => {
       try {
         return JSON.parse(error.responseBody ?? "") as Record<string, unknown>
@@ -1369,8 +1376,13 @@ export namespace ProviderTransform {
         return undefined
       }
     })
-    if (!body || typeof body.error !== "string") return
-    return body
+    if (!body) return
+    if (typeof body.error === "string") return body
+    // FastAPI HTTPException envelope: {"detail": {"error": "ace_required", ...}}.
+    const detail = body.detail
+    if (detail && typeof detail === "object" && typeof (detail as Record<string, unknown>).error === "string")
+      return detail as Record<string, unknown>
+    return
   }
 
   /** The SDK treats every 402 as final. The managed gateway's says whether
@@ -1411,6 +1423,8 @@ export namespace ProviderTransform {
       const spent = dollars(body.spent_cents)
       return `Ace is paused: this workspace reached its monthly usage limit${limit ? ` of ${limit}` : ""}${spent ? ` (${spent} spent)` : ""}. Raise the limit under Billing at ${BILLING_URL}, or switch model access to Keys & subscriptions.`
     }
+    if (body.error === "ace_required")
+      return `Ace is paused: your Wallet has no available balance and auto reload is not on. Add funds or turn on auto reload at ${BILLING_URL}, or switch model access to Keys & subscriptions.`
     if (body.error !== "insufficient_balance") return
     const detail = balance ? ` ${balance}.` : ""
     // The reload's own state, when the gateway knows it: on its way, blocked
@@ -1451,6 +1465,33 @@ export namespace ProviderTransform {
     }
   }
 
+  // Which provider a gateway "not configured" code is about, as people know it.
+  const MANAGED_UPSTREAM_NAMES: Record<string, string> = {
+    anthropic: "Anthropic (Claude models)",
+    bedrock: "Anthropic (Claude models)",
+    gemini: "Google (Gemini models)",
+    google: "Google (Gemini models)",
+    openai: "OpenAI (GPT models)",
+    openai_fast: "OpenAI (GPT models)",
+    azure: "OpenAI (GPT models)",
+    xai: "xAI (Grok models)",
+  }
+
+  /** Ace has no working upstream for the model's provider: its key is not
+   * set, or the deployment names an unknown route. That is Ace's setup, not
+   * something the user can fix or a retry can repair, and the code means
+   * nothing to them. Say the provider is unavailable and what they can do. */
+  export function managedProviderUnavailable(error: APICallError) {
+    if (error.statusCode !== 503) return
+    const code = managedErrorBody(error)?.error
+    if (typeof code !== "string") return
+    const upstream =
+      code.match(/^([a-z_]+)_not_configured$/)?.[1] ?? code.match(/^invalid_ace_([a-z_]+)_upstream$/)?.[1]
+    if (!upstream) return
+    const name = MANAGED_UPSTREAM_NAMES[upstream] ?? "This model's provider"
+    return `${name} is unavailable on Ace right now. Try a model from another provider, or switch model access to Keys & subscriptions to use your own API key.`
+  }
+
   /** The managed gateway's edge proxy answers a request it could not hand to
    * the model service with a bare router code. The usual cause is a request
    * body past what the proxy forwards (several inline images), which no retry
@@ -1472,7 +1513,8 @@ export namespace ProviderTransform {
   export function error(providerID: string, error: APICallError) {
     let message = error.message
     const body = error.responseBody?.toLowerCase() ?? ""
-    const managed = managedPaymentRequired(error) ?? managedGatewayUnreachable(error)
+    const managed =
+      managedPaymentRequired(error) ?? managedGatewayUnreachable(error) ?? managedProviderUnavailable(error)
     if (managed) return managed
     if (
       providerID === "openrouter" &&

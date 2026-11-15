@@ -161,7 +161,27 @@ const cli = yargs(hideBin(process.argv))
       if (!capabilityCanary) {
         UsageLogging.start()
         await import("./server/routes/settings/credentials").then((m) => m.applyCredentialEnv()).catch(() => {})
-        void import("./openscience").then((m) => m.OpenScience.startCredentialSync())
+        void import("./openscience").then((m) => {
+          m.OpenScience.startCredentialSync()
+        })
+        // Open the managed gateway connection now and keep it usable until the
+        // first message (a no-op unless OPENSCIENCE_MANAGED_H2 is switched on).
+        // The gateway URL comes from credential sync, so it is read per check.
+        // Like the managed provider: a saved Ace session means the managed
+        // gateway at managedOpenRouterBaseURL().
+        void Promise.all([
+          import("./provider/managed-h2"),
+          import("./openscience/synced-env-policy"),
+          import("./openscience"),
+          import("./auth"),
+        ]).then(([{ ManagedH2 }, policy, { OpenScience }, { Auth }]) =>
+          ManagedH2.keepWarm(async () => {
+            const session = await OpenScience.getSession().catch(() => null)
+            return session?.api_key && Auth.isAtlasApiKey(session.api_key)
+              ? policy.managedOpenRouterBaseURL()
+              : undefined
+          }),
+        )
       }
 
       // First authenticated startup quietly provisions the app-owned Python

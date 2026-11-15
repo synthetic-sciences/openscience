@@ -227,6 +227,7 @@ export namespace SessionRetry {
     "managed_request_timeout",
     "managed_response_incomplete",
     "provider_request_timeout",
+    "provider_stream_incomplete",
     "managed_conflict_timeout",
     "operation_in_progress",
     "idempotency_conflict",
@@ -269,6 +270,9 @@ export namespace SessionRetry {
     // Once model output exists the attempt stays terminal, so the partial
     // output is kept rather than discarded and paid for twice.
     const data = (error as { data?: { metadata?: Record<string, unknown> } }).data
+    // A reply cut off before the provider's final event is resent once only
+    // when nothing reached the page; partial output is kept, not paid twice.
+    if (data?.metadata?.code === "provider_stream_incomplete") return !input.output
     if (data?.metadata?.code !== "provider_request_timeout") return false
     if (data.metadata.phase === "connect") return true
     return !input.output && (data.metadata.phase === "first_event" || data.metadata.phase === "stream")

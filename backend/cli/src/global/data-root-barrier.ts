@@ -254,8 +254,12 @@ export namespace DataRootBarrier {
       )
       const handle = await fs.open(temporary, "wx", 0o600)
       try {
+        // No fsync: other processes see the renamed marker through the page
+        // cache, which is all coordination needs. A sync only survives power
+        // loss or a kernel crash, after which every owner is dead and its
+        // marker (complete, empty or missing) is reclaimed as stale. Syncing
+        // here cost ~5 ms on every database access, ~0.6 s per chat turn.
         await handle.writeFile(JSON.stringify({ ...operationOwner, token, created: Date.now() }))
-        await handle.sync()
         await handle.close()
         await AtomicRename.replace(temporary, marker)
       } catch (error) {
@@ -283,8 +287,8 @@ export namespace DataRootBarrier {
               const temporary = path.join(current.config, `.data-root-operation-${token}.${randomUUID()}.next`)
               const replacement = await fs.open(temporary, "wx", 0o600)
               try {
+                // No fsync, as for the initial marker (see createOperation).
                 await replacement.writeFile(JSON.stringify({ ...nextOwner, token, created: Date.now() }))
-                await replacement.sync()
                 await replacement.close()
                 // Windows can reject replacement while a scanner holds a
                 // conflicting destination handle. Retrying the same atomic
@@ -395,6 +399,21 @@ export namespace DataRootBarrier {
         return disposal
       },
     }
+  }
+
+  /** The barrier configuration a long-lived holder was opened under. */
+  export function generation(): unknown {
+    return configuration
+  }
+
+  /** Whether a holder opened under `opened` must let go: the barrier was
+   * reconfigured, or a relocation has published its intent and is waiting
+   * for live operation markers to clear. One lstat; never throws. */
+  export async function superseded(filepath: string, opened: unknown): Promise<boolean> {
+    if (configuration !== opened) return true
+    const current = configured(filepath)
+    if (!current) return false
+    return !!(await fs.lstat(paths(current.config).intent).catch(() => undefined))
   }
 
   /** Mark one durable operation. Paths outside the managed root are no-ops.

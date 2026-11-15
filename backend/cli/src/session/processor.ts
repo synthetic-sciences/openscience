@@ -19,9 +19,9 @@ import { PermissionNext } from "@/permission/next"
 import { Question } from "@/question"
 import { accessRoute, resolveCredentialSource } from "./access-route"
 import { requiresWalletBalance } from "./access-route"
+import { ManagedH2 } from "@/provider/managed-h2"
 import type { CredentialSource } from "./access-route"
-import { OpenScience } from "@/openscience"
-import { BILLING_URL } from "@/endpoints"
+import { OpenScience, type FundingSnapshot } from "@/openscience"
 import { ManagedPricing } from "@/provider/managed-pricing"
 import { CallLink } from "@/provider/call-link"
 import { UsageLogging } from "./usage-logging"
@@ -99,6 +99,37 @@ export namespace SessionProcessor {
       isRetryable: true,
       metadata: { openscience_state: "paused", action: "retry", ...(code ? { code } : {}) },
     })
+  }
+
+  /** Get the managed route ready as soon as a turn is submitted. The turn no
+   * longer reads the client's balance (Ace decides every call against the
+   * real Wallet), so this only warms the gateway connection. Never throws. */
+  export function warmFunding(model: { providerID: string; modelID: string }): void {
+    void resolveCredentialSource(model.providerID, model.modelID)
+      .then(async (source) => {
+        if (!requiresWalletBalance(source)) return
+        // Open the gateway connection while the prompt is assembled, so the
+        // model call finds it ready (a no-op unless ManagedH2 is switched on).
+        const base = (await Provider.getProvider(model.providerID))?.options?.["baseURL"]
+        if (Provider.isAtlasProxyBaseURL(base)) ManagedH2.warm(base)
+      })
+      .catch(() => undefined)
+  }
+
+  /** What a managed turn checks on the client before dispatch: only that a
+   * funding snapshot exists (otherwise the device needs to sign in again).
+   * Funds are not checked here. The client's balance copy can disagree with
+   * the Wallet (a top-up seconds ago, funds held by this account's own
+   * requests in flight, auto reload that would refill it, a failed balance
+   * read while the gateway works); Ace reserves a hold against the real
+   * Wallet before every call and answers with the precise contract: 402 with
+   * add-funds, wait-for-in-flight or reload recovery, monthly limits, or 409
+   * for funding that is no longer active. */
+  export function managedPreflight(funding: FundingSnapshot | undefined): asserts funding is FundingSnapshot {
+    if (!funding)
+      throw managedPauseError(
+        "Ace is paused because OpenScience could not snapshot the connected funding account. Sign in again or switch to a direct provider or local model.",
+      )
   }
 
   /** The funding choice for one managed turn. A scoped session needs no
@@ -359,6 +390,46 @@ export namespace SessionProcessor {
     }
     if (state.transientRetries >= MAX_RETRY_ATTEMPTS) return
     return { ...state, attempt: state.attempt + 1, transientRetries: state.transientRetries + 1 }
+  }
+
+  /** Raised when a model stream ends without the provider's final event. */
+  export class StreamIncompleteError extends Error {
+    constructor() {
+      super("The model's reply ended before the provider finished it")
+      this.name = "StreamIncompleteError"
+    }
+  }
+
+  /** A step that ended without the provider's final event (checked for
+   * Ace-managed calls and providers with requireStreamCompletion): no finish reason
+   * (the SDK reports "unknown" or, for OpenRouter, "other" until one arrives)
+   * and no usage. Every compliant provider stream ends with a finish reason
+   * in its last event, so this means the reply was cut off, whatever the
+   * transport (HTTP/1.1, HTTP/2) or runtime reported. */
+  export function incompleteStep(step: {
+    finishReason: string
+    usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+  }) {
+    if (step.finishReason !== "unknown" && step.finishReason !== "other") return false
+    const usage = step.usage
+    const counted = [usage?.inputTokens, usage?.outputTokens, usage?.totalTokens].some(
+      (value) => typeof value === "number" && Number.isFinite(value) && value > 0,
+    )
+    return !counted
+  }
+
+  export function incompleteError(error: unknown) {
+    if (!(error instanceof StreamIncompleteError)) return
+    return new MessageV2.APIError({
+      message:
+        "The model's reply ended before the provider finished it (the connection was probably lost). Partial output and completed tool results are kept; resubmitting starts a new request.",
+      isRetryable: false,
+      metadata: {
+        code: "provider_stream_incomplete",
+        openscience_state: "stopped",
+        action: "resubmit",
+      },
+    }).toObject()
   }
 
   export function timeoutError(error: unknown) {
@@ -818,6 +889,8 @@ export namespace SessionProcessor {
     // Status published while this processor is streaming. Compaction turns pass
     // "compacting" so the UI can show a distinct loader.
     busyStatus?: "busy" | "compacting"
+    // Called each time a model request is handed to the transport.
+    onDispatch?: () => void
   }) {
     let snapshot: string | undefined
     let blocked = false
@@ -994,28 +1067,14 @@ export namespace SessionProcessor {
             progress("preparing")
             traceRoute = accessRoute(credentialSource, input.model)
 
-            if (requiresWalletBalance(credentialSource)) {
-              if (!funding) {
-                throw managedPauseError(
-                  "Ace is paused because OpenScience could not snapshot the connected funding account. Sign in again or switch to a direct provider or local model.",
-                )
-              }
-              const balance = await OpenScience.getBalance(funding)
-              if (balance === null) {
-                throw managedPauseError(
-                  "Ace is paused because OpenScience could not verify the current balance. Retry when the connection returns or switch to a direct provider or local model.",
-                  SessionRetry.BALANCE_UNVERIFIED,
-                )
-              }
-              if (balance <= 0) {
-                OpenScience.invalidateBalance()
-                throw new Error(
-                  `Your Wallet has no available balance (purchased balance less holds for turns in flight). Add funds at ${BILLING_URL} or switch model access to Keys & subscriptions.`,
-                )
-              }
-            }
+            if (requiresWalletBalance(credentialSource)) managedPreflight(funding)
 
             const provider = await Provider.getProvider(input.model.providerID)
+            // Ace-managed streams always end with a finish reason and usage;
+            // other providers opt in (some local OpenAI-compatible servers
+            // end complete replies without either).
+            const requireCompletion =
+              requiresWalletBalance(credentialSource) || provider?.options?.["requireStreamCompletion"] === true
             const deadline = Provider.resolveOutputIdleTimeout(provider.options.outputIdleTimeout)
             output = outputWatchdog({
               timeout: deadline,
@@ -1035,6 +1094,7 @@ export namespace SessionProcessor {
               onRequest: () => {
                 output?.start()
                 progress("connecting")
+                input.onDispatch?.()
               },
               ...(credentialSource === "managed" && funding ? { funding } : {}),
             }
@@ -1232,6 +1292,9 @@ export namespace SessionProcessor {
                 }
 
                 case "finish-step":
+                  // A reply cut off before the provider's final event must not
+                  // pass as a complete answer.
+                  if (requireCompletion && incompleteStep(value)) throw new StreamIncompleteError()
                   // The call and hold travel on this step's own response: in
                   // a multi-step tool stream the SDK may already be fetching
                   // the next step, so shared request state would name it.
@@ -1440,7 +1503,10 @@ export namespace SessionProcessor {
               ...(cause !== e ? { thrown: e } : {}),
               stack: JSON.stringify(e.stack),
             })
-            const error = timeoutError(cause) ?? MessageV2.fromError(cause, { providerID: input.model.providerID })
+            const error =
+              timeoutError(cause) ??
+              incompleteError(cause) ??
+              MessageV2.fromError(cause, { providerID: input.model.providerID })
             // A context-window overflow is deterministic — retrying the same
             // oversized input can only fail again. Signal the outer loop (via the
             // "overflow" return below) to compact + resume instead of burning

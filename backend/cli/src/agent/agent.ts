@@ -31,7 +31,6 @@ import { ProjectTrust } from "@/project/trust"
 import { ProjectAccess } from "@/project/access"
 import { randomUUID } from "node:crypto"
 import { OpenScience } from "@/openscience"
-import { BILLING_URL } from "@/endpoints"
 import { accessRoute, requiresWalletBalance, resolveCredentialSource } from "@/session/access-route"
 import { ToolVisibility } from "@/tool/visibility"
 import { BIOLOGY_TOOL_IDS } from "@/tool/biology/ids"
@@ -506,17 +505,9 @@ export namespace Agent {
     const model = await Provider.getModel(selected.providerID, selected.modelID)
     const credentialSource = await resolveCredentialSource(model.providerID, model.id)
     const funding = credentialSource === "managed" ? ((await OpenScience.getRequestSnapshot()) ?? undefined) : undefined
-    if (requiresWalletBalance(credentialSource)) {
-      if (!funding) throw new Error("Ace could not snapshot the connected funding account. Sign in again.")
-      const balance = await OpenScience.getBalance(funding)
-      if (balance === null)
-        throw new Error("Ace could not verify the current balance. Retry when the connection returns.")
-      if (balance <= 0) {
-        throw new Error(
-          `Your Wallet has no available balance (purchased balance less holds for turns in flight). Add funds at ${BILLING_URL} or switch model access to Keys & subscriptions.`,
-        )
-      }
-    }
+    // Funds are Ace's decision on the call itself (see SessionProcessor.managedPreflight).
+    if (requiresWalletBalance(credentialSource) && !funding)
+      throw new Error("Ace could not snapshot the connected funding account. Sign in again.")
 
     const defaultModel = selected
     const language = await Provider.getLanguage(model)

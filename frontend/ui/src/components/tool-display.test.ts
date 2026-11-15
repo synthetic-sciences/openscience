@@ -181,6 +181,26 @@ describe("sessionErrorText", () => {
     })
   })
 
+  test("Ace without an upstream for the provider is titled as the provider being unavailable", () => {
+    const message =
+      "OpenAI (GPT models) is unavailable on Ace right now. Try a model from another provider, or switch model access to Keys & subscriptions to use your own API key."
+    const shown = sessionErrorDisplay({
+      name: "APIError",
+      data: {
+        message,
+        statusCode: 503,
+        isRetryable: false,
+        responseBody: JSON.stringify({ detail: { error: "azure_not_configured" } }),
+        metadata: { providerID: "openrouter", code: "managed_provider_unavailable" },
+      },
+    })
+    expect(shown.state).toBe("error")
+    expect(shown.title).toBe("Provider unavailable")
+    expect(shown.message).toBe(message)
+    expect(shown.detail).toBe("HTTP 503")
+    expect(JSON.stringify(shown)).not.toContain("not_configured")
+  })
+
   test("a gateway router error gets a plain title and keeps its codes as detail", () => {
     const shown = sessionErrorDisplay({
       name: "APIError",
