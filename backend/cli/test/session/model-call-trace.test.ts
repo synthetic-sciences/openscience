@@ -439,7 +439,15 @@ test("model.request is recorded after dispatch without the caller awaiting the b
     provider: "openai",
     model: "fixture",
   }).context.callTrace!.start(
-    { requestID: "call_late", sessionID: "ses", messageID: "msg", providerID: "openai", modelID: "fixture", startedAt: Date.now(), attempt: 1 } as never,
+    {
+      requestID: "call_late",
+      sessionID: "ses",
+      messageID: "msg",
+      providerID: "openai",
+      modelID: "fixture",
+      startedAt: Date.now(),
+      attempt: 1,
+    } as never,
     "{}",
   )
   // Without a usage binding there is nothing to defer.

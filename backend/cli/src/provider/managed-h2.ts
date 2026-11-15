@@ -219,7 +219,11 @@ export namespace ManagedH2 {
           if (sessions.get(origin) === pending) sessions.delete(origin)
           if (held.streams === 0) kill(held, "upload window too small", origin, pending)
         }
-        if (session.remoteSettings?.initialWindowSize !== undefined && session.remoteSettings.initialWindowSize !== 65_535) check()
+        if (
+          session.remoteSettings?.initialWindowSize !== undefined &&
+          session.remoteSettings.initialWindowSize !== 65_535
+        )
+          check()
         else session.once("remoteSettings", check)
       })
     })
@@ -267,7 +271,15 @@ export namespace ManagedH2 {
     held.idleTimer.unref?.()
   }
 
-  const hopByHop = new Set(["connection", "host", "keep-alive", "proxy-connection", "transfer-encoding", "upgrade", "te"])
+  const hopByHop = new Set([
+    "connection",
+    "host",
+    "keep-alive",
+    "proxy-connection",
+    "transfer-encoding",
+    "upgrade",
+    "te",
+  ])
 
   function once(url: URL, init: BunFetchRequestInit, held: Session, reused: boolean): Promise<Response> {
     const origin = url.origin
@@ -392,7 +404,10 @@ export namespace ManagedH2 {
           (!stream.rstCode || stream.rstCode === http2.constants.NGHTTP2_NO_ERROR)
         try {
           if (clean) controller.close()
-          else controller.error(lost(ended ? "the reply ended with the connection" : `stream reset (code ${stream.rstCode})`, true))
+          else
+            controller.error(
+              lost(ended ? "the reply ended with the connection" : `stream reset (code ${stream.rstCode})`, true),
+            )
         } catch {
           // already closed or errored
         }
@@ -435,7 +450,10 @@ export namespace ManagedH2 {
       if (!(error instanceof Unsuitable)) throw error
       unsuitable.set(url.origin, Date.now() + options.unsuitableMs)
       stats.fallbacks++
-      log.info("gateway connection reuse unavailable; using a fresh connection", { origin: url.origin, reason: error.message })
+      log.info("gateway connection reuse unavailable; using a fresh connection", {
+        origin: url.origin,
+        reason: error.message,
+      })
       return undefined
     })
     if (!acquired) return fetchWithFreshConnection(input, init)
@@ -444,8 +462,10 @@ export namespace ManagedH2 {
       return await once(url, request, acquired.held, acquired.reused)
     } catch (error) {
       const method = (request.method ?? "GET").toUpperCase()
-      const resendable = new Headers(request.headers as HeadersInit | undefined).has("idempotency-key") || method === "GET"
-      if (!(error instanceof DeadConnection) || error.afterHeaders || !resendable || request.signal?.aborted) throw error
+      const resendable =
+        new Headers(request.headers as HeadersInit | undefined).has("idempotency-key") || method === "GET"
+      if (!(error instanceof DeadConnection) || error.afterHeaders || !resendable || request.signal?.aborted)
+        throw error
       stats.retries++
       log.warn("gateway connection lost before the reply; sending once more on a new connection", {
         origin: url.origin,
@@ -533,7 +553,9 @@ export namespace ManagedH2 {
       const woke = current.due !== undefined && Date.now() - current.due > options.keepWarmWakeMs
       current.lastCheck = Date.now()
       const base =
-        enabled() && Date.now() <= current.until ? await Promise.resolve(current.resolve()).catch(() => undefined) : undefined
+        enabled() && Date.now() <= current.until
+          ? await Promise.resolve(current.resolve()).catch(() => undefined)
+          : undefined
       const url = base ? target(base) : undefined
       schedule(!!url)
       if (!url || skip(url.origin)) return

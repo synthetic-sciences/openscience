@@ -53,7 +53,8 @@ async function run(main: (request: number) => string, requireStreamCompletion = 
     port: 0,
     async fetch(request) {
       const body = await request.json()
-      if (!JSON.stringify(body).includes(marker)) return new Response(complete("Helper title"), { headers: { "content-type": "text/event-stream" } })
+      if (!JSON.stringify(body).includes(marker))
+        return new Response(complete("Helper title"), { headers: { "content-type": "text/event-stream" } })
       requests++
       return new Response(main(requests), { headers: { "content-type": "text/event-stream" } })
     },
@@ -104,7 +105,9 @@ async function run(main: (request: number) => string, requireStreamCompletion = 
 
 test("a reply cut off after output keeps the partial answer and is reported, not resent", async () => {
   // Text arrives, then the stream ends with no finish reason and no usage.
-  const { requests, outcome, texts } = await run(() => `${chunk({ role: "assistant", content: "Partial answer." })}data: [DONE]\n\n`)
+  const { requests, outcome, texts } = await run(
+    () => `${chunk({ role: "assistant", content: "Partial answer." })}data: [DONE]\n\n`,
+  )
   expect(requests).toBe(1)
   expect(texts.join("")).toContain("Partial answer.")
   expect(outcome.info).toMatchObject({

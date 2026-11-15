@@ -177,7 +177,9 @@ const cli = yargs(hideBin(process.argv))
         ]).then(([{ ManagedH2 }, policy, { OpenScience }, { Auth }]) =>
           ManagedH2.keepWarm(async () => {
             const session = await OpenScience.getSession().catch(() => null)
-            return session?.api_key && Auth.isAtlasApiKey(session.api_key) ? policy.managedOpenRouterBaseURL() : undefined
+            return session?.api_key && Auth.isAtlasApiKey(session.api_key)
+              ? policy.managedOpenRouterBaseURL()
+              : undefined
           }),
         )
       }

@@ -1998,32 +1998,34 @@ export namespace SessionPrompt {
         agent,
         model: { providerID: model.providerID, id: model.id },
       })
-      const result = await processor.process({
-        user: lastUser,
-        agent,
-        abort,
-        sessionID,
-        system,
-        messages: [
-          // Keep only the most-recent images in full; older figures/screenshots become
-          // text placeholders so re-shipping media every turn can't bloat the window.
-          ...MessageV2.toModelMessages(sessionMessages, model, {
-            keepRecentImages: SessionCompaction.recentImages(config),
-            imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
-            reduceInputs: config.compaction?.pruneInputs === true,
-          }),
-          ...(isLastStep
-            ? [
-                {
-                  role: "assistant" as const,
-                  content: MAX_STEPS,
-                },
-              ]
-            : []),
-        ],
-        tools,
-        model,
-      }).finally(() => dispatched())
+      const result = await processor
+        .process({
+          user: lastUser,
+          agent,
+          abort,
+          sessionID,
+          system,
+          messages: [
+            // Keep only the most-recent images in full; older figures/screenshots become
+            // text placeholders so re-shipping media every turn can't bloat the window.
+            ...MessageV2.toModelMessages(sessionMessages, model, {
+              keepRecentImages: SessionCompaction.recentImages(config),
+              imageBytes: SessionCompaction.imageBytes(await resolveAccessRoute(model.providerID, model.id)),
+              reduceInputs: config.compaction?.pruneInputs === true,
+            }),
+            ...(isLastStep
+              ? [
+                  {
+                    role: "assistant" as const,
+                    content: MAX_STEPS,
+                  },
+                ]
+              : []),
+          ],
+          tools,
+          model,
+        })
+        .finally(() => dispatched())
       // The final budgeted child turn is a structured partial outcome, not a
       // normal completion. Persist that fact instead of relying on the model
       // to repeat the MAX_STEPS prose correctly.

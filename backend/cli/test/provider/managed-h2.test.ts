@@ -362,7 +362,12 @@ test("keep-warm does nothing with the switch off or before the gateway is known"
 })
 
 test("keep-warm opens the connection within about a second of the gateway becoming known", async () => {
-  const restore = ManagedH2.configure({ keepWarmCheckMs: 30_000, keepWarmPendingMs: 50, keepaliveMs: 10_000, keepWarmIdleStopMs: 60_000 })
+  const restore = ManagedH2.configure({
+    keepWarmCheckMs: 30_000,
+    keepWarmPendingMs: 50,
+    keepaliveMs: 10_000,
+    keepWarmIdleStopMs: 60_000,
+  })
   try {
     let base: string | undefined
     ManagedH2.keepWarm(() => base)
@@ -389,7 +394,12 @@ test("keep-warm accepts an asynchronous gateway lookup (the saved Ace session)",
 })
 
 test("activity re-opens a dropped connection at once instead of at the next check", async () => {
-  const restore = ManagedH2.configure({ keepWarmCheckMs: 30_000, keepWarmPendingMs: 50, keepaliveMs: 60_000, keepWarmIdleStopMs: 60_000 })
+  const restore = ManagedH2.configure({
+    keepWarmCheckMs: 30_000,
+    keepWarmPendingMs: 50,
+    keepaliveMs: 60_000,
+    keepWarmIdleStopMs: 60_000,
+  })
   try {
     ManagedH2.keepWarm(() => origin)
     expect(await until(() => sessionsOpened.length === 1 && health() === 1)).toBe(true)
@@ -403,7 +413,12 @@ test("activity re-opens a dropped connection at once instead of at the next chec
 })
 
 test("a check that fires far later than due (the machine slept) replaces the idle connection", async () => {
-  const restore = ManagedH2.configure({ keepWarmCheckMs: 100, keepaliveMs: 60_000, keepWarmIdleStopMs: 60_000, keepWarmWakeMs: 300 })
+  const restore = ManagedH2.configure({
+    keepWarmCheckMs: 100,
+    keepaliveMs: 60_000,
+    keepWarmIdleStopMs: 60_000,
+    keepWarmWakeMs: 300,
+  })
   try {
     ManagedH2.keepWarm(() => origin)
     expect(await until(() => sessionsOpened.length === 1 && health() === 1)).toBe(true)
