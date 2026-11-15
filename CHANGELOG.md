@@ -8,6 +8,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Start managed (Ace) model requests sooner: the balance read, account check and key sign-in run alongside the request instead of before it, Ace decides whether a workspace has funds, title and summary work waits until the request is sent, and the research database stays open between operations. Two opt-in switches, `OPENSCIENCE_MANAGED_H2=1` (reuse one kept-warm HTTP/2 connection to Ace) and `OPENSCIENCE_MANAGED_GZIP=1` (compress request bodies when Ace accepts them), are off by default. An Ace reply that ends without the provider's final event is now reported as cut off instead of being shown as a finished answer, and is resent once when nothing had arrived yet. An empty Ace wallet now says to add funds or turn on auto reload instead of showing only "Payment Required".
 - Add website cookie preferences and consent-gated marketing events for downloads and installation-command copies.
 
 - Answer the local server's health check without waiting on data-folder bookkeeping, so a busy Windows server is no longer reported as unreachable while it is still running.
