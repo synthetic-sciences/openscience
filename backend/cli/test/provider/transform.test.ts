@@ -2724,6 +2724,25 @@ describe("ProviderTransform.error for the managed gateway's payment-required con
     expect(text).not.toContain("insufficient_balance")
   })
 
+  test("an empty Wallet without Ace (FastAPI detail envelope, ace_required) says to add funds", () => {
+    // Ace answers this 402 as HTTPException detail: {"detail": {"error": "ace_required", ...}}.
+    const text = ProviderTransform.error(
+      "openrouter",
+      managed({
+        detail: {
+          error: "ace_required",
+          message: "Add Wallet funds or turn on Ace to use managed models.",
+          billing_url: "https://app.syntheticsciences.ai/billing",
+        },
+      }),
+    )
+    expect(text).toContain("Ace is paused")
+    expect(text).toContain("no available balance")
+    expect(text).toContain("/billing")
+    expect(text).not.toContain("ace_required")
+    expect(text).not.toContain("detail")
+  })
+
   test("a shared Wallet points at the billing manager; a pending reload says to retry", () => {
     expect(
       ProviderTransform.error(
@@ -2872,5 +2891,44 @@ describe("ProviderTransform.error for the managed gateway's payment-required con
   test("a 402 from a provider the person connected directly is left alone", () => {
     const direct = managed({ error: "insufficient_balance" }, "https://openrouter.ai/api/v1/chat/completions")
     expect(ProviderTransform.error("openrouter", direct)).toBe("Payment Required")
+  })
+})
+
+describe("ProviderTransform.error when Ace has no upstream for the model's provider", () => {
+  const unavailable = (detail: Record<string, unknown>, url = `${managedOpenRouterBaseURL()}/chat/completions`) =>
+    new APICallError({
+      message: "Service Unavailable",
+      url,
+      requestBodyValues: {},
+      statusCode: 503,
+      responseBody: JSON.stringify({ detail }),
+      isRetryable: true,
+    })
+
+  test("a missing provider key reads as that provider being down, with another model or BYOK as the way on", () => {
+    const text = ProviderTransform.error("openrouter", unavailable({ error: "anthropic_not_configured" }))
+    expect(text).toContain("Anthropic (Claude models) is unavailable on Ace right now")
+    expect(text).toContain("another provider")
+    expect(text).toContain("Keys & subscriptions")
+    expect(text).not.toContain("not_configured")
+    expect(text).not.toContain("detail")
+    expect(ProviderTransform.error("openrouter", unavailable({ error: "gemini_not_configured" }))).toContain(
+      "Google (Gemini models) is unavailable",
+    )
+    expect(ProviderTransform.error("openrouter", unavailable({ error: "invalid_ace_openai_upstream" }))).toContain(
+      "OpenAI (GPT models) is unavailable",
+    )
+    expect(
+      ProviderTransform.error("openrouter", unavailable({ error: "managed_not_configured", provider: "openrouter" })),
+    ).toStartWith("This model's provider is unavailable on Ace right now")
+  })
+
+  test("only Ace's own codes are rewritten; other 503s keep their message", () => {
+    expect(ProviderTransform.managedProviderUnavailable(unavailable({ error: "overloaded" }))).toBeUndefined()
+    expect(
+      ProviderTransform.managedProviderUnavailable(
+        unavailable({ error: "anthropic_not_configured" }, "https://openrouter.ai/api/v1/chat/completions"),
+      ),
+    ).toBeUndefined()
   })
 })

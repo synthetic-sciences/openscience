@@ -1901,14 +1901,22 @@ export namespace MessageV2 {
 
         // The provider lets the UI point a credential failure at the right
         // connection instead of a bare "API key is invalid".
-        const metadata = { providerID: ctx.providerID, ...(e.url ? { url: e.url } : {}) }
+        // Ace with no upstream for the provider answers 503 every time: it is
+        // tagged so the UI can name it, and never retried.
+        const unavailable = !!ProviderTransform.managedProviderUnavailable(e)
+        const metadata = {
+          providerID: ctx.providerID,
+          ...(e.url ? { url: e.url } : {}),
+          ...(unavailable ? { code: "managed_provider_unavailable" } : {}),
+        }
         return new MessageV2.APIError(
           {
             message,
             statusCode: e.statusCode,
             isRetryable:
-              (ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable) ||
-              ProviderTransform.managedRetryable(e),
+              ((ctx.providerID.startsWith("openai") ? isOpenAiErrorRetryable(e) : e.isRetryable) ||
+                ProviderTransform.managedRetryable(e)) &&
+              !unavailable,
             responseHeaders: e.responseHeaders,
             responseBody: e.responseBody,
             metadata,

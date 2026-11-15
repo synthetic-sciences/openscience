@@ -731,7 +731,12 @@ export namespace OpenScience {
   ): Promise<FundingSnapshot> {
     if (!apiKey || !isAtlasManagedKey(apiKey)) throw new FundingContextError("Expected an Atlas managed API key.")
     const selected = await (async () => {
-      if (!snapshot) return (await getReconciledFundingState())?.snapshot
+      // Without a caller snapshot, resolve it the way getRequestSnapshot does:
+      // a scoped session comes from the local session file, and only a legacy
+      // unscoped one needs the status read. Reconciling every managed request
+      // put an Ace round trip in front of each model call for no added check;
+      // the gateway still proves the funding context on the response.
+      if (!snapshot) return (await getRequestSnapshot()) ?? undefined
       if (!isLegacyUnscoped(snapshot)) return snapshot
       const state = await getReconciledFundingState()
       if (state?.snapshot.api_key !== snapshot.api_key) return
@@ -1238,20 +1243,32 @@ export namespace OpenScience {
   export async function loginWithKey(rawKey: string): Promise<OpenScienceSession> {
     const key = rawKey.trim()
     if (!isAccountKey(key)) throw new Error("Expected an OpenScience API key starting with `thk_` or `osk_`.")
-    const probe = await atlasFetch(`${apiBase()}/api/cli/balance`, {
-      headers: { Authorization: `Bearer ${key}`, [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL },
-    })
-    if (probe.status === 401 || probe.status === 403)
+    // Both reads need only the key, so they run together: one round trip to
+    // Ace instead of two. The probe's verdict is still checked first, so a
+    // rejected key reports as rejected whatever the status read returned.
+    const [probe, response] = await Promise.all([
+      atlasFetch(`${apiBase()}/api/cli/balance`, {
+        headers: { Authorization: `Bearer ${key}`, [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL },
+      }),
+      atlasFetch(`${apiBase()}/api/v1/auth/status`, {
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
+        },
+      }).catch(() => undefined),
+    ])
+    const discard = () => response?.body?.cancel().catch(() => undefined)
+    await probe.body?.cancel().catch(() => undefined)
+    if (probe.status === 401 || probe.status === 403) {
+      await discard()
       throw new Error("That key was rejected. Double-check it and try again.")
-    if (!probe.ok) throw new Error(`Could not validate key: HTTP ${probe.status}`)
+    }
+    if (!probe.ok) {
+      await discard()
+      throw new Error(`Could not validate key: HTTP ${probe.status}`)
+    }
 
-    const response = await atlasFetch(`${apiBase()}/api/v1/auth/status`, {
-      headers: {
-        Authorization: `Bearer ${key}`,
-        Accept: "application/json",
-        [FUNDING_PROTOCOL_HEADER]: FUNDING_PROTOCOL,
-      },
-    }).catch(() => undefined)
     // The status read is what tells this client which workspace the key is
     // billed to; a session written without it would carry no user and never
     // verify, so the login fails here instead of half-succeeding.
@@ -1750,8 +1767,12 @@ export namespace OpenScience {
   const BALANCE_CACHE_TTL_MS = 30_000
   // A positive balance past the TTL is still served while a refresh runs in
   // the background, up to this age. A missing, non-positive or older value
-  // blocks on the fetch so an empty wallet is noticed promptly.
-  const BALANCE_STALE_MAX_MS = 5 * 60_000
+  // blocks on the fetch so an empty wallet is noticed promptly. The client
+  // check is a fast fail, not the guard: Ace reserves a hold against the real
+  // Wallet before every managed call and answers 402 when it cannot fund it
+  // (then forgetBalance drops this value). An hour keeps the first message
+  // after a pause from waiting on a balance round trip.
+  const BALANCE_STALE_MAX_MS = 60 * 60_000
 
   /** Expire the cached balance after a spend or credential change. A positive
    * value is kept past its TTL so the next check serves it while a refresh runs
@@ -1776,6 +1797,24 @@ export namespace OpenScience {
 
   export function invalidateBalanceCache(): void {
     invalidateBalance()
+  }
+
+  /** Drop the cached balance outright: Ace refused a managed request for its
+   * funding, so the next check must read the balance fresh rather than serve
+   * the stale positive value again. */
+  export function forgetBalance(): void {
+    invalidateBalance()
+    cachedBalance = null
+  }
+
+  /** Start a balance read in the background so the next managed turn finds it
+   * cached instead of waiting on an Ace round trip before the model call. The
+   * usual cache rules apply afterwards (30 s fresh, positive values served
+   * stale for up to an hour while a refresh runs). Never throws. */
+  export function warmBalance(): void {
+    void getRequestSnapshot()
+      .then((snapshot) => (snapshot ? getBalance(snapshot) : null))
+      .catch(() => undefined)
   }
 
   export async function getBalance(snapshot?: FundingSnapshot): Promise<number | null> {

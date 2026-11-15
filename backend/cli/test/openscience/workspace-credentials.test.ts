@@ -51,6 +51,8 @@ let authOrg: string | undefined = "org_a"
 let authUser = "user_a"
 let authStatus = 200
 let authReads = 0
+/** When set, the balance probe answers only after an auth status read arrives. */
+let balanceWaitsForStatus: PromiseWithResolvers<void> | undefined
 let browser: { state: string; redirect_uri: string } | undefined
 let redeemed = session
 let revokes: string[] = []
@@ -97,8 +99,13 @@ const server = Bun.serve({
         return new Response(null, { status: 400 })
       return Response.json(redeemed)
     }
+    if (new URL(input.url).pathname === "/api/cli/balance" && balanceWaitsForStatus) {
+      await balanceWaitsForStatus.promise
+      return Response.json({ balance_usd: 10 })
+    }
     if (new URL(input.url).pathname === "/api/v1/auth/status") {
       authReads++
+      balanceWaitsForStatus?.resolve()
       return Response.json(
         {
           user: { user_id: authUser },
@@ -192,6 +199,7 @@ beforeEach(async () => {
   authUser = "user_a"
   authStatus = 200
   authReads = 0
+  balanceWaitsForStatus = undefined
   browser = undefined
   redeemed = session
   revokes = []
@@ -431,6 +439,21 @@ describe("workspace credential sync", () => {
     expect(revokes).not.toContain(`Bearer ${final}`)
   })
 
+  test("key sign-in sends the balance probe and the status read together", async () => {
+    // The fixture holds the probe until the status read arrives: sequential
+    // reads would never finish, concurrent ones cost one round trip.
+    balanceWaitsForStatus = Promise.withResolvers<void>()
+    const key = "osk_fixture_concurrent_login"
+    const result = await Promise.race([
+      OpenScience.loginWithKey(key),
+      Bun.sleep(5_000).then(() => {
+        throw new Error("the probe waited for the status read")
+      }),
+    ])
+    expect(result.api_key).toBe(key)
+    expect(authReads).toBeGreaterThan(0)
+  })
+
   test("an old server without self-revoke keeps the replacement active and exposes a warning", async () => {
     revokeStatus = 404
     const key = "osk_fixture_old_server"
@@ -564,6 +587,24 @@ describe("workspace credential sync", () => {
     expect(state?.snapshot).toMatchObject(session)
     expect(state?.context).toMatchObject({ type: "organization", organization_id: "org_a", available: false })
     expect(await OpenScience.getSession()).toEqual(session)
+  })
+
+  test("a managed request without a caller snapshot reads no account status for a scoped session", async () => {
+    // A scoped workspace session is resolved from the local session file, as
+    // getRequestSnapshot documents; an Ace status read here sat in front of
+    // every model call.
+    await OpenScience.saveSession(session)
+    const selected = await OpenScience.managedRequestSnapshot(session.api_key)
+    expect(selected).toMatchObject(session)
+    expect(authReads).toBe(0)
+  })
+
+  test("a legacy unscoped session without a caller snapshot still reconciles before dispatch", async () => {
+    await OpenScience.clearSession()
+    await OpenScience.saveSession({ api_key: "thk_fixture_pre_sync", user_id: "" })
+    const selected = await OpenScience.managedRequestSnapshot("thk_fixture_pre_sync")
+    expect(selected).toMatchObject({ api_key: "thk_fixture_pre_sync", user_id: "user_a", organization_id: "org_a" })
+    expect(authReads).toBeGreaterThan(0)
   })
 
   test("unsaved legacy and workspace keys both fail before managed dispatch", async () => {

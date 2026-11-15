@@ -396,6 +396,8 @@ function errorTitle(value: unknown, message: string): string {
   const error = record(value)
   const data = record(error?.data)
   const status = typeof data?.statusCode === "number" ? data.statusCode : undefined
+  const metadata = record(data?.metadata)
+  if (metadata?.code === "managed_provider_unavailable") return "Provider unavailable"
   if (credentialErrorText(value)) return "Credentials rejected"
   if (status === 402 || /insufficient_balance|Wallet cannot fund/i.test(message)) return "Ace is paused"
   if (status === 429 || /rate limit/i.test(message)) return "Rate limited"

@@ -8,22 +8,37 @@ import { DataRootBarrier } from "@/global/data-root-barrier"
 // Bun 1.3.14 can keep statements beyond its query cache alive after close; each access must own them.
 class Connection extends Database {
   private readonly statements = new Set<{ finalize(): void }>()
+  // Bun 1.3.14 prepares its transaction-control statements once per
+  // connection and reuses them for every db.transaction(); they live until
+  // the connection closes.
+  private readonly control = new Set<{ finalize(): void }>()
+
+  private track<S extends { finalize(): void }>(sql: string, statement: S) {
+    if (/^\s*(BEGIN|COMMIT|ROLLBACK|SAVEPOINT|RELEASE)\b/i.test(sql)) this.control.add(statement)
+    else this.statements.add(statement)
+    return statement
+  }
 
   override query<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string) {
-    const statement = super.query<T, P>(sql)
-    this.statements.add(statement)
-    return statement
+    return this.track(sql, super.query<T, P>(sql))
   }
 
   override prepare<T, P extends SQLQueryBindings | SQLQueryBindings[]>(sql: string, params?: P) {
-    const statement = super.prepare<T, P>(sql, params)
-    this.statements.add(statement)
-    return statement
+    return this.track(sql, super.prepare<T, P>(sql, params))
+  }
+
+  /** Finalize every statement an access created. The shared connection
+   * outlives each access, so an access must not leave statements (or a
+   * pending read) behind; Bun re-prepares a finalized cached query. */
+  release() {
+    for (const statement of this.statements) statement.finalize()
+    this.statements.clear()
   }
 
   override close(throwOnError = true) {
-    for (const statement of this.statements) statement.finalize()
-    this.statements.clear()
+    this.release()
+    for (const statement of this.control) statement.finalize()
+    this.control.clear()
     super.close(throwOnError)
   }
 }
@@ -31,6 +46,8 @@ class Connection extends Database {
 /** Session records share one transaction boundary. Legacy files are retained as
  * backups, but after import the database is authoritative, including deletes. */
 export namespace ResearchDatabase {
+  /** How long the shared connection stays open without an access. */
+  export const IDLE_MS = 750
   const tables = {
     session: { scope: "project_id", depth: 3 },
     message: { scope: "session_id", depth: 3 },
@@ -106,13 +123,118 @@ export namespace ResearchDatabase {
         .get(record.parent, record.id)
       return row ? (JSON.parse(row.data) as T) : undefined
     }
-    const access = async <T>(fn: (db: Database) => T): Promise<T> => {
-      await using operation = await DataRootBarrier.enter(filepath)
-      await fs.mkdir(root, { recursive: true })
-      const db = new Connection(filepath, { create: true, strict: true })
+    // One connection per process is kept open between accesses (the anchor).
+    // While any connection is open, closing another never checkpoints the
+    // WAL, so with synchronous=NORMAL a commit costs no fsync. NORMAL keeps
+    // the database consistent after a process crash; an OS crash or power
+    // loss can drop the last commits, never corrupt the file. The anchor
+    // holds one data-root operation marker while open and lets go after a
+    // short idle period, or as soon as a relocation publishes its intent, so
+    // relocation still drains every live handle. Accesses reuse the anchor
+    // rather than opening the file again: closing a second descriptor on the
+    // same file in-process is what dropped POSIX locks in oh-my-pi #17005.
+    type Anchor = {
+      db: Connection
+      operation: DataRootBarrier.Operation
+      generation: unknown
+      identity: string
+      users: number
+      retired: boolean
+      timer?: ReturnType<typeof setTimeout>
+    }
+    let anchor: Promise<Anchor> | undefined
+    const fileIdentity = () =>
+      fs.stat(filepath).then(
+        (stat) => `${stat.dev}:${stat.ino}`,
+        () => undefined,
+      )
+    const close = async (held: Anchor) => {
       try {
-        await fs.chmod(filepath, 0o600)
-        db.exec("PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;")
+        held.db.close(false)
+      } finally {
+        await held.operation[Symbol.asyncDispose]()
+      }
+    }
+    const retire = (held: Anchor, pending: Promise<Anchor>) => {
+      if (anchor === pending) anchor = undefined
+      held.retired = true
+      if (held.timer) clearTimeout(held.timer)
+      if (held.users === 0) void close(held).catch(() => undefined)
+    }
+    const open = async (): Promise<Anchor> => {
+      const generation = DataRootBarrier.generation()
+      const operation = await DataRootBarrier.enter(filepath)
+      try {
+        await fs.mkdir(root, { recursive: true })
+        const db = new Connection(filepath, { create: true, strict: true })
+        try {
+          await fs.chmod(filepath, 0o600)
+          // Switching a new database to WAL takes an exclusive lock. When
+          // several processes create it at once SQLite may answer SQLITE_BUSY
+          // at once (deadlock avoidance skips the busy handler), so retry
+          // within the same bound as busy_timeout.
+          const deadline = Date.now() + 10_000
+          for (;;) {
+            try {
+              db.exec(
+                "PRAGMA busy_timeout=10000; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;",
+              )
+              break
+            } catch (error) {
+              if ((error as { code?: unknown }).code !== "SQLITE_BUSY" || Date.now() >= deadline) throw error
+              await Bun.sleep(10 + Math.random() * 40)
+            }
+          }
+          // Darwin's fsync does not order writes; checkpoints use F_FULLFSYNC.
+          if (process.platform === "darwin") db.exec("PRAGMA checkpoint_fullfsync=1")
+          const identity = await fileIdentity()
+          if (!identity) throw new Error("The research database disappeared while it was opened")
+          return { db, operation, generation, identity, users: 0, retired: false }
+        } catch (error) {
+          db.close(false)
+          throw error
+        }
+      } catch (error) {
+        await operation[Symbol.asyncDispose]()
+        throw error
+      }
+    }
+    const hold = async (): Promise<{ held: Anchor; pending: Promise<Anchor> }> => {
+      for (;;) {
+        const pending = anchor
+        if (pending) {
+          const held = await pending.catch(() => undefined)
+          if (held && !held.retired && anchor === pending) {
+            // A relocation intent, a reconfigured barrier, or a file deleted or
+            // replaced underneath the anchor (a reset or restore) retires it.
+            if (
+              !(await DataRootBarrier.superseded(filepath, held.generation)) &&
+              (await fileIdentity()) === held.identity
+            ) {
+              if (!held.retired && anchor === pending) return { held, pending }
+              continue
+            }
+            retire(held, pending)
+          } else if (anchor === pending) anchor = undefined
+          continue
+        }
+        const opening = open()
+        anchor = opening
+        try {
+          return { held: await opening, pending: opening }
+        } catch (error) {
+          if (anchor === opening) anchor = undefined
+          throw error
+        }
+      }
+    }
+    const access = async <T>(fn: (db: Database) => T): Promise<T> => {
+      const { held, pending } = await hold()
+      if (held.timer) clearTimeout(held.timer)
+      held.timer = undefined
+      held.users++
+      const db = held.db
+      try {
         const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version
         if (version > 7) throw new Error("This research database requires a newer OpenScience version")
         if (version < 7)
@@ -268,8 +390,17 @@ export namespace ResearchDatabase {
         }
         return fn(db)
       } finally {
-        // No live SQLite handle may follow the old physical root after relocation.
-        db.close()
+        db.release()
+        held.users--
+        if (held.users === 0) {
+          // No live SQLite handle may follow the old physical root after
+          // relocation: a retired anchor closes now, an idle one shortly.
+          if (held.retired) void close(held).catch(() => undefined)
+          else {
+            held.timer = setTimeout(() => retire(held, pending), IDLE_MS)
+            held.timer.unref?.()
+          }
+        }
       }
     }
     return {

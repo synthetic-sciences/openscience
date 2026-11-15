@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import { Bus } from "../../src/bus"
 import { Identifier } from "../../src/id/id"
 import { Instance } from "../../src/project/instance"
@@ -7,6 +7,7 @@ import { Session } from "../../src/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionSummary } from "../../src/session/summary"
+import { SessionTelemetry } from "../../src/session/telemetry"
 import { Log } from "../../src/util/log"
 import { tmpdir, trustProject } from "../fixture/fixture"
 import { STRESS_PROVIDER_ID, STRESS_PROVIDER_MODEL, stressProviderConfig } from "../fixture/stress-provider"
@@ -191,6 +192,51 @@ describe("session title generation", () => {
       })
     } finally {
       gate.resolve()
+      local.stop()
+    }
+  })
+
+  test("title and summary requests start only after the research request is sent", async () => {
+    const local = fixture()
+    try {
+      await provide(local.base, async () => {
+        const session = await Session.create({})
+        const order: string[] = []
+        const recordProgress = SessionTelemetry.recordProgress
+        const progress = spyOn(SessionTelemetry, "recordProgress").mockImplementation((input) => {
+          if (input.sessionID === session.id) order.push(input.phase)
+          return recordProgress(input)
+        })
+        const original = SessionSummary.summarize
+        const summarize = spyOn(SessionSummary, "summarize").mockImplementation(
+          Object.assign((input: Parameters<typeof original>[0]) => {
+            if (input.sessionID === session.id) order.push("summarize")
+            return original(input)
+          }, original),
+        )
+        try {
+          await SessionPrompt.prompt({
+            sessionID: session.id,
+            model,
+            agent: "research",
+            tools: { "*": false },
+            parts: [{ type: "text", text: "Compare sequencing pipelines on this cohort." }],
+          })
+          await local.received("session", 1)
+          await local.received("message", 1)
+          expect(local.requests[0]?.kind).toBe("research")
+          // The summary was started only after the research request was
+          // handed to the transport ("connecting"), not while it was prepared.
+          const first = order.indexOf("summarize")
+          expect(first).toBeGreaterThan(-1)
+          expect(order.slice(0, first)).toContain("connecting")
+        } finally {
+          progress.mockRestore()
+          summarize.mockRestore()
+          await Instance.dispose()
+        }
+      })
+    } finally {
       local.stop()
     }
   })
