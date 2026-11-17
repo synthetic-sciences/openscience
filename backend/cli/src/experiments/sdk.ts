@@ -190,7 +190,11 @@ def init(project=None, name=None, config=None, **_ignored):
     global _active, run
     if _active is not None and not _active._finished:
         return _active
-    cfg = dict(config or {})
+    try:
+        cfg = dict(config or {})
+    except (TypeError, ValueError):
+        # wandb.init also takes an argparse.Namespace (config=args), which dict() cannot read.
+        cfg = dict(vars(config))
     globals()["config"].clear()
     globals()["config"].update(cfg)
     summary.clear()

@@ -89,6 +89,45 @@ describe("tracking SDK over stdout", () => {
     }
   })
 
+  test.skipIf(!python)("wandb.init takes an argparse Namespace as its config", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-track-"))
+    try {
+      const entries = await TrackingSDK.materialize(workspace, { shim: true })
+      await fs.writeFile(
+        path.join(workspace, "train.py"),
+        [
+          "import argparse",
+          "import wandb",
+          "parser = argparse.ArgumentParser()",
+          "parser.add_argument('--lr', type=float, default=0.1)",
+          "parser.add_argument('--steps', type=int, default=3)",
+          "args = parser.parse_args([])",
+          "wandb.init(project='p', config=args)",
+          "wandb.log({'val_loss': 0.5}, step=0)",
+          "wandb.finish()",
+        ].join("\n"),
+      )
+      const run = await Experiments.createRun({ projectID, name: "namespace", source: "job", jobID: "job_y" })
+      const command = TrackingSDK.wrap(`${python} train.py`, { runID: run.id, name: "namespace", entries })
+      const proc = Bun.spawn(["sh", "-lc", command], { cwd: workspace, stdout: "pipe", stderr: "pipe" })
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ])
+      expect(stderr).toBe("")
+      expect(code).toBe(0)
+      const logFile = path.join(workspace, "job.log")
+      await fs.writeFile(logFile, stdout)
+      await new Tracker.Follower(run.id, logFile, projectID).poll()
+      const stored = await Experiments.getRun(run.id, { projectID })
+      expect(stored?.config).toMatchObject({ lr: 0.1, steps: 3 })
+      expect(stored?.points).toBe(1)
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   test("parses only well-formed marked lines and survives partial writes", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-track-"))
     try {
