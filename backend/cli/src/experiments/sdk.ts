@@ -235,9 +235,11 @@ def finish(status="finished"):
    * for wandb run unchanged when this directory precedes the real package on
    * PYTHONPATH. Enabled per study; never imposed on ordinary compute jobs. */
   export const WANDB_SHIM = `"""wandb-compatible shim backed by openscience_track."""
-from openscience_track import *  # noqa: F401,F403
-from openscience_track import init as _init, log, finish, summary, config, Run  # noqa: F401
+from openscience_track import init as _init, log, log_artifact, finish, summary, config, Run  # noqa: F401
 import openscience_track as _track
+
+# init() rebinds run; a snapshot imported here would leave wandb.run stale, so
+# __getattr__ resolves the active one instead.
 
 
 def init(*args, **kwargs):
