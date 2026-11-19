@@ -21,7 +21,7 @@ track.summary["val_loss"] = evaluate()
 track.finish()
 ```
 
-Scripts written for `wandb` work unchanged inside a study: `import wandb` resolves to a shim that forwards to the tracker. No account, no network, no dependency: inside a compute job each record is one marked line on the job's output, which OpenScience reads back and stores in a per-project SQLite file under the data root. The Compute pane's log view and the model's `compute_job logs` never show those lines.
+Scripts written for `wandb` work unchanged inside a study: `import wandb` resolves to a shim that forwards to the tracker. Reading `wandb.run` (for example `wandb.run.id` or `wandb.run.name`) returns the active run and follows it across re-initialisation, as with the real package. No account, no network, no dependency: inside a compute job each record is one marked line on the job's output, which OpenScience reads back and stores in a per-project SQLite file under the data root. The Compute pane's log view and the model's `compute_job logs` never show those lines.
 
 New study runs retain their bound compute job’s provenance envelope. Expand **Recorded execution provenance** in run details to inspect the recorded command, working directory, code state, host/runtime information when captured, output hashes and timestamps. Unavailable fields retain their reason, and older runs without evidence say so. A run stays open while its compute job is delivering outputs, so its retained provenance includes the final captured artifacts and checkpoints. This snapshot survives reopening the experiment database; it is not a complete replay bundle or a guarantee that the dataset and environment can be reconstructed.
 
