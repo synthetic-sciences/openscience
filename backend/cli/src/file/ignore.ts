@@ -1,5 +1,3 @@
-import { sep } from "node:path"
-
 export namespace FileIgnore {
   const FOLDERS = new Set([
     "node_modules",
@@ -73,7 +71,10 @@ export namespace FileIgnore {
       if (glob.match(filepath)) return false
     }
 
-    const parts = filepath.split(sep)
+    // Tool inputs and watcher events use either separator regardless of the
+    // host. Splitting only on the platform one hid ignored folders whenever a
+    // path used the other, so their whole subtree was still watched.
+    const parts = filepath.split(/[/\\]/)
     for (let i = 0; i < parts.length; i++) {
       if (FOLDERS.has(parts[i])) return true
     }
