@@ -641,8 +641,10 @@ export namespace ArtifactStore {
     using _ = await Lock.write(lock)
     await using lease = await FileLease.acquire(lock)
     const db = await prepare()
+    // Only the first trash starts the retention clock; repeating it must not
+    // postpone deletion or rewrite the activity timestamp.
     db.query(
-      "UPDATE artifacts SET state = 'trash', trashed_at = ?1, updated_at = ?1 WHERE project_id = ?2 AND id = ?3",
+      "UPDATE artifacts SET state = 'trash', trashed_at = ?1, updated_at = ?1 WHERE project_id = ?2 AND id = ?3 AND state = 'active'",
     ).run(now, projectID, artifactID)
     const row = rows(db, projectID, artifactID)[0]
     db.close()
