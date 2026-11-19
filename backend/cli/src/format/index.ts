@@ -15,6 +15,7 @@ import { Sandbox } from "@/sandbox/sandbox"
 import { CommandRuntime } from "@/science/command/registry"
 import { Shell } from "@/shell/shell"
 import { spawn } from "node:child_process"
+import { substituteFile } from "./substitute"
 
 export namespace Format {
   const log = Log.create({ service: "format" })
@@ -97,7 +98,7 @@ export namespace Format {
   }
 
   async function run(item: Formatter.Info, file: string): Promise<number> {
-    const command = item.command.map((value) => value.replace("$FILE", file))
+    const command = substituteFile(item.command, file)
     const launched = await AuthoritySignal.exclusive(async () => {
       // Global binaries can still execute project-owned config, plugins, or
       // hooks merely by starting in the project root. Binary location is not a
