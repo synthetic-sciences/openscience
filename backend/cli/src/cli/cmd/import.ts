@@ -5,6 +5,9 @@ import { bootstrap } from "../bootstrap"
 import { Storage } from "../../storage/storage"
 import { Instance } from "../../project/instance"
 import { EOL } from "os"
+import * as prompts from "@clack/prompts"
+import { ForeignImport } from "../../session/foreign/import"
+import type { ForeignSource } from "../../session/foreign/types"
 
 export type SessionExport = {
   info: Session.Info
@@ -36,19 +39,119 @@ export async function readExport(
   return { ok: true, data: data as SessionExport }
 }
 
-export const ImportCommand = cmd({
-  command: "import <file>",
-  describe: "import session data from JSON file",
-  builder: (yargs: Argv) => {
-    return yargs.positional("file", {
-      describe: "path to JSON file",
-      type: "string",
-      demandOption: true,
+const OUTCOME: Record<string, string> = {
+  created: "New session created.",
+  updated: "Added the new messages to the existing session.",
+  "copied:continued": "Your earlier import has been continued in OpenScience, so this is a separate copy.",
+  "copied:rewound": "The conversation was rewound or edited since the last import, so this is a separate copy.",
+  unchanged: "Nothing new to import; the existing session is up to date.",
+}
+
+function fail(message: string) {
+  process.stderr.write(message)
+  process.stderr.write(EOL)
+  process.exitCode = 1
+}
+
+const NAMES: Record<ForeignSource, string> = { claude: "Claude Code", codex: "Codex" }
+
+async function importForeign(source: ForeignSource, id: string | undefined, access: string | undefined) {
+  const interactive = process.stdin.isTTY && process.stdout.isTTY
+  let sourceID = id
+  if (!sourceID) {
+    if (!interactive) return fail(`Give the ${NAMES[source]} session id to import.`)
+    const sessions = await ForeignImport.list(source)
+    if (!sessions.length) return fail(`No ${NAMES[source]} sessions found.`)
+    const picked = await prompts.autocomplete({
+      message: `Import a ${NAMES[source]} session`,
+      maxItems: 10,
+      options: sessions.map((session) => ({
+        value: session.id,
+        label: [
+          new Date(session.modified).toLocaleString(),
+          session.cwd ?? "",
+          (session.title ?? session.firstMessage ?? "").replace(/\s+/g, " ").slice(0, 60),
+        ]
+          .filter(Boolean)
+          .join("  "),
+      })),
     })
+    if (prompts.isCancel(picked)) return fail("Import cancelled.")
+    sourceID = picked as string
+  }
+
+  let folderAccess = access
+  if (!folderAccess) {
+    const folder = await ForeignImport.folder(source, sourceID).catch(() => undefined)
+    if (interactive && folder?.exists && folder.path) {
+      const picked = await prompts.select({
+        message: `Connect ${folder.path}?`,
+        initialValue: "write",
+        options: [
+          { value: "write", label: "Read and write" },
+          { value: "read", label: "Read only" },
+          { value: "none", label: "Don't connect" },
+        ],
+      })
+      if (prompts.isCancel(picked)) return fail("Import cancelled.")
+      folderAccess = picked as string
+    } else folderAccess = "write"
+  }
+  const parsed = ForeignImport.FolderAccess.safeParse(folderAccess)
+  if (!parsed.success) return fail("--folder-access must be write, read or none.")
+
+  try {
+    const result = await ForeignImport.run({ source, sourceID, folderAccess: parsed.data })
+    process.stdout.write(`Imported session: ${result.sessionID}` + EOL)
+    const key = result.outcome === "copied" ? `copied:${result.reason}` : result.outcome
+    process.stdout.write((OUTCOME[key] ?? result.outcome) + EOL)
+    if (result.folderMissing) {
+      process.stdout.write("The original folder is not available, so the session uses the normal workspace." + EOL)
+    }
+  } catch (error) {
+    if (ForeignImport.NotFoundError.isInstance(error)) return fail(`Session not found: ${sourceID}`)
+    fail(error instanceof Error ? error.message : String(error))
+  }
+}
+
+export const ImportCommand = cmd({
+  command: "import [file]",
+  describe: "import a session from a JSON export, or a Claude Code or Codex conversation",
+  builder: (yargs: Argv) => {
+    return yargs
+      .positional("file", {
+        describe: "path to JSON file",
+        type: "string",
+      })
+      .option("from-claude", {
+        describe: "import a Claude Code conversation (session id, or pick one)",
+        type: "string",
+      })
+      .option("from-codex", {
+        describe: "import a Codex conversation (session id, or pick one)",
+        type: "string",
+      })
+      .option("folder-access", {
+        describe: "connect the conversation's folder: write, read or none",
+        type: "string",
+        choices: ["write", "read", "none"],
+      })
   },
   handler: async (args) => {
+    const fromClaude = args.fromClaude as string | undefined
+    const fromCodex = args.fromCodex as string | undefined
+    const foreign = fromClaude !== undefined || fromCodex !== undefined
+    if (foreign && (args.file || (fromClaude !== undefined && fromCodex !== undefined))) {
+      return fail("Import either a file or one of --from-claude / --from-codex, not both.")
+    }
+    if (!foreign && !args.file) return fail("Give a JSON export file, or --from-claude / --from-codex.")
     await bootstrap(process.cwd(), async () => {
-      const read = await readExport(args.file)
+      if (foreign) {
+        const source: ForeignSource = fromClaude !== undefined ? "claude" : "codex"
+        const id = (source === "claude" ? fromClaude : fromCodex) || undefined
+        return importForeign(source, id, args.folderAccess as string | undefined)
+      }
+      const read = await readExport(args.file!)
       if (!read.ok) {
         // A failure here is the whole result of the command, so it must not
         // exit 0 and read as a success in a script.
