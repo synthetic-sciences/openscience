@@ -28,7 +28,8 @@ export namespace CodexReplay {
     }
     const keys = await Storage.list(["foreign_compaction", projectID, sessionID]).catch(() => [] as string[][])
     const records: Stored[] = []
-    for (const key of keys) {
+    // Newest first: when two compactions share a summary, the latest history wins.
+    for (const key of keys.toSorted((a, b) => b.join("/").localeCompare(a.join("/")))) {
       const record = await Storage.read<Stored>(key).catch(() => undefined)
       if (record) records.push(record)
     }
@@ -52,7 +53,9 @@ export namespace CodexReplay {
       const start =
         index > 0 && input[index - 1].role === "user" && text(input[index - 1]) === CARRIER_QUESTION ? index - 1 : index
       input.splice(start, index - start + 1, ...kept, record.item)
+      // Only the newest compaction is ever in view (filterCompacted drops older history).
       changed = true
+      break
     }
     return changed
   }

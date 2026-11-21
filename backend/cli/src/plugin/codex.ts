@@ -577,11 +577,25 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
                     mutated = true
                   }
                 }
-                // An imported Codex session replays its own encrypted compaction here.
-                if (await CodexReplay.rewrite(parsedBody, Provider.currentRequestContext()?.sessionID)) mutated = true
                 if (mutated) bodyForRequest = JSON.stringify(parsedBody)
               } catch {
                 // body wasn't JSON — leave it alone
+              }
+            }
+
+            // An imported Codex session replays its own encrypted compaction.
+            // If Codex rejects that history, the turn is resent once with the
+            // readable summary instead of failing.
+            let withoutReplay: string | undefined
+            if (isCodexRoute && typeof bodyForRequest === "string") {
+              try {
+                const replayed = JSON.parse(bodyForRequest)
+                if (await CodexReplay.rewrite(replayed, Provider.currentRequestContext()?.sessionID)) {
+                  withoutReplay = bodyForRequest
+                  bodyForRequest = JSON.stringify(replayed)
+                }
+              } catch (error) {
+                log.warn("imported compaction replay skipped", { error: String(error) })
               }
             }
 
@@ -624,9 +638,25 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
             // A clean 429/403 is the correct signal that the subscription is
             // rate-limited; the user's own `openai` provider (BYOK) is the
             // supported way to run on an API key.
-            return isCodexRoute
-              ? await sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
-              : await send(currentAuth.access)
+            const attempt = () =>
+              isCodexRoute
+                ? sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
+                : send(currentAuth.access)
+            const response = await attempt()
+            if (
+              withoutReplay !== undefined &&
+              response.status >= 400 &&
+              response.status < 500 &&
+              ![401, 403, 429].includes(response.status)
+            ) {
+              log.warn("codex rejected the imported compaction; resending with the summary", {
+                status: response.status,
+              })
+              await response.body?.cancel().catch(() => undefined)
+              bodyForRequest = withoutReplay
+              return await attempt()
+            }
+            return response
           },
         }
       },
