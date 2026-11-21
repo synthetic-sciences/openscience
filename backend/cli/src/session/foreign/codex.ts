@@ -3,7 +3,7 @@
 // codex-session-store.ts (MIT, Copyright (c) 2025 Mario Zechner).
 import fs from "node:fs/promises"
 import path from "node:path"
-import { isRecord, parseLines, sample, str, time, type JsonRecord } from "./jsonl"
+import { clip, isLive, isRecord, mapLimit, parseLines, sample, str, time, type JsonRecord } from "./jsonl"
 import type {
   ForeignConversation,
   ForeignEntry,
@@ -97,7 +97,7 @@ async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
     id: str(first.payload, "id") ?? path.basename(file, ".jsonl"),
     path: file,
     cwd: str(first.payload, "cwd"),
-    firstMessage,
+    firstMessage: clip(firstMessage),
     created: time(str(first.payload, "timestamp") ?? first.timestamp, stat.birthtimeMs || stat.mtimeMs),
     modified: stat.mtimeMs,
   }
@@ -198,7 +198,8 @@ function convert(lines: Array<{ line: number; record: JsonRecord }>, info: Forei
     if (kind === "message") {
       const text = contentText(payload.content)
       if (payload.role === "assistant") {
-        if (text) assistant(id, at).parts.push({ type: "text", text })
+        // Anthropic rejects whitespace-only text blocks.
+        if (text.trim()) assistant(id, at).parts.push({ type: "text", text })
       } else if (payload.role === "user" && !userEvents && text && !INJECTED.test(text)) {
         const images = Array.isArray(payload.content)
           ? payload.content
@@ -252,7 +253,7 @@ function convert(lines: Array<{ line: number; record: JsonRecord }>, info: Forei
 
   // A live session may still be writing its last turn; it comes in on the next import.
   const last = entries.at(-1)
-  if (last && !("kind" in last) && last.role === "assistant") {
+  if (last && !("kind" in last) && last.role === "assistant" && isLive(info.modified)) {
     const waiting = last.parts.some((part) => part.type === "tool" && part.output === undefined)
     if (waiting || last.parts.at(-1)?.type !== "text") {
       entries.pop()
@@ -268,8 +269,8 @@ export namespace CodexReader {
     return {
       source: "codex",
       async list() {
-        const infos = await Promise.all((await rollouts(root)).map((file) => describe(file)))
-        return infos.filter((info): info is ForeignSessionInfo => !!info).toSorted((a, b) => b.modified - a.modified)
+        const infos = await mapLimit(await rollouts(root), 16, describe)
+        return infos.toSorted((a, b) => b.modified - a.modified)
       },
       async load(info) {
         return convert(parseLines(await fs.readFile(info.path, "utf8")), info)

@@ -75,3 +75,30 @@ export function time(value: unknown, fallback: number): number {
   if (typeof value === "number" && Number.isFinite(value)) return value
   return fallback
 }
+
+/** A file written to this recently may still be mid-turn; its last turn waits for the next import. */
+export const LIVE_MS = 5 * 60 * 1000
+export function isLive(modified: number) {
+  return Date.now() - modified < LIVE_MS
+}
+
+export const LISTED_TEXT = 200
+export function clip(text: string | undefined) {
+  if (!text) return text
+  const flat = text.replace(/\s+/g, " ").trim()
+  return flat.length > LISTED_TEXT ? flat.slice(0, LISTED_TEXT - 1) + "…" : flat
+}
+
+/** Map with at most `limit` calls in flight; a failed item becomes undefined. */
+export async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R | undefined>) {
+  const out: Array<R | undefined> = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      out[index] = await fn(items[index]).catch(() => undefined)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out.filter((item): item is R => item !== undefined)
+}

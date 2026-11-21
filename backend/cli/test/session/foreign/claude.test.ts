@@ -294,4 +294,44 @@ describe("ClaudeReader", () => {
     const tool = turns(await load("image"))[1].parts[0]
     expect(tool).toMatchObject({ type: "tool", attachments: [{ mime: "image/png", data: "iVBORw0KGgo=" }] })
   })
+
+  test("drops whitespace-only text blocks", async () => {
+    await write("blank", [
+      user("u1", null, "go", 0),
+      assistant("a1", "u1", [text("\n\n"), { type: "tool_use", id: "c1", name: "Bash", input: { command: "ls" } }], 1, {
+        stop: "tool_use",
+      }),
+      user("u2", "a1", [{ type: "tool_result", tool_use_id: "c1", content: "a" }], 2),
+      assistant("a2", "u2", [text("done")], 3),
+    ])
+    const reply = turns(await load("blank"))[1]
+    expect(reply.parts.map((p) => p.type)).toEqual(["tool"])
+  })
+
+  test("keeps the trailing turn of a finished file", async () => {
+    const file = await write("finished", [
+      user("u1", null, "first", 0),
+      assistant("a1", "u1", [text("partial answer")], 1, { stop: null }),
+    ])
+    const old = new Date(Date.now() - 60 * 60 * 1000)
+    await fs.utimes(file, old, old)
+    expect(texts(await load("finished"))).toEqual(["user:first", "assistant:partial answer"])
+  })
+
+  test("an unreadable file does not break listing", async () => {
+    await write("good", [user("u1", null, "q", 0), assistant("a1", "u1", [text("a")], 1)])
+    const bad = await write("bad", [user("u1", null, "q", 0)])
+    await fs.chmod(bad, 0)
+    try {
+      expect((await ClaudeReader.create(root).list()).map((s) => s.id)).toEqual(["good"])
+    } finally {
+      await fs.chmod(bad, 0o644)
+    }
+  })
+
+  test("caps the listed first message", async () => {
+    await write("long", [user("u1", null, "y".repeat(5000), 0), assistant("a1", "u1", [text("a")], 1)])
+    const info = (await ClaudeReader.create(root).list())[0]
+    expect(info.firstMessage!.length).toBeLessThanOrEqual(200)
+  })
 })

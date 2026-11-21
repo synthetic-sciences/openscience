@@ -260,4 +260,19 @@ describe("CodexReader", () => {
     const c = await load(id)
     expect(texts(c)).toEqual(["user:fix the parser", "assistant:Fixed it.", "user:list files"])
   })
+
+  test("drops whitespace-only text and keeps the trailing turn of a finished file", async () => {
+    const id = "77777777-0000-0000-0000-000000000013"
+    const file = await write("2026/11/02", id, [
+      ...basic(id),
+      said("  \n", 7),
+      typed("list files", 10),
+      call("call_2", "shell", { command: ["ls"] }, 11),
+      output("call_2", "a b", 12),
+    ])
+    const old = new Date(Date.now() - 60 * 60 * 1000)
+    await fs.utimes(file, old, old)
+    const c = await load(id)
+    expect(texts(c)).toEqual(["user:fix the parser", "assistant:Fixed it.", "user:list files", "assistant:"])
+  })
 })

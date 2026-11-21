@@ -3,7 +3,19 @@
 // claude-session-store.ts (MIT, Copyright (c) 2025 Mario Zechner).
 import fs from "node:fs/promises"
 import path from "node:path"
-import { isRecord, num, parseLines, readStats as listingStats, sample, str, time, type JsonRecord } from "./jsonl"
+import {
+  clip,
+  isLive,
+  isRecord,
+  mapLimit,
+  num,
+  parseLines,
+  readStats as listingStats,
+  sample,
+  str,
+  time,
+  type JsonRecord,
+} from "./jsonl"
 import type {
   ForeignAttachment,
   ForeignConversation,
@@ -118,8 +130,8 @@ async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
     id: path.basename(file, ".jsonl"),
     path: file,
     cwd,
-    title: custom ?? generated,
-    firstMessage,
+    title: clip(custom ?? generated),
+    firstMessage: clip(firstMessage),
     created: created ?? stat.birthtimeMs ?? stat.mtimeMs,
     modified: stat.mtimeMs,
   }
@@ -226,7 +238,8 @@ function convert(records: JsonRecord[], info: ForeignSessionInfo): ForeignConver
       const kind = str(block, "type")
       if (kind === "text") {
         const value = str(block, "text")
-        if (value) parts.push({ type: "text", text: value })
+        // Anthropic rejects whitespace-only text blocks.
+        if (value?.trim()) parts.push({ type: "text", text: value })
       } else if (kind === "thinking") {
         const value = str(block, "thinking")
         if (value) parts.push({ type: "reasoning", text: value })
@@ -272,7 +285,7 @@ function convert(records: JsonRecord[], info: ForeignSessionInfo): ForeignConver
 
   // A live session may still be writing its last turn; it comes in on the next import.
   const last = entries.at(-1)
-  if (last && !("kind" in last) && last.role === "assistant") {
+  if (last && !("kind" in last) && last.role === "assistant" && isLive(info.modified)) {
     const waiting = last.parts.some((part) => part.type === "tool" && part.output === undefined)
     const stop = stops.get(last)
     if (waiting || stop === null || stop === undefined) entries.pop()
@@ -286,8 +299,9 @@ export namespace ClaudeReader {
     return {
       source: "claude",
       async list() {
-        const infos = await Promise.all((await sessionFiles(root)).map((file) => describe(file)))
-        return infos.filter((info): info is ForeignSessionInfo => !!info).toSorted((a, b) => b.modified - a.modified)
+        // Bounded, and one unreadable file never hides the others.
+        const infos = await mapLimit(await sessionFiles(root), 16, describe)
+        return infos.toSorted((a, b) => b.modified - a.modified)
       },
       async load(info) {
         const text = await fs.readFile(info.path, "utf8")
