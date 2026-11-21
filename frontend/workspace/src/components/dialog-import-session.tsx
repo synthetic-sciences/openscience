@@ -57,6 +57,18 @@ const ACCESS: Array<{ value: FolderAccess; label: string }> = [
   { value: "none", label: "Don't connect" },
 ]
 
+/** The SDK throws the parsed error body ({ name, data: { message } }), not an Error. */
+function errorText(error: unknown) {
+  if (error && typeof error === "object" && "data" in error) {
+    const message = (error as { data?: { message?: string } }).data?.message
+    if (message) return message
+  }
+  // Solid wraps a thrown non-Error value and keeps the original as the cause.
+  if (error instanceof Error && error.cause !== undefined) return errorText(error.cause)
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 function noteFor(result: ImportResult) {
   return NOTES[result.outcome === "copied" ? `copied:${result.reason}` : result.outcome]
 }
@@ -84,7 +96,8 @@ export function DialogImportSession(props: {
 
   const visible = () => {
     const needle = query().trim().toLowerCase()
-    const all = sessions() ?? []
+    // Reading an errored resource throws; the error is shown on its own.
+    const all = sessions.error ? [] : (sessions() ?? [])
     if (!needle) return all
     return all.filter((item) =>
       [item.cwd, item.title, item.firstMessage].some((field) => field?.toLowerCase().includes(needle)),
@@ -103,7 +116,7 @@ export function DialogImportSession(props: {
       if (noteFor(result)) setState({ result, busy: false })
       else finish(result)
     } catch (error) {
-      setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      setState({ busy: false, error: errorText(error) })
     }
   }
 
@@ -119,7 +132,7 @@ export function DialogImportSession(props: {
       }
       await run(picked, folder.connected ? "read" : "none")
     } catch (error) {
-      setState({ busy: false, error: error instanceof Error ? error.message : String(error) })
+      setState({ busy: false, error: errorText(error) })
     }
   }
 
@@ -219,7 +232,21 @@ export function DialogImportSession(props: {
               />
             </label>
             <div class="import-session__list" role="list">
-              <Show when={!sessions.loading} fallback={<p class="import-session__empty">Loading…</p>}>
+              <Show when={sessions.error}>
+                {(error) => (
+                  <p role="alert" class="import-session__error">
+                    Could not list conversations: {errorText(error())}
+                  </p>
+                )}
+              </Show>
+              <Show
+                when={!sessions.loading && !sessions.error}
+                fallback={
+                  <Show when={sessions.loading}>
+                    <p class="import-session__empty">Loading…</p>
+                  </Show>
+                }
+              >
                 <Show
                   when={visible().length > 0}
                   fallback={<p class="import-session__empty">No conversations found.</p>}

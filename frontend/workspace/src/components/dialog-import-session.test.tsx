@@ -177,4 +177,33 @@ describe("DialogImportSession", () => {
     button("Open session")?.click()
     expect(imported.map((item) => item.sessionID)).toEqual(["ses_copy"])
   })
+
+  test("shows the server's message when an import is refused", async () => {
+    open({
+      api: api({
+        run: async () => {
+          throw { name: "ForeignSessionEmptyError", data: { message: "This conversation has no messages to import." } }
+        },
+      }),
+    })
+    await settle()
+    button("plot results")?.click()
+    await settle()
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe(
+      "This conversation has no messages to import.",
+    )
+  })
+
+  test("a failed listing shows an error instead of breaking the dialog", async () => {
+    open({
+      api: api({
+        list: async () => {
+          throw { name: "UnknownError", data: { message: "permission denied" } }
+        },
+      }),
+    })
+    await settle()
+    expect(document.body.textContent).toContain("Could not list conversations: permission denied")
+    expect(button("Claude Code")).toBeDefined()
+  })
 })
