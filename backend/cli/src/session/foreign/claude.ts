@@ -94,7 +94,9 @@ async function sessionFiles(root: string): Promise<string[]> {
 async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
   const stat = await fs.stat(file).catch(() => undefined)
   if (!stat) return undefined
-  const { head, tail } = await sample(file)
+  const { head, tail, whole } = await sample(file)
+  // A session that was opened and closed without a message has nothing to import.
+  if (whole && !head.some((record) => isConversation(record))) return undefined
   let cwd: string | undefined
   let firstMessage: string | undefined
   let created: number | undefined

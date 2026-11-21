@@ -160,7 +160,8 @@ export namespace Server {
             if (err instanceof Storage.NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name === "SessionFilesystemDeniedError") status = 403
-            else if (err.name === "SessionFilesystemInvalidPathError") status = 400
+            else if (err.name === "SessionFilesystemInvalidPathError" || err.name === "ForeignSessionEmptyError")
+              status = 400
             else if (
               err.name === "SessionDirectoryMismatchError" ||
               err.name === "SessionDirectoryImmutableError" ||

@@ -43,7 +43,7 @@ export function parseLines(text: string): Array<{ line: number; record: JsonReco
 }
 
 /** Records from the first and last `SAMPLE_BYTES` of a file, for listing. */
-export async function sample(file: string): Promise<{ head: JsonRecord[]; tail: JsonRecord[] }> {
+export async function sample(file: string): Promise<{ head: JsonRecord[]; tail: JsonRecord[]; whole: boolean }> {
   const handle = await fs.open(file, "r")
   try {
     const size = (await handle.stat()).size
@@ -55,13 +55,13 @@ export async function sample(file: string): Promise<{ head: JsonRecord[]; tail: 
     }
     if (size <= SAMPLE_BYTES * 2) {
       const all = parseLines(await read(0, size)).map((item) => item.record)
-      return { head: all, tail: all }
+      return { head: all, tail: all, whole: true }
     }
     // The first line of the tail and the last line of the head are usually cut;
     // parseLines skips them.
     const head = parseLines(await read(0, SAMPLE_BYTES)).map((item) => item.record)
     const tail = parseLines(await read(size - SAMPLE_BYTES, SAMPLE_BYTES)).map((item) => item.record)
-    return { head, tail }
+    return { head, tail, whole: false }
   } finally {
     await handle.close()
   }

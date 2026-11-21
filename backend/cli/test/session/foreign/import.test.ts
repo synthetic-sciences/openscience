@@ -293,4 +293,32 @@ describe("ForeignImport", () => {
       expect(second.sessionID).not.toBe(first.sessionID)
     })
   })
+
+  test("an empty conversation is not listed and cannot be imported", async () => {
+    const dir = path.join(claudeRoot, "-source-folder")
+    await fs.mkdir(dir, { recursive: true })
+    await fs.writeFile(
+      path.join(dir, "empty.jsonl"),
+      [
+        { type: "permission-mode", mode: "default" },
+        { type: "system", uuid: "s1", parentUuid: null, cwd: folder },
+      ]
+        .map((r) => JSON.stringify(r))
+        .join("\n") + "\n",
+    )
+    // Too large to read whole while listing, so it is listed; importing it is refused.
+    await fs.writeFile(
+      path.join(dir, "empty-big.jsonl"),
+      JSON.stringify({ type: "file-history-snapshot", snapshot: { blob: "x".repeat(300_000) } }) + "\n",
+    )
+    await source(base())
+    await inProject(async () => {
+      const listed = (await ForeignImport.list("claude", claudeRoot)).map((s) => s.id)
+      expect(listed).toContain("conv-1")
+      expect(listed).not.toContain("empty")
+      await expect(run("write", "empty")).rejects.toThrow(ForeignImport.NotFoundError)
+      await expect(run("write", "empty-big")).rejects.toThrow(ForeignImport.EmptyError)
+      expect(await Provenance.findBySource("claude", "empty-big")).toEqual([])
+    })
+  })
 })

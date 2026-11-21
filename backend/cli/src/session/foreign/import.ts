@@ -62,6 +62,11 @@ export namespace ForeignImport {
     })
     .meta({ ref: "ForeignSessionImportResult" })
 
+  export const EmptyError = NamedError.create(
+    "ForeignSessionEmptyError",
+    z.object({ source: z.string(), sourceID: z.string(), message: z.string() }),
+  )
+
   export type Outcome = "created" | "updated" | "copied" | "unchanged"
   export type Result = {
     sessionID: string
@@ -171,9 +176,16 @@ export namespace ForeignImport {
   }): Promise<Result> {
     const { reader, info } = await find(input.source, input.sourceID, input.root)
     await using lease = await FileLease.acquire(lockPath(input.source, input.sourceID), 120_000)
-    return lease.during(async () => {
+    return await lease.during(async () => {
       const conversation = await reader.load(info)
       const previous = await latestImport(input.source, input.sourceID)
+      if (!previous && conversation.entries.length === 0) {
+        throw new EmptyError({
+          source: input.source,
+          sourceID: input.sourceID,
+          message: "This conversation has no messages to import.",
+        })
+      }
       if (!previous) return create(input, conversation, "created")
 
       const { sessionID, record } = previous

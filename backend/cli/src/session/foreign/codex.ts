@@ -75,7 +75,7 @@ async function rollouts(directory: string): Promise<string[]> {
 async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
   const stat = await fs.stat(file).catch(() => undefined)
   if (!stat) return undefined
-  const { head } = await sample(file)
+  const { head, whole } = await sample(file)
   const first = head[0]
   if (first?.type !== "session_meta" || !isRecord(first.payload)) return undefined
   let firstMessage: string | undefined
@@ -85,6 +85,13 @@ async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
       if (firstMessage) break
     }
   }
+  const conversation = head.some(
+    (record) =>
+      (record.type === "event_msg" && str(record.payload, "type") === "user_message") ||
+      (record.type === "response_item" && str(record.payload, "type") === "message"),
+  )
+  // A session that was opened and closed without a message has nothing to import.
+  if (whole && !conversation) return undefined
   return {
     source: "codex",
     id: str(first.payload, "id") ?? path.basename(file, ".jsonl"),
