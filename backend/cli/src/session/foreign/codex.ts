@@ -114,7 +114,9 @@ function convert(lines: Array<{ line: number; record: JsonRecord }>, info: Forei
   }
   const assistant = (id: string, at: number): ForeignTurn => {
     const last = entries.at(-1)
-    if (last && !("kind" in last) && last.role === "assistant") {
+    // A reply that ended in text is complete; anything after it is a new turn,
+    // so an imported turn never grows and its sourceID stays put on re-import.
+    if (last && !("kind" in last) && last.role === "assistant" && last.parts.at(-1)?.type !== "text") {
       last.sourceID = id
       ids.get(last)!.push(id)
       return last
@@ -245,8 +247,7 @@ function convert(lines: Array<{ line: number; record: JsonRecord }>, info: Forei
   const last = entries.at(-1)
   if (last && !("kind" in last) && last.role === "assistant") {
     const waiting = last.parts.some((part) => part.type === "tool" && part.output === undefined)
-    const answered = last.parts.some((part) => part.type === "text" || part.type === "tool")
-    if (waiting || !answered) {
+    if (waiting || last.parts.at(-1)?.type !== "text") {
       entries.pop()
       ids.delete(last)
     }

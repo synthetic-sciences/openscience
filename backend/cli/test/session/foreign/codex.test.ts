@@ -235,4 +235,29 @@ describe("CodexReader", () => {
     const c = await load(id)
     expect(texts(c)).toEqual(["user:fix the parser", "assistant:Fixed it.", "user:run the tests"])
   })
+
+  test("a reply that ends in text closes the assistant turn", async () => {
+    const id = "55555555-0000-0000-0000-000000000011"
+    await write("2026/11/02", id, [
+      ...basic(id),
+      call("call_2", "shell", { command: ["ls"] }, 10),
+      output("call_2", "a b", 11),
+      said("Listed.", 12),
+    ])
+    const c = await load(id)
+    expect(turns(c).map((t) => t.role)).toEqual(["user", "assistant", "assistant"])
+    expect(turns(c)[1].sourceID).toBe("codex:9")
+  })
+
+  test("skips a trailing turn that does not end in text", async () => {
+    const id = "66666666-0000-0000-0000-000000000012"
+    await write("2026/11/02", id, [
+      ...basic(id),
+      typed("list files", 10),
+      call("call_2", "shell", { command: ["ls"] }, 11),
+      output("call_2", "a b", 12),
+    ])
+    const c = await load(id)
+    expect(texts(c)).toEqual(["user:fix the parser", "assistant:Fixed it.", "user:list files"])
+  })
 })
