@@ -595,6 +595,12 @@ export namespace Session {
         }
         await SessionTraceStore.remove(sessionID)
         await SessionResearch.remove(sessionID)
+        // Records kept for imported Claude Code / Codex conversations.
+        await Storage.remove(["foreign_import", project.id, sessionID]).catch(() => undefined)
+        for (const key of await Storage.list(["foreign_compaction", project.id, sessionID]).catch(
+          () => [] as string[][],
+        ))
+          await Storage.remove(key).catch(() => undefined)
         await Storage.remove(deletionKey(project.id, sessionID))
       } catch (e) {
         log.error(e)
