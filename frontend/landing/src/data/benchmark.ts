@@ -2,13 +2,12 @@
 
    The values are the `export/numbers.json` and `data/*.json` of the launch
    post's generator (scripts/build.py in openscience-launch), snapshotted at
-   OpenScience `132dfdf` and benchmarks-openscience `61328d9` on 2026-09-26.
+   OpenScience `132dfdf` and benchmark data revision `61328d9` on 2026-09-26.
    Refresh them from that generator; do not retype them here. */
 
 export const SNAPSHOT = {
   date: "2026-09-26",
   openscience: "132dfdf",
-  benchmarks: "61328d9",
 } as const
 
 /** Which harness a row belongs to; the colour mapping is fixed everywhere. */
@@ -109,8 +108,6 @@ export const OSB = {
   margin: 6.7,
   other_short: "Claude Science",
 } as const
-
-export const TRACES = "https://github.com/synthetic-sciences/benchmarks-openscience"
 
 /** Terminal-Bench Science resolution rate by domain: ours against the
  * strongest Codex and Claude Code entries. */

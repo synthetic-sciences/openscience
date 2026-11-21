@@ -3,7 +3,7 @@ import { CopyStatus, useCopy } from "@/components/Copy"
 import { Footer } from "@/components/Footer"
 import Header from "@/components/Header"
 import { useMeta } from "@/components/Meta"
-import { NUMBERS, OSB, SNAPSHOT, TRACES, type BoardRow } from "@/data/benchmark"
+import { NUMBERS, OSB, SNAPSHOT, type BoardRow } from "@/data/benchmark"
 import { GITHUB, docs } from "@/data/links"
 import boardTbsSvg from "@/data/benchmark/board-tbs.svg?raw"
 import domainsSvg from "@/data/benchmark/domains.svg?raw"
@@ -261,9 +261,6 @@ export default function Benchmark() {
                 </a>
                 <a href={GITHUB} target="_blank" rel="noreferrer">
                   GitHub
-                </a>
-                <a href={TRACES} target="_blank" rel="noreferrer">
-                  Benchmark traces
                 </a>
               </div>
             </header>
@@ -530,9 +527,8 @@ export default function Benchmark() {
               <ol>
                 <li id="n1">
                   Figures and counts are computed by the launch post's scripts from OpenScience (commit{" "}
-                  <code>{SNAPSHOT.openscience}</code>), <a href={TRACES}>benchmarks-openscience</a> (commit{" "}
-                  <code>{SNAPSHOT.benchmarks}</code>) and snapshots of the public leaderboards taken {SNAPSHOT.date}.
-                  The build checks the recomputed scores against the benchmarks repository's README.
+                  <code>{SNAPSHOT.openscience}</code>), benchmark run data, and public leaderboard snapshots taken{" "}
+                  {SNAPSHOT.date}.
                 </li>
                 <li id="n2">
                   OpenScience runs: Terminal-Bench Science with a GPT-6 Astra lead, GPT-6 Sol workers and 8 hours per
