@@ -95,7 +95,15 @@ async function importForeign(source: ForeignSource, id: string | undefined, acce
       })
       if (prompts.isCancel(picked)) return fail("Import cancelled.")
       folderAccess = picked as string
-    } else folderAccess = "write"
+    } else {
+      // Nobody was asked, so nothing is connected: a script must pass --folder-access.
+      folderAccess = "none"
+      if (folder?.exists && folder.path && !folder.connected) {
+        process.stdout.write(
+          `Folder not connected: ${folder.path} (pass --folder-access write or read to connect it)` + EOL,
+        )
+      }
+    }
   }
   const parsed = ForeignImport.FolderAccess.safeParse(folderAccess)
   if (!parsed.success) return fail("--folder-access must be write, read or none.")

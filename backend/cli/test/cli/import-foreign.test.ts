@@ -109,4 +109,10 @@ describe("openscience import --from-claude / --from-codex", () => {
     expect(result.code).toBe(1)
     expect(result.stderr).toContain("either a file or")
   }, 60_000)
+
+  test("without a terminal and without --folder-access the folder is not connected", async () => {
+    const result = await openscience("--from-claude", "conv-cli")
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain("Folder not connected")
+  }, 60_000)
 })
