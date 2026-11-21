@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- Remove the external benchmark trace links from the OpenScience website.
+
 - New sessions reuse the model provider's cached prompt from their first message: the system prompt and tool definitions are now identical across a project's sessions, and this session's own details (its ID, scratch or working folder, connected folders, budget and checks) travel in a labelled block on the first message. A new Claude session reads about 14,600 cached tokens on its first call instead of none, so first replies are faster and cheaper.
 - When a session's details change mid-chat (a folder connected, a different time budget), the agent is told in a short "Session details changed" note instead of having its earlier context rewritten.
 - Acceptance checks and named outputs stated in a session's first request now survive a restart of the local server; previously their checks silently stopped.
