@@ -4,6 +4,8 @@ import { escapeHtml, htmlResponse } from "../util/html"
 import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
+import { Provider } from "../provider/provider"
+import { CodexReplay } from "../session/foreign/codex-replay"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -575,6 +577,8 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
                     mutated = true
                   }
                 }
+                // An imported Codex session replays its own encrypted compaction here.
+                if (await CodexReplay.rewrite(parsedBody, Provider.currentRequestContext()?.sessionID)) mutated = true
                 if (mutated) bodyForRequest = JSON.stringify(parsedBody)
               } catch {
                 // body wasn't JSON — leave it alone
