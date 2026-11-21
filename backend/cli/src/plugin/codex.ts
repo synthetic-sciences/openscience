@@ -638,10 +638,12 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
             // A clean 429/403 is the correct signal that the subscription is
             // rate-limited; the user's own `openai` provider (BYOK) is the
             // supported way to run on an API key.
-            const attempt = () =>
-              isCodexRoute
+            const attempt = () => {
+              if (currentAuth.type !== "oauth") throw new CodexCredentialsChangedError()
+              return isCodexRoute
                 ? sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
                 : send(currentAuth.access)
+            }
             const response = await attempt()
             if (
               withoutReplay !== undefined &&
