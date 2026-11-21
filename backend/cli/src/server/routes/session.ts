@@ -24,12 +24,77 @@ import { SessionTrace } from "../../session/trace"
 import { RuntimeEvents } from "../../runtime/events"
 import { SessionLoopState } from "../../session/loop-state"
 import { SubagentRoutes } from "./subagents"
+import { ForeignImport } from "../../session/foreign/import"
 
 const log = Log.create({ service: "server" })
 
 export const SessionRoutes = lazy(() =>
   new Hono()
     .route("/:sessionID/subagents", SubagentRoutes())
+    .get(
+      "/import/:source",
+      describeRoute({
+        summary: "List Claude Code or Codex conversations",
+        description: "List the conversations saved by Claude Code or Codex on this machine, newest first.",
+        operationId: "session.importList",
+        responses: {
+          200: {
+            description: "Conversations available to import",
+            content: { "application/json": { schema: resolver(ForeignImport.SessionInfo.array()) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("param", z.object({ source: ForeignImport.Source })),
+      async (c) => {
+        c.header("Cache-Control", "no-store")
+        return c.json(await ForeignImport.list(c.req.valid("param").source))
+      },
+    )
+    .get(
+      "/import/:source/:sourceID/folder",
+      describeRoute({
+        summary: "Get an importable conversation's folder",
+        description: "Report the folder the conversation ran in, whether it exists, and how it is connected.",
+        operationId: "session.importFolder",
+        responses: {
+          200: {
+            description: "The conversation's folder",
+            content: { "application/json": { schema: resolver(ForeignImport.Folder) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ source: ForeignImport.Source, sourceID: z.string().min(1) })),
+      async (c) => {
+        const { source, sourceID } = c.req.valid("param")
+        c.header("Cache-Control", "no-store")
+        return c.json(await ForeignImport.folder(source, sourceID))
+      },
+    )
+    .post(
+      "/import/:source",
+      describeRoute({
+        summary: "Import a Claude Code or Codex conversation",
+        description:
+          "Import one conversation as a session that can be continued. Importing it again updates that session, or makes a separate copy when either side has moved on.",
+        operationId: "session.import",
+        responses: {
+          200: {
+            description: "The imported session and what the import did",
+            content: { "application/json": { schema: resolver(ForeignImport.RunResult) } },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator("param", z.object({ source: ForeignImport.Source })),
+      validator("json", z.object({ sourceID: z.string().min(1), folderAccess: ForeignImport.FolderAccess })),
+      async (c) => {
+        const { source } = c.req.valid("param")
+        const body = c.req.valid("json")
+        return c.json(await ForeignImport.run({ source, sourceID: body.sourceID, folderAccess: body.folderAccess }))
+      },
+    )
     .get(
       "/",
       describeRoute({

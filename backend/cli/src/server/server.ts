@@ -167,7 +167,7 @@ export namespace Server {
               err.name === "SessionWorkspaceMismatchError"
             )
               status = 409
-            else if (err.name === "ProjectUnknownError") status = 404
+            else if (err.name === "ProjectUnknownError" || err.name === "ForeignSessionNotFoundError") status = 404
             else if (err.name === "ProjectStaleError") status = 410
             else if (err.name === "ProjectMismatchError") status = 409
             else if (err.name === "ProjectDirectoryError") status = 400

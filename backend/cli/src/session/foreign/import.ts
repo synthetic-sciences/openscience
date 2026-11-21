@@ -31,6 +31,37 @@ export namespace ForeignImport {
     z.object({ source: z.string(), sourceID: z.string(), message: z.string() }),
   )
 
+  export const SessionInfo = z
+    .object({
+      source: Source,
+      id: z.string(),
+      path: z.string(),
+      cwd: z.string().optional(),
+      title: z.string().optional(),
+      firstMessage: z.string().optional(),
+      created: z.number(),
+      modified: z.number(),
+      messageCount: z.number().optional(),
+    })
+    .meta({ ref: "ForeignSessionInfo" })
+
+  export const Folder = z
+    .object({
+      path: z.string().optional(),
+      exists: z.boolean(),
+      connected: SessionFilesystem.Access.optional(),
+    })
+    .meta({ ref: "ForeignSessionFolder" })
+
+  export const RunResult = z
+    .object({
+      sessionID: z.string(),
+      outcome: z.enum(["created", "updated", "copied", "unchanged"]),
+      reason: z.enum(["continued", "rewound"]).optional(),
+      folderMissing: z.boolean().optional(),
+    })
+    .meta({ ref: "ForeignSessionImportResult" })
+
   export type Outcome = "created" | "updated" | "copied" | "unchanged"
   export type Result = {
     sessionID: string
