@@ -39,6 +39,7 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { confirmDialog } from "@/atlas/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
+import { DialogImportSession, type ImportResult } from "@/components/dialog-import-session"
 import { SessionSidebarActions, SidebarAction, type SessionContext } from "@/pages/session-sidebar-action"
 import { DisconnectedPanel } from "@/atlas/DisconnectedPanel"
 import { CommandPalette } from "@/atlas/CommandPalette"
@@ -50,6 +51,7 @@ import {
   IconChevronRight,
   IconHome,
   IconPlus,
+  IconDownload,
   IconSearch,
   IconSettings,
   IconMessageSquare,
@@ -327,6 +329,19 @@ export default function Page(): JSX.Element {
     } catch (error: unknown) {
       console.error("session.restore failed", error)
       toast.error("Could not restore session", error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  async function openImported(result: ImportResult) {
+    try {
+      await sync.session.fetch(1)
+      sessionTabs.open(result.sessionID)
+      navigate(`/${params.dir}/session/${result.sessionID}`)
+      if (result.folderMissing)
+        toast.success("Conversation imported", "Its original folder is not available, so it uses the normal workspace.")
+    } catch (error: unknown) {
+      console.error("session.import open failed", error)
+      toast.error("Could not open the imported session", error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -1119,6 +1134,24 @@ export default function Page(): JSX.Element {
             setMobileSessionsOpen(false)
             dialog.show(() => <DialogSettings />)
           }}
+          onImport={() => {
+            setMobileSessionsOpen(false)
+            dialog.show(() => (
+              <DialogImportSession
+                api={{
+                  list: (source) =>
+                    sdk.client.session.importList({ source }, { throwOnError: true }).then((r) => r.data),
+                  folder: (source, sourceID) =>
+                    sdk.client.session.importFolder({ source, sourceID }, { throwOnError: true }).then((r) => r.data),
+                  run: (source, sourceID, folderAccess) =>
+                    sdk.client.session
+                      .import({ source, sourceID, folderAccess }, { throwOnError: true })
+                      .then((r) => r.data),
+                }}
+                onImported={(result) => void openImported(result)}
+              />
+            ))
+          }}
           onContext={(context) => {
             setMobileSessionsOpen(false)
             openContext(context)
@@ -1663,6 +1696,7 @@ function SessionsSidebar(props: {
   onResize: (width: number, done: boolean) => void
   onSearch: () => void
   onCustomize: () => void
+  onImport: () => void
   onContext: (context: SessionContext) => void
   context: SessionContext
   contextOpen: boolean
@@ -1778,6 +1812,14 @@ function SessionsSidebar(props: {
             onClick={props.onNew}
           >
             <IconPlus size={16} strokeWidth={1.5} />
+          </SidebarAction>
+          <SidebarAction
+            label="Import"
+            detail="From Claude Code or Codex"
+            ariaLabel="Import a Claude Code or Codex conversation"
+            onClick={props.onImport}
+          >
+            <IconDownload size={16} strokeWidth={1.5} />
           </SidebarAction>
           <SidebarAction
             label="Search"
