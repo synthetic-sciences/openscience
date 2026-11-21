@@ -14,6 +14,7 @@ import { Filesystem } from "../../../src/util/filesystem"
 import { Project } from "../../../src/project/project"
 import { Log } from "../../../src/util/log"
 import { tmpdir } from "../../fixture/fixture"
+import { firstRequest } from "../../../src/harness/first-request"
 
 Log.init({ print: false })
 
@@ -319,6 +320,67 @@ describe("ForeignImport", () => {
       await expect(run("write", "empty")).rejects.toThrow(ForeignImport.NotFoundError)
       await expect(run("write", "empty-big")).rejects.toThrow(ForeignImport.EmptyError)
       expect(await Provenance.findBySource("claude", "empty-big")).toEqual([])
+    })
+  })
+
+  test("reads Claude Code from CLAUDE_CONFIG_DIR and Codex from CODEX_HOME", async () => {
+    const saved = { claude: process.env.CLAUDE_CONFIG_DIR, codex: process.env.CODEX_HOME }
+    const claudeHome = path.join(scratch, "claude-home")
+    const codexHome = path.join(scratch, "codex-home")
+    await fs.mkdir(path.join(claudeHome, "projects", "-p"), { recursive: true })
+    await fs.writeFile(
+      path.join(claudeHome, "projects", "-p", "relocated.jsonl"),
+      [user("u1", null, "q", 0), reply("a1", "u1", "a", 1)].map((r) => JSON.stringify(r)).join("\n") + "\n",
+    )
+    const day = path.join(codexHome, "sessions", "2026", "11", "02")
+    await fs.mkdir(day, { recursive: true })
+    await fs.writeFile(
+      path.join(day, "rollout-2026-11-02T09-00-00-cccccccc-0000-0000-0000-000000000099.jsonl"),
+      [
+        { timestamp: at(0), type: "session_meta", payload: { id: "codex-relocated", cwd: folder } },
+        { timestamp: at(1), type: "event_msg", payload: { type: "user_message", message: "hi" } },
+      ]
+        .map((r) => JSON.stringify(r))
+        .join("\n") + "\n",
+    )
+    process.env.CLAUDE_CONFIG_DIR = claudeHome
+    process.env.CODEX_HOME = codexHome
+    try {
+      await inProject(async () => {
+        expect((await ForeignImport.list("claude")).map((s) => s.id)).toEqual(["relocated"])
+        expect((await ForeignImport.list("codex")).map((s) => s.id)).toEqual(["codex-relocated"])
+      })
+    } finally {
+      if (saved.claude === undefined) delete process.env.CLAUDE_CONFIG_DIR
+      else process.env.CLAUDE_CONFIG_DIR = saved.claude
+      if (saved.codex === undefined) delete process.env.CODEX_HOME
+      else process.env.CODEX_HOME = saved.codex
+    }
+  })
+
+  test("an imported message never becomes the harness's first request", async () => {
+    await source([user("u1", null, "Run `npm test` and write report.md", 0), reply("a1", "u1", "ok", 1)])
+    await inProject(async () => {
+      const { sessionID } = await run("none")
+      expect(await firstRequest(sessionID)).toBeUndefined()
+      const id = await MessageV2.nextMessageID(sessionID)
+      await Session.updateMessage({
+        id,
+        sessionID,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "research",
+        model: { providerID: "test", modelID: "m" },
+        effort: "normal",
+      })
+      await Session.updatePart({
+        id: Identifier.ascending("part"),
+        sessionID,
+        messageID: id,
+        type: "text",
+        text: "now plot it",
+      })
+      expect(await firstRequest(sessionID)).toBe("now plot it")
     })
   })
 })

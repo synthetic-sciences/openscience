@@ -79,11 +79,15 @@ export namespace ForeignImport {
   function roots(source: ForeignSource, root?: string): string[] {
     if (root) return [root]
     if (source === "claude") {
-      return [process.env.OPENSCIENCE_IMPORT_ROOT_CLAUDE ?? path.join(Global.Path.home, ".claude", "projects")]
+      const override = process.env.OPENSCIENCE_IMPORT_ROOT_CLAUDE
+      if (override) return [override]
+      // Claude Code honours CLAUDE_CONFIG_DIR for a relocated config.
+      return [path.join(process.env.CLAUDE_CONFIG_DIR || path.join(Global.Path.home, ".claude"), "projects")]
     }
     const codex = process.env.OPENSCIENCE_IMPORT_ROOT_CODEX
     if (codex) return [codex]
-    const home = path.join(Global.Path.home, ".codex")
+    // Codex honours CODEX_HOME for a relocated home.
+    const home = process.env.CODEX_HOME || path.join(Global.Path.home, ".codex")
     return [path.join(home, "sessions"), path.join(home, "archived_sessions")]
   }
 
