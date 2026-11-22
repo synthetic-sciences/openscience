@@ -20,6 +20,66 @@ const lines = (source: string) => {
     .map((raw) => ({ raw, text: raw.replace(/(?:\r\n|\n|\r)$/, "") }))
 }
 
+/** Hide HTML comments without changing source offsets. An image commented out of a
+ * manuscript must not become a missing-figure finding or a preview asset. */
+const withoutComments = (source: string) => {
+  const state = { comment: false, code: "", fence: "", size: 0, offset: 0 }
+  const closes = (ticks: string, start: number) => {
+    for (let match = source.indexOf(ticks, start); match !== -1; match = source.indexOf(ticks, match + ticks.length))
+      if (source[match - 1] !== "`" && source[match + ticks.length] !== "`") return true
+    return false
+  }
+  return lines(source)
+    .map((line) => {
+      const offset = state.offset
+      state.offset += line.raw.length
+      const marker = !state.comment && /^[ \t]{0,3}(`{3,}|~{3,})/.exec(line.text)?.[1]
+      if (marker) {
+        if (!state.fence) {
+          state.fence = marker[0]!
+          state.size = marker.length
+        } else if (state.fence === marker[0] && marker.length >= state.size) {
+          state.fence = ""
+          state.size = 0
+        }
+        return line.raw
+      }
+      if (state.fence || /^(?: {4}|\t)/.test(line.text)) return line.raw
+      const output: string[] = []
+      for (let index = 0; index < line.text.length; ) {
+        if (state.comment && line.text.startsWith("-->", index)) {
+          state.comment = false
+          output.push("   ")
+          index += 3
+          continue
+        }
+        if (state.comment) {
+          output.push(" ")
+          index++
+          continue
+        }
+        const ticks = /^`+/.exec(line.text.slice(index))?.[0]
+        if (ticks) {
+          if (!state.code && closes(ticks, offset + index + ticks.length)) state.code = ticks
+          else if (state.code === ticks) state.code = ""
+          output.push(ticks)
+          index += ticks.length
+          continue
+        }
+        if (!state.code && line.text.startsWith("<!--", index) && !escaped(line.text, index)) {
+          state.comment = true
+          output.push("    ")
+          index += 4
+          continue
+        }
+        output.push(line.text[index]!)
+        index++
+      }
+      return output.join("") + line.raw.slice(line.text.length)
+    })
+    .join("")
+}
+
 const escaped = (value: string, index: number) => {
   const count = { value: 0 }
   for (const char of value.slice(0, index).split("").reverse()) {
@@ -128,6 +188,7 @@ const definitions = (source: string) => {
 
 /** Parse inline and reference-style Markdown images while ignoring fenced and inline code. */
 export function markdownImages(source: string): MarkdownImage[] {
+  source = withoutComments(source)
   const refs = definitions(source)
   const output: MarkdownImage[] = []
   const offset = { value: 0 }
