@@ -22,6 +22,27 @@ describe("util.lazy", () => {
     expect(callCount).toBe(1)
   })
 
+  test("retries the initializer after a synchronous failure instead of caching undefined", () => {
+    let calls = 0
+    const getValue = lazy(() => {
+      calls++
+      if (calls === 1) throw new Error("temporarily unavailable")
+      return "ready"
+    })
+
+    expect(getValue).toThrow("temporarily unavailable")
+    expect(getValue()).toBe("ready")
+    expect(getValue()).toBe("ready")
+    expect(calls).toBe(2)
+  })
+
+  test("preserves in-progress recursion semantics while allowing the outer initializer to provide a fallback", () => {
+    let get!: () => number | undefined
+    get = lazy(() => get() ?? 1)
+    expect(get()).toBe(1)
+    expect(get()).toBe(1)
+  })
+
   test("should preserve the same reference", () => {
     const obj = { value: 42 }
     const lazyObj = lazy(() => obj)
