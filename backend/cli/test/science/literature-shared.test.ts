@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { fromInverted } from "../../src/science/connectors/literature/shared"
+import { fromInverted, xmlAttr, xmlSelfClosing } from "../../src/science/connectors/literature/shared"
 
 describe("fromInverted", () => {
   test("reconstructs a plain abstract in position order", () => {
@@ -33,5 +33,26 @@ describe("fromInverted", () => {
     expect(fromInverted(undefined)).toBeUndefined()
     expect(fromInverted(null)).toBeUndefined()
     expect(fromInverted({})).toBeUndefined()
+  })
+})
+
+
+describe("XML/Atom attributes", () => {
+  test("reads single-quoted arXiv category terms", () => {
+    expect(xmlAttr("<arxiv:primary_category term='cs.AI' />", "arxiv:primary_category", "term")).toBe("cs.AI")
+  })
+
+  test("parses single-quoted and mixed-quoted self-closing PDF links", () => {
+    const links = xmlSelfClosing(
+      `<link title='pdf' href='https://arxiv.org/pdf/1234.56789?x=1&amp;y=2' />` +
+        `<link title="pdf" href='https://arxiv.org/pdf/9876.54321' />` +
+        `<link title='other' href="https://example.com/O'Brien" />`,
+      "link",
+    )
+    expect(links.map((link) => link.attrs)).toEqual([
+      { title: "pdf", href: "https://arxiv.org/pdf/1234.56789?x=1&y=2" },
+      { title: "pdf", href: "https://arxiv.org/pdf/9876.54321" },
+      { title: "other", href: "https://example.com/O'Brien" },
+    ])
   })
 })

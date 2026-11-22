@@ -98,8 +98,8 @@ export function xmlBlocks(xml: string, tag: string): string[] {
 
 /** Value of `attr` on the first `<tag …>` occurrence. */
 export function xmlAttr(xml: string, tag: string, attr: string): string | undefined {
-  const m = new RegExp(`<${tag}\\b[^>]*?\\b${attr}="([^"]*)"`).exec(xml)
-  return m ? decodeEntities(m[1]) : undefined
+  const m = new RegExp(`<${tag}\\b[^>]*?\\b${attr}\\s*=\\s*(["'])([\\s\\S]*?)\\1`).exec(xml)
+  return m ? decodeEntities(m[2]) : undefined
 }
 
 /** A single self-closing element: its (entity-decoded) attributes plus raw text. */
@@ -129,9 +129,9 @@ export function xmlSelfClosing(xml: string, tag: string): SelfClosing[] {
 /** Parse a run of `key="value"` attribute pairs into an entity-decoded map. */
 function parseAttrs(input: string): Record<string, string> {
   const attrs: Record<string, string> = {}
-  const re = /([\w:.-]+)\s*=\s*"([^"]*)"/g
+  const re = /([\w:.-]+)\s*=\s*(["'])([\s\S]*?)\2/g
   for (let m = re.exec(input); m !== null; m = re.exec(input)) {
-    attrs[m[1]] = decodeEntities(m[2])
+    attrs[m[1]] = decodeEntities(m[3])
   }
   return attrs
 }
