@@ -172,6 +172,10 @@ export namespace ForeignImport {
     return latest
   }
 
+  /** Internal folder rule: the public three, plus "existing" (reuse a grant, never create one). */
+  type FolderRule = FolderAccess | "existing"
+  type RunInput = { source: ForeignSource; sourceID: string; folderAccess: FolderRule }
+
   export async function run(input: {
     source: ForeignSource
     sourceID: string
@@ -179,6 +183,11 @@ export namespace ForeignImport {
     root?: string
   }): Promise<Result> {
     const { reader, info } = await find(input.source, input.sourceID, input.root)
+    return runInfo(reader, info, input)
+  }
+
+  /** One conversation, already resolved from the reader's own listing. */
+  async function runInfo(reader: ForeignReader, info: ForeignSessionInfo, input: RunInput): Promise<Result> {
     await using lease = await FileLease.acquire(lockPath(input.source, input.sourceID), 120_000)
     return await lease.during(async () => {
       const conversation = await reader.load(info)
@@ -190,7 +199,7 @@ export namespace ForeignImport {
           message: "This conversation has no messages to import.",
         })
       }
-      if (!previous) return create(input, conversation, "created")
+      if (!previous) return create(input, conversation, "created", undefined, false)
 
       const { sessionID, record } = previous
       const branch = new Set(conversation.branchIDs)
@@ -201,17 +210,18 @@ export namespace ForeignImport {
       const nothingImported = !record.lastSourceID
       // The branch the copy came from is gone: the source was rewound or edited.
       if ((fromIndex < 0 && !nothingImported) || record.branchIDs.some((id) => !branch.has(id))) {
-        return create(input, conversation, "copied", "rewound")
-      }
-      const messages = await Session.messages({ sessionID })
-      if (messages.some((message) => message.info.id > record.lastMessageID)) {
-        return create(input, conversation, "copied", "continued")
+        return create(input, conversation, "copied", "rewound", true)
       }
       const from = fromIndex + 1
+      // Nothing new in the source: leave the session alone, whether or not it was continued here.
       if (from >= conversation.entries.length) {
         // Branch ids can still grow (a trailing turn the source is writing).
         await Provenance.write(sessionID, { ...record, branchIDs: conversation.branchIDs })
         return { sessionID, outcome: "unchanged" as const }
+      }
+      const messages = await Session.messages({ sessionID })
+      if (messages.some((message) => message.info.id > record.lastMessageID)) {
+        return create(input, conversation, "copied", "continued", true)
       }
       const session = await Session.get(sessionID)
       const workingRoot = (await SessionFilesystem.state(sessionID)).workingRoot
@@ -236,14 +246,16 @@ export namespace ForeignImport {
   }
 
   async function create(
-    input: { source: ForeignSource; sourceID: string; folderAccess: FolderAccess },
+    input: RunInput,
     conversation: ForeignConversation,
     outcome: "created" | "copied",
-    reason?: "continued" | "rewound",
+    reason: "continued" | "rewound" | undefined,
+    beside: boolean,
   ): Promise<Result> {
     const info = conversation.info
     let workingRoot: string | undefined
     let folderMissing: boolean | undefined
+    if (input.folderAccess === "existing") throw new Error('folder rule "existing" is added in the project import')
     if (input.folderAccess !== "none") {
       if (info.cwd && (await isDirectory(info.cwd))) {
         try {
@@ -256,25 +268,34 @@ export namespace ForeignImport {
         }
       } else folderMissing = true
     }
-    const title = info.title ?? info.firstMessage?.replace(/\s+/g, " ").trim().slice(0, 80) ?? "Imported conversation"
+    const base = info.title ?? info.firstMessage?.replace(/\s+/g, " ").trim().slice(0, 80) ?? "Imported conversation"
+    // Every session made from this conversation counts; a copy beside a live import is numbered.
+    const count = await Provenance.nextCopy(info.source, info.id)
+    const title = beside ? `${base} (import #${Math.max(count, 2)})` : base
     const session = await Session.create({ title, workingRoot })
-    const written = await ForeignConvert.write({
-      sessionID: session.id,
-      conversation,
-      cwd: workingRoot ?? session.directory,
-      root: Instance.worktree,
-      agent: "research",
-    })
-    await Provenance.write(session.id, {
-      source: info.source,
-      sourceID: info.id,
-      path: info.path,
-      cwd: info.cwd,
-      branchIDs: conversation.branchIDs,
-      lastSourceID: written.lastSourceID,
-      lastMessageID: written.lastMessageID,
-      importedAt: Date.now(),
-    })
+    try {
+      const written = await ForeignConvert.write({
+        sessionID: session.id,
+        conversation,
+        cwd: workingRoot ?? session.directory,
+        root: Instance.worktree,
+        agent: "research",
+      })
+      await Provenance.write(session.id, {
+        source: info.source,
+        sourceID: info.id,
+        path: info.path,
+        cwd: info.cwd,
+        branchIDs: conversation.branchIDs,
+        lastSourceID: written.lastSourceID,
+        lastMessageID: written.lastMessageID,
+        importedAt: Date.now(),
+      })
+    } catch (error) {
+      // Never leave a half-written session without provenance: a retry would duplicate it.
+      await Session.remove(session.id).catch(() => undefined)
+      throw error
+    }
     return {
       sessionID: session.id,
       outcome,

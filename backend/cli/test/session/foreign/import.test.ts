@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -15,6 +15,7 @@ import { Project } from "../../../src/project/project"
 import { Log } from "../../../src/util/log"
 import { tmpdir } from "../../fixture/fixture"
 import { firstRequest } from "../../../src/harness/first-request"
+import { ForeignConvert } from "../../../src/session/foreign/convert"
 
 Log.init({ print: false })
 
@@ -381,6 +382,105 @@ describe("ForeignImport", () => {
         text: "now plot it",
       })
       expect(await firstRequest(sessionID)).toBe("now plot it")
+    })
+  })
+
+  async function continueInOpenScience(sessionID: string, text = "work in OpenScience") {
+    const id = await MessageV2.nextMessageID(sessionID)
+    await Session.updateMessage({
+      id,
+      sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: "research",
+      model: { providerID: "test", modelID: "m" },
+      effort: "normal",
+    })
+    await Session.updatePart({ id: Identifier.ascending("part"), sessionID, messageID: id, type: "text", text })
+  }
+  let turn = 10
+  async function moveSourceOn() {
+    turn += 2
+    const records = [...base()]
+    for (let i = 12; i <= turn; i += 2)
+      records.push(
+        user(`u${i}`, i === 12 ? "a1" : `a${i - 2}`, `more ${i}`, i),
+        reply(`a${i}`, `u${i}`, `ok ${i}`, i + 1),
+      )
+    await source(records)
+  }
+  const title = async (sessionID: string) => (await Session.get(sessionID)).title
+
+  test("continued copy with nothing new in the source is unchanged", async () => {
+    await source(base())
+    await inProject(async () => {
+      const first = await run()
+      await continueInOpenScience(first.sessionID)
+      expect(await run()).toMatchObject({ sessionID: first.sessionID, outcome: "unchanged" })
+      expect(await Provenance.findBySource("claude", "conv-1")).toEqual([first.sessionID])
+    })
+  })
+
+  test("the first import keeps the title; copies are numbered", async () => {
+    turn = 10
+    await source(base())
+    await inProject(async () => {
+      const first = await run()
+      await continueInOpenScience(first.sessionID)
+      await moveSourceOn()
+      const second = await run()
+      await continueInOpenScience(second.sessionID)
+      await moveSourceOn()
+      const third = await run()
+      expect(await title(first.sessionID)).toBe("first question")
+      expect(await title(second.sessionID)).toBe("first question (import #2)")
+      expect(await title(third.sessionID)).toBe("first question (import #3)")
+    })
+  })
+
+  test("copy numbers never repeat after a copy is deleted, and renames do not matter", async () => {
+    turn = 10
+    await source(base())
+    await inProject(async () => {
+      const first = await run()
+      await continueInOpenScience(first.sessionID)
+      await moveSourceOn()
+      const second = await run()
+      await Session.update(first.sessionID, (draft) => {
+        draft.title = "renamed"
+      })
+      await Session.remove(second.sessionID)
+      await moveSourceOn()
+      const third = await run()
+      expect(await title(third.sessionID)).toBe("first question (import #3)")
+    })
+  })
+
+  test("a sole re-import after deleting the only copy keeps the plain title", async () => {
+    await source(base())
+    await inProject(async () => {
+      const first = await run()
+      await Session.remove(first.sessionID)
+      const again = await run()
+      expect(again.outcome).toBe("created")
+      expect(await title(again.sessionID)).toBe("first question")
+    })
+  })
+
+  test("a failed import leaves no session behind", async () => {
+    await source(base())
+    await inProject(async () => {
+      const before = (await Array.fromAsync(Session.list())).length
+      const spy = spyOn(ForeignConvert, "write").mockImplementationOnce(async () => {
+        throw new Error("disk full")
+      })
+      await expect(run()).rejects.toThrow("disk full")
+      spy.mockRestore()
+      expect((await Array.fromAsync(Session.list())).length).toBe(before)
+      expect(await Provenance.findBySource("claude", "conv-1")).toEqual([])
+      const ok = await run()
+      expect(ok.outcome).toBe("created")
+      expect(await Provenance.findBySource("claude", "conv-1")).toEqual([ok.sessionID])
     })
   })
 })

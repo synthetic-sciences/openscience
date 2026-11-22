@@ -1,5 +1,6 @@
 // A hidden record of where an imported session came from, so a re-import can
 // update it (or make a separate copy) instead of importing twice.
+import crypto from "node:crypto"
 import { Instance } from "../../project/instance"
 import { Storage } from "../../storage/storage"
 import type { ForeignSource } from "./types"
@@ -31,6 +32,28 @@ export namespace Provenance {
 
   export async function remove(sessionID: string): Promise<void> {
     await Storage.remove(key(sessionID)).catch(() => undefined)
+  }
+
+  const countKey = (source: ForeignSource, sourceID: string) => [
+    "foreign_import_count",
+    Instance.project.id,
+    source,
+    crypto.createHash("sha256").update(sourceID).digest("hex").slice(0, 32),
+  ]
+
+  /** Count one more session created from this conversation in the project; returns the new count.
+   * The counter outlives the sessions: it numbers copies and marks "imported, then deleted". */
+  export async function nextCopy(source: ForeignSource, sourceID: string): Promise<number> {
+    const current = await Storage.read<{ count: number }>(countKey(source, sourceID)).catch(() => ({ count: 0 }))
+    const count = current.count + 1
+    await Storage.write(countKey(source, sourceID), { count })
+    return count
+  }
+
+  export async function everImported(source: ForeignSource, sourceID: string): Promise<boolean> {
+    return Storage.read(countKey(source, sourceID))
+      .then(() => true)
+      .catch(() => false)
   }
 
   /** Sessions in the current project imported from this source conversation. */
