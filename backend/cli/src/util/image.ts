@@ -5,14 +5,21 @@
 export function detectImageMime(bytes: Uint8Array): string | undefined {
   if (bytes.length < 4) return undefined
 
-  // PNG: 89 50 4E 47
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png"
+  // PNG has an eight-byte signature, not just the first four characters.
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) return "image/png"
 
   // JPEG: FF D8 FF
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg"
 
-  // GIF: 47 49 46 38 (GIF8)
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif"
+  // GIF87a and GIF89a are the two supported GIF signatures.
+  if (
+    bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 &&
+    bytes[3] === 0x38 && (bytes[4] === 0x37 || bytes[4] === 0x39) && bytes[5] === 0x61
+  ) return "image/gif"
 
   // WebP: RIFF....WEBP
   if (
@@ -81,9 +88,15 @@ export function readImageDimensions(bytes: Uint8Array): { width: number; height:
 
   if (mime === "image/png") {
     // 8-byte signature, then IHDR: 4-byte length, 4-byte type "IHDR", width (BE u32) at 16, height at 20
-    if (bytes.length < 24) return undefined
+    if (
+      bytes.length < 24 ||
+      bytes[8] !== 0 || bytes[9] !== 0 || bytes[10] !== 0 || bytes[11] !== 13 ||
+      bytes[12] !== 0x49 || bytes[13] !== 0x48 || bytes[14] !== 0x44 || bytes[15] !== 0x52
+    ) return undefined
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    return { width: view.getUint32(16, false), height: view.getUint32(20, false) }
+    const width = view.getUint32(16, false)
+    const height = view.getUint32(20, false)
+    return width > 0 && height > 0 ? { width, height } : undefined
   }
 
   if (mime === "image/gif") {
