@@ -28,7 +28,11 @@ export namespace JsonStore {
     })
     if (text === undefined) return {}
     if (!text.trim()) throw new Error("JSON store is empty or truncated")
-    return JSON.parse(text) as Record<string, unknown>
+    const data: unknown = JSON.parse(text)
+    if (data === null || typeof data !== "object" || Array.isArray(data)) {
+      throw new Error("JSON credential store must contain an object")
+    }
+    return data as Record<string, unknown>
   }
 
   /** By default unreadable stores degrade to `{}`; strict funding decisions
