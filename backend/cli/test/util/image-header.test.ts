@@ -34,3 +34,20 @@ test("accepts GIF87a/GIF89a but rejects GIF8 with an invalid version", () => {
   valid[4] = 0x37
   expect(detectImageMime(valid)).toBe("image/gif")
 })
+
+
+test("rejects PNG dimensions above the 31-bit format limit", () => {
+  const max = validPNG()
+  const header = new DataView(max.buffer)
+  header.setUint32(16, 0x7fffffff, false)
+  header.setUint32(20, 0x7fffffff, false)
+  expect(readImageDimensions(max)).toEqual({ width: 0x7fffffff, height: 0x7fffffff })
+
+  for (const offset of [16, 20]) {
+    for (const value of [0x80000000, 0xffffffff]) {
+      const invalid = validPNG()
+      new DataView(invalid.buffer).setUint32(offset, value, false)
+      expect(readImageDimensions(invalid)).toBeUndefined()
+    }
+  }
+})

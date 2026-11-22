@@ -96,7 +96,10 @@ export function readImageDimensions(bytes: Uint8Array): { width: number; height:
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     const width = view.getUint32(16, false)
     const height = view.getUint32(20, false)
-    return width > 0 && height > 0 ? { width, height } : undefined
+    // PNG dimensions use signed-range four-byte values: 1..2^31-1.
+    return width > 0 && width <= 0x7fffffff && height > 0 && height <= 0x7fffffff
+      ? { width, height }
+      : undefined
   }
 
   if (mime === "image/gif") {
