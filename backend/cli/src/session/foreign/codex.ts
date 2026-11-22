@@ -78,6 +78,8 @@ async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
   const { head, whole } = await sample(file)
   const first = head[0]
   if (first?.type !== "session_meta" || !isRecord(first.payload)) return undefined
+  // A subagent's run is saved as its own rollout; its result already sits in the parent conversation.
+  if (isRecord(first.payload.source) && "subagent" in first.payload.source) return undefined
   let firstMessage: string | undefined
   for (const record of head) {
     if (record.type === "event_msg" && str(record.payload, "type") === "user_message") {

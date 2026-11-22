@@ -285,4 +285,22 @@ describe("CodexReader", () => {
     expect(info).toBeDefined()
     expect(info?.cwd).toBe("/work/codex-proj")
   })
+
+  test("does not list Codex subagent runs as conversations of their own", async () => {
+    const parent = "99999999-0000-0000-0000-000000000015"
+    const child = "99999999-0000-0000-0000-000000000016"
+    await write("2026/11/02", parent, basic(parent))
+    await write("2026/11/02", child, [
+      rec(
+        "session_meta",
+        { id: child, cwd: "/work/codex-proj", source: { subagent: { thread_spawn: { parent_thread_id: parent } } } },
+        0,
+      ),
+      injected("inspect the parser", 1),
+      said("found it", 2),
+    ])
+    const ids = (await CodexReader.create(root).list()).map((item) => item.id)
+    expect(ids).toContain(parent)
+    expect(ids).not.toContain(child)
+  })
 })
