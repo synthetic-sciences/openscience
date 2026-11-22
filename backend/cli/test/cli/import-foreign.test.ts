@@ -115,4 +115,27 @@ describe("openscience import --from-claude / --from-codex", () => {
     expect(result.code, result.stderr).toBe(0)
     expect(result.stdout).toContain("Folder not connected")
   }, 60_000)
+
+  test("--all in a fresh folder imports its conversations", async () => {
+    const result = await openscience("--all")
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain("created  cli question")
+    expect(result.stdout).toContain("Imported 1: created 1")
+    const again = await openscience("--all")
+    expect(again.stdout).toContain("unchanged  cli question")
+  }, 60_000)
+
+  test("--all --from-codex limits to Codex and says when nothing matches", async () => {
+    const result = await openscience("--all", "--from-codex")
+    expect(result.code, result.stderr).toBe(0)
+    expect(result.stdout).toContain("No Claude Code or Codex conversations ran in this project's folders.")
+    const both = await openscience("--all", "--from-claude", "--from-codex")
+    expect(both.code, both.stderr).toBe(0)
+    expect(both.stdout).toContain("Imported 1: created 1")
+  }, 60_000)
+
+  test("--all with an id or with --folder-access exits 1", async () => {
+    expect((await openscience("--all", "--from-claude", "conv-cli")).code).toBe(1)
+    expect((await openscience("--all", "--folder-access", "write")).code).toBe(1)
+  }, 60_000)
 })

@@ -122,6 +122,28 @@ async function importForeign(source: ForeignSource, id: string | undefined, acce
   }
 }
 
+async function importProject(sources?: ForeignSource[]) {
+  const result = await ForeignImport.runProject({ sources })
+  if (!result.results.length) {
+    process.stdout.write("No Claude Code or Codex conversations ran in this project's folders." + EOL)
+    return
+  }
+  for (const item of result.results) {
+    const notes = [
+      item.outcome === "copied" ? OUTCOME[`copied:${item.reason}`] : undefined,
+      item.folderMissing ? "folder not available" : undefined,
+      item.error,
+    ].filter(Boolean)
+    process.stdout.write(`${item.outcome}  ${item.title}${notes.length ? `  (${notes.join("; ")})` : ""}` + EOL)
+  }
+  const { counts } = result
+  process.stdout.write(
+    `Imported ${result.results.length}: created ${counts.created}, updated ${counts.updated}, copied ${counts.copied}, unchanged ${counts.unchanged}, skipped ${counts.skipped}, failed ${counts.failed}` +
+      EOL,
+  )
+  if (counts.failed === result.results.length) process.exitCode = 1
+}
+
 export const ImportCommand = cmd({
   command: "import [file]",
   describe: "import a session from a JSON export, or a Claude Code or Codex conversation",
@@ -144,10 +166,26 @@ export const ImportCommand = cmd({
         type: "string",
         choices: ["write", "read", "none"],
       })
+      .option("all", {
+        describe: "import every Claude Code and Codex conversation that ran in this project's folders",
+        type: "boolean",
+      })
   },
   handler: async (args) => {
     const fromClaude = args.fromClaude as string | undefined
     const fromCodex = args.fromCodex as string | undefined
+    if (args.all) {
+      if (args.file || fromClaude || fromCodex || args.folderAccess) {
+        return fail(
+          "--all takes no file, session id or --folder-access; add --from-claude or --from-codex to pick one tool.",
+        )
+      }
+      const sources: ForeignSource[] = []
+      if (fromClaude !== undefined) sources.push("claude")
+      if (fromCodex !== undefined) sources.push("codex")
+      await bootstrap(process.cwd(), () => importProject(sources.length ? sources : undefined))
+      return
+    }
     const foreign = fromClaude !== undefined || fromCodex !== undefined
     if (foreign && (args.file || (fromClaude !== undefined && fromCodex !== undefined))) {
       return fail("Import either a file or one of --from-claude / --from-codex, not both.")
