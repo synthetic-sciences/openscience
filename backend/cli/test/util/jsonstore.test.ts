@@ -49,3 +49,26 @@ test("a store that cannot be parsed still names the backup it wrote", async () =
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+
+test("refuses valid JSON that is not an object-shaped credential store", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-jsonstore-shapes-"))
+  try {
+    for (const [index, malformed] of ["[]", "null", "23", '"text"'].entries()) {
+      const store = path.join(root, `auth-${index}.json`)
+      await fs.writeFile(store, malformed)
+      const error = await JsonStore.update(store, (data) => {
+        data.anthropic = { token: "test-only" }
+      }).then(
+        () => undefined,
+        (thrown: Error) => thrown,
+      )
+      expect(error?.message).toContain("could not be parsed")
+      expect(await fs.readFile(store, "utf8")).toBe(malformed)
+      expect(await fs.readFile(`${store}.corrupt-${process.pid}`, "utf8")).toBe(malformed)
+      expect(await JsonStore.read(store)).toEqual({})
+    }
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
