@@ -6,6 +6,8 @@ import fs from "node:fs/promises"
 export type JsonRecord = Record<string, unknown>
 
 export const SAMPLE_BYTES = 64 * 1024
+/** How far listing reads to complete a file's first record. */
+export const FIRST_RECORD_CAP = 4 * 1024 * 1024
 
 /** Bytes read by `sample`; tests use it to prove listing stays cheap. */
 export const readStats = { bytes: 0 }
@@ -47,19 +49,32 @@ export async function sample(file: string): Promise<{ head: JsonRecord[]; tail: 
   const handle = await fs.open(file, "r")
   try {
     const size = (await handle.stat()).size
-    const read = async (start: number, length: number) => {
+    const readBytes = async (start: number, length: number) => {
       const buffer = Buffer.alloc(length)
       const { bytesRead } = await handle.read(buffer, 0, length, start)
       readStats.bytes += bytesRead
-      return buffer.subarray(0, bytesRead).toString("utf8")
+      return buffer.subarray(0, bytesRead)
     }
+    const read = async (start: number, length: number) => (await readBytes(start, length)).toString("utf8")
     if (size <= SAMPLE_BYTES * 2) {
       const all = parseLines(await read(0, size)).map((item) => item.record)
       return { head: all, tail: all, whole: true }
     }
     // The first line of the tail and the last line of the head are usually cut;
     // parseLines skips them.
-    const head = parseLines(await read(0, SAMPLE_BYTES)).map((item) => item.record)
+    // The first record (a Codex session_meta with its instructions) can outgrow the sample;
+    // read on until it is complete, within a cap.
+    const chunks = [await readBytes(0, SAMPLE_BYTES)]
+    let headBytes = chunks[0].length
+    while (!chunks.some((chunk) => chunk.includes(10)) && headBytes < FIRST_RECORD_CAP && headBytes < size) {
+      const next = await readBytes(headBytes, SAMPLE_BYTES)
+      if (!next.length) break
+      chunks.push(next)
+      headBytes += next.length
+    }
+    // Decoded once, so a multi-byte character split across chunks stays whole.
+    const headText = Buffer.concat(chunks).toString("utf8")
+    const head = parseLines(headText).map((item) => item.record)
     const tail = parseLines(await read(size - SAMPLE_BYTES, SAMPLE_BYTES)).map((item) => item.record)
     return { head, tail, whole: false }
   } finally {

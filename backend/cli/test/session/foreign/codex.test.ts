@@ -275,4 +275,14 @@ describe("CodexReader", () => {
     const c = await load(id)
     expect(texts(c)).toEqual(["user:fix the parser", "assistant:Fixed it.", "user:list files", "assistant:"])
   })
+
+  test("lists a rollout whose first record is larger than the sampled head", async () => {
+    const id = "88888888-0000-0000-0000-000000000014"
+    const huge = rec("session_meta", { id, cwd: "/work/codex-proj", base_instructions: "i".repeat(100_000) }, 0)
+    const filler = Array.from({ length: 4 }, (_, i) => said("x".repeat(40_000), 10 + i))
+    await write("2026/11/02", id, [huge, typed("the real question", 1), said("answer", 2), ...filler])
+    const info = (await CodexReader.create(root).list()).find((item) => item.id === id)
+    expect(info).toBeDefined()
+    expect(info?.cwd).toBe("/work/codex-proj")
+  })
 })

@@ -17,7 +17,14 @@ import { ClaudeReader } from "./claude"
 import { CodexReader } from "./codex"
 import { ForeignConvert } from "./convert"
 import { Provenance } from "./provenance"
-import type { ForeignConversation, ForeignReader, ForeignSessionInfo, ForeignSource } from "./types"
+import {
+  isCompaction,
+  type ForeignConversation,
+  type ForeignReader,
+  type ForeignSessionInfo,
+  type ForeignSource,
+  type ForeignTurn,
+} from "./types"
 
 export namespace ForeignImport {
   const log = Log.create({ service: "session.foreign-import" })
@@ -187,7 +194,12 @@ export namespace ForeignImport {
         }
         const result = await runInfo(reader, info, { source: info.source, sourceID: info.id, folderAccess: "existing" })
         counts[result.outcome]++
-        results.push({ ...base, ...result })
+        // Without a listed title or first message, report the title the session was given.
+        const named =
+          info.title || info.firstMessage
+            ? base.title
+            : (await Session.get(result.sessionID).catch(() => undefined))?.title.replace(/ \(import #\d+\)$/, "")
+        results.push({ ...base, title: named ?? base.title, ...result })
       } catch (error) {
         log.warn("project import failed for one conversation", { source: info.source, id: info.id, error })
         counts.failed++
@@ -357,7 +369,15 @@ export namespace ForeignImport {
         }
       } else folderMissing = true
     }
-    const base = info.title ?? info.firstMessage?.replace(/\s+/g, " ").trim().slice(0, 80) ?? "Imported conversation"
+    // Listing reads only part of a file; the loaded conversation has the first message for sure.
+    const firstUser = conversation.entries
+      .find((entry): entry is ForeignTurn => !isCompaction(entry) && entry.role === "user")
+      ?.parts.find((part) => part.type === "text")
+    const firstText = firstUser?.type === "text" ? firstUser.text : undefined
+    const base =
+      info.title ??
+      (info.firstMessage ?? firstText)?.replace(/\s+/g, " ").trim().slice(0, 80) ??
+      "Imported conversation"
     // Every session made from this conversation counts; a copy beside a live import is numbered.
     const count = await Provenance.nextCopy(info.source, info.id)
     const title = beside ? `${base} (import #${Math.max(count, 2)})` : base

@@ -266,4 +266,29 @@ describe("ForeignImport.runProject", () => {
       expect(await Provenance.findBySource("claude", "race")).toHaveLength(1)
     })
   })
+
+  test("a conversation whose first message is beyond the listed bytes is titled from it", async () => {
+    const id = "late-title"
+    const dir = path.join(codexRoot, "2026", "11", "03")
+    await fs.mkdir(dir, { recursive: true })
+    const file = path.join(dir, `rollout-2026-11-03T09-00-00-${id}.jsonl`)
+    const records = [
+      { timestamp: at(0), type: "session_meta", payload: { id, cwd: project } },
+      { timestamp: at(0), type: "turn_context", payload: { model: "gpt-6-codex", note: "n".repeat(90_000) } },
+      { timestamp: at(1), type: "event_msg", payload: { type: "user_message", message: "Tune the learning rate" } },
+      {
+        timestamp: at(2),
+        type: "response_item",
+        payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "x".repeat(90_000) }] },
+      },
+    ]
+    await fs.writeFile(file, records.map((r) => JSON.stringify(r)).join("\n") + "\n")
+    const when = new Date(Date.now() - 3600_000)
+    await fs.utimes(file, when, when)
+    await inProject(async () => {
+      const result = byID(await runProject(["codex"]))
+      expect(result[id].title).toBe("Tune the learning rate")
+      expect((await Session.get(result[id].sessionID!)).title).toBe("Tune the learning rate")
+    })
+  })
 })
