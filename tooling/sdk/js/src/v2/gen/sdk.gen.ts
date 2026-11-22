@@ -323,6 +323,8 @@ import type {
   SessionImportFolderResponses,
   SessionImportListErrors,
   SessionImportListResponses,
+  SessionImportProjectErrors,
+  SessionImportProjectResponses,
   SessionImportResponses,
   SessionIncreaseSubagentBudgetErrors,
   SessionIncreaseSubagentBudgetResponses,
@@ -4043,6 +4045,45 @@ export class Session extends HeyApiClient {
       ThrowOnError
     >({
       url: "/session/{sessionID}/subagents/budget/increase",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Import a project's Claude Code and Codex conversations
+   *
+   * Import every Claude Code and Codex conversation that ran in one of this project's folders. Running it again updates, copies or adds conversations by the re-import rules; conversations whose imports were deleted are skipped.
+   */
+  public importProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sources?: Array<"claude" | "codex">
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sources" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionImportProjectResponses,
+      SessionImportProjectErrors,
+      ThrowOnError
+    >({
+      url: "/session/import/project",
       ...options,
       ...params,
       headers: {

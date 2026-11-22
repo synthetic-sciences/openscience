@@ -290,6 +290,11 @@ export namespace SessionFilesystem {
     )
   }
 
+  /** A managed project lives in OpenScience's data folder and has no folder of its own. */
+  export function isManagedProject() {
+    return managedProject()
+  }
+
   function managedProject() {
     const root = Project.canonicalize(path.join(Global.Path.data, "projects"))
     const worktree = Project.canonicalize(Instance.project.worktree)

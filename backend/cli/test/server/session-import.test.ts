@@ -5,6 +5,7 @@ import path from "node:path"
 import { Instance } from "../../src/project/instance"
 import { Server } from "../../src/server/server"
 import { Session } from "../../src/session"
+import { SessionFilesystem } from "../../src/session/filesystem"
 import { Log } from "../../src/util/log"
 import { tmpdir } from "../fixture/fixture"
 
@@ -118,6 +119,24 @@ describe("session import routes", () => {
       })
       expect(response.status).toBe(404)
       expect((await call(`/session/import/claude/${encodeURIComponent("../conv-route")}/folder`)).status).toBe(404)
+    })
+  })
+
+  test("imports a project's conversations", async () => {
+    await withServer(async (call) => {
+      await SessionFilesystem.connectProject({ path: folder, access: "read" })
+      const post = (body: unknown) =>
+        call("/session/import/project", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      const response = await post({ sources: ["claude"] })
+      expect(response.status).toBe(200)
+      const body = (await response.json()) as { counts: Record<string, number>; results: Array<{ title: string }> }
+      expect(body.counts.created).toBe(1)
+      expect(body.results[0].title).toBe("route question")
+      expect((await post({ sources: ["cursor"] })).status).toBe(400)
     })
   })
 })

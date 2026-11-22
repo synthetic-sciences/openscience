@@ -3149,6 +3149,22 @@ export type McpResource = {
   client: string
 }
 
+export type ForeignProjectImportResult = {
+  results: Array<{
+    source: "claude" | "codex"
+    sourceID: string
+    title: string
+    sessionID?: string
+    outcome: "created" | "updated" | "copied" | "unchanged" | "skipped" | "failed"
+    reason?: "continued" | "rewound"
+    folderMissing?: boolean
+    error?: string
+  }>
+  counts: {
+    [key: string]: number
+  }
+}
+
 export type ForeignSessionInfo = {
   source: "claude" | "codex"
   id: string
@@ -12447,6 +12463,35 @@ export type SessionIncreaseSubagentBudgetResponses = {
 
 export type SessionIncreaseSubagentBudgetResponse =
   SessionIncreaseSubagentBudgetResponses[keyof SessionIncreaseSubagentBudgetResponses]
+
+export type SessionImportProjectData = {
+  body?: {
+    sources?: Array<"claude" | "codex">
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/session/import/project"
+}
+
+export type SessionImportProjectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionImportProjectError = SessionImportProjectErrors[keyof SessionImportProjectErrors]
+
+export type SessionImportProjectResponses = {
+  /**
+   * What happened to each conversation, with counts
+   */
+  200: ForeignProjectImportResult
+}
+
+export type SessionImportProjectResponse = SessionImportProjectResponses[keyof SessionImportProjectResponses]
 
 export type SessionImportListData = {
   body?: never

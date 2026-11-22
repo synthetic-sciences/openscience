@@ -68,6 +68,26 @@ export namespace ForeignImport {
   )
 
   export type Outcome = "created" | "updated" | "copied" | "unchanged"
+
+  const ProjectOutcome = z.enum(["created", "updated", "copied", "unchanged", "skipped", "failed"])
+  export const ProjectResult = z
+    .object({
+      results: z
+        .object({
+          source: Source,
+          sourceID: z.string(),
+          title: z.string(),
+          sessionID: z.string().optional(),
+          outcome: ProjectOutcome,
+          reason: z.enum(["continued", "rewound"]).optional(),
+          folderMissing: z.boolean().optional(),
+          error: z.string().optional(),
+        })
+        .array(),
+      counts: z.record(ProjectOutcome, z.number()),
+    })
+    .meta({ ref: "ForeignProjectImportResult" })
+  export type ProjectResult = z.infer<typeof ProjectResult>
   export type Result = {
     sessionID: string
     outcome: Outcome
@@ -76,8 +96,8 @@ export namespace ForeignImport {
   }
 
   /** Default locations; the environment variables override them (tests, unusual installs). */
-  function roots(source: ForeignSource, root?: string): string[] {
-    if (root) return [root]
+  function roots(source: ForeignSource, root?: string | string[]): string[] {
+    if (root) return Array.isArray(root) ? root : [root]
     if (source === "claude") {
       const override = process.env.OPENSCIENCE_IMPORT_ROOT_CLAUDE
       if (override) return [override]
@@ -91,7 +111,7 @@ export namespace ForeignImport {
     return [path.join(home, "sessions"), path.join(home, "archived_sessions")]
   }
 
-  function readers(source: ForeignSource, root?: string): ForeignReader[] {
+  function readers(source: ForeignSource, root?: string | string[]): ForeignReader[] {
     return roots(source, root).map((item) =>
       source === "claude" ? ClaudeReader.create(item) : CodexReader.create(item),
     )
@@ -114,6 +134,67 @@ export namespace ForeignImport {
   async function canonical(value: string) {
     const resolved = await Filesystem.canonical(value)
     return resolved ? Project.canonicalize(resolved) : undefined
+  }
+
+  /** Canonical when the path exists, otherwise its normalised form (a deleted folder still matches). */
+  async function folderKey(value: string) {
+    return (await canonical(value)) ?? Project.canonicalize(path.resolve(value))
+  }
+
+  /** The project's folders: live connected folders, plus its own folder unless it is managed. */
+  export async function projectFolders(): Promise<string[]> {
+    const folders = new Set<string>()
+    for (const grant of (await SessionFilesystem.projectSnapshot()).grants) {
+      if (!grant.time.revoked) folders.add(await folderKey(grant.path))
+    }
+    if (!SessionFilesystem.isManagedProject()) {
+      for (const dir of [Instance.directory, Instance.worktree]) folders.add(await folderKey(dir))
+    }
+    return [...folders]
+  }
+
+  /** Import every conversation that ran in one of the project's folders (exact match). */
+  export async function runProject(input: {
+    sources?: ForeignSource[]
+    roots?: Partial<Record<ForeignSource, string[]>>
+  }): Promise<ProjectResult> {
+    const folders = new Set(await projectFolders())
+    const matches: Array<{ reader: ForeignReader; info: ForeignSessionInfo }> = []
+    const seen = new Set<string>()
+    for (const source of input.sources ?? (["claude", "codex"] as const)) {
+      // Each reader is listed once; every import below reuses that listing.
+      for (const reader of readers(source, input.roots?.[source])) {
+        for (const info of await reader.list()) {
+          const key = `${source}:${info.id}`
+          if (!info.cwd || seen.has(key) || !folders.has(await folderKey(info.cwd))) continue
+          seen.add(key)
+          matches.push({ reader, info })
+        }
+      }
+    }
+    matches.sort((a, b) => a.info.modified - b.info.modified)
+    const counts = { created: 0, updated: 0, copied: 0, unchanged: 0, skipped: 0, failed: 0 }
+    const results: ProjectResult["results"] = []
+    for (const { reader, info } of matches) {
+      const title = info.title ?? info.firstMessage ?? info.id
+      const base = { source: info.source, sourceID: info.id, title }
+      try {
+        // Deleted after an earlier import: the person removed it on purpose.
+        if (!(await latestImport(info.source, info.id)) && (await Provenance.everImported(info.source, info.id))) {
+          counts.skipped++
+          results.push({ ...base, outcome: "skipped" })
+          continue
+        }
+        const result = await runInfo(reader, info, { source: info.source, sourceID: info.id, folderAccess: "existing" })
+        counts[result.outcome]++
+        results.push({ ...base, ...result })
+      } catch (error) {
+        log.warn("project import failed for one conversation", { source: info.source, id: info.id, error })
+        counts.failed++
+        results.push({ ...base, outcome: "failed", error: error instanceof Error ? error.message : String(error) })
+      }
+    }
+    return { results, counts }
   }
 
   async function isDirectory(value: string) {
@@ -255,8 +336,16 @@ export namespace ForeignImport {
     const info = conversation.info
     let workingRoot: string | undefined
     let folderMissing: boolean | undefined
-    if (input.folderAccess === "existing") throw new Error('folder rule "existing" is added in the project import')
-    if (input.folderAccess !== "none") {
+    if (input.folderAccess === "existing") {
+      // Reuse what the project already has; never create or change a grant.
+      if (info.cwd && (await isDirectory(info.cwd))) {
+        const grant = await existingGrant(info.cwd)
+        if (grant?.access === "write") workingRoot = grant.path
+        // A read-only folder: work in scratch so relative paths never land in another folder.
+        else if (grant?.access === "read") workingRoot = "scratch"
+        // The project's own folder (no grant): a native session's default.
+      } else folderMissing = true
+    } else if (input.folderAccess !== "none") {
       if (info.cwd && (await isDirectory(info.cwd))) {
         try {
           const grant = await grantFolder(info.cwd, input.folderAccess)

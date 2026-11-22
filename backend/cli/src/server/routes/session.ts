@@ -31,6 +31,27 @@ const log = Log.create({ service: "server" })
 export const SessionRoutes = lazy(() =>
   new Hono()
     .route("/:sessionID/subagents", SubagentRoutes())
+    .post(
+      "/import/project",
+      describeRoute({
+        summary: "Import a project's Claude Code and Codex conversations",
+        description:
+          "Import every Claude Code and Codex conversation that ran in one of this project's folders. Running it again updates, copies or adds conversations by the re-import rules; conversations whose imports were deleted are skipped.",
+        operationId: "session.importProject",
+        responses: {
+          200: {
+            description: "What happened to each conversation, with counts",
+            content: { "application/json": { schema: resolver(ForeignImport.ProjectResult) } },
+          },
+          ...errors(400),
+        },
+      }),
+      validator("json", z.object({ sources: ForeignImport.Source.array().optional() })),
+      async (c) => {
+        const { sources } = c.req.valid("json")
+        return c.json(await ForeignImport.runProject({ sources }))
+      },
+    )
     .get(
       "/import/:source",
       describeRoute({

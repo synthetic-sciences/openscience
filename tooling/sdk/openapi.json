@@ -29561,6 +29561,71 @@
         ]
       }
     },
+    "/session/import/project": {
+      "post": {
+        "operationId": "session.importProject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Import a project's Claude Code and Codex conversations",
+        "description": "Import every Claude Code and Codex conversation that ran in one of this project's folders. Running it again updates, copies or adds conversations by the re-import rules; conversations whose imports were deleted are skipped.",
+        "responses": {
+          "200": {
+            "description": "What happened to each conversation, with counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForeignProjectImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "claude",
+                        "codex"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.importProject({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session/import/{source}": {
       "get": {
         "operationId": "session.importList",
@@ -67963,6 +68028,86 @@
           "name",
           "uri",
           "client"
+        ]
+      },
+      "ForeignProjectImportResult": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "claude",
+                    "codex"
+                  ]
+                },
+                "sourceID": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "sessionID": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "updated",
+                    "copied",
+                    "unchanged",
+                    "skipped",
+                    "failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "continued",
+                    "rewound"
+                  ]
+                },
+                "folderMissing": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "sourceID",
+                "title",
+                "outcome"
+              ]
+            }
+          },
+          "counts": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "created",
+                "updated",
+                "copied",
+                "unchanged",
+                "skipped",
+                "failed"
+              ]
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "results",
+          "counts"
         ]
       },
       "ForeignSessionInfo": {
