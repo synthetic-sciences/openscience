@@ -96,10 +96,39 @@ export function xmlBlocks(xml: string, tag: string): string[] {
   return out
 }
 
+/** Opening tags, bounded by the first `>` outside a quoted attribute value. */
+function* openingTags(xml: string, tag: string): Generator<{ raw: string; attributes: string; selfClosing: boolean }> {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const start = new RegExp(`<${escaped}(?=[\\s/>])`, "g")
+  for (let found = start.exec(xml); found !== null; found = start.exec(xml)) {
+    let quote: string | undefined
+    let end = -1
+    for (let index = start.lastIndex; index < xml.length; index++) {
+      const char = xml[index]!
+      if (quote !== undefined) {
+        if (char === quote) quote = undefined
+      } else if (char === "'" || char === '"') {
+        quote = char
+      } else if (char === ">") {
+        end = index
+        break
+      }
+    }
+    if (end < 0) break
+    const raw = xml.slice(found.index, end + 1)
+    const attributes = xml.slice(start.lastIndex, end)
+    start.lastIndex = end + 1
+    yield { raw, attributes, selfClosing: attributes.trimEnd().endsWith("/") }
+  }
+}
+
 /** Value of `attr` on the first `<tag …>` occurrence. */
 export function xmlAttr(xml: string, tag: string, attr: string): string | undefined {
-  const m = new RegExp(`<${tag}\\b[^>]*?\\b${attr}\\s*=\\s*(["'])([\\s\\S]*?)\\1`).exec(xml)
-  return m ? decodeEntities(m[2]) : undefined
+  for (const element of openingTags(xml, tag)) {
+    const value = parseAttrs(element.attributes)[attr]
+    if (value !== undefined) return value
+  }
+  return undefined
 }
 
 /** A single self-closing element: its (entity-decoded) attributes plus raw text. */
@@ -118,10 +147,9 @@ export interface SelfClosing {
  * (e.g. arXiv's `title="pdf"` link) regardless of attribute order.
  */
 export function xmlSelfClosing(xml: string, tag: string): SelfClosing[] {
-  const re = new RegExp(`<${tag}\\b([^>]*?)/\\s*>`, "g")
   const out: SelfClosing[] = []
-  for (let m = re.exec(xml); m !== null; m = re.exec(xml)) {
-    out.push({ attrs: parseAttrs(m[1]), raw: m[0] })
+  for (const element of openingTags(xml, tag)) {
+    if (element.selfClosing) out.push({ attrs: parseAttrs(element.attributes), raw: element.raw })
   }
   return out
 }

@@ -56,3 +56,17 @@ describe("XML/Atom attributes", () => {
     ])
   })
 })
+
+test("XML tag scanners preserve greater-than signs inside quoted attribute values", () => {
+  expect(xmlAttr("<arxiv:primary_category note='a>b' term='cs.AI' />", "arxiv:primary_category", "term")).toBe("cs.AI")
+  const links = xmlSelfClosing(
+    "<link title='pdf' href='https://arxiv.org/pdf/x?comparison=a>b' />" +
+    '<link title="other" href="https://example.org?q=x>y" />',
+    "link",
+  )
+  expect(links.map((link) => link.attrs.href)).toEqual([
+    "https://arxiv.org/pdf/x?comparison=a>b",
+    "https://example.org?q=x>y",
+  ])
+  expect(links).toHaveLength(2)
+})
