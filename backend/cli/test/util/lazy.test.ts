@@ -22,6 +22,20 @@ describe("util.lazy", () => {
     expect(callCount).toBe(1)
   })
 
+  test("retries the initializer after a synchronous failure instead of caching undefined", () => {
+    let calls = 0
+    const getValue = lazy(() => {
+      calls++
+      if (calls === 1) throw new Error("temporarily unavailable")
+      return "ready"
+    })
+
+    expect(getValue).toThrow("temporarily unavailable")
+    expect(getValue()).toBe("ready")
+    expect(getValue()).toBe("ready")
+    expect(calls).toBe(2)
+  })
+
   test("should preserve the same reference", () => {
     const obj = { value: 42 }
     const lazyObj = lazy(() => obj)
