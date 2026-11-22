@@ -41,19 +41,35 @@ export namespace Provenance {
     crypto.createHash("sha256").update(sourceID).digest("hex").slice(0, 32),
   ]
 
-  /** Count one more session created from this conversation in the project; returns the new count.
-   * The counter outlives the sessions: it numbers copies and marks "imported, then deleted". */
-  export async function nextCopy(source: ForeignSource, sourceID: string): Promise<number> {
-    const current = await Storage.read<{ count: number }>(countKey(source, sourceID)).catch(() => ({ count: 0 }))
-    const count = current.count + 1
+  /** Sessions ever created from this conversation in the project. The counter outlives the
+   * sessions: it numbers copies and marks "imported, then deleted". */
+  export async function copyCount(source: ForeignSource, sourceID: string): Promise<number> {
+    return (await Storage.read<{ count: number }>(countKey(source, sourceID)).catch(() => ({ count: 0 }))).count
+  }
+
+  /** Record a session made from this conversation; call only once its import succeeded. */
+  export async function setCopyCount(source: ForeignSource, sourceID: string, count: number): Promise<void> {
     await Storage.write(countKey(source, sourceID), { count })
-    return count
   }
 
   export async function everImported(source: ForeignSource, sourceID: string): Promise<boolean> {
     return Storage.read(countKey(source, sourceID))
       .then(() => true)
       .catch(() => false)
+  }
+
+  /** Every import record in the project, read once: `source:sourceID` → session ids. */
+  export async function index(): Promise<Map<string, string[]>> {
+    const keys = await Storage.list(["foreign_import", Instance.project.id]).catch(() => [] as string[][])
+    const out = new Map<string, string[]>()
+    for (const item of keys) {
+      const sessionID = item.at(-1)!
+      const record = await read(sessionID)
+      if (!record) continue
+      const key = `${record.source}:${record.sourceID}`
+      out.set(key, [...(out.get(key) ?? []), sessionID])
+    }
+    return out
   }
 
   /** Sessions in the current project imported from this source conversation. */

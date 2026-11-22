@@ -291,4 +291,48 @@ describe("ForeignImport.runProject", () => {
       expect((await Session.get(result[id].sessionID!)).title).toBe("Tune the learning rate")
     })
   })
+
+  test("a failed conversation is imported on the next refresh, not skipped", async () => {
+    await claude("flaky", project)
+    await inProject(async () => {
+      const spy = spyOn(ForeignConvert, "write").mockImplementationOnce(async () => {
+        throw new Error("disk full")
+      })
+      expect(byID(await runProject()).flaky.outcome).toBe("failed")
+      spy.mockRestore()
+      const again = byID(await runProject())
+      expect(again.flaky.outcome).toBe("created")
+      expect((await Session.get(again.flaky.sessionID!)).title).toBe("flaky question 0")
+    })
+  })
+
+  test("a refresh reads the import records once, not once per conversation", async () => {
+    for (const id of ["r1", "r2", "r3", "r4"]) await claude(id, project)
+    await inProject(async () => {
+      await runProject()
+      const scans = spyOn(Provenance, "findBySource")
+      await runProject()
+      expect(scans).toHaveBeenCalledTimes(0)
+      scans.mockRestore()
+    })
+  })
+
+  test("a whitespace-only first message never gives an empty title", async () => {
+    const dir = path.join(claudeRoot, "-slug")
+    await fs.mkdir(dir, { recursive: true })
+    const file = path.join(dir, "blank.jsonl")
+    await fs.writeFile(
+      file,
+      [user("u0", null, "   ", 0, project), reply("a0", "u0", "hello", 1, project)]
+        .map((r) => JSON.stringify(r))
+        .join("\n") + "\n",
+    )
+    const when = new Date(Date.now() - 3600_000)
+    await fs.utimes(file, when, when)
+    await inProject(async () => {
+      const result = byID(await runProject())
+      expect(result.blank.title).toBe("Imported conversation")
+      expect((await Session.get(result.blank.sessionID!)).title).toBe("Imported conversation")
+    })
+  })
 })

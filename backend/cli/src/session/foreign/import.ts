@@ -181,18 +181,29 @@ export namespace ForeignImport {
     }
     matches.sort((a, b) => a.info.modified - b.info.modified)
     const counts = { created: 0, updated: 0, copied: 0, unchanged: 0, skipped: 0, failed: 0 }
+    // Import records are read once for the whole run (not once per conversation).
+    const imported = await Provenance.index()
     const results: ProjectResult["results"] = []
     for (const { reader, info } of matches) {
-      const title = info.title ?? info.firstMessage ?? info.id
+      const title = info.title || info.firstMessage || info.id
       const base = { source: info.source, sourceID: info.id, title }
       try {
         // Deleted after an earlier import: the person removed it on purpose.
-        if (!(await latestImport(info.source, info.id)) && (await Provenance.everImported(info.source, info.id))) {
+        const known = imported.get(`${info.source}:${info.id}`)
+        if (
+          !(await latestImport(info.source, info.id, known)) &&
+          (await Provenance.everImported(info.source, info.id))
+        ) {
           counts.skipped++
           results.push({ ...base, outcome: "skipped" })
           continue
         }
-        const result = await runInfo(reader, info, { source: info.source, sourceID: info.id, folderAccess: "existing" })
+        const result = await runInfo(reader, info, {
+          source: info.source,
+          sourceID: info.id,
+          folderAccess: "existing",
+          known,
+        })
         counts[result.outcome]++
         // Without a listed title or first message, report the title the session was given.
         const named =
@@ -249,9 +260,11 @@ export namespace ForeignImport {
       `${Instance.project.id}.${source}.${crypto.createHash("sha256").update(sourceID).digest("hex").slice(0, 32)}.lock`,
     )
 
-  async function latestImport(source: ForeignSource, sourceID: string) {
+  /** `known`: session ids from an index read once per project import; empty means "look it up". */
+  async function latestImport(source: ForeignSource, sourceID: string, known?: string[]) {
     let latest: { sessionID: string; record: Provenance.Record } | undefined
-    for (const sessionID of await Provenance.findBySource(source, sourceID)) {
+    const candidates = known?.length ? known : await Provenance.findBySource(source, sourceID)
+    for (const sessionID of candidates) {
       const exists = await Session.get(sessionID)
         .then(() => true)
         .catch(() => false)
@@ -267,7 +280,7 @@ export namespace ForeignImport {
 
   /** Internal folder rule: the public three, plus "existing" (reuse a grant, never create one). */
   type FolderRule = FolderAccess | "existing"
-  type RunInput = { source: ForeignSource; sourceID: string; folderAccess: FolderRule }
+  type RunInput = { source: ForeignSource; sourceID: string; folderAccess: FolderRule; known?: string[] }
 
   export async function run(input: {
     source: ForeignSource
@@ -284,7 +297,7 @@ export namespace ForeignImport {
     await using lease = await FileLease.acquire(lockPath(input.source, input.sourceID), 120_000)
     return await lease.during(async () => {
       const conversation = await reader.load(info)
-      const previous = await latestImport(input.source, input.sourceID)
+      const previous = await latestImport(input.source, input.sourceID, input.known)
       if (!previous && conversation.entries.length === 0) {
         throw new EmptyError({
           source: input.source,
@@ -374,12 +387,12 @@ export namespace ForeignImport {
       .find((entry): entry is ForeignTurn => !isCompaction(entry) && entry.role === "user")
       ?.parts.find((part) => part.type === "text")
     const firstText = firstUser?.type === "text" ? firstUser.text : undefined
-    const base =
-      info.title ??
-      (info.firstMessage ?? firstText)?.replace(/\s+/g, " ").trim().slice(0, 80) ??
-      "Imported conversation"
-    // Every session made from this conversation counts; a copy beside a live import is numbered.
-    const count = await Provenance.nextCopy(info.source, info.id)
+    // The first candidate that is not blank.
+    const clean = (value?: string) => value?.replace(/\s+/g, " ").trim().slice(0, 80)
+    const base = clean(info.title) || clean(info.firstMessage) || clean(firstText) || "Imported conversation"
+    // Every session made from this conversation counts (saved only once the import succeeds,
+    // so a failure is never mistaken for a deleted import); a copy beside a live import is numbered.
+    const count = (await Provenance.copyCount(info.source, info.id)) + 1
     const title = beside ? `${base} (import #${Math.max(count, 2)})` : base
     const session = await Session.create({ title, workingRoot })
     try {
@@ -400,6 +413,7 @@ export namespace ForeignImport {
         lastMessageID: written.lastMessageID,
         importedAt: Date.now(),
       })
+      await Provenance.setCopyCount(info.source, info.id, count)
     } catch (error) {
       // Never leave a half-written session without provenance: a retry would duplicate it.
       await Session.remove(session.id).catch(() => undefined)
