@@ -12,7 +12,7 @@ export namespace Context {
     return {
       use() {
         const result = storage.getStore()
-        if (!result) {
+        if (result === undefined) {
           throw new NotFound(name)
         }
         return result
