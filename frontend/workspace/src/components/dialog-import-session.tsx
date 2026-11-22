@@ -5,6 +5,7 @@ import { IconFolder, IconSearch } from "@/atlas/shared/Icon"
 import { For, Match, Show, Switch, createResource, createSignal, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./dialog-import-session.css"
+import { describeCounts } from "./project-import"
 
 export type ImportSource = "claude" | "codex"
 export type FolderAccess = "write" | "read" | "none"
@@ -33,8 +34,14 @@ export interface ImportResult {
   folderMissing?: boolean
 }
 
+export interface ProjectImportResult {
+  results: Array<{ source: ImportSource; sourceID: string; title: string; sessionID?: string; outcome: string }>
+  counts: Record<string, number>
+}
+
 /** The server calls the dialog needs, injected so the dialog stays testable. */
 export interface ImportApi {
+  runProject: () => Promise<ProjectImportResult>
   list: (source: ImportSource) => Promise<ImportSessionInfo[]>
   folder: (source: ImportSource, id: string) => Promise<ImportFolder>
   run: (source: ImportSource, id: string, access: FolderAccess) => Promise<ImportResult>
@@ -92,7 +99,19 @@ export function DialogImportSession(props: {
     folder?: string
     access: FolderAccess
     result?: ImportResult
+    project?: string
   }>({ busy: false, error: "", access: "write" })
+
+  const importAll = async () => {
+    if (state.busy) return
+    setState({ busy: true, error: "", project: undefined })
+    try {
+      const result = await props.api.runProject()
+      setState({ busy: false, project: `Imported from this project's folders: ${describeCounts(result.counts)}.` })
+    } catch (error) {
+      setState({ busy: false, error: errorText(error) })
+    }
+  }
 
   const visible = () => {
     const needle = query().trim().toLowerCase()
@@ -220,6 +239,14 @@ export function DialogImportSession(props: {
                   </button>
                 )}
               </For>
+            </div>
+            <div class="import-session__all">
+              <Button type="button" size="small" variant="ghost" disabled={state.busy} onClick={() => void importAll()}>
+                Import all from this project's folders
+              </Button>
+              <Show when={state.project}>
+                <span role="status">{state.project}</span>
+              </Show>
             </div>
             <label data-focus-frame class="import-session__search">
               <IconSearch size={14} strokeWidth={1.5} />

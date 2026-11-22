@@ -72,6 +72,10 @@ function api(overrides: Partial<ImportApi> & { calls?: Array<[ImportSource, stri
   return {
     list: async (source) => [...sessions[source]],
     folder: async (_source, id) => ({ path: id === "c2" ? "/work/beta" : "/work/alpha", exists: id !== "c2" }),
+    runProject: async () => ({
+      results: [],
+      counts: { created: 2, updated: 0, copied: 1, unchanged: 3, skipped: 0, failed: 0 },
+    }),
     run: async (source, id, access) => {
       overrides.calls?.push([source, id, access])
       return { sessionID: "ses_new", outcome: "created" }
@@ -205,5 +209,36 @@ describe("DialogImportSession", () => {
     await settle()
     expect(document.body.textContent).toContain("Could not list conversations: permission denied")
     expect(button("Claude Code")).toBeDefined()
+  })
+
+  test("imports all of the project's conversations and shows the counts", async () => {
+    let calls = 0
+    open({
+      api: api({
+        runProject: async () => {
+          calls++
+          return { results: [], counts: { created: 2, updated: 0, copied: 1, unchanged: 3, skipped: 0, failed: 0 } }
+        },
+      }),
+    })
+    await settle()
+    button("Import all from this project's folders")?.click()
+    await settle()
+    expect(calls).toBe(1)
+    expect(document.body.textContent).toContain("2 created, 1 copied, 3 unchanged")
+  })
+
+  test("shows the server's message when importing all fails", async () => {
+    open({
+      api: api({
+        runProject: async () => {
+          throw { name: "UnknownError", data: { message: "storage unavailable" } }
+        },
+      }),
+    })
+    await settle()
+    button("Import all from this project's folders")?.click()
+    await settle()
+    expect(document.body.querySelector('[role="alert"]')?.textContent).toBe("storage unavailable")
   })
 })

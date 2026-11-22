@@ -9,6 +9,8 @@ import "./dialog-create-project.css"
 export interface ProjectCreateInput {
   name: string
   sources: Array<{ path: string; access: "write" }>
+  /** Import the Claude Code and Codex conversations that ran in these folders, once, after creation. */
+  importConversations?: boolean
 }
 
 export function DialogCreateProject(props: {
@@ -26,6 +28,7 @@ export function DialogCreateProject(props: {
     name: props.name ?? "",
     busy: false,
     error: "",
+    importConversations: false,
   })
 
   // A native folder dialog belongs to one file manager; without one the in-app picker opens, which is neither.
@@ -49,6 +52,7 @@ export function DialogCreateProject(props: {
       .onCreate({
         name,
         sources: (props.sources ?? []).map((path) => ({ path, access: "write" })),
+        ...(state.importConversations && (props.sources ?? []).length > 0 ? { importConversations: true } : {}),
       })
       .then(
         () => dialog.close(),
@@ -152,6 +156,19 @@ export function DialogCreateProject(props: {
                   Add folders
                 </button>
               </div>
+            </Show>
+
+            <Show when={(props.sources ?? []).length > 0}>
+              <label class="project-create__import">
+                <input
+                  type="checkbox"
+                  name="import-conversations"
+                  checked={state.importConversations}
+                  disabled={state.busy}
+                  onChange={(event) => setState("importConversations", event.currentTarget.checked)}
+                />
+                <span>Import Claude Code and Codex conversations from these folders</span>
+              </label>
             </Show>
 
             <Show when={state.error}>

@@ -13,6 +13,7 @@ import { projectPrefs } from "@/atlas/store/projectPrefs"
 import { ToastContainer } from "@/atlas/Toast"
 import { useGlobalKeys } from "@/atlas/useGlobalKeys"
 import { DialogSelectServer } from "@/components/dialog-select-server"
+import { importFlagUrl, projectCreateBody } from "@/components/project-import"
 import { DialogCreateProject, type ProjectCreateInput } from "@/components/dialog-create-project"
 import { DialogSettings } from "@/components/dialog-settings"
 import { settingsApi } from "@/components/settings/api"
@@ -69,11 +70,12 @@ export default function Home(): JSX.Element {
     return "checking"
   })
 
-  function openProject(project: ProjectRecord) {
+  function openProject(project: ProjectRecord, importConversations = false) {
     projectPrefs.unhide(project.id, project.worktree)
     layout.projects.open(project.worktree)
     server.projects.touch(project.id)
-    navigate(projectHref(project))
+    const href = projectHref(project)
+    navigate(importConversations ? importFlagUrl(href) : href)
   }
 
   function pinProject(project: ProjectRecord) {
@@ -125,10 +127,10 @@ export default function Home(): JSX.Element {
   async function createProject(input: ProjectCreateInput) {
     const project = await settingsApi<ProjectRecord>(sdk.url, platform.fetch ?? fetch, "/global/project", {
       method: "POST",
-      body: JSON.stringify(input),
+      body: JSON.stringify(projectCreateBody(input)),
     })
     setDraft({ name: "", sources: [] })
-    openProject(project)
+    openProject(project, input.importConversations === true)
   }
 
   const mergeSources = (result: string | string[] | null) => {

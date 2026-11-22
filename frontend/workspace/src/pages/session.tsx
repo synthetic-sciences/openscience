@@ -40,6 +40,7 @@ import { useSettings } from "@/context/settings"
 import { confirmDialog } from "@/atlas/dialogs"
 import { DialogSettings } from "@/components/dialog-settings"
 import { DialogImportSession, type ImportResult } from "@/components/dialog-import-session"
+import { describeCounts, takeImportFlag } from "@/components/project-import"
 import { SessionSidebarActions, SidebarAction, type SessionContext } from "@/pages/session-sidebar-action"
 import { DisconnectedPanel } from "@/atlas/DisconnectedPanel"
 import { CommandPalette } from "@/atlas/CommandPalette"
@@ -331,6 +332,20 @@ export default function Page(): JSX.Element {
       toast.error("Could not restore session", error instanceof Error ? error.message : String(error))
     }
   }
+
+  // A project just created with "Import Claude Code and Codex conversations" ticked.
+  createEffect(() => {
+    const projectID = params.dir
+    if (!projectID || !takeImportFlag(projectID, location.search)) return
+    navigate(location.pathname + location.hash, { replace: true })
+    void sdk.client.session
+      .importProject({}, { throwOnError: true })
+      .then(async (response) => {
+        await sync.session.fetch(50)
+        toast.success("Imported Claude Code and Codex conversations", describeCounts(response.data.counts))
+      })
+      .catch((error: unknown) => toast.error("Could not import conversations", requestError(error)))
+  })
 
   async function openImported(result: ImportResult) {
     try {
@@ -1139,6 +1154,7 @@ export default function Page(): JSX.Element {
             dialog.show(() => (
               <DialogImportSession
                 api={{
+                  runProject: () => sdk.client.session.importProject({}, { throwOnError: true }).then((r) => r.data),
                   list: (source) =>
                     sdk.client.session.importList({ source }, { throwOnError: true }).then((r) => r.data),
                   folder: (source, sourceID) =>

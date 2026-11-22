@@ -176,3 +176,11 @@
   justify-content: flex-end;
   gap: 0.5rem;
 }
+
+.import-session__all {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
