@@ -11,6 +11,7 @@ const TRANSIENT_MESSAGES = [
   "network connection was lost",
   "network request failed",
   "failed to fetch",
+  "fetch failed",
   "econnreset",
   "econnrefused",
   "etimedout",
