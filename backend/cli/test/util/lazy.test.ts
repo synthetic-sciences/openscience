@@ -36,6 +36,13 @@ describe("util.lazy", () => {
     expect(calls).toBe(2)
   })
 
+  test("preserves in-progress recursion semantics while allowing the outer initializer to provide a fallback", () => {
+    let get!: () => number | undefined
+    get = lazy(() => get() ?? 1)
+    expect(get()).toBe(1)
+    expect(get()).toBe(1)
+  })
+
   test("should preserve the same reference", () => {
     const obj = { value: 42 }
     const lazyObj = lazy(() => obj)
