@@ -61,6 +61,9 @@ test("changed paths map to their test directories, root files always run, and pr
     "./test/project",
   ])
 
+  const colocated = affected(["backend/cli/src/file/watcher.test.ts"], items)
+  expect(colocated.groups[0].paths.split(" ")).toContain("./src")
+
   const nothing = affected(["docs/readme.md", "frontend/workspace/src/app.tsx"], items)
   expect(nothing.groups.map((group) => group.paths)).toEqual([rootPaths.join(" ")])
 

@@ -137,6 +137,7 @@ export function owner(file: string) {
   if (prefix) return prefix[1]
   if (file.startsWith("backend/cli/test/")) return area(file, "backend/cli/test/") ?? "root"
   if (file.startsWith("backend/cli/src/")) {
+    if (file.endsWith(".test.ts")) return "src"
     const dir = area(file, "backend/cli/src/")
     if (!dir) return "cli"
     return aliases[dir] ?? (dir in weights ? dir : anyTest)
