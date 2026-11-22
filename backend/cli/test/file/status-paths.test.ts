@@ -46,3 +46,31 @@ describe("file.status paths", () => {
     })
   }, 30_000)
 })
+
+
+test("Git status keeps exact filenames containing tabs, newlines and surrounding whitespace", async () => {
+  await using tmp = await tmpdir({
+    git: true,
+    init: async (directory) => {
+      await Bun.write(path.join(directory, "tab\tmodified.txt"), "before\n")
+      await Bun.write(path.join(directory, "line\ndeleted.txt"), "before\n")
+      await $`git add -A`.cwd(directory).quiet()
+      await $`git commit -m seed`.cwd(directory).quiet()
+    },
+  })
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      await Bun.write(path.join(tmp.path, "tab\tmodified.txt"), "after\n")
+      await fs.rm(path.join(tmp.path, "line\ndeleted.txt"))
+      await Bun.write(path.join(tmp.path, " new\tline.txt "), "new\n")
+      const status = await File.status()
+      expect(status).toEqual(expect.arrayContaining([
+        expect.objectContaining({ path: "tab\tmodified.txt", status: "modified" }),
+        expect.objectContaining({ path: "line\ndeleted.txt", status: "deleted" }),
+        expect.objectContaining({ path: " new\tline.txt ", status: "added" }),
+      ]))
+      expect(status.every((entry) => typeof entry.path === "string" && entry.path.length > 0)).toBe(true)
+    },
+  })
+})
