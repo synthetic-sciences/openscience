@@ -21,6 +21,7 @@ import { PublicationFile } from "./publication"
 import { PublicationReview } from "./review"
 import { SessionFilesystem } from "../session/filesystem"
 import { Filesystem } from "../util/filesystem"
+import { GitStatus } from "./git-status"
 import { SafeFileIO } from "./safe-io"
 import { FileTrash } from "./trash"
 import { Lock } from "@/util/lock"
@@ -428,7 +429,7 @@ export namespace File {
     // the same form `ls-files --others` already returns. Without it git prints
     // repository-root-relative paths, and re-relativizing a relative path
     // resolves it against the process working directory instead.
-    const diffOutput = await $`git -c core.quotepath=false diff --numstat --relative HEAD`
+    const diffOutput = await $`git -c core.quotepath=false diff --numstat -z --relative HEAD`
       .cwd(Instance.directory)
       .quiet()
       .nothrow()
@@ -436,61 +437,50 @@ export namespace File {
 
     const changedFiles: Info[] = []
 
-    if (diffOutput.trim()) {
-      const lines = diffOutput.trim().split("\n")
-      for (const line of lines) {
-        const [added, removed, filepath] = line.split("\t")
-        changedFiles.push({
-          path: filepath,
-          added: added === "-" ? 0 : parseInt(added, 10),
-          removed: removed === "-" ? 0 : parseInt(removed, 10),
-          status: "modified",
-        })
-      }
+    for (const change of GitStatus.numstat(diffOutput)) {
+      changedFiles.push({
+        path: change.path,
+        added: change.added,
+        removed: change.removed,
+        status: "modified",
+      })
     }
 
-    const untrackedOutput = await $`git -c core.quotepath=false ls-files --others --exclude-standard`
+    const untrackedOutput = await $`git -c core.quotepath=false ls-files --others --exclude-standard -z`
       .cwd(Instance.directory)
       .quiet()
       .nothrow()
       .text()
 
-    if (untrackedOutput.trim()) {
-      const untrackedFiles = untrackedOutput.trim().split("\n")
-      for (const filepath of untrackedFiles) {
-        try {
-          const snapshot = await SafeFileIO.read(path.join(Instance.directory, filepath), { prefixBytes: preview })
-          const lines =
-            snapshot.size > snapshot.bytes.byteLength ? 0 : snapshot.bytes.toString("utf8").split("\n").length
-          changedFiles.push({
-            path: filepath,
-            added: lines,
-            removed: 0,
-            status: "added",
-          })
-        } catch {
-          continue
-        }
+    for (const filepath of GitStatus.paths(untrackedOutput)) {
+      try {
+        const snapshot = await SafeFileIO.read(path.join(Instance.directory, filepath), { prefixBytes: preview })
+        const lines = snapshot.size > snapshot.bytes.byteLength ? 0 : snapshot.bytes.toString("utf8").split("\n").length
+        changedFiles.push({
+          path: filepath,
+          added: lines,
+          removed: 0,
+          status: "added",
+        })
+      } catch {
+        continue
       }
     }
 
     // Get deleted files
-    const deletedOutput = await $`git -c core.quotepath=false diff --name-only --diff-filter=D --relative HEAD`
+    const deletedOutput = await $`git -c core.quotepath=false diff --name-only --diff-filter=D -z --relative HEAD`
       .cwd(Instance.directory)
       .quiet()
       .nothrow()
       .text()
 
-    if (deletedOutput.trim()) {
-      const deletedFiles = deletedOutput.trim().split("\n")
-      for (const filepath of deletedFiles) {
-        changedFiles.push({
-          path: filepath,
-          added: 0,
-          removed: 0, // Could get original line count but would require another git command
-          status: "deleted",
-        })
-      }
+    for (const filepath of GitStatus.paths(deletedOutput)) {
+      changedFiles.push({
+        path: filepath,
+        added: 0,
+        removed: 0, // Could get original line count but would require another git command
+        status: "deleted",
+      })
     }
 
     return changedFiles
