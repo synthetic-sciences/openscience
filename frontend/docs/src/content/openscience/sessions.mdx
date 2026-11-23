@@ -39,6 +39,34 @@ openscience debug legacy-import --restore session/PROJECT_ID/SESSION_ID
 Multiple keys can follow `--restore`; restoration is atomic. Records deleted by the current database cannot
 be recovered through this command. Original JSON backups remain unchanged.
 
+## Recall earlier project conversations
+
+When earlier work matters to a new task, ask the agent to search previous conversations:
+
+> Use recall to find the dataset and evaluation settings we chose in an earlier session of this project.
+
+The agent can call `recall` with `scope: "project"` and a relevant search pattern.
+Matching excerpts arrive as tool results with source session and message IDs;
+conversation history is not automatically added to the system prompt. The tool's
+default scope continues to search only the current session and its saved outputs.
+
+Project search checks up to eight recent eligible sessions in the same project and
+directory, examining their latest 32 messages and returning excerpts from at most
+four matching sessions within 16 KiB. It searches the first 65,536 UTF-16 code units
+of visible text in each message. Only completed user/assistant exchanges qualify;
+subagent, archived and reverted sessions, failed or unfinished replies, compaction
+summaries, tool outputs, reasoning and synthetic text are excluded. Subagents cannot
+use project recall. No match means nothing was found in this bounded window, not
+that the entire history was searched.
+
+Saved conversations remain available after a server restart. Deleting, archiving
+or reverting a source excludes it from subsequent searches. Already returned tool
+results remain part of the receiving conversation.
+
+Set `OPENSCIENCE_DISABLE_PROJECT_MEMORY=1` before starting the server to disable
+project recall without deleting history. `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1`
+also disables it. Current-session recall continues to work.
+
 ## Check settled Ace charges
 
 Open the session's context panel from the header and choose **Check settled charges**.

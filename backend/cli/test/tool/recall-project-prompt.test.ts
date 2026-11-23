@@ -2,17 +2,12 @@ import { expect, test } from "bun:test"
 import path from "path"
 import { tmpdir } from "../fixture/fixture"
 
-test("a new runtime recalls automatically saved project context without a remember request", async () => {
+test("history reaches the model only through recall results while system and tools stay identical", async () => {
   await using tmp = await tmpdir()
-  for (const phase of ["record", "recall", "queued"]) {
+  for (const phase of ["record", "idle", "recall"]) {
     const child = Bun.spawn(
-      [process.execPath, path.join(import.meta.dir, "../fixture/project-memory-prompt.ts"), tmp.path, phase],
-      {
-        cwd: path.resolve(import.meta.dir, "../.."),
-        env: process.env,
-        stdout: "pipe",
-        stderr: "pipe",
-      },
+      [process.execPath, path.join(import.meta.dir, "../fixture/recall-project-prompt.ts"), tmp.path, phase],
+      { cwd: path.resolve(import.meta.dir, "../.."), env: process.env, stdout: "pipe", stderr: "pipe" },
     )
     const timeout = setTimeout(() => child.kill(), 90_000)
     try {
@@ -22,7 +17,7 @@ test("a new runtime recalls automatically saved project context without a rememb
         new Response(child.stderr).text(),
       ])
       expect({ code, error: code ? stderr : "" }).toEqual({ code: 0, error: "" })
-      expect(stdout).toContain(`project-memory:${phase}:ok`)
+      expect(stdout).toContain(`recall-project:${phase}:ok`)
     } finally {
       clearTimeout(timeout)
       if (child.exitCode === null) child.kill()

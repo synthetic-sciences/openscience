@@ -24,7 +24,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
 - Use supported low reasoning effort for Claude Opus 5.5 internal summaries.
 
-- Recall recent saved conversations across sessions in the same project, with bounded context, optional .openscience/memory notes, and a project-memory disable switch.
+- Search earlier conversations in the same project on demand with the recall tool, returning bounded, sourced excerpts without adding history to the system prompt.
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.
 - Report upgrade and uninstall failures even when an operation rejects without an Error object or a reason.
 - Show Ace access and optional auto-reload consent separately, including cardless workspaces and older Dashboard responses.
