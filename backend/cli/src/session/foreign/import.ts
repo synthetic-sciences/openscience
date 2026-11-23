@@ -88,6 +88,7 @@ export namespace ForeignImport {
           outcome: ProjectOutcome,
           reason: z.enum(["continued", "rewound"]).optional(),
           folderMissing: z.boolean().optional(),
+          folderUpgraded: z.boolean().optional(),
           error: z.string().optional(),
         })
         .array(),
@@ -100,6 +101,8 @@ export namespace ForeignImport {
     outcome: Outcome
     reason?: "continued" | "rewound"
     folderMissing?: boolean
+    /** The project's read-only grant on the folder was raised to read and write. */
+    folderUpgraded?: boolean
   }
 
   /** Default locations; the environment variables override them (tests, unusual installs). */
@@ -146,6 +149,14 @@ export namespace ForeignImport {
   /** Canonical when the path exists, otherwise its normalised form (a deleted folder still matches). */
   async function folderKey(value: string) {
     return (await canonical(value)) ?? Project.canonicalize(path.resolve(value))
+  }
+
+  /** False for the home folder and anything containing it: raising those to read and write would
+   * hand the agent everything under them. */
+  export async function raisable(folder: string): Promise<boolean> {
+    const target = await folderKey(folder)
+    const home = await folderKey(Global.Path.home)
+    return target !== home && !home.startsWith(target.endsWith(path.sep) ? target : target + path.sep)
   }
 
   /** The project's folders: live connected folders, plus its own folder unless it is managed. */
@@ -361,13 +372,26 @@ export namespace ForeignImport {
     const info = conversation.info
     let workingRoot: string | undefined
     let folderMissing: boolean | undefined
+    let folderUpgraded: boolean | undefined
     if (input.folderAccess === "existing") {
       // Reuse what the project already has; never create or change a grant.
       if (info.cwd && (await isDirectory(info.cwd))) {
         const grant = await existingGrant(info.cwd)
         if (grant?.access === "write") workingRoot = grant.path
-        // A read-only folder: work in scratch so relative paths never land in another folder.
-        else if (grant?.access === "read") workingRoot = "scratch"
+        else if (grant?.access === "read") {
+          // Continuing a coding conversation needs to edit its folder: running the project import is
+          // the consent to raise it, except for the home folder or anything containing it.
+          const raised = (await raisable(info.cwd))
+            ? await SessionFilesystem.connectProject({ path: info.cwd, access: "write" }).catch((error) => {
+                log.warn("folder not raised to read and write", { cwd: info.cwd, error })
+                return undefined
+              })
+            : undefined
+          if (raised) {
+            workingRoot = raised.path
+            folderUpgraded = true
+          } else workingRoot = "scratch" // read-only: relative paths never land in another folder
+        }
         // The project's own folder (no grant): a native session's default.
       } else folderMissing = true
     } else if (input.folderAccess !== "none") {
@@ -424,6 +448,7 @@ export namespace ForeignImport {
       outcome,
       ...(reason ? { reason } : {}),
       ...(folderMissing ? { folderMissing } : {}),
+      ...(folderUpgraded ? { folderUpgraded } : {}),
     }
   }
 }

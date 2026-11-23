@@ -68075,6 +68075,9 @@
                 "folderMissing": {
                   "type": "boolean"
                 },
+                "folderUpgraded": {
+                  "type": "boolean"
+                },
                 "error": {
                   "type": "string"
                 }

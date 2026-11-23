@@ -149,7 +149,7 @@ describe("ForeignImport.runProject", () => {
     })
   })
 
-  test("connected folders: write works there, read-only works in scratch, never re-granted", async () => {
+  test("connected folders: write works there, a read-only folder is raised to read and write", async () => {
     const readonly = path.join(scratch, "readonly")
     const writable = path.join(scratch, "writable")
     await claude("ro", readonly)
@@ -161,7 +161,14 @@ describe("ForeignImport.runProject", () => {
       const before = (await SessionFilesystem.projectSnapshot()).grants.filter((g) => !g.time.revoked).length
       const result = byID(await runProject())
       expect((await SessionFilesystem.state(result.rw.sessionID!)).workingRoot).toBe(write.path)
-      expect((await SessionFilesystem.state(result.ro.sessionID!)).workingRoot).toBe("scratch")
+      expect(result.rw.folderUpgraded).toBeUndefined()
+      // The read-only folder is now read and write, and the session works in it.
+      const raised = (await SessionFilesystem.projectSnapshot()).grants.filter(
+        (g) => !g.time.revoked && g.path === readonly,
+      )
+      expect(raised.map((g) => g.access)).toEqual(["write"])
+      expect((await SessionFilesystem.state(result.ro.sessionID!)).workingRoot).toBe(readonly)
+      expect(result.ro.folderUpgraded).toBe(true)
       const own = await import("../../../src/storage/storage").then(({ Storage }) =>
         Storage.read<{ workingRoot?: string }>([
           "session_filesystem",
@@ -334,5 +341,14 @@ describe("ForeignImport.runProject", () => {
       expect(result.blank.title).toBe("Imported conversation")
       expect((await Session.get(result.blank.sessionID!)).title).toBe("Imported conversation")
     })
+  })
+
+  test("the home folder and its parents are never raised to read and write", async () => {
+    const { Global } = await import("../../../src/global")
+    const home = Global.Path.home
+    expect(await ForeignImport.raisable(home)).toBe(false)
+    expect(await ForeignImport.raisable(path.dirname(home))).toBe(false)
+    expect(await ForeignImport.raisable("/")).toBe(false)
+    expect(await ForeignImport.raisable(project)).toBe(true)
   })
 })

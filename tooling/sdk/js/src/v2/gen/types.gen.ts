@@ -3158,6 +3158,7 @@ export type ForeignProjectImportResult = {
     outcome: "created" | "updated" | "copied" | "unchanged" | "skipped" | "failed"
     reason?: "continued" | "rewound"
     folderMissing?: boolean
+    folderUpgraded?: boolean
     error?: string
   }>
   counts: {

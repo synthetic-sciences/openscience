@@ -132,6 +132,7 @@ async function importProject(sources?: ForeignSource[]) {
     const notes = [
       item.outcome === "copied" ? OUTCOME[`copied:${item.reason}`] : undefined,
       item.folderMissing ? "folder not available" : undefined,
+      item.folderUpgraded ? "folder now read and write" : undefined,
       item.error,
     ].filter(Boolean)
     process.stdout.write(`${item.outcome}  ${item.title}${notes.length ? `  (${notes.join("; ")})` : ""}` + EOL)

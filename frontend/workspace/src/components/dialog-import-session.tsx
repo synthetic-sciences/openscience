@@ -244,6 +244,7 @@ export function DialogImportSession(props: {
               <Button type="button" size="small" variant="ghost" disabled={state.busy} onClick={() => void importAll()}>
                 Import all from this project's folders
               </Button>
+              <span>Imported sessions get read and write access to their folders.</span>
               <Show when={state.project}>
                 <span role="status">{state.project}</span>
               </Show>

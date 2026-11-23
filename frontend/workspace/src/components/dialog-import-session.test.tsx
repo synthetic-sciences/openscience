@@ -226,6 +226,7 @@ describe("DialogImportSession", () => {
     await settle()
     expect(calls).toBe(1)
     expect(document.body.textContent).toContain("2 created, 1 copied, 3 unchanged")
+    expect(document.body.textContent).toContain("Imported sessions get read and write access to their folders.")
   })
 
   test("shows the server's message when importing all fails", async () => {
