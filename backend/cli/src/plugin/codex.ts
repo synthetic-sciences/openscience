@@ -593,6 +593,9 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
                 if (await CodexReplay.rewrite(replayed, Provider.currentRequestContext()?.sessionID)) {
                   withoutReplay = bodyForRequest
                   bodyForRequest = JSON.stringify(replayed)
+                  log.info("replaying an imported Codex compaction", {
+                    sessionID: Provider.currentRequestContext()?.sessionID,
+                  })
                 }
               } catch (error) {
                 log.warn("imported compaction replay skipped", { error: String(error) })
