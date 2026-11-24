@@ -17,6 +17,12 @@ export namespace Storage {
   const log = Log.create({ service: "storage" })
   const timeout = 10_000
   const database = ResearchDatabase.create(Global.Path.data)
+
+  /** Close the research database now instead of after its idle period, before
+   * removing the data folder (Windows will not delete an open file). */
+  export async function close() {
+    await database.close()
+  }
   const grace = 5_000
 
   type Migration = (dir: string) => Promise<void>
