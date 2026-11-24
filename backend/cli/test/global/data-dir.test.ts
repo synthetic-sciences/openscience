@@ -974,6 +974,8 @@ test("legacy-root rescans notify a running research store and preserve database 
   await Bun.write(path.join(legacy, "storage", ...key) + ".json", JSON.stringify({ id: "original" }))
   const first = await resolveDataDirectory({ home, legacy })
   const store = ResearchDatabase.create(first.path)
+  // Closed before afterEach removes the folder: Windows will not delete an open file.
+  await using _ = { [Symbol.asyncDispose]: () => store.close() }
   expect(await store.read<unknown>(key)).toEqual({ id: "original" })
   await store.remove(key)
   const added = ["session", "project", "later"]

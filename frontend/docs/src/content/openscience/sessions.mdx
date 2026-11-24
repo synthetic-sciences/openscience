@@ -188,6 +188,25 @@ openscience import session.json
 
 An export contains the conversation record. It is not a complete project backup: copy the datasets, source files, and result files separately. Review the transcript before sharing it because it can include private research content.
 
+### Import from Claude Code or Codex
+
+Continue a conversation you started in Claude Code or Codex:
+
+```bash
+openscience import --from-claude            # pick from your Claude Code conversations
+openscience import --from-codex <session-id>
+openscience import --from-claude <session-id> --folder-access read
+```
+
+In the app, choose **Import** in the sidebar, pick **Claude Code** or **Codex**, and search by folder or first message.
+
+- The whole conversation is imported, including tool calls and their results. A subagent's run comes in as its final result, so the agent knows what it found. Where the original tool compacted the conversation, the session keeps that summary as a compaction point.
+- OpenScience asks whether to connect the folder the conversation worked in: **Read and write** (the default), **Read only**, or **Don't connect**. A folder already connected at read and write is never lowered to read only. If the folder no longer exists, the session uses the normal workspace and says so.
+- The conversation continues on the model you select in OpenScience. Imported turns cost nothing, and the original tool's hidden thinking is shown but never sent to a model.
+- Importing the same conversation again adds its new messages to the session. If nothing new happened in the original tool, the session is left as it is, even if you have continued it in OpenScience. If both sides have moved on, or the conversation was rewound or edited in the original tool, OpenScience makes a separate copy titled `<title> (import #2)`, `(import #3)` and so on, and tells you why. Your OpenScience session is never changed or removed.
+- To import every conversation that ran in a project's folders, tick **Import Claude Code and Codex conversations from these folders** when you create the project, choose **Import all from this project's folders** in the Import dialog, or run `openscience import --all` (add `--from-claude` or `--from-codex` for one tool) from the project's folder. Only conversations whose folder is exactly one of the project's folders (or the folder the project was opened from) match. Running it again updates, copies or adds conversations by the rules above; conversations you deleted after an earlier import are skipped. Imported sessions get read and write access to their folders: a folder connected read only is raised to read and write, except your home folder or a folder that contains it.
+- Conversations are read from `~/.claude/projects` and `~/.codex/sessions` (including archived Codex sessions), or from `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when those are set. Imported history follows your trace-sharing setting, like any other session.
+
 For recovery during long work, use `/checkpoint` or `/handoff` in the workspace. For machine-readable output and CI, see [Automation and JSON output](/openscience/automation).
 
 ## Native benchmark runners

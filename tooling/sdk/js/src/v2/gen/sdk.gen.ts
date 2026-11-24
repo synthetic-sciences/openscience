@@ -318,6 +318,14 @@ import type {
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
+  SessionImportErrors,
+  SessionImportFolderErrors,
+  SessionImportFolderResponses,
+  SessionImportListErrors,
+  SessionImportListResponses,
+  SessionImportProjectErrors,
+  SessionImportProjectResponses,
+  SessionImportResponses,
   SessionIncreaseSubagentBudgetErrors,
   SessionIncreaseSubagentBudgetResponses,
   SessionInitErrors,
@@ -4044,6 +4052,146 @@ export class Session extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Import a project's Claude Code and Codex conversations
+   *
+   * Import every Claude Code and Codex conversation that ran in one of this project's folders. Running it again updates, copies or adds conversations by the re-import rules; conversations whose imports were deleted are skipped.
+   */
+  public importProject<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      sources?: Array<"claude" | "codex">
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "body", key: "sources" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionImportProjectResponses,
+      SessionImportProjectErrors,
+      ThrowOnError
+    >({
+      url: "/session/import/project",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * List Claude Code or Codex conversations
+   *
+   * List the conversations saved by Claude Code or Codex on this machine, newest first.
+   */
+  public importList<ThrowOnError extends boolean = false>(
+    parameters: {
+      source: "claude" | "codex"
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "source" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionImportListResponses, SessionImportListErrors, ThrowOnError>({
+      url: "/session/import/{source}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Import a Claude Code or Codex conversation
+   *
+   * Import one conversation as a session that can be continued. Importing it again updates that session, or makes a separate copy when either side has moved on.
+   */
+  public import<ThrowOnError extends boolean = false>(
+    parameters: {
+      source: "claude" | "codex"
+      directory?: string
+      sourceID: string
+      folderAccess: "write" | "read" | "none"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "source" },
+            { in: "query", key: "directory" },
+            { in: "body", key: "sourceID" },
+            { in: "body", key: "folderAccess" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionImportResponses, SessionImportErrors, ThrowOnError>({
+      url: "/session/import/{source}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get an importable conversation's folder
+   *
+   * Report the folder the conversation ran in, whether it exists, and how it is connected.
+   */
+  public importFolder<ThrowOnError extends boolean = false>(
+    parameters: {
+      source: "claude" | "codex"
+      sourceID: string
+      directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "source" },
+            { in: "path", key: "sourceID" },
+            { in: "query", key: "directory" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionImportFolderResponses, SessionImportFolderErrors, ThrowOnError>({
+      url: "/session/import/{source}/{sourceID}/folder",
+      ...options,
+      ...params,
     })
   }
 

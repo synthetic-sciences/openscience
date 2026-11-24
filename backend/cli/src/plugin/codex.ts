@@ -4,6 +4,8 @@ import { escapeHtml, htmlResponse } from "../util/html"
 import { Installation } from "../installation"
 import { Auth, OAUTH_DUMMY_KEY } from "../auth"
 import os from "os"
+import { Provider } from "../provider/provider"
+import { CodexReplay } from "../session/foreign/codex-replay"
 
 const log = Log.create({ service: "plugin.codex" })
 
@@ -581,6 +583,25 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
               }
             }
 
+            // An imported Codex session replays its own encrypted compaction.
+            // If Codex rejects that history, the turn is resent once with the
+            // readable summary instead of failing.
+            let withoutReplay: string | undefined
+            if (isCodexRoute && typeof bodyForRequest === "string") {
+              try {
+                const replayed = JSON.parse(bodyForRequest)
+                if (await CodexReplay.rewrite(replayed, Provider.currentRequestContext()?.sessionID)) {
+                  withoutReplay = bodyForRequest
+                  bodyForRequest = JSON.stringify(replayed)
+                  log.info("replaying an imported Codex compaction", {
+                    sessionID: Provider.currentRequestContext()?.sessionID,
+                  })
+                }
+              } catch (error) {
+                log.warn("imported compaction replay skipped", { error: String(error) })
+              }
+            }
+
             // Send with the current bearer; re-called by the 401-retry path with
             // a refreshed token. Each attempt re-sets the authorization header.
             const send = (accessToken: string) => {
@@ -620,9 +641,27 @@ export async function CodexAuthPlugin(): Promise<Hooks> {
             // A clean 429/403 is the correct signal that the subscription is
             // rate-limited; the user's own `openai` provider (BYOK) is the
             // supported way to run on an API key.
-            return isCodexRoute
-              ? await sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
-              : await send(currentAuth.access)
+            const attempt = () => {
+              if (currentAuth.type !== "oauth") throw new CodexCredentialsChangedError()
+              return isCodexRoute
+                ? sendWithCodex401Retry(send, currentAuth.access, forceRefreshOn401)
+                : send(currentAuth.access)
+            }
+            const response = await attempt()
+            if (
+              withoutReplay !== undefined &&
+              response.status >= 400 &&
+              response.status < 500 &&
+              ![401, 403, 429].includes(response.status)
+            ) {
+              log.warn("codex rejected the imported compaction; resending with the summary", {
+                status: response.status,
+              })
+              await response.body?.cancel().catch(() => undefined)
+              bodyForRequest = withoutReplay
+              return await attempt()
+            }
+            return response
           },
         }
       },

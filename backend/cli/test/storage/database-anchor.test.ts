@@ -67,3 +67,18 @@ test("an access during a published relocation waits for it instead of reusing th
   await writing
   expect(await store.read(["todo", "second"])).toEqual({ content: "after" })
 })
+
+test("close lets the shared connection go at once, so the folder can be removed", async () => {
+  await using tmp = await tmpdir()
+  const store = ResearchDatabase.create(tmp.path)
+  await store.write(["session", "project", "a"], { id: "a" })
+  const first = await store.query((db) => db)
+  await store.close()
+  // Closed now, not after the idle period: Windows refuses to delete a folder
+  // holding an open file.
+  expect(() => first.query("SELECT 1").get()).toThrow()
+  // The store stays usable: the next access opens a new connection.
+  expect(await store.read<unknown>(["session", "project", "a"])).toEqual({ id: "a" })
+  expect(await store.query((db) => db)).not.toBe(first)
+  await store.close()
+})

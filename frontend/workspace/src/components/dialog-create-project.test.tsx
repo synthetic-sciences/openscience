@@ -180,4 +180,46 @@ describe("DialogCreateProject", () => {
       },
     ])
   })
+
+  test("offers importing Claude Code and Codex conversations only with source folders, off by default", async () => {
+    const inputs: ProjectCreateInput[] = []
+    const host = mount(() =>
+      dialogs.DialogProvider({
+        get children() {
+          return Harness({
+            onCreate: async (input) => {
+              inputs.push(input)
+            },
+            onChooseSources: () => {},
+            sources: ["/Users/aayam/kras-speedrun"],
+          })
+        },
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("button")?.click()
+    const box = document.body.querySelector<HTMLInputElement>('input[name="import-conversations"]')
+    expect(box).not.toBeNull()
+    expect(box!.checked).toBe(false)
+    box!.click()
+    const input = document.body.querySelector<HTMLInputElement>('input[name="name"]')!
+    input.value = "KRAS study"
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+    Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "Create project")
+      ?.click()
+    await Promise.resolve()
+    expect(inputs[0]).toMatchObject({ name: "KRAS study", importConversations: true })
+  })
+
+  test("hides the import option without source folders", () => {
+    const host = mount(() =>
+      dialogs.DialogProvider({
+        get children() {
+          return Harness({ onCreate: async () => {}, onChooseSources: () => {} })
+        },
+      }),
+    )
+    host.querySelector<HTMLButtonElement>("button")?.click()
+    expect(document.body.querySelector('input[name="import-conversations"]')).toBeNull()
+  })
 })

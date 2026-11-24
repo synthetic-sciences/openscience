@@ -343,3 +343,12 @@
     transition: none;
   }
 }
+
+.project-create__import {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
