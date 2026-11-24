@@ -8,6 +8,8 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 
 ## Unreleased
 
+- `openscience stats --models` now renders its table with plain text only: redirected output no longer contains a terminal cursor-control character, and a zero limit no longer leaves an empty table behind.
+
 - Remove the external benchmark trace links from the OpenScience website.
 
 - New sessions reuse the model provider's cached prompt from their first message: the system prompt and tool definitions are now identical across a project's sessions, and this session's own details (its ID, scratch or working folder, connected folders, budget and checks) travel in a labelled block on the first message. A new Claude session reads about 14,600 cached tokens on its first call instead of none, so first replies are faster and cheaper.

@@ -389,32 +389,37 @@ export function displayStats(stats: SessionStats, toolLimit?: number, modelLimit
   if (modelLimit !== undefined && Object.keys(stats.modelUsage).length > 0) {
     const sortedModels = Object.entries(stats.modelUsage).sort(([, a], [, b]) => b.messages - a.messages)
     const modelsToDisplay = modelLimit === Infinity ? sortedModels : sortedModels.slice(0, modelLimit)
-
-    console.log("┌────────────────────────────────────────────────────────┐")
-    console.log("│                      MODEL USAGE                       │")
-    console.log("├────────────────────────────────────────────────────────┤")
-
-    for (const [model, usage] of modelsToDisplay) {
-      console.log(`│ ${model.padEnd(54)} │`)
-      console.log(renderRow("  Messages", usage.messages.toLocaleString()))
-      console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
-      console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
-      console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
-      console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
-      console.log(renderRow("  Recorded accounting", `$${usage.cost.toFixed(4)}`))
-      const rows = stats.evidence.filter((row) => `${row.provider}/${row.model}` === model)
-      console.log(renderRow("  Calls in this cost evidence", String(rows.reduce((sum, row) => sum + row.calls, 0))))
-      const costs = usageCostTotals(rows)
-      if (!costs.length) console.log(renderRow("  Cost evidence", "Unknown"))
-      for (const cost of costs) {
-        console.log(`│  ${usageCostLabels[cost.source]}: ${costValue(cost)}`)
-        if (cost.unknown && cost.source !== "subscription") console.log(`│    Unreported amounts: ${cost.unknown}`)
-      }
+    // The bottom border closes the last model directly: a cursor-up escape
+    // printed a control character into redirected output, and an empty slice
+    // erased the table's only separator.
+    if (modelsToDisplay.length) {
+      console.log("┌────────────────────────────────────────────────────────┐")
+      console.log("│                      MODEL USAGE                       │")
       console.log("├────────────────────────────────────────────────────────┤")
+
+      for (const [index, [model, usage]] of modelsToDisplay.entries()) {
+        console.log(`│ ${model.padEnd(54)} │`)
+        console.log(renderRow("  Messages", usage.messages.toLocaleString()))
+        console.log(renderRow("  Input Tokens", formatNumber(usage.tokens.input)))
+        console.log(renderRow("  Output Tokens", formatNumber(usage.tokens.output)))
+        console.log(renderRow("  Cache Read", formatNumber(usage.tokens.cache.read)))
+        console.log(renderRow("  Cache Write", formatNumber(usage.tokens.cache.write)))
+        console.log(renderRow("  Recorded accounting", `$${usage.cost.toFixed(4)}`))
+        const rows = stats.evidence.filter((row) => `${row.provider}/${row.model}` === model)
+        console.log(renderRow("  Calls in this cost evidence", String(rows.reduce((sum, row) => sum + row.calls, 0))))
+        const costs = usageCostTotals(rows)
+        if (!costs.length) console.log(renderRow("  Cost evidence", "Unknown"))
+        for (const cost of costs) {
+          console.log(`│  ${usageCostLabels[cost.source]}: ${costValue(cost)}`)
+          if (cost.unknown && cost.source !== "subscription") console.log(`│    Unreported amounts: ${cost.unknown}`)
+        }
+        console.log(
+          index === modelsToDisplay.length - 1
+            ? "└────────────────────────────────────────────────────────┘"
+            : "├────────────────────────────────────────────────────────┤",
+        )
+      }
     }
-    // Remove last separator and add bottom border
-    process.stdout.write("\x1B[1A") // Move up one line
-    console.log("└────────────────────────────────────────────────────────┘")
   }
   console.log()
 

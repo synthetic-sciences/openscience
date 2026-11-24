@@ -149,6 +149,9 @@ nullable provider fields on recorded calls.
 calls and unmatched or ambiguous billing records are excluded from project
 summaries; all-project summaries include them. `--models` also lists models
 seen only in internal/failed calls or imports, even without transcript messages.
+`--models N` shows the top N models (a bare `--models` shows all, and zero hides
+the section). The table uses plain text only, so redirecting `stats` to a file
+does not embed terminal control characters.
 
 
 OpenAI and Azure Responses cache-write counters are retained when the provider
