@@ -334,4 +334,96 @@ describe("ClaudeReader", () => {
     const info = (await ClaudeReader.create(root).list())[0]
     expect(info.firstMessage!.length).toBeLessThanOrEqual(200)
   })
+
+  test("a task notification becomes a labelled harness note, not a typed message", async () => {
+    const note = [
+      "<task-notification>",
+      "<task-id>b1</task-id>",
+      "<tool-use-id>c9</tool-use-id>",
+      "<status>completed</status>",
+      '<summary>Background command "Run the suite" completed (exit code 0)</summary>',
+      "</task-notification>",
+    ].join("\n")
+    await write("notify", [
+      user("u1", null, "start the suite", 0),
+      assistant("a1", "u1", [text("started")], 1),
+      user("n1", "a1", note, 2),
+      assistant("a2", "n1", [text("it passed")], 3),
+    ])
+    const c = await load("notify")
+    const noticeTurn = turns(c)[2]
+    expect(noticeTurn.role).toBe("user")
+    expect(noticeTurn.parts).toEqual([
+      { type: "text", text: note, notice: 'Background command "Run the suite" completed (exit code 0)' },
+    ])
+  })
+
+  test("a background agent's reported result fills its card", async () => {
+    const launched = "Async agent launched successfully. agentId: abc (internal ID - do not mention to user.)"
+    const report = [
+      "<task-notification>",
+      "<task-id>t1</task-id>",
+      "<tool-use-id>call_bg</tool-use-id>",
+      "<status>completed</status>",
+      '<summary>Agent "Review" finished</summary>',
+      "<result>The review found two bugs.</result>",
+      "</task-notification>",
+    ].join("\n")
+    await write("bg-agent", [
+      user("u1", null, "review it in the background", 0),
+      assistant("a1", "u1", [{ type: "tool_use", id: "call_bg", name: "Agent", input: { description: "Review" } }], 1, {
+        stop: "tool_use",
+      }),
+      user("u2", "a1", [{ type: "tool_result", tool_use_id: "call_bg", content: [text(launched)] }], 2),
+      assistant("a2", "u2", [text("it is running")], 3),
+      user("n1", "a2", report, 10),
+      assistant("a3", "n1", [text("done")], 11),
+    ])
+    const tool = turns(await load("bg-agent"))[1].parts[0]
+    expect(tool).toMatchObject({
+      type: "tool",
+      subagentResult: "The review found two bugs.",
+      output: "The review found two bugs.",
+    })
+  })
+
+  test("a background agent with no reported result says so instead of the launch note", async () => {
+    await write("bg-pending", [
+      user("u1", null, "review it in the background", 0),
+      assistant("a1", "u1", [{ type: "tool_use", id: "call_bg", name: "Agent", input: { description: "Review" } }], 1, {
+        stop: "tool_use",
+      }),
+      user(
+        "u2",
+        "a1",
+        [
+          {
+            type: "tool_result",
+            tool_use_id: "call_bg",
+            content: [text("Async agent launched successfully. agentId: abc")],
+          },
+        ],
+        2,
+      ),
+      assistant("a2", "u2", [text("it is running")], 3),
+    ])
+    const tool = turns(await load("bg-pending"))[1].parts[0] as { output?: string; subagentResult?: string }
+    expect(tool.output).toBe("Started in the background; no result was recorded in this conversation.")
+    expect(tool.subagentResult).toBeUndefined()
+  })
+
+  test("lists the folder from the end of the file when the start lacks it", async () => {
+    const dir = path.join(root, "-late-cwd")
+    await fs.mkdir(dir, { recursive: true })
+    // Ten 30 KB records without a folder, so the folder appears only near the end of the file.
+    const head = Array.from({ length: 10 }, (_, i) => ({
+      type: "file-history-snapshot",
+      n: i,
+      blob: "x".repeat(30_000),
+    }))
+    const rest = [user("u1", null, "late question", 1, { cwd: "/work/late" }), assistant("a1", "u1", [text("a")], 2)]
+    await fs.writeFile(path.join(dir, "late.jsonl"), [...head, ...rest].map((r) => JSON.stringify(r)).join("\n") + "\n")
+    const info = (await ClaudeReader.create(root).list()).find((item) => item.id === "late")
+    expect(info?.cwd).toBe("/work/late")
+  })
 })

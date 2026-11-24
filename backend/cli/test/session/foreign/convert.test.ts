@@ -340,4 +340,31 @@ describe("Provenance", () => {
       expect(await Provenance.findBySource("codex", "src-1")).toEqual([])
     })
   })
+
+  test("a notice is written as a synthetic harness note with its label", async () => {
+    await withSession(async (session, dir) => {
+      await write(
+        session,
+        dir,
+        conversation("claude", [
+          say("u1", "user", "go"),
+          say("a1", "assistant", "started", 2),
+          {
+            sourceID: "n1",
+            role: "user",
+            time: 3,
+            parts: [{ type: "text", text: "<task-notification>…</task-notification>", notice: "Job finished" }],
+          },
+          say("a2", "assistant", "ok", 4),
+        ]),
+      )
+      const part = (await Session.messages({ sessionID: session.id }))[2].parts[0] as MessageV2.TextPart
+      expect(part).toMatchObject({
+        type: "text",
+        synthetic: true,
+        metadata: { "openscience.wake": { label: "Job finished" } },
+      })
+      expect(part.text).toBe("<task-notification>…</task-notification>")
+    })
+  })
 })

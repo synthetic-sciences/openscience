@@ -196,7 +196,14 @@ export namespace ForeignConvert {
       if (entry.role === "user") {
         const id = await writeUser(entry.time)
         for (const item of entry.parts) {
-          if (item.type === "text") await Session.updatePart({ ...part(id), type: "text", text: item.text })
+          if (item.type === "text")
+            await Session.updatePart({
+              ...part(id),
+              type: "text",
+              text: item.text,
+              // A source tool's own report: shown as one trace line, still sent to the model.
+              ...(item.notice ? { synthetic: true, metadata: { "openscience.wake": { label: item.notice } } } : {}),
+            })
           else if (item.type === "image")
             await Session.updatePart({ ...part(id), type: "file", mime: item.mime, url: dataURL(item) })
         }

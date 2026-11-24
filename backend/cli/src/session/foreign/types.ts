@@ -17,7 +17,13 @@ export type ForeignSessionInfo = {
 export type ForeignAttachment = { mime: string; data: string }
 
 export type ForeignPart =
-  | { type: "text"; text: string }
+  | {
+      type: "text"
+      text: string
+      /** A runtime report the source tool injected (e.g. Claude Code's
+       * `<task-notification>`), not something the person typed: its one-line label. */
+      notice?: string
+    }
   | { type: "image"; mime: string; data: string }
   | { type: "reasoning"; text: string }
   | {

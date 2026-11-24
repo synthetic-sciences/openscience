@@ -30,6 +30,16 @@ import type {
 const WRAPPER =
   /^\s*<(command-name|command-message|command-args|local-command-stdout|local-command-stderr|local-command-caveat)>/
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"])
+// Claude Code reports background jobs and agents in a user message it writes itself.
+const NOTIFICATION = /^\s*<task-notification>/
+// The immediate result of an agent started in the background: a receipt, not its findings.
+const BACKGROUND_LAUNCH = /^\s*Async agent launched/
+const BACKGROUND_PENDING = "Started in the background; no result was recorded in this conversation."
+
+function tag(text: string, name: string) {
+  const match = new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(text)
+  return match?.[1]?.trim() || undefined
+}
 
 function isConversation(record: JsonRecord) {
   return (
@@ -112,8 +122,8 @@ async function describe(file: string): Promise<ForeignSessionInfo | undefined> {
   let cwd: string | undefined
   let firstMessage: string | undefined
   let created: number | undefined
+  for (const record of [...head, ...tail]) cwd ??= str(record, "cwd")
   for (const record of head) {
-    cwd ??= str(record, "cwd")
     if (created === undefined && isConversation(record)) created = time(record.timestamp, stat.mtimeMs)
     if (!firstMessage && record.type === "user" && isConversation(record) && record.isCompactSummary !== true) {
       firstMessage = userText(record)
@@ -205,14 +215,26 @@ function convert(records: JsonRecord[], info: ForeignSessionInfo): ForeignConver
     if (record.type === "user") {
       const content = message.content
       const parts: ForeignPart[] = []
+      // A background job or agent reporting back: the model needs it, the person didn't type it.
+      const userText = (value: string) => {
+        if (!NOTIFICATION.test(value)) return parts.push({ type: "text", text: value })
+        parts.push({ type: "text", text: value, notice: tag(value, "summary") ?? "Background task update" })
+        const callID = tag(value, "tool-use-id")
+        const result = tag(value, "result")
+        const tool = callID ? findTool(callID) : undefined
+        if (tool && result && SUBAGENT_TOOLS.has(tool.name)) {
+          tool.output = result
+          tool.subagentResult = result
+        }
+      }
       if (typeof content === "string") {
-        if (!WRAPPER.test(content)) parts.push({ type: "text", text: content })
+        if (!WRAPPER.test(content)) userText(content)
       } else if (Array.isArray(content)) {
         for (const block of content) {
           const kind = str(block, "type")
           if (kind === "text") {
             const value = str(block, "text")
-            if (value && !WRAPPER.test(value)) parts.push({ type: "text", text: value })
+            if (value && !WRAPPER.test(value)) userText(value)
           } else if (kind === "image") {
             const attachment = image(block)
             if (attachment) parts.push({ type: "image", ...attachment })
@@ -224,7 +246,11 @@ function convert(records: JsonRecord[], info: ForeignSessionInfo): ForeignConver
             tool.output = result.text
             if (result.images.length) tool.attachments = result.images
             if (isRecord(block) && block.is_error === true) tool.isError = true
-            if (SUBAGENT_TOOLS.has(tool.name)) tool.subagentResult = result.text
+            if (SUBAGENT_TOOLS.has(tool.name)) {
+              // A background launch returns only a receipt; its findings arrive in a later notification.
+              if (BACKGROUND_LAUNCH.test(result.text)) tool.output = BACKGROUND_PENDING
+              else tool.subagentResult = result.text
+            }
           }
         }
       }
