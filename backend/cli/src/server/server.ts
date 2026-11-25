@@ -160,14 +160,15 @@ export namespace Server {
             if (err instanceof Storage.NotFoundError) status = 404
             else if (err instanceof Provider.ModelNotFoundError) status = 400
             else if (err.name === "SessionFilesystemDeniedError") status = 403
-            else if (err.name === "SessionFilesystemInvalidPathError") status = 400
+            else if (err.name === "SessionFilesystemInvalidPathError" || err.name === "ForeignSessionEmptyError")
+              status = 400
             else if (
               err.name === "SessionDirectoryMismatchError" ||
               err.name === "SessionDirectoryImmutableError" ||
               err.name === "SessionWorkspaceMismatchError"
             )
               status = 409
-            else if (err.name === "ProjectUnknownError") status = 404
+            else if (err.name === "ProjectUnknownError" || err.name === "ForeignSessionNotFoundError") status = 404
             else if (err.name === "ProjectStaleError") status = 410
             else if (err.name === "ProjectMismatchError") status = 409
             else if (err.name === "ProjectDirectoryError") status = 400

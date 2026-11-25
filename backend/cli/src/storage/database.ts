@@ -141,6 +141,7 @@ export namespace ResearchDatabase {
       users: number
       retired: boolean
       timer?: ReturnType<typeof setTimeout>
+      closing?: Promise<void>
     }
     let anchor: Promise<Anchor> | undefined
     const fileIdentity = () =>
@@ -148,13 +149,15 @@ export namespace ResearchDatabase {
         (stat) => `${stat.dev}:${stat.ino}`,
         () => undefined,
       )
-    const close = async (held: Anchor) => {
-      try {
-        held.db.close(false)
-      } finally {
-        await held.operation[Symbol.asyncDispose]()
-      }
-    }
+    // Once per anchor: the idle timer, a relocation and close() may all reach it.
+    const close = (held: Anchor) =>
+      (held.closing ??= (async () => {
+        try {
+          held.db.close(false)
+        } finally {
+          await held.operation[Symbol.asyncDispose]()
+        }
+      })())
     const retire = (held: Anchor, pending: Promise<Anchor>) => {
       if (anchor === pending) anchor = undefined
       held.retired = true
@@ -405,6 +408,16 @@ export namespace ResearchDatabase {
     }
     return {
       filepath,
+      /** Let the shared connection go now instead of after the idle period; an
+       * access still running keeps it until it finishes. The store stays usable.
+       * Call before removing the folder: Windows will not delete an open file. */
+      async close() {
+        const pending = anchor
+        const held = await pending?.catch(() => undefined)
+        if (!pending || !held) return
+        retire(held, pending)
+        if (held.users === 0) await close(held)
+      },
       pendingLegacy: () =>
         access((db) =>
           db

@@ -8,7 +8,10 @@ import { afterAll } from "bun:test"
 
 const dir = path.join(os.tmpdir(), "openscience-test-data-" + process.pid)
 await fs.mkdir(dir, { recursive: true })
-afterAll(() => {
+afterAll(async () => {
+  // The research database stays open briefly after its last use; close it first,
+  // since Windows will not remove a folder holding an open file.
+  await import("../src/storage/storage").then(({ Storage }) => Storage.close()).catch(() => undefined)
   fsSync.rmSync(dir, { recursive: true, force: true })
 })
 // Set test home directory to isolate tests from user's actual home directory

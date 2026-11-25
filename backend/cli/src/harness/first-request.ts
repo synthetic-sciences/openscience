@@ -1,4 +1,5 @@
 import { Session } from "@/session"
+import { Provenance } from "@/session/foreign/provenance"
 
 /**
  * The text the person typed in a session's first request: the anchor for the
@@ -12,9 +13,13 @@ export async function firstRequest(sessionID: string): Promise<string | undefine
   const session = await Session.get(sessionID).catch(() => undefined)
   if (!session || session.parentID) return
   const messages = await Session.messages({ sessionID }).catch(() => [])
+  // Imported Claude Code / Codex history is context, not this session's request:
+  // its old instructions must not become the acceptance or deliverables contract.
+  const imported = (await Provenance.read(sessionID).catch(() => undefined))?.lastMessageID
   const first = messages.find(
     (message) =>
       message.info.role === "user" &&
+      !(imported && message.info.id <= imported) &&
       message.info.internal?.type !== "continuation" &&
       message.parts.some((part) => part.type === "text" && !part.synthetic),
   )

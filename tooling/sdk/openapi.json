@@ -29561,6 +29561,296 @@
         ]
       }
     },
+    "/session/import/project": {
+      "post": {
+        "operationId": "session.importProject",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Import a project's Claude Code and Codex conversations",
+        "description": "Import every Claude Code and Codex conversation that ran in one of this project's folders. Running it again updates, copies or adds conversations by the re-import rules; conversations whose imports were deleted are skipped.",
+        "responses": {
+          "200": {
+            "description": "What happened to each conversation, with counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForeignProjectImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "claude",
+                        "codex"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.importProject({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/import/{source}": {
+      "get": {
+        "operationId": "session.importList",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            "required": true
+          }
+        ],
+        "summary": "List Claude Code or Codex conversations",
+        "description": "List the conversations saved by Claude Code or Codex on this machine, newest first.",
+        "responses": {
+          "200": {
+            "description": "Conversations available to import",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ForeignSessionInfo"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.importList({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "session.import",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            "required": true
+          }
+        ],
+        "summary": "Import a Claude Code or Codex conversation",
+        "description": "Import one conversation as a session that can be continued. Importing it again updates that session, or makes a separate copy when either side has moved on.",
+        "responses": {
+          "200": {
+            "description": "The imported session and what the import did",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForeignSessionImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sourceID": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "folderAccess": {
+                    "type": "string",
+                    "enum": [
+                      "write",
+                      "read",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "sourceID",
+                  "folderAccess"
+                ]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.import({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/session/import/{source}/{sourceID}/folder": {
+      "get": {
+        "operationId": "session.importFolder",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "claude",
+                "codex"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "sourceID",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get an importable conversation's folder",
+        "description": "Report the folder the conversation ran in, whether it exists, and how it is connected.",
+        "responses": {
+          "200": {
+            "description": "The conversation's folder",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForeignSessionFolder"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpenScienceClient } from \"@synsci/sdk\"\n\nconst client = createOpenScienceClient()\nawait client.session.importFolder({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/session": {
       "get": {
         "operationId": "session.list",
@@ -67738,6 +68028,184 @@
           "name",
           "uri",
           "client"
+        ]
+      },
+      "ForeignProjectImportResult": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "claude",
+                    "codex"
+                  ]
+                },
+                "sourceID": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "sessionID": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": [
+                    "created",
+                    "updated",
+                    "copied",
+                    "unchanged",
+                    "skipped",
+                    "failed"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "continued",
+                    "rewound"
+                  ]
+                },
+                "folderMissing": {
+                  "type": "boolean"
+                },
+                "folderUpgraded": {
+                  "type": "boolean"
+                },
+                "error": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "sourceID",
+                "title",
+                "outcome"
+              ]
+            }
+          },
+          "counts": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "enum": [
+                "created",
+                "updated",
+                "copied",
+                "unchanged",
+                "skipped",
+                "failed"
+              ]
+            },
+            "additionalProperties": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "results",
+          "counts"
+        ]
+      },
+      "ForeignSessionInfo": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "claude",
+              "codex"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "firstMessage": {
+            "type": "string"
+          },
+          "created": {
+            "type": "number"
+          },
+          "modified": {
+            "type": "number"
+          },
+          "messageCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "id",
+          "path",
+          "created",
+          "modified"
+        ]
+      },
+      "ForeignSessionFolder": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "exists": {
+            "type": "boolean"
+          },
+          "connected": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "exists"
+        ]
+      },
+      "ForeignSessionImportResult": {
+        "type": "object",
+        "properties": {
+          "sessionID": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "copied",
+              "unchanged"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "continued",
+              "rewound"
+            ]
+          },
+          "folderMissing": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sessionID",
+          "outcome"
         ]
       },
       "TextPartInput": {

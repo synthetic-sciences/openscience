@@ -3149,6 +3149,48 @@ export type McpResource = {
   client: string
 }
 
+export type ForeignProjectImportResult = {
+  results: Array<{
+    source: "claude" | "codex"
+    sourceID: string
+    title: string
+    sessionID?: string
+    outcome: "created" | "updated" | "copied" | "unchanged" | "skipped" | "failed"
+    reason?: "continued" | "rewound"
+    folderMissing?: boolean
+    folderUpgraded?: boolean
+    error?: string
+  }>
+  counts: {
+    [key: string]: number
+  }
+}
+
+export type ForeignSessionInfo = {
+  source: "claude" | "codex"
+  id: string
+  path: string
+  cwd?: string
+  title?: string
+  firstMessage?: string
+  created: number
+  modified: number
+  messageCount?: number
+}
+
+export type ForeignSessionFolder = {
+  path?: string
+  exists: boolean
+  connected?: "read" | "write"
+}
+
+export type ForeignSessionImportResult = {
+  sessionID: string
+  outcome: "created" | "updated" | "copied" | "unchanged"
+  reason?: "continued" | "rewound"
+  folderMissing?: boolean
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -12422,6 +12464,134 @@ export type SessionIncreaseSubagentBudgetResponses = {
 
 export type SessionIncreaseSubagentBudgetResponse =
   SessionIncreaseSubagentBudgetResponses[keyof SessionIncreaseSubagentBudgetResponses]
+
+export type SessionImportProjectData = {
+  body?: {
+    sources?: Array<"claude" | "codex">
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/session/import/project"
+}
+
+export type SessionImportProjectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionImportProjectError = SessionImportProjectErrors[keyof SessionImportProjectErrors]
+
+export type SessionImportProjectResponses = {
+  /**
+   * What happened to each conversation, with counts
+   */
+  200: ForeignProjectImportResult
+}
+
+export type SessionImportProjectResponse = SessionImportProjectResponses[keyof SessionImportProjectResponses]
+
+export type SessionImportListData = {
+  body?: never
+  path: {
+    source: "claude" | "codex"
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/import/{source}"
+}
+
+export type SessionImportListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionImportListError = SessionImportListErrors[keyof SessionImportListErrors]
+
+export type SessionImportListResponses = {
+  /**
+   * Conversations available to import
+   */
+  200: Array<ForeignSessionInfo>
+}
+
+export type SessionImportListResponse = SessionImportListResponses[keyof SessionImportListResponses]
+
+export type SessionImportData = {
+  body?: {
+    sourceID: string
+    folderAccess: "write" | "read" | "none"
+  }
+  path: {
+    source: "claude" | "codex"
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/import/{source}"
+}
+
+export type SessionImportErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionImportError = SessionImportErrors[keyof SessionImportErrors]
+
+export type SessionImportResponses = {
+  /**
+   * The imported session and what the import did
+   */
+  200: ForeignSessionImportResult
+}
+
+export type SessionImportResponse = SessionImportResponses[keyof SessionImportResponses]
+
+export type SessionImportFolderData = {
+  body?: never
+  path: {
+    source: "claude" | "codex"
+    sourceID: string
+  }
+  query?: {
+    directory?: string
+  }
+  url: "/session/import/{source}/{sourceID}/folder"
+}
+
+export type SessionImportFolderErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionImportFolderError = SessionImportFolderErrors[keyof SessionImportFolderErrors]
+
+export type SessionImportFolderResponses = {
+  /**
+   * The conversation's folder
+   */
+  200: ForeignSessionFolder
+}
+
+export type SessionImportFolderResponse = SessionImportFolderResponses[keyof SessionImportFolderResponses]
 
 export type SessionListData = {
   body?: never
