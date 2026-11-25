@@ -238,7 +238,6 @@ export namespace Ripgrep {
       cwd: input.cwd,
       stdout: "pipe",
       stderr: "ignore",
-      maxBuffer: 1024 * 1024 * 20,
       signal: input.signal,
     })
 
@@ -246,6 +245,7 @@ export namespace Ripgrep {
     const decoder = new TextDecoder()
     let buffer = ""
     let finished = false
+    let code: number | null = null
 
     try {
       while (true) {
@@ -274,10 +274,16 @@ export namespace Ripgrep {
         await reader.cancel().catch(() => undefined)
       }
       reader.releaseLock()
-      await proc.exited
+      code = await proc.exited
     }
 
     input.signal?.throwIfAborted()
+    // A capped buffer used to kill rg mid-walk, and the partial list was
+    // returned as if complete. Surface a failed listing instead: callers
+    // cannot tell a truncated index from a project with fewer files.
+    if (finished && code !== 0) {
+      throw new Error(`ripgrep file listing failed in ${input.cwd} (exit code ${code})`)
+    }
   }
 
   export async function tree(input: { cwd: string; limit?: number; signal?: AbortSignal }) {

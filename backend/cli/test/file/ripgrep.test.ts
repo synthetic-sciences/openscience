@@ -56,6 +56,16 @@ test.skipIf(process.platform === "win32")(
   },
 )
 
+test("file listing surfaces a ripgrep failure instead of an empty list", async () => {
+  await using project = await tmpdir({
+    init: async (directory) => {
+      await Bun.write(path.join(directory, "notes.txt"), "value\n")
+    },
+  })
+
+  await expect(Array.fromAsync(Ripgrep.files({ cwd: project.path, glob: ["["] }))).rejects.toThrow(/exit code 2/)
+})
+
 test("stopping file discovery early terminates and reaps ripgrep", async () => {
   await using project = await tmpdir({
     init: async (directory) => {
