@@ -56,7 +56,7 @@ export const RecallTool = Tool.define("recall", {
       .enum(["all", "history", "outputs", "project"])
       .optional()
       .describe(
-        "history: this session's earlier messages and tool results, including compacted ones. outputs: this session's saved full tool outputs. all (default): both. project: completed visible exchanges in other recent sessions of this project and directory.",
+        "history: this session's earlier messages and tool results, including compacted ones. outputs: this session's saved full tool outputs. all (default): both. project: completed visible exchanges in other sessions of this project and directory.",
       ),
     limit: z.number().int().min(1).max(100).optional().describe("Matches to return (default 20)."),
   }),

@@ -119,7 +119,7 @@ async function run() {
         if (phase === "recall") {
           const output = JSON.stringify(requests[1].messages.filter((message) => message.role === "tool"))
           assert(output.includes("ORION-9") && output.includes("VisDrone"))
-          assert(output.includes("Additional matches were omitted"))
+          assert(output.includes("Stopped at the match limit"))
           assert.equal(calls.length, 1)
           assert.equal(calls[0].tool, "recall")
           assert.equal(calls[0].state.status, "completed")

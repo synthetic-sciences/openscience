@@ -50,14 +50,17 @@ Matching excerpts arrive as tool results with source session and message IDs;
 conversation history is not automatically added to the system prompt. The tool's
 default scope continues to search only the current session and its saved outputs.
 
-Project search checks up to eight recent eligible sessions in the same project and
-directory, examining their latest 32 messages and returning excerpts from at most
-four matching sessions within 16 KiB. It searches the first 65,536 UTF-16 code units
-of visible text in each message. Only completed user/assistant exchanges qualify;
-subagent, archived and reverted sessions, failed or unfinished replies, compaction
-summaries, tool outputs, reasoning and synthetic text are excluded. Subagents cannot
-use project recall. No match means nothing was found in this bounded window, not
-that the entire history was searched.
+Project search visits other sessions in the same project and directory, newest
+first. It stops at the requested number of matches, at 16 KiB of output, or after
+about two seconds. The final line reports coverage and, if the search stopped
+early, why it stopped and how far it got. A partial search with no matches does
+not mean the fact was never mentioned.
+
+The search checks the first 65,536 UTF-16 code units of visible text per message.
+Only completed user/assistant exchanges qualify. Empty sessions do not count toward
+coverage; copied exchanges in forks are not returned twice. Subagent, archived and
+reverted sessions, failed or unfinished replies, compaction summaries, tool outputs,
+reasoning and synthetic text are excluded. Subagents cannot use project recall.
 
 Saved conversations remain available after a server restart. Deleting, archiving
 or reverting a source excludes it from subsequent searches. Already returned tool
