@@ -89,6 +89,49 @@ describe("tracking SDK over stdout", () => {
     }
   })
 
+  test.skipIf(!python)("wandb.run follows the active run, including across re-init", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-track-"))
+    try {
+      const entries = await TrackingSDK.materialize(workspace, { shim: true })
+      const script = path.join(workspace, "train.py")
+      await fs.writeFile(
+        script,
+        [
+          "import wandb",
+          "wandb.init(project='p', name='first')",
+          "print('first=' + wandb.run.name + ':' + wandb.run.id)",
+          "wandb.finish()",
+          "wandb.init(project='p', name='second')",
+          "print('second=' + wandb.run.name + ':' + wandb.run.id)",
+          "wandb.finish()",
+        ].join("\n"),
+      )
+      const proc = Bun.spawn([python!, "train.py"], {
+        cwd: workspace,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: {
+          ...process.env,
+          PYTHONPATH: entries.join(process.platform === "win32" ? ";" : ":"),
+          OPENSCIENCE_RUN_ID: "run_wandb",
+          OPENSCIENCE_TRACK_TRANSPORT: "stdout",
+          PYTHONUNBUFFERED: "1",
+        },
+      })
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ])
+      expect(stderr).toBe("")
+      expect(code).toBe(0)
+      expect(stdout).toContain("first=first:run_wandb")
+      expect(stdout).toContain("second=second:run_wandb")
+    } finally {
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   test("parses only well-formed marked lines and survives partial writes", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "openscience-track-"))
     try {
