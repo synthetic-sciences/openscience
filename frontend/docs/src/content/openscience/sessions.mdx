@@ -39,6 +39,44 @@ openscience debug legacy-import --restore session/PROJECT_ID/SESSION_ID
 Multiple keys can follow `--restore`; restoration is atomic. Records deleted by the current database cannot
 be recovered through this command. Original JSON backups remain unchanged.
 
+## Recall earlier project conversations
+
+When earlier work matters to a new task, ask the agent to search previous conversations:
+
+> Use recall to find the dataset and evaluation settings we chose in an earlier session of this project.
+
+The agent can call `recall` with `scope: "project"` and a relevant search pattern.
+Matching excerpts arrive as tool results with source session and message IDs;
+conversation history is not automatically added to the system prompt. The tool's
+default scope continues to search only the current session and its saved outputs.
+
+Project search visits other sessions in the same project and directory, newest
+first. It stops at the requested number of matches, at 16 KiB of output, or after
+about two seconds. The final line reports coverage and, if the search stopped
+early, why it stopped and how far it got. A partial search with no matches does
+not mean the fact was never mentioned. If you ask the agent to continue, it can pass the
+last result's `nextCursor` as `cursor` with the same regex and project scope. This
+continues inside the last session or message; omitting the cursor starts over.
+A cursor is single-use, tied to the requesting session, and expires after five idle
+minutes or a server restart.
+
+Simple identifier patterns such as `SEAL-\d{2}` and `RUN-[A-Z]{2,8}` search full
+visible messages, including across scan boundaries. Other expressions (for example,
+`BEGIN.*END`, groups or anchors) search only the first 65,536 UTF-16 units per
+message. The final line notes when a long message was limited to its prefix.
+Only completed user/assistant exchanges qualify. Empty sessions do not count toward
+coverage; copied exchanges in forks are not returned twice. Subagent, archived and
+reverted sessions, failed or unfinished replies, compaction summaries, tool outputs,
+reasoning and synthetic text are excluded. Subagents cannot use project recall.
+
+Saved conversations remain available after a server restart. Deleting, archiving
+or reverting a source excludes it from subsequent searches. Already returned tool
+results remain part of the receiving conversation.
+
+Set `OPENSCIENCE_DISABLE_PROJECT_MEMORY=1` before starting the server to disable
+project recall without deleting history. `OPENSCIENCE_DISABLE_PROJECT_CONFIG=1`
+also disables it. Current-session recall continues to work.
+
 ## Check settled Ace charges
 
 Open the session's context panel from the header and choose **Check settled charges**.

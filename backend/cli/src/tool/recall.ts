@@ -5,6 +5,7 @@ import { Session } from "../session"
 import { SessionFilesystem } from "@/session/filesystem"
 import type { MessageV2 } from "@/session/message-v2"
 import DESCRIPTION from "./recall.txt"
+import { recallProject } from "./recall-project"
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024
 const EXCERPT = 240
@@ -52,11 +53,16 @@ export const RecallTool = Tool.define("recall", {
   parameters: z.object({
     pattern: z.string().min(1).max(500).describe("Regular expression (JavaScript syntax, case-insensitive)."),
     scope: z
-      .enum(["all", "history", "outputs"])
+      .enum(["all", "history", "outputs", "project"])
       .optional()
       .describe(
-        "history: every earlier message and tool result of this session, including compacted ones. outputs: saved full tool outputs. Default all.",
+        "history: this session's earlier messages and tool results, including compacted ones. outputs: this session's saved full tool outputs. all (default): both. project: completed visible exchanges in other sessions of this project and directory.",
       ),
+    cursor: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Project scope only: pass the previous nextCursor with the same pattern to continue the search."),
     limit: z.number().int().min(1).max(100).optional().describe("Matches to return (default 20)."),
   }),
   async execute(params, ctx) {
@@ -69,6 +75,8 @@ export const RecallTool = Tool.define("recall", {
     })()
     const limit = params.limit ?? 20
     const scope = params.scope ?? "all"
+    if (params.cursor && scope !== "project") throw new Error("A recall cursor requires project scope.")
+    if (scope === "project") return recallProject(pattern, limit, ctx.sessionID, ctx.abort, { cursor: params.cursor })
     const matches: Match[] = []
 
     if (scope !== "outputs") {

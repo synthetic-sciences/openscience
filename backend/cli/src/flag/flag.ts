@@ -35,6 +35,7 @@ export namespace Flag {
   export const OPENSCIENCE_DISABLE_BUNDLED_SKILLS = truthy("OPENSCIENCE_DISABLE_BUNDLED_SKILLS")
   export declare const OPENSCIENCE_DISABLED_SKILLS: ReadonlySet<string>
   export declare const OPENSCIENCE_DISABLE_PROJECT_CONFIG: boolean
+  export declare const OPENSCIENCE_DISABLE_PROJECT_MEMORY: boolean
   export const OPENSCIENCE_FAKE_VCS = process.env["OPENSCIENCE_FAKE_VCS"]
   export const OPENSCIENCE_CLIENT = process.env["OPENSCIENCE_CLIENT"] ?? "cli"
   export const OPENSCIENCE_TRUST_PROXY = truthy("OPENSCIENCE_TRUST_PROXY")
@@ -78,6 +79,14 @@ export namespace Flag {
 Object.defineProperty(Flag, "OPENSCIENCE_DISABLE_PROJECT_CONFIG", {
   get() {
     return truthy("OPENSCIENCE_DISABLE_PROJECT_CONFIG")
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "OPENSCIENCE_DISABLE_PROJECT_MEMORY", {
+  get() {
+    return truthy("OPENSCIENCE_DISABLE_PROJECT_MEMORY")
   },
   enumerable: true,
   configurable: false,
