@@ -58,6 +58,11 @@ export const RecallTool = Tool.define("recall", {
       .describe(
         "history: this session's earlier messages and tool results, including compacted ones. outputs: this session's saved full tool outputs. all (default): both. project: completed visible exchanges in other sessions of this project and directory.",
       ),
+    cursor: z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Project scope only: pass the previous nextCursor with the same pattern to continue the search."),
     limit: z.number().int().min(1).max(100).optional().describe("Matches to return (default 20)."),
   }),
   async execute(params, ctx) {
@@ -70,7 +75,8 @@ export const RecallTool = Tool.define("recall", {
     })()
     const limit = params.limit ?? 20
     const scope = params.scope ?? "all"
-    if (scope === "project") return recallProject(pattern, limit, ctx.sessionID, ctx.abort)
+    if (params.cursor && scope !== "project") throw new Error("A recall cursor requires project scope.")
+    if (scope === "project") return recallProject(pattern, limit, ctx.sessionID, ctx.abort, { cursor: params.cursor })
     const matches: Match[] = []
 
     if (scope !== "outputs") {

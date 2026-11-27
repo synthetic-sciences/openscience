@@ -54,7 +54,11 @@ Project search visits other sessions in the same project and directory, newest
 first. It stops at the requested number of matches, at 16 KiB of output, or after
 about two seconds. The final line reports coverage and, if the search stopped
 early, why it stopped and how far it got. A partial search with no matches does
-not mean the fact was never mentioned.
+not mean the fact was never mentioned. If you ask the agent to continue, it can pass the
+last result's `nextCursor` as `cursor` with the same regex and project scope. This
+continues inside the last session or message; omitting the cursor starts over.
+A cursor is single-use, tied to the requesting session, and expires after five idle
+minutes or a server restart.
 
 Simple identifier patterns such as `SEAL-\d{2}` and `RUN-[A-Z]{2,8}` search full
 visible messages, including across scan boundaries. Other expressions (for example,

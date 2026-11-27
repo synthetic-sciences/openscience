@@ -41,7 +41,18 @@ another match exists. A caller abort rejects rather than returning partial resul
 Pending storage reads can settle after the caller returns. The deadline is checked
 between units of work; a running synchronous JavaScript regex is not preemptible.
 
-Each invocation reads current state. Results already delivered to a conversation
+Partial pages (time, result count or output bytes) expose an opaque `nextCursor` in
+the tool result and metadata. Pass it as `cursor` with the same regex and reader
+session. The server retains the iterator position (including an unfinished message
+or regex window), at most one pending read/row per iterator, and fork deduplication
+state. Coverage is cumulative; the time and output budgets reset on each call.
+Bookmarks are single-use, expire after five idle minutes or instance disposal, and
+at most eight idle bookmarks are retained per instance. Sources are revalidated
+before emitting buffered matches on resume. This is not a transactional snapshot;
+start a new search for newly created sessions. An invalid cursor errors instead of
+silently restarting. There is no automatic pagination or alternate matching mode.
+
+A fresh search reads current state. Results already delivered to a conversation
 are not removed when the source changes.
 The operator switches `OPENSCIENCE_DISABLE_PROJECT_MEMORY` and
 `OPENSCIENCE_DISABLE_PROJECT_CONFIG` suppress project search only.

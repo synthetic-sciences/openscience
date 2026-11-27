@@ -19,7 +19,12 @@ async function run() {
     port: 0,
     async fetch(request) {
       requests.push((await request.json()) as Request)
-      const calling = phase === "recall" && requests.length === 1
+      const calling = phase === "recall" && requests.length <= 2
+      const lastResult = requests
+        .at(-1)
+        ?.messages.filter((message) => message.role === "tool")
+        .at(-1)
+      const cursor = /nextCursor: ([a-f\d-]{36})/.exec(JSON.stringify(lastResult?.content ?? ""))?.[1]
       const chunk = (delta: Record<string, unknown>, finish: string | null) =>
         `data: ${JSON.stringify({
           id: "chatcmpl-recall",
@@ -35,11 +40,16 @@ async function run() {
             tool_calls: [
               {
                 index: 0,
-                id: "call_project_recall",
+                id: `call_project_recall_${requests.length}`,
                 type: "function",
                 function: {
                   name: "recall",
-                  arguments: JSON.stringify({ scope: "project", pattern: "codename|dataset", limit: 1 }),
+                  arguments: JSON.stringify({
+                    scope: "project",
+                    pattern: "codename|dataset",
+                    limit: requests.length === 1 ? 1 : 20,
+                    cursor,
+                  }),
                 },
               },
             ],
@@ -97,7 +107,7 @@ async function run() {
             },
           ],
         })
-        assert.equal(requests.length, phase === "recall" ? 2 : 1)
+        assert.equal(requests.length, phase === "recall" ? 3 : 1)
         const prefix = (request: Request) => ({
           system: request.messages.filter((message) => message.role === "system"),
           tools: request.tools,
@@ -120,7 +130,12 @@ async function run() {
           const output = JSON.stringify(requests[1].messages.filter((message) => message.role === "tool"))
           assert(output.includes("ORION-9") && output.includes("VisDrone"))
           assert(output.includes("Stopped at the match limit"))
-          assert.equal(calls.length, 1)
+          const more = JSON.stringify(requests[2].messages.filter((message) => message.role === "tool").at(-1)?.content)
+          assert(more.includes("Searched") && more.includes("of"))
+          assert(!more.includes("nextCursor:") && more.includes("VisDrone"))
+          assert.equal(calls.length, 2)
+          assert.equal(calls[1].state.status, "completed")
+          if (calls[1].state.status === "completed") assert.equal(typeof calls[1].state.input.cursor, "string")
           assert.equal(calls[0].tool, "recall")
           assert.equal(calls[0].state.status, "completed")
         } else assert.equal(calls.length, 0)

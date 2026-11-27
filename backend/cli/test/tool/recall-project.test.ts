@@ -447,7 +447,9 @@ test("a timeout preserves earlier hits and reports the partially scanned session
         if (id === older.id) elapsed = 2001
       })
       try {
-        const result = await recallProject(/MATCH/gi, 20, reader.id, new AbortController().signal, () => elapsed)
+        const result = await recallProject(/MATCH/gi, 20, reader.id, new AbortController().signal, {
+          now: () => elapsed,
+        })
         expect(result.metadata.stopReason).toBe("time")
         expect(result.output).toContain("NEWER_MATCH")
         expect(result.output).not.toContain("OLDER_MATCH")
@@ -474,7 +476,9 @@ test("the time budget includes candidate listing, even before history is searche
         yield source
       })
       try {
-        const result = await recallProject(/missing/gi, 20, reader.id, new AbortController().signal, () => elapsed)
+        const result = await recallProject(/missing/gi, 20, reader.id, new AbortController().signal, {
+          now: () => elapsed,
+        })
         expect(result.metadata.stopReason).toBe("time")
         expect(result.metadata.count).toBe(0)
         expect(result.output.split("\n").at(-1)).toContain("Candidate listing incomplete; no history scanned.")
@@ -525,6 +529,230 @@ test.each(["cancel", "timeout"])(
     })
   },
 )
+
+function nextCursor(result: { output: string; metadata: Record<string, unknown> }) {
+  const token = /nextCursor: ([a-f\d-]{36})/.exec(result.output)?.[1]
+  if (!token) throw new Error("Missing nextCursor in tool output")
+  expect(result.metadata.nextCursor).toBe(token)
+  return token
+}
+
+test("successive time slices finish a long session with no missing or repeated evidence", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const source = await Session.create({}),
+        reader = await Session.create({})
+      const fact = await exchange(source.id, "oldest archived decision KEY", "Noted.")
+      for (let i = 0; i < 18; i++) await exchange(source.id, `decision ${i}`, "Noted.")
+      for (const [query, expected] of [
+        ["decision", 19],
+        ["absent", 0],
+      ] as const) {
+        const hits: string[] = []
+        let cursor: string | undefined
+        let ended = false
+        for (let page = 0; page < 40; page++) {
+          let time = 0
+          const result = await recallProject(new RegExp(query, "gi"), 100, reader.id, new AbortController().signal, {
+            now: () => (time += 80),
+            cursor,
+          })
+          hits.push(
+            ...result.output
+              .split("\n")
+              .filter((x) => x.startsWith("{"))
+              .map((x) => JSON.parse(x).messageID),
+          )
+          if (result.metadata.stopReason === "complete") {
+            expect(page).toBeGreaterThan(0)
+            expect(result.metadata.nextCursor).toBeUndefined()
+            ended = true
+            break
+          }
+          expect(result.metadata.stopReason).toBe("time")
+          cursor = nextCursor(result)
+        }
+        expect(ended).toBe(true)
+        expect(hits.length).toBe(expected)
+        expect(new Set(hits).size).toBe(expected)
+        if (expected) expect(hits.at(-1)).toBe(fact.prompt.id)
+      }
+    },
+  })
+}, 60_000)
+
+test("resume in one message across output and match limits, including empty regex matches", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const s = await Session.create({}),
+        reader = await Session.create({})
+      const unit = "🧪".repeat(100) + "X"
+      await exchange(s.id, unit.repeat(24), "Done.")
+      const tool = await RecallTool.init()
+      const offsets: number[] = []
+      let cursor: string | undefined
+      for (let page = 0; page < 15; page++) {
+        const result = await tool.execute(
+          { scope: "project", pattern: "(?=X)", limit: page === 0 ? 100 : 3, cursor },
+          context(reader.id),
+        )
+        expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(16 * 1024)
+        offsets.push(
+          ...result.output
+            .split("\n")
+            .filter((l) => l.startsWith("{"))
+            .map((l) => JSON.parse(l).offset),
+        )
+        if (page === 0) expect(result.metadata.stopReason).toBe("bytes")
+        if (result.metadata.stopReason === "complete") {
+          cursor = undefined
+          break
+        }
+        cursor = nextCursor(result)
+      }
+      expect(cursor).toBeUndefined()
+      expect(offsets).toEqual(Array.from({ length: 24 }, (_, i) => (i + 1) * unit.length - 1))
+    },
+  })
+})
+
+test("bookmarks are scoped, single-use, and do not reveal a source archived between pages", async () => {
+  await using tmp = await tmpdir()
+  let stale = ""
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reader = await Session.create({}),
+        other = await Session.create({}),
+        s = await Session.create({})
+      await exchange(s.id, "fact ONE, fact TWO", "fact THREE")
+      const tool = await RecallTool.init()
+      const params = { scope: "project" as const, pattern: "fact", limit: 1 }
+      const run = (args: typeof params & { cursor?: string }, id = reader.id) => tool.execute(args, context(id))
+      const cursor = nextCursor(await run(params))
+      await expect(run({ ...params, cursor }, other.id)).rejects.toThrow(/cursor/i)
+      await expect(run({ ...params, pattern: "wrong", cursor })).rejects.toThrow(/cursor/i)
+      await expect(tool.execute({ pattern: "fact", cursor }, context(reader.id))).rejects.toThrow(/scope/i)
+      stale = nextCursor(await run(params))
+      await Session.update(s.id, (d) => {
+        d.time.archived = Date.now()
+      })
+      const result = await run({ ...params, cursor })
+      expect(result.metadata.count).toBe(0)
+      expect(result.metadata.nextCursor).toBeUndefined()
+      await expect(run({ ...params, cursor })).rejects.toThrow(/expired/i)
+      await Instance.dispose()
+      await Instance.provide({
+        directory: tmp.path,
+        fn: async () => {
+          await expect(run({ ...params, cursor: stale })).rejects.toThrow(/expired/i)
+        },
+      })
+    },
+  })
+})
+
+test("an expired cursor errors instead of silently restarting", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reader = await Session.create({})
+      await exchange((await Session.create({})).id, "fact fact", "Noted.")
+      const tool = await RecallTool.init()
+      const params = { scope: "project" as const, pattern: "fact", limit: 1 }
+      const cursor = nextCursor(await tool.execute(params, context(reader.id)))
+      const now = Date.now()
+      const clock = spyOn(Date, "now").mockReturnValue(now + 6 * 60_000)
+      try {
+        await expect(tool.execute({ ...params, cursor }, context(reader.id))).rejects.toThrow(/expired/i)
+      } finally {
+        clock.mockRestore()
+      }
+    },
+  })
+})
+
+test("resuming after an in-flight read timed out consumes the pending read instead of restarting", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reader = await Session.create({}),
+        s = await Session.create({})
+      await exchange(s.id, "fact: KINGFISHER", "Done")
+      const gate = Promise.withResolvers<void>()
+      const entered = Promise.withResolvers<void>()
+      const original = Session.flushPendingParts
+      const flush = spyOn(Session, "flushPendingParts").mockImplementation(async (id) => {
+        entered.resolve()
+        await gate.promise
+        await original(id)
+      })
+      const tool = await RecallTool.init()
+      const params = { scope: "project" as const, pattern: "fact" }
+      try {
+        const first = tool.execute(params, context(reader.id))
+        await entered.promise
+        const partial = await first
+        expect(partial.metadata.stopReason).toBe("time")
+        const more = tool.execute({ ...params, cursor: nextCursor(partial) }, context(reader.id))
+        gate.resolve()
+        const result = await more
+        expect(result.metadata.stopReason).toBe("complete")
+        expect(result.metadata.count).toBe(1)
+        expect(result.output).toContain("KINGFISHER")
+        expect(flush).toHaveBeenCalledTimes(1)
+      } finally {
+        gate.resolve()
+        flush.mockRestore()
+      }
+    },
+  })
+})
+
+test("a regex resumes across time and count limits inside a long message, including a real boundary match", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reader = await Session.create({}),
+        source = await Session.create({})
+      const text = "SEAL-01".padEnd(65_532, "x") + "sEaL-02" + "y".repeat(900_000) + "SEAL-03"
+      const turn = await exchange(source.id, "Save the manifest.", text)
+      const regex = /SEAL-\d{2}/gi
+      const expected = Array.from(text.matchAll(regex), (match) => match.index)
+      const hits: number[] = []
+      const stops = new Set<unknown>()
+      let cursor: string | undefined
+      for (let i = 0; i < 60; i++) {
+        let tick = 0
+        const page = await recallProject(new RegExp(regex), 1, reader.id, new AbortController().signal, {
+          cursor,
+          now: () => (tick += 160),
+        })
+        stops.add(page.metadata.stopReason)
+        for (const line of page.output.split("\n").filter((line) => line.startsWith("{"))) {
+          const row = JSON.parse(line)
+          expect(row.messageID).toBe(turn.assistant.id)
+          hits.push(row.offset)
+        }
+        expect(Buffer.byteLength(page.output)).toBeLessThanOrEqual(16 * 1024)
+        if (page.metadata.stopReason === "complete") {
+          expect(page.metadata.nextCursor).toBeUndefined()
+          break
+        }
+        cursor = nextCursor(page)
+      }
+      expect(stops).toEqual(new Set(["time", "limit", "complete"]))
+      expect(hits).toEqual(expected)
+    },
+  })
+}, 60_000)
 
 test("project regex offsets on long visible messages agree with native full-text matching", async () => {
   await using tmp = await tmpdir()
