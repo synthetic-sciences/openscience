@@ -16,6 +16,12 @@ export interface RegexPassResult {
   warnings: Warning[]
 }
 
+/** References are installed beside SKILL.md and read as instructions just
+ * like scripts, so the same review has to cover both companion files. */
+function companions(skill: SkillEntry): { file: string; content: string }[] {
+  return [...skill.scripts, ...skill.references].map((item) => ({ file: item.path, content: item.content }))
+}
+
 // ── Layer 1 — auto-reject ───────────────────────────────────────────────────
 
 const DESCRIPTION_INJECTION = [
@@ -47,10 +53,7 @@ export function runtimeRegexPass(manifest: SkillEntry[]): RegexPassResult {
       }
     }
     if (matched) continue
-    const bodies = [
-      { file: "SKILL.md", content: skill.content },
-      ...skill.scripts.map((s) => ({ file: s.path, content: s.content })),
-    ]
+    const bodies = [{ file: "SKILL.md", content: skill.content }, ...companions(skill)]
     outer: for (const { file, content } of bodies) {
       for (const re of CATASTROPHIC) {
         const match = content.match(re)
@@ -83,7 +86,7 @@ const CLASSIFIER_INJECTION: { re: RegExp; label: string }[] = [
 export function classifierInjectionRegexPass(manifest: SkillEntry[]): RegexPassResult {
   const rejected: Rejection[] = []
   for (const skill of manifest) {
-    const haystacks = [skill.content, ...skill.scripts.map((s) => s.content)]
+    const haystacks = [skill.content, ...companions(skill).map((item) => item.content)]
     outer: for (const text of haystacks) {
       for (const { re, label } of CLASSIFIER_INJECTION) {
         if (re.test(text)) {
@@ -115,7 +118,7 @@ export function suspiciousRegexPass(manifest: SkillEntry[]): RegexPassResult {
   for (const skill of manifest) {
     const files: { file: string; content: string }[] = [
       { file: "SKILL.md", content: skill.content },
-      ...skill.scripts.map((s) => ({ file: s.path, content: s.content })),
+      ...companions(skill),
     ]
     for (const { file, content } of files) {
       const lines = content.split("\n")
