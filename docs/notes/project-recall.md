@@ -20,7 +20,13 @@ Forks remap message IDs. Matching excerpts are deduplicated across sessions by
 role, turn timestamps and the full visible exchange text, not a short excerpt.
 The session and message IDs refer to the copy actually returned.
 
-Each message's search text is capped at 65,536 UTF-16 code units and each excerpt
+The existing JavaScript /gi interface is unchanged. Plain identifier text and a
+conservative subset of regexes have a known positive maximum width (up to 4,096
+UTF-16 units): simple character classes and bounded repetitions, at most one of
+variable length. These patterns scan all visible text in 65,536-unit windows with
+lookahead of maximum width minus one. A short pause between windows allows
+cancellation or timeout. Other expressions retain the original 65,536-unit prefix
+limit, disclosed in the coverage footer. Each excerpt is capped
 at 240 Unicode code points. There is no fixed window on sessions or messages.
 Results are bounded by the match limit (default 20, maximum 100) and a 16 KiB
 UTF-8 output budget. The header,

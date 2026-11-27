@@ -526,6 +526,38 @@ test.each(["cancel", "timeout"])(
   },
 )
 
+test("project regex offsets on long visible messages agree with native full-text matching", async () => {
+  await using tmp = await tmpdir()
+  await Instance.provide({
+    directory: tmp.path,
+    fn: async () => {
+      const reader = await Session.create({}),
+        origin = await Session.create({})
+      const input = "🧭SEAL-14".padEnd(65532, " ") + "sEaL-42"
+      const text = input.padEnd(131068, " ") + "K".repeat(19) + " SEAL-83 铜牌-37 RUN-aBCde"
+      const exchangeIDs = await exchange(origin.id, "Store these observations.", text)
+      for (const regex of [/SEAL-\d{2}/gi, /K{2,7}/gi, /铜牌-\d{2}/gi, /RUN-[A-Z]{2,8}/gi]) {
+        const expected = Array.from(text.matchAll(regex), (m) => m.index)
+        expect(expected.length).toBeGreaterThan(0)
+        const result = await search(reader.id, regex.source)
+        const hits = result.output
+          .split("\n")
+          .filter((s) => s.startsWith("{"))
+          .map((s) => JSON.parse(s))
+        expect(hits.map((row) => row.offset)).toEqual(expected)
+        expect(hits.every((row) => row.messageID === exchangeIDs.assistant.id && row.sessionID === origin.id)).toBe(
+          true,
+        )
+        expect(result.metadata.stopReason).toBe("complete")
+        expect(Buffer.byteLength(result.output)).toBeLessThanOrEqual(16 * 1024)
+      }
+      const complex = await search(reader.id, "SEAL-.*RUN")
+      expect(complex.metadata.count).toBe(0)
+      expect(complex.output.split("\n").at(-1)).toContain("prefix")
+    },
+  })
+})
+
 test("excerpts distinguish normalized whitespace from omitted text and respect the scan boundary", async () => {
   await using tmp = await tmpdir()
   await Instance.provide({
@@ -536,9 +568,9 @@ test("excerpts distinguish normalized whitespace from omitted text and respect t
       await exchange(source.id, "needle     here", "x".repeat(65_534) + "Z🧪OUTSIDE")
       const short = await search(current.id, "needle")
       expect(JSON.parse(short.output.split("\n")[1]).excerpt).toBe("needle here")
-      const boundary = await search(current.id, "Z")
+      const boundary = await search(current.id, "Z.*")
       expect(JSON.parse(boundary.output.split("\n")[1]).excerpt).toBe("…" + "x".repeat(80) + "Z")
-      expect((await search(current.id, "OUTSIDE")).metadata.count).toBe(0)
+      expect((await search(current.id, "OUTSIDE$")).metadata.count).toBe(0)
     },
   })
 })

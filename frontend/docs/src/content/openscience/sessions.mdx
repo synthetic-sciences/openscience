@@ -56,7 +56,10 @@ about two seconds. The final line reports coverage and, if the search stopped
 early, why it stopped and how far it got. A partial search with no matches does
 not mean the fact was never mentioned.
 
-The search checks the first 65,536 UTF-16 code units of visible text per message.
+Simple identifier patterns such as `SEAL-\d{2}` and `RUN-[A-Z]{2,8}` search full
+visible messages, including across scan boundaries. Other expressions (for example,
+`BEGIN.*END`, groups or anchors) search only the first 65,536 UTF-16 units per
+message. The final line notes when a long message was limited to its prefix.
 Only completed user/assistant exchanges qualify. Empty sessions do not count toward
 coverage; copied exchanges in forks are not returned twice. Subagent, archived and
 reverted sessions, failed or unfinished replies, compaction summaries, tool outputs,
