@@ -3,7 +3,7 @@ import path from "node:path"
 import { SafeFileIO } from "@/file/safe-io"
 import { ProvenanceEnvelope } from "@/science/provenance/envelope"
 
-type Fingerprint = { size: number; mtimeMs: number; dev: number; ino: number }
+export type Fingerprint = { size: number; mtimeMs: number; dev: number; ino: number }
 export type Snapshot = Map<string, Fingerprint>
 
 const MAX_ENTRIES = 4_096
@@ -43,19 +43,32 @@ export async function snapshot(root: string): Promise<Snapshot> {
   return output
 }
 
-/** Hash files that were created or changed during an execution, within hard
- * per-run byte/count bounds. Concurrent replacement fails closed through
- * SafeFileIO and simply leaves that file uncaptured. */
-export async function changed(root: string, before: Snapshot, completedAt: number) {
-  const after = await snapshot(root)
+/** The changed files worth hashing, within the per-run bounds. */
+export function select(before: Snapshot, after: Snapshot) {
   const candidates = [...after].filter(([name, value]) => {
     const prior = before.get(name)
     return !prior || prior.size !== value.size || prior.mtimeMs !== value.mtimeMs || prior.ino !== value.ino
   })
+  const out: [string, Fingerprint][] = []
+  for (const candidate of candidates) {
+    if (out.length >= MAX_FILES) break
+    // The count bounds what is captured, not what was considered: a file too
+    // large to hash must not retire a slot that an eligible one later needs.
+    if (candidate[1].size > MAX_FILE_BYTES) continue
+    out.push(candidate)
+  }
+  return out
+}
+
+/** Hash files that were created or changed during an execution, within hard
+ * per-run byte/count bounds. Concurrent replacement fails closed through
+ * SafeFileIO and simply leaves that file uncaptured. */
+export async function changed(root: string, before: Snapshot, completedAt: number) {
+  const selected = select(before, await snapshot(root))
   const outputs: ProvenanceEnvelope.Output[] = []
   let total = 0
-  for (const [name, value] of candidates.slice(0, MAX_FILES)) {
-    if (value.size > MAX_FILE_BYTES || total + value.size > MAX_TOTAL_BYTES) continue
+  for (const [name, value] of selected) {
+    if (total + value.size > MAX_TOTAL_BYTES) continue
     const target = path.join(root, name)
     const file = await SafeFileIO.optional(target).catch(() => undefined)
     if (!file || file.bytes.byteLength !== value.size) continue
