@@ -23,6 +23,7 @@ tagged release also ships native binaries for Linux, macOS, and Windows.
 - Save subagent settings to `subagents.json` beside the global config, so an older OpenScience desktop app or CLI sharing the config folder still starts.
 - The Context window's **Cost so far** loads on open, shows readable amounts with exact values on hover, and groups settled Wallet charges by model.
 - Finalize database statements when research operations finish, including statements beyond the query cache, so Windows can release database files.
+- Keep every eligible file checkpoint in a run's recorded provenance: a file too large or over the total capture budget no longer takes a slot away from a later, eligible output.
 - Use supported low reasoning effort for Claude Opus 5.5 internal summaries.
 
 - Discard local credential-sync retries and responses from earlier sign-ins so logout, account changes, and reconnects cannot restore an expired workspace grant.

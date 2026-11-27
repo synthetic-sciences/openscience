@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/fixture"
-import { changed, snapshot } from "../../src/science/execution/files"
+import { changed, select, snapshot, type Fingerprint } from "../../src/science/execution/files"
 
 describe("execution workspace file observation", () => {
   test("records created and changed regular files with hashes but not unchanged files or cache trees", async () => {
@@ -30,5 +30,20 @@ describe("execution workspace file observation", () => {
         .sort(),
     ).toEqual(["changed.csv", "figure.txt"])
     expect(outputs.every((item) => item.kind === "checkpoint" && item.sha256.length === 64)).toBe(true)
+  })
+
+  test("an ineligible file does not use up a checkpoint slot", () => {
+    const fingerprint = (size: number): Fingerprint => ({ size, mtimeMs: 1, dev: 1, ino: 1 })
+    const small = Array.from({ length: 64 }, (_, index) => `small-${String(index).padStart(3, "0")}.txt`)
+    // The oversized file sorts first and is skipped; it must not spend one of
+    // the 64 slots, leaving only 63 of the eligible outputs to be captured.
+    const after = new Map<string, Fingerprint>([
+      ["000-oversized.bin", fingerprint(33 * 1024 * 1024)],
+      ...small.map((name) => [name, fingerprint(1)] as const),
+    ])
+
+    const selected = select(new Map(), after).map(([name]) => name)
+    expect(selected).toEqual(small)
+    expect(selected).not.toContain("000-oversized.bin")
   })
 })
